@@ -46,6 +46,72 @@ def chamfer_distance(pred_pc, target_pc):
     chamfer_dist = forward_loss + backward_loss
     
     return chamfer_dist
+
+
+def earth_movers_distance(pred_pc, target_pc, num_samples=1000):
+    """
+    Compute Earth Mover's Distance (EMD) / Wasserstein Distance between point clouds
+    
+    Uses approximate EMD for efficiency with large point clouds:
+    - Subsamples points for tractable computation
+    - Uses Hungarian algorithm for optimal matching
+    
+    Args:
+        pred_pc: (B, N, 3) predicted point cloud
+        target_pc: (B, M, 3) target point cloud
+        num_samples: Number of points to use for EMD calculation (default: 1000)
+        
+    Returns:
+        emd: scalar Earth Mover's Distance
+    """
+    try:
+        from scipy.optimize import linear_sum_assignment
+    except ImportError:
+        print("⚠️  scipy not available, EMD will return 0. Install with: pip install scipy")
+        return torch.tensor(0.0, device=pred_pc.device)
+    
+    B, N, _ = pred_pc.shape
+    _, M, _ = target_pc.shape
+    
+    # For large point clouds, subsample for efficiency
+    if N > num_samples:
+        # Randomly sample points from pred
+        indices_pred = torch.randperm(N, device=pred_pc.device)[:num_samples]
+        pred_sampled = pred_pc[:, indices_pred, :]
+    else:
+        pred_sampled = pred_pc
+        num_samples = N
+    
+    if M > num_samples:
+        # Randomly sample points from target
+        indices_target = torch.randperm(M, device=target_pc.device)[:num_samples]
+        target_sampled = target_pc[:, indices_target, :]
+    else:
+        target_sampled = target_pc
+    
+    # Compute EMD for each batch
+    emd_list = []
+    for b in range(B):
+        pred_b = pred_sampled[b].cpu().detach().numpy()  # (num_samples, 3)
+        target_b = target_sampled[b].cpu().detach().numpy()  # (num_samples, 3)
+        
+        # Compute pairwise distance matrix
+        # dist_matrix[i, j] = distance from pred[i] to target[j]
+        dist_matrix = np.sqrt(np.sum((pred_b[:, None, :] - target_b[None, :, :]) ** 2, axis=-1))
+        
+        # Solve optimal assignment problem (Hungarian algorithm)
+        row_ind, col_ind = linear_sum_assignment(dist_matrix)
+        
+        # EMD is the mean distance of optimal assignment
+        emd_b = dist_matrix[row_ind, col_ind].mean()
+        emd_list.append(emd_b)
+    
+    # Average across batch
+    emd = torch.tensor(np.mean(emd_list), device=pred_pc.device, dtype=torch.float32)
+    
+    return emd
+
+
 from typing import Tuple, Optional, List
 import math
 
@@ -297,7 +363,10 @@ class EmbodiedMAE(nn.Module):
         mlp_ratio=4.,
         norm_pix_loss=True,
         dirichlet_alpha=1.0,
-        pc_loss_weight=50.0
+        pc_loss_weight=50.0,
+        target_points=10000,
+        normalize_depth_global=True,
+        depth_norm_type='minmax'
     ):
         super().__init__()
         
@@ -310,6 +379,8 @@ class EmbodiedMAE(nn.Module):
         self.norm_pix_loss = norm_pix_loss
         self.dirichlet_alpha = dirichlet_alpha
         self.pc_loss_weight = pc_loss_weight
+        self.normalize_depth_global = normalize_depth_global
+        self.depth_norm_type = depth_norm_type  # 'minmax' or 'standard'
         
         # Patch embeddings for each modality
         self.rgb_embed = PatchEmbed(img_size, patch_size, in_chans_rgb, embed_dim)
@@ -357,9 +428,9 @@ class EmbodiedMAE(nn.Module):
         self.decoder_pred_depth = nn.Linear(decoder_embed_dim, patch_size**2 * in_chans_depth, bias=True)
         
         # Point cloud reconstruction - upsample from tokens to full point cloud
-        # Each token will generate multiple points to reach target_points (e.g., 2048)
-        self.target_points = 2048  # Target number of output points
-        self.points_per_token = self.target_points // num_pc_tokens  # e.g., 2048/196 ≈ 10
+        # Each token will generate multiple points to reach target_points (e.g., 10000)
+        self.target_points = target_points  # Target number of output points
+        self.points_per_token = self.target_points // num_pc_tokens  # e.g., 10000/196 ≈ 51
         
         # Folding-based upsampling (inspired by FoldingNet and Point-MAE)
         self.decoder_pc_proj = nn.Linear(decoder_embed_dim, 512, bias=True)
@@ -683,7 +754,62 @@ class EmbodiedMAE(nn.Module):
         
         # Depth loss
         target_depth = self.patchify(imgs_depth, self.patch_size, imgs_depth.shape[1])
-        if self.norm_pix_loss:
+        
+        # Global depth normalization before loss calculation
+        if self.normalize_depth_global:
+            B = target_depth.shape[0]
+            N = target_depth.shape[1]  # Number of patches
+            
+            if self.depth_norm_type == 'minmax':
+                # Min-max normalization per sample: (x - min) / (max - min)
+                # Reshape to (B, -1) to get per-sample min/max
+                target_flat = target_depth.reshape(B, -1)
+                pred_flat = pred_depth.reshape(B, -1)
+                
+                # Normalize per sample
+                target_normalized = torch.zeros_like(target_flat)
+                pred_normalized = torch.zeros_like(pred_flat)
+                
+                for b in range(B):
+                    target_min = target_flat[b].min()
+                    target_max = target_flat[b].max()
+                    
+                    if target_max > target_min:
+                        target_normalized[b] = (target_flat[b] - target_min) / (target_max - target_min)
+                        # Normalize prediction with same min/max as target
+                        pred_normalized[b] = (pred_flat[b] - target_min) / (target_max - target_min)
+                    else:
+                        target_normalized[b] = target_flat[b]
+                        pred_normalized[b] = pred_flat[b]
+                
+                target_depth = target_normalized.reshape(B, N, -1)
+                pred_depth = pred_normalized.reshape(B, N, -1)
+                
+            elif self.depth_norm_type == 'standard':
+                # Standardization per sample: (x - mean) / std
+                target_flat = target_depth.reshape(B, -1)
+                pred_flat = pred_depth.reshape(B, -1)
+                
+                target_normalized = torch.zeros_like(target_flat)
+                pred_normalized = torch.zeros_like(pred_flat)
+                
+                for b in range(B):
+                    target_mean = target_flat[b].mean()
+                    target_std = target_flat[b].std()
+                    
+                    if target_std > 1e-6:
+                        target_normalized[b] = (target_flat[b] - target_mean) / target_std
+                        # Normalize prediction with same mean/std as target
+                        pred_normalized[b] = (pred_flat[b] - target_mean) / target_std
+                    else:
+                        target_normalized[b] = target_flat[b]
+                        pred_normalized[b] = pred_flat[b]
+                
+                target_depth = target_normalized.reshape(B, N, -1)
+                pred_depth = pred_normalized.reshape(B, N, -1)
+        
+        # Per-patch normalization (only if global norm is not used)
+        elif self.norm_pix_loss:
             mean = target_depth.mean(dim=-1, keepdim=True)
             var = target_depth.var(dim=-1, keepdim=True)
             target_depth = (target_depth - mean) / (var + 1.e-6)**.5

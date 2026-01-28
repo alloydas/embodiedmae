@@ -1,0 +1,66 @@
+# EmbodiedMAE Training Configuration
+
+# Data
+data:
+  data_root: "./Dataset/SorghumData/"  # Path to data directory
+  img_size: 224
+  num_points: 2048
+  train_split: 0.9
+  seed: 42
+
+# Model
+model:
+  model_size: "base"  # Options: small, base, large, giant
+  patch_size: 16
+  num_pc_tokens: 196
+  mask_ratio: 0.15
+  pc_loss_weight: 1.0
+  norm_pix_loss: true
+  dirichlet_alpha: 1.0
+  normalize_depth_global: true  # Apply global depth normalization before loss  
+  depth_norm_type: "minmax"  # Options: minmax, standard
+
+
+# Training
+training:
+  batch_size: 64  # Batch size PER GPU
+  epochs: 1800
+  lr: 1.5e-2
+  weight_decay: 0.05
+  warmup_epochs: 10
+  val_freq: 20  # Run validation every N epochs
+  
+# Checkpointing
+checkpointing:
+  output_dir: "./outputs/outputs_sorghum_lr-2mr-15_new_data_bs_64_multi_4_depth_normalize_min_max"
+  save_freq: 100  # Save checkpoint every N epochs
+  resume: null  # Path to checkpoint to resume from (null = train from scratch)
+
+# Visualization
+visualization:
+  viz_freq: 100  # Generate visualizations every N epochs
+  num_viz_samples: 6  # Number of samples to visualize
+
+# Multi-GPU / Distributed Training
+distributed:
+  world_size: 4  # Number of GPUs (1 = single GPU)
+  dist_backend: "nccl"
+  dist_url: "env://"
+
+# System
+system:
+  num_workers: 16
+  device: "cuda"
+  pin_memory: true
+
+# Weights & Biases
+wandb:
+  use_wandb: true
+  project: "embodied-mae-sorghum"
+  entity: null  # Your wandb username or team (null = personal)
+  name: 'embodied-mae-sorghum_lr-2dmr-15_new_data_bs_64_multi_depth_normalize_min_max'  # Run name (null = auto-generated)
+  
+# Notes
+notes: |
+  Default configuration for EmbodiedMAE training on Sorghum data.
+  This config file can be overridden by command-line arguments.
