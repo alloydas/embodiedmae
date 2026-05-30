@@ -2,9 +2,9 @@
 
 # Data
 data:
-  data_root: "./Dataset/SorghumData/"  # Path to data directory
+  data_root: "./Dataset/new_data"  # Path to data directory
   img_size: 224
-  num_points: 2048
+  num_points: 8196
   train_split: 0.9
   seed: 42
 
@@ -14,7 +14,7 @@ model:
   patch_size: 16
   num_pc_tokens: 196
   mask_ratio: 0.15
-  pc_loss_weight: 1.0
+  pc_loss_weight: 10.0
   norm_pix_loss: true
   dirichlet_alpha: 1.0
   normalize_depth_global: true  # Apply global depth normalization before loss  
@@ -23,33 +23,33 @@ model:
 
 # Training
 training:
-  batch_size: 64  # Batch size PER GPU
-  epochs: 1800
-  lr: 1.5e-2
+  batch_size: 16      # Batch size PER GPU
+  epochs: 2400
+  lr: 1.5e-4
   weight_decay: 0.05
   warmup_epochs: 10
   val_freq: 20  # Run validation every N epochs
   
 # Checkpointing
 checkpointing:
-  output_dir: "./outputs/outputs_sorghum_lr-2mr-15_new_data_bs_64_multi_4_depth_normalize_min_max"
+  output_dir: "./outputs/Try_with_procedorial_param_1"
   save_freq: 100  # Save checkpoint every N epochs
+  #resume: "./outputs/outputs_sorghum_long_old_done_8000/checkpoints/checkpoint_epoch_800.pth"  # Path to checkpoint to resume from (null = train from scratch)
   resume: null  # Path to checkpoint to resume from (null = train from scratch)
-
 # Visualization
 visualization:
-  viz_freq: 100  # Generate visualizations every N epochs
-  num_viz_samples: 6  # Number of samples to visualize
+  viz_freq: 50  # Generate visualizations every N epochs
+  num_viz_samples: 12  # Number of samples to visualize
 
 # Multi-GPU / Distributed Training
 distributed:
-  world_size: 4  # Number of GPUs (1 = single GPU)
+  world_size: 1  # Number of GPUs (1 = single GPU)
   dist_backend: "nccl"
   dist_url: "env://"
 
 # System
 system:
-  num_workers: 16
+  num_workers: 1
   device: "cuda"
   pin_memory: true
 
@@ -58,7 +58,7 @@ wandb:
   use_wandb: true
   project: "embodied-mae-sorghum"
   entity: null  # Your wandb username or team (null = personal)
-  name: 'embodied-mae-sorghum_lr-2dmr-15_new_data_bs_64_multi_depth_normalize_min_max'  # Run name (null = auto-generated)
+  name: 'Try_with_procedorial_param_2'  # Run name (null = auto-generated) 
   
 # Notes
 notes: |

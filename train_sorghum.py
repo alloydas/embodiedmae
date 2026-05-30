@@ -34,210 +34,204 @@ def unpatchify(x, patch_size, channels, img_size):
     """
     p = patch_size
     h = w = img_size // p
-    
+
     x = x.reshape(x.shape[0], h, w, p, p, channels)
     x = torch.einsum('nhwpqc->nchpwq', x)
     imgs = x.reshape(x.shape[0], channels, h * p, w * p)
     return imgs
 
 
+def _pc_token_membership(xyz: torch.Tensor, fps_idx: torch.Tensor, group_size: int) -> np.ndarray:
+    """Return (num_tokens, group_size) array of point indices per FPS token."""
+    centers = xyz[0, fps_idx[0]]                       # (S, 3)
+    dist    = torch.cdist(centers.unsqueeze(0), xyz)   # (1, S, N)
+    _, idx  = torch.topk(dist[0], group_size, dim=1, largest=False)  # (S, k)
+    return idx.cpu().numpy()
+
+
+def _scatter3d(ax, pts, c, s=2, alpha=0.7, **kw):
+    """3-D scatter with data-Z mapped to the plot Y-axis for upright plant view."""
+    ax.scatter(pts[:, 0], pts[:, 2], pts[:, 1], c=c, s=s, alpha=alpha, **kw)
+    ax.set_xlabel('X', fontsize=7)
+    ax.set_ylabel('Z', fontsize=7)
+    ax.set_zlabel('Y', fontsize=7)
+    ax.tick_params(labelsize=6)
+    ax.view_init(elev=20, azim=45)
+
+
 def visualize_reconstruction_sorghum(model, dataloader, device, epoch, save_dir, num_samples=4):
     """
-    Visualize reconstruction results for Sorghum data
-    
-    Args:
-        model: EmbodiedMAE model
-        dataloader: DataLoader
-        device: torch device
-        epoch: Current epoch number
-        save_dir: Directory to save visualizations
-        num_samples: Number of samples to visualize
-        
-    Returns:
-        saved_paths: List of saved visualization file paths
+    Visualize reconstruction results for Sorghum data.
+
+    Layout per sample (4 rows × 3 cols):
+      Row 1 — RGB:        Original | Masked | Reconstructed
+      Row 2 — Depth:      Original | Masked | Reconstructed
+      Row 3 — PC (token): Original | FPS centres (green=visible, red=masked) | Reconstructed
+      Row 4 — PC (pts):   Visible points | Masked points | (loss summary)
     """
     model.eval()
-    
     saved_paths = []
-    
-    # Get a batch
+
     rgb_batch, depth_batch, pc_batch, names = next(iter(dataloader))
-    
-    # Limit to num_samples
-    rgb_batch = rgb_batch[:num_samples].to(device)
+    rgb_batch   = rgb_batch[:num_samples].to(device)
     depth_batch = depth_batch[:num_samples].to(device)
-    pc_batch = pc_batch[:num_samples].to(device)
-    names = names[:num_samples]
-    
+    pc_batch    = pc_batch[:num_samples].to(device)
+    names       = names[:num_samples]
+
     with torch.no_grad():
-        # Forward pass
-        loss, (loss_rgb, loss_depth, loss_pc), (pred_rgb, pred_depth, pred_pc), (mask_rgb, mask_depth, mask_pc) = model(
-            rgb_batch, depth_batch, pc_batch
-        )
-    
+        loss, (loss_rgb, loss_depth, loss_pc), \
+            (pred_rgb, pred_depth, pred_pc), \
+            (mask_rgb, mask_depth, mask_pc) = model(rgb_batch, depth_batch, pc_batch)
+
+        # FPS centres and token membership (computed once for the whole batch)
+        fps_indices  = model.pc_embed.fps(pc_batch, model.num_pc_tokens)   # (B, S)
+        member_idx_b = _pc_token_membership(pc_batch, fps_indices,
+                                            model.pc_embed.group_size)     # (S, k) for batch item 0
+
     # Denormalize RGB
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(device)
-    std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(device)
-    rgb_denorm = rgb_batch * std + mean
-    
-    # Unpatchify predictions
-    pred_rgb_img = unpatchify(pred_rgb, model.patch_size, 3, model.img_size)
+    rgb_mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(device)
+    rgb_std  = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(device)
+    rgb_denorm = rgb_batch * rgb_std + rgb_mean
+
+    pred_rgb_img   = unpatchify(pred_rgb,   model.patch_size, 3, model.img_size)
     pred_depth_img = unpatchify(pred_depth, model.patch_size, 1, model.img_size)
-    
-    # Denormalize predicted RGB
-    pred_rgb_denorm = pred_rgb_img * std + mean
-    
-    # Create background mask for depth (where depth is near 0)
-    depth_bg_mask = (depth_batch < 0.01).float()  # Background is near 0
-    
-    # Create visualization for each sample
+    pred_rgb_denorm = pred_rgb_img * rgb_std + rgb_mean
+
     for idx in range(num_samples):
-        fig = plt.figure(figsize=(16, 12))  # Square-ish for 3x3 grid
-        
-        # ========== ROW 1: RGB ==========
-        # Original RGB
-        ax1 = plt.subplot(3, 3, 1)
-        ax1.imshow(rgb_denorm[idx].cpu().permute(1, 2, 0).clamp(0, 1))
-        ax1.set_title(f'Original RGB\n{names[idx]}', fontsize=10, fontweight='bold')
-        ax1.axis('off')
-        
-        # Masked RGB
-        ax2 = plt.subplot(3, 3, 2)
-        mask_rgb_img = mask_rgb[idx].reshape(int(mask_rgb.shape[1]**.5), int(mask_rgb.shape[1]**.5))
-        mask_rgb_img = mask_rgb_img.unsqueeze(0).unsqueeze(0).float()
-        mask_rgb_img = torch.nn.functional.interpolate(
-            mask_rgb_img, size=(model.img_size, model.img_size), mode='nearest'
-        )
-        rgb_masked = rgb_denorm[idx] * (1 - mask_rgb_img[0])
-        ax2.imshow(rgb_masked.cpu().permute(1, 2, 0).clamp(0, 1))
-        ax2.set_title(f'Masked RGB\n({mask_rgb[idx].mean().item():.1%} masked)', fontsize=10)
-        ax2.axis('off')
-        
-        # Reconstructed RGB
-        ax3 = plt.subplot(3, 3, 3)
-        ax3.imshow(pred_rgb_denorm[idx].cpu().permute(1, 2, 0).clamp(0, 1))
-        ax3.set_title(f'Reconstructed RGB\nLoss: {loss_rgb.item():.4f}', fontsize=10)
-        ax3.axis('off')
-        
-        # ========== ROW 2: Depth ==========
-        # Depth - Original
-        ax4 = plt.subplot(3, 3, 4)
+        fig = plt.figure(figsize=(16, 20))
+
+        # ── Row 1: RGB ────────────────────────────────────────────────────────
+        ax = plt.subplot(4, 3, 1)
+        ax.imshow(rgb_denorm[idx].cpu().permute(1, 2, 0).clamp(0, 1))
+        ax.set_title(f'Original RGB\n{names[idx]}', fontsize=9, fontweight='bold')
+        ax.axis('off')
+
+        ax = plt.subplot(4, 3, 2)
+        m = mask_rgb[idx].reshape(int(mask_rgb.shape[1]**.5), -1)
+        m = torch.nn.functional.interpolate(
+            m.unsqueeze(0).unsqueeze(0).float(), size=(model.img_size, model.img_size), mode='nearest')
+        ax.imshow((rgb_denorm[idx] * (1 - m[0])).cpu().permute(1, 2, 0).clamp(0, 1))
+        ax.set_title(f'Masked RGB\n({mask_rgb[idx].mean().item():.1%} masked)', fontsize=9)
+        ax.axis('off')
+
+        ax = plt.subplot(4, 3, 3)
+        ax.imshow(pred_rgb_denorm[idx].cpu().permute(1, 2, 0).clamp(0, 1))
+        ax.set_title(f'Reconstructed RGB\nLoss: {loss_rgb.item():.4f}', fontsize=9)
+        ax.axis('off')
+
+        # ── Row 2: Depth ──────────────────────────────────────────────────────
         depth_data = depth_batch[idx, 0].cpu().numpy()
-        # Set background pixels to NaN for complete transparency
-        depth_display = depth_data.copy()
-        depth_display[depth_data < 0.01] = np.nan
-        im4 = ax4.imshow(depth_display, cmap='viridis')
-        ax4.set_title('Original Depth\n(no background)', fontsize=10, fontweight='bold')
-        ax4.axis('off')
-        ax4.set_facecolor('white')  # White background for clarity
-        
-        # Depth - Masked
-        ax5 = plt.subplot(3, 3, 5)
-        mask_depth_img = mask_depth[idx].reshape(int(mask_depth.shape[1]**.5), int(mask_depth.shape[1]**.5))
-        mask_depth_img = mask_depth_img.unsqueeze(0).unsqueeze(0).float()
-        mask_depth_img = torch.nn.functional.interpolate(
-            mask_depth_img, size=(model.img_size, model.img_size), mode='nearest'
-        )
-        depth_masked = depth_batch[idx] * (1 - mask_depth_img[0])
-        depth_masked_data = depth_masked[0].cpu().numpy()
-        # Set background AND masked pixels to NaN
-        depth_masked_display = depth_masked_data.copy()
-        depth_masked_display[depth_data < 0.01] = np.nan  # Background
-        depth_masked_display[depth_masked_data < 0.01] = np.nan  # Masked regions
-        im5 = ax5.imshow(depth_masked_display, cmap='viridis')
-        ax5.set_title(f'Masked Depth\n({mask_depth[idx].mean().item():.1%} masked)', fontsize=10)
-        ax5.axis('off')
-        ax5.set_facecolor('white')
-        
-        # Depth - Reconstructed
-        ax6 = plt.subplot(3, 3, 6)
-        pred_depth_data = pred_depth_img[idx, 0].cpu().numpy()
-        # Apply background mask to reconstruction (set background to NaN)
-        pred_depth_display = pred_depth_data.copy()
-        pred_depth_display[depth_data < 0.01] = np.nan
-        im6 = ax6.imshow(pred_depth_display, cmap='viridis')
-        ax6.set_title(f'Reconstructed Depth\nLoss: {loss_depth.item():.4f}', fontsize=10)
-        ax6.axis('off')
-        ax6.set_facecolor('white')
-        
-        # ========== ROW 3: Point Cloud ==========
-        # Point Cloud - Original
-        ax7 = plt.subplot(3, 3, 7, projection='3d')
+        bg = depth_data < 0.01
+
+        ax = plt.subplot(4, 3, 4)
+        d = depth_data.copy(); d[bg] = np.nan
+        ax.imshow(d, cmap='viridis'); ax.set_title('Original Depth', fontsize=9, fontweight='bold')
+        ax.axis('off'); ax.set_facecolor('white')
+
+        ax = plt.subplot(4, 3, 5)
+        md = mask_depth[idx].reshape(int(mask_depth.shape[1]**.5), -1)
+        md = torch.nn.functional.interpolate(
+            md.unsqueeze(0).unsqueeze(0).float(), size=(model.img_size, model.img_size), mode='nearest')
+        dm = (depth_batch[idx] * (1 - md[0]))[0].cpu().numpy()
+        dm_disp = dm.copy(); dm_disp[bg] = np.nan; dm_disp[dm < 0.01] = np.nan
+        ax.imshow(dm_disp, cmap='viridis')
+        ax.set_title(f'Masked Depth\n({mask_depth[idx].mean().item():.1%} masked)', fontsize=9)
+        ax.axis('off'); ax.set_facecolor('white')
+
+        ax = plt.subplot(4, 3, 6)
+        pd_disp = pred_depth_img[idx, 0].cpu().numpy().copy(); pd_disp[bg] = np.nan
+        ax.imshow(pd_disp, cmap='viridis')
+        ax.set_title(f'Reconstructed Depth\nLoss: {loss_depth.item():.4f}', fontsize=9)
+        ax.axis('off'); ax.set_facecolor('white')
+
+        # ── Row 3: Point cloud — original / FPS masking / reconstructed ───────
         pc_np = pc_batch[idx].cpu().numpy()
-        # Subsample for visualization
-        if pc_np.shape[0] > 1000:
-            vis_indices_orig = np.random.choice(pc_np.shape[0], 1000, replace=False)
-            pc_vis = pc_np[vis_indices_orig]
+        mask_pc_s = mask_pc[idx].cpu().numpy()          # (S,)  1=masked 0=visible
+        n_tok     = model.num_pc_tokens
+        n_masked  = int(mask_pc_s.sum())
+        n_visible = n_tok - n_masked
+
+        # FPS centres for this sample
+        centers = pc_batch[idx, fps_indices[idx]].cpu().numpy()   # (S, 3)
+        vis_cen = centers[mask_pc_s == 0]
+        msk_cen = centers[mask_pc_s == 1]
+
+        # Original PC
+        ax = plt.subplot(4, 3, 7, projection='3d')
+        sub = pc_np[np.random.choice(len(pc_np), min(2000, len(pc_np)), replace=False)]
+        _scatter3d(ax, sub, c=sub[:, 2], cmap='viridis', s=2)
+        ax.set_title(f'Original PC\n{len(pc_np)} pts', fontsize=9, fontweight='bold')
+
+        # FPS token centres coloured by visibility
+        ax = plt.subplot(4, 3, 8, projection='3d')
+        if len(vis_cen):
+            _scatter3d(ax, vis_cen, c='#2ecc71', s=16, alpha=0.9, label='visible')
+        if len(msk_cen):
+            _scatter3d(ax, msk_cen, c='#e74c3c', s=16, alpha=0.9, label='masked')
+        ax.legend(fontsize=7, loc='upper left')
+        ax.set_title(f'FPS token centres\nvisible={n_visible}  masked={n_masked}'
+                     f'  ({100*n_masked/n_tok:.0f}%)', fontsize=9)
+
+        # Reconstructed PC
+        ax = plt.subplot(4, 3, 9, projection='3d')
+        pred_np = pred_pc[idx].detach().cpu().numpy()
+        pred_sub = pred_np[np.random.choice(len(pred_np), min(2000, len(pred_np)), replace=False)]
+        _scatter3d(ax, pred_sub, c=pred_sub[:, 2], cmap='plasma', s=2)
+        ax.set_title(f'Reconstructed PC\nLoss: {loss_pc.item():.4f}', fontsize=9)
+
+        # ── Row 4: Visible / masked raw points ────────────────────────────────
+        # Use the per-sample member_idx (recompute if sample != 0)
+        if idx == 0:
+            m_idx = member_idx_b
         else:
-            pc_vis = pc_np
-        
-        # Scatter with color based on Z coordinate
-        scatter = ax7.scatter(pc_vis[:, 0], pc_vis[:, 1], pc_vis[:, 2], 
-                             c=pc_vis[:, 2], cmap='viridis', s=2, alpha=0.8)
-        ax7.set_title(f'Original Point Cloud\n{pc_np.shape[0]} points', 
-                     fontsize=10, fontweight='bold')
-        ax7.set_xlabel('X', fontsize=8)
-        ax7.set_ylabel('Y', fontsize=8)
-        ax7.set_zlabel('Z', fontsize=8)
-        ax7.view_init(elev=20, azim=45)
-        
-        # Point Cloud - Masked
-        ax8 = plt.subplot(3, 3, 8, projection='3d')
-        # Get mask for this sample
-        mask_pc_sample = mask_pc[idx].cpu().numpy()
-        # Mask indicates which tokens are MASKED (1 = masked, 0 = visible)
-        # We want to show visible tokens
-        visible_mask = (1 - mask_pc_sample).astype(bool)
-        
-        # Since we don't have direct token-to-point mapping in visualization,
-        # we'll show a portion of points based on mask ratio to illustrate masking
-        num_visible = int(pc_np.shape[0] * (1 - mask_pc_sample.mean()))
-        if num_visible > 0:
-            visible_indices = np.random.choice(pc_np.shape[0], min(num_visible, 1000), replace=False)
-            pc_masked_vis = pc_np[visible_indices]
-        else:
-            pc_masked_vis = pc_np[:10]  # Show at least a few points
-        
-        scatter2 = ax8.scatter(pc_masked_vis[:, 0], pc_masked_vis[:, 1], pc_masked_vis[:, 2],
-                              c=pc_masked_vis[:, 2], cmap='viridis', s=2, alpha=0.8)
-        ax8.set_title(f'Masked Point Cloud\n({mask_pc_sample.mean():.1%} masked, ~{num_visible} visible)', 
-                     fontsize=10, fontweight='bold')
-        ax8.set_xlabel('X', fontsize=8)
-        ax8.set_ylabel('Y', fontsize=8)
-        ax8.set_zlabel('Z', fontsize=8)
-        ax8.view_init(elev=20, azim=45)
-        
-        # Point Cloud - Reconstructed
-        ax9 = plt.subplot(3, 3, 9, projection='3d')
-        pred_pc_np = pred_pc[idx].detach().cpu().numpy()
-        if pred_pc_np.shape[0] > 1000:
-            vis_indices = np.random.choice(pred_pc_np.shape[0], 1000, replace=False)
-            pred_pc_vis = pred_pc_np[vis_indices]
-        else:
-            pred_pc_vis = pred_pc_np
-        
-        # Scatter with color based on Z coordinate
-        scatter3 = ax9.scatter(pred_pc_vis[:, 0], pred_pc_vis[:, 1], pred_pc_vis[:, 2],
-                              c=pred_pc_vis[:, 2], cmap='viridis', s=2, alpha=0.8)
-        ax9.set_title(f'Reconstructed Point Cloud\n{pred_pc_np.shape[0]} points | Loss: {loss_pc.item():.4f}', 
-                     fontsize=10, fontweight='bold')
-        ax9.set_xlabel('X', fontsize=8)
-        ax9.set_ylabel('Y', fontsize=8)
-        ax9.set_zlabel('Z', fontsize=8)
-        ax9.view_init(elev=20, azim=45)  # Same viewing angle for comparison
-        
-        plt.suptitle(f'Epoch {epoch} - Sample {idx+1} - Total Loss: {loss.item():.4f}', 
-                    fontsize=14, fontweight='bold')
+            with torch.no_grad():
+                fps_i_s = model.pc_embed.fps(pc_batch[idx:idx+1], model.num_pc_tokens)
+                m_idx   = _pc_token_membership(pc_batch[idx:idx+1], fps_i_s,
+                                               model.pc_embed.group_size)
+
+        vis_pts_idx = np.unique(m_idx[mask_pc_s == 0].flatten()) if n_visible > 0 else np.array([], dtype=int)
+        msk_pts_idx = np.unique(m_idx[mask_pc_s == 1].flatten()) if n_masked  > 0 else np.array([], dtype=int)
+
+        ax = plt.subplot(4, 3, 10, projection='3d')
+        if len(vis_pts_idx):
+            v = pc_np[vis_pts_idx[np.random.choice(len(vis_pts_idx), min(2000, len(vis_pts_idx)), replace=False)]]
+            _scatter3d(ax, v, c='#2ecc71', s=3)
+        ax.set_title(f'Visible pts\n({len(vis_pts_idx)} pts)', fontsize=9)
+
+        ax = plt.subplot(4, 3, 11, projection='3d')
+        if len(msk_pts_idx):
+            m = pc_np[msk_pts_idx[np.random.choice(len(msk_pts_idx), min(2000, len(msk_pts_idx)), replace=False)]]
+            _scatter3d(ax, m, c='#e74c3c', s=3)
+        ax.set_title(f'Masked pts\n({len(msk_pts_idx)} pts)', fontsize=9)
+
+        # Loss summary panel
+        ax = plt.subplot(4, 3, 12)
+        ax.axis('off')
+        summary = (
+            f"Epoch {epoch}  —  Sample {idx+1}\n\n"
+            f"Total loss : {loss.item():.4f}\n"
+            f"RGB loss   : {loss_rgb.item():.4f}\n"
+            f"Depth loss : {loss_depth.item():.4f}\n"
+            f"PC loss    : {loss_pc.item():.4f}\n\n"
+            f"PC tokens masked : {n_masked}/{n_tok}  ({100*n_masked/n_tok:.0f}%)\n"
+            f"PC pts visible   : {len(vis_pts_idx)}\n"
+            f"PC pts masked    : {len(msk_pts_idx)}"
+        )
+        ax.text(0.05, 0.95, summary, transform=ax.transAxes, fontsize=9,
+                verticalalignment='top', fontfamily='monospace',
+                bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
+
+        plt.suptitle(f'Epoch {epoch}  |  {names[idx]}  |  Total Loss: {loss.item():.4f}',
+                     fontsize=13, fontweight='bold')
         plt.tight_layout()
-        
-        # Save
+
         save_path = save_dir / f'epoch_{epoch:03d}_sample_{idx+1}_{names[idx]}.png'
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.savefig(save_path, dpi=130, bbox_inches='tight')
         plt.close()
-        
+
         saved_paths.append(str(save_path))
         print(f"  Saved: {save_path.name}")
-    
+
     model.train()
     return saved_paths
 
@@ -312,7 +306,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train EmbodiedMAE on Sorghum Data')
     
     # Data parameters
-    parser.add_argument('--data_root', type=str, required=True,
+    parser.add_argument('--data_root', type=str, default='./Dataset/SorghumData/',
                        help='Path to data directory containing Sorghum folders')
     parser.add_argument('--img_size', type=int, default=224)
     parser.add_argument('--num_points', type=int, default=2048)
@@ -321,11 +315,11 @@ def main():
     parser.add_argument('--model_size', type=str, default='base',
                        choices=['small', 'base'])
     parser.add_argument('--mask_ratio', type=float, default=0.15)
-    parser.add_argument('--pc_loss_weight', type=float, default=10.0,
+    parser.add_argument('--pc_loss_weight', type=float, default=1.0,
                        help='Weight for point cloud loss (Chamfer distance is naturally small, so we scale it up)')
     
     # Training parameters
-    parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--epochs', type=int, default=3000)
     parser.add_argument('--lr', type=float, default=1.5e-3)
     parser.add_argument('--weight_decay', type=float, default=0.05)
@@ -338,17 +332,21 @@ def main():
                        help='Number of samples to visualize')
     
     # System
-    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--output_dir', type=str, default='./outputs_sorghum_lr-3mr-15_pc_w_0')
-    parser.add_argument('--save_freq', type=int, default=10)
+    parser.add_argument('--output_dir', type=str, default='./outputs/outputs_sorghum_lr-3mr-15_new_data_bs_64')
+    parser.add_argument('--save_freq', type=int, default=100)
+    parser.add_argument('--resume', type=str, default=None,
+                       help='Path to checkpoint to resume from (e.g., ./outputs_sorghum/checkpoints/checkpoint_epoch_50.pth)')
+    
+
     
     # Weights & Biases (wandb) arguments
     parser.add_argument('--use_wandb', action='store_true', default=True,
                        help='Use Weights & Biases for logging (default: True)')
     parser.add_argument('--no_wandb', action='store_false', dest='use_wandb',
                        help='Disable Weights & Biases')
-    parser.add_argument('--wandb_project', type=str, default='embodied-mae-sorghum_lr-3mr-15_pc_w_0',
+    parser.add_argument('--wandb_project', type=str, default='embodied-mae-sorghum_lr-3mr-15_new_data_bs_64',
                        help='W&B project name')
     parser.add_argument('--wandb_entity', type=str, default=None,
                        help='W&B entity (username or team name)')
@@ -377,12 +375,12 @@ def main():
     # Dataset and DataLoader
     print(f"\nLoading data from: {args.data_root}")
     train_dataset = SorghumDataset(
-        args.data_root, img_size=args.img_size, 
-        num_points=args.num_points, train=True
+        args.data_root, img_size=args.img_size,
+        num_points=args.num_points, split='train'
     )
     val_dataset = SorghumDataset(
         args.data_root, img_size=args.img_size,
-        num_points=args.num_points, train=False
+        num_points=args.num_points, split='val'
     )
     
     train_loader = DataLoader(
@@ -465,18 +463,52 @@ def main():
     
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     
+    # Resume from checkpoint if specified
+    start_epoch = 1
+    if args.resume:
+        if os.path.exists(args.resume):
+            print(f"\n{'='*80}")
+            print(f"📂 Loading checkpoint from: {args.resume}")
+            checkpoint = torch.load(args.resume, map_location=device)
+            
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+            history = checkpoint.get('history', {
+                'train_loss': [], 'train_rgb': [], 'train_depth': [], 'train_pc': [],
+                'val_loss': [], 'val_rgb': [], 'val_depth': [], 'val_pc': []
+            })
+            
+            print(f"✅ Resumed from epoch {checkpoint['epoch']}")
+            print(f"   Starting from epoch {start_epoch}")
+            print(f"   Best validation loss so far: {best_val_loss:.4f}")
+            print(f"{'='*80}\n")
+        else:
+            print(f"\n⚠️  Checkpoint not found: {args.resume}")
+            print(f"   Starting from scratch instead.\n")
+            best_val_loss = float('inf')
+            history = {
+                'train_loss': [], 'train_rgb': [], 'train_depth': [], 'train_pc': [],
+                'val_loss': [], 'val_rgb': [], 'val_depth': [], 'val_pc': []
+            }
+    else:
+        best_val_loss = float('inf')
+        history = {
+            'train_loss': [], 'train_rgb': [], 'train_depth': [], 'train_pc': [],
+            'val_loss': [], 'val_rgb': [], 'val_depth': [], 'val_pc': []
+        }
+    
     # Training loop
-    best_val_loss = float('inf')
-    history = {
-        'train_loss': [], 'train_rgb': [], 'train_depth': [], 'train_pc': [],
-        'val_loss': [], 'val_rgb': [], 'val_depth': [], 'val_pc': []
-    }
     
     print(f"\nStarting training for {args.epochs} epochs...")
+    if args.resume and start_epoch > 1:
+        print(f"Resuming from epoch {start_epoch} (already completed {start_epoch - 1} epochs)")
     print(f"Visualizations will be saved every {args.viz_freq} epochs to: {viz_dir}")
     print("=" * 80)
     
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         print(f"\n{'='*80}")
         print(f"Epoch {epoch}/{args.epochs}")
         print(f"Learning rate: {optimizer.param_groups[0]['lr']:.6f}")
@@ -541,8 +573,11 @@ def main():
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
                 'train_loss': train_loss,
                 'val_loss': val_loss,
+                'best_val_loss': best_val_loss,
+                'history': history,
             }, checkpoint_path)
             print(f"💾 Checkpoint saved: {checkpoint_path.name}")
         
@@ -554,7 +589,10 @@ def main():
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
                 'val_loss': val_loss,
+                'best_val_loss': best_val_loss,
+                'history': history,
             }, best_model_path)
             print(f"⭐ New best model saved! Val Loss: {val_loss:.4f}")
         

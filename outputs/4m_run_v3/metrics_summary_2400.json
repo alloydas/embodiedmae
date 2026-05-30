@@ -1,0 +1,35 @@
+{
+  "best_epoch": 2280,
+  "final_epoch": 2400,
+  "total_epochs_completed": 2400,
+  "best": {
+    "val_loss": 0.0204,
+    "val_rgb": 0.0127,
+    "val_depth": 0.0046,
+    "val_pc": 0.0003,
+    "val_text": 0.0,
+    "val_rgb_mse": 0.697611,
+    "val_depth_mse": 0.007063,
+    "val_pc_chamfer": 0.000308,
+    "val_pc_emd": 0.0,
+    "val_param_mse": 0.016849,
+    "val_param_mae": 0.056765,
+    "val_param_mae_masked": 0.001025,
+    "val_param_acc05": 1.0
+  },
+  "final": {
+    "val_loss": 0.021,
+    "val_rgb": 0.0133,
+    "val_depth": 0.0046,
+    "val_pc": 0.0003,
+    "val_text": 0.0,
+    "val_rgb_mse": 0.697717,
+    "val_depth_mse": 0.006968,
+    "val_pc_chamfer": 0.000299,
+    "val_pc_emd": 0.3132,
+    "val_param_mse": 0.016526,
+    "val_param_mae": 0.054648,
+    "val_param_mae_masked": 0.001052,
+    "val_param_acc05": 1.0
+  }
+}

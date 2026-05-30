@@ -1,0 +1,56 @@
+# Datasets — too large to track
+Dataset/
+Datasets/
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# Training artefacts — ignore everything by default, then whitelist
+outputs/**
+!outputs/4m_run_v3/
+outputs/4m_run_v3/**
+!outputs/4m_run_v3/metrics_summary_2400.json
+!outputs/4m_run_v3/training_history_recovered.json
+!outputs/4m_run_v3/loss_curves_2400.png
+!outputs/4m_run_v3/loss_curves.png
+!outputs/4m_run_v3/REPORT.md
+!outputs/4m_run_v3/config.json
+
+# Legacy run dirs (kept for reference but not in git)
+outputs_sorghum_*/
+
+# Wandb + SLURM logs
+wandb/
+logs/
+
+# Heavy eval dumps — keep the script that produces them, not the dump
+slide_dump/
+slide_dump2/
+slide_dump3/
+slide_dump_v3/
+slide_dump_v3_2400/
+slide_dump_v3_diverse/
+
+# Per-plant figure dirs — the .pptx already bundles them
+slide_per_plant_v3/
+slide_per_plant_v3_2400/
+slide_per_plant_v3_diverse/
+
+# Validation visualisations
+vis_val/
+vis_val.zip
+
+# Built LaTeX side-products
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk

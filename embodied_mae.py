@@ -394,7 +394,7 @@ class EmbodiedMAE(nn.Module):
         
         # Positional embeddings
         self.pos_embed_2d = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim), requires_grad=False)
-        self.pos_embed_pc = nn.Parameter(torch.zeros(1, num_pc_tokens, embed_dim), requires_grad=False)
+        self.pos_embed_pc = nn.Parameter(torch.zeros(1, num_pc_tokens, embed_dim), requires_grad=True)
         
         # CLS token
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -481,117 +481,49 @@ class EmbodiedMAE(nn.Module):
             
     def random_masking_dirichlet(self, x_rgb, x_depth, x_pc, mask_ratio_total=0.75):
         """
-        Random masking using Dirichlet distribution to allocate visible tokens
-        
-        Args:
-            x_rgb: (B, L, D) RGB tokens
-            x_depth: (B, L, D) Depth tokens
-            x_pc: (B, M, D) Point cloud tokens
-            mask_ratio_total: Total ratio of masked tokens
-            
-        Returns:
-            Masked tokens and masks for each modality
+        Random masking using Dirichlet distribution to allocate visible tokens.
+
+        A single Dirichlet sample determines the modality split for the whole batch,
+        so all samples have identical visible-token counts per modality. This avoids
+        the padding/zero-token corruption that arises from per-sample allocation.
         """
         B = x_rgb.shape[0]
         L_rgb = x_rgb.shape[1]
         L_depth = x_depth.shape[1]
         L_pc = x_pc.shape[1]
-        
-        # Total visible tokens
+
         total_tokens = L_rgb + L_depth + L_pc
         num_visible_total = int(total_tokens * (1 - mask_ratio_total))
-        
-        # Sample from Dirichlet distribution
+
+        # One Dirichlet draw per batch step — varies across iterations, uniform within batch
         alpha = torch.ones(3) * self.dirichlet_alpha
-        lambdas = torch.distributions.Dirichlet(alpha).sample((B,))  # (B, 3)
-        
-        # Allocate visible tokens to each modality
-        num_visible_rgb = (lambdas[:, 0] * num_visible_total).long()
-        num_visible_depth = (lambdas[:, 1] * num_visible_total).long()
-        num_visible_pc = num_visible_total - num_visible_rgb - num_visible_depth
-        
-        # Ensure at least 1 visible token per modality
-        num_visible_rgb = torch.clamp(num_visible_rgb, min=1, max=L_rgb)
-        num_visible_depth = torch.clamp(num_visible_depth, min=1, max=L_depth)
-        num_visible_pc = torch.clamp(num_visible_pc, min=1, max=L_pc)
-        
-        # Create masks and indices
-        x_rgb_visible_list = []
-        x_depth_visible_list = []
-        x_pc_visible_list = []
-        mask_rgb_list = []
-        mask_depth_list = []
-        mask_pc_list = []
-        ids_restore_rgb_list = []
-        ids_restore_depth_list = []
-        ids_restore_pc_list = []
-        
-        for i in range(B):
-            # RGB masking
-            noise_rgb = torch.rand(L_rgb, device=x_rgb.device)
-            ids_shuffle_rgb = torch.argsort(noise_rgb)
-            ids_restore_rgb = torch.argsort(ids_shuffle_rgb)
-            
-            ids_keep_rgb = ids_shuffle_rgb[:num_visible_rgb[i]]
-            x_rgb_visible_list.append(x_rgb[i:i+1, ids_keep_rgb])
-            
-            mask_rgb = torch.ones(L_rgb, device=x_rgb.device)
-            mask_rgb[:num_visible_rgb[i]] = 0
-            mask_rgb = torch.gather(mask_rgb, 0, ids_restore_rgb)
-            mask_rgb_list.append(mask_rgb)
-            ids_restore_rgb_list.append(ids_restore_rgb)
-            
-            # Depth masking
-            noise_depth = torch.rand(L_depth, device=x_depth.device)
-            ids_shuffle_depth = torch.argsort(noise_depth)
-            ids_restore_depth = torch.argsort(ids_shuffle_depth)
-            
-            ids_keep_depth = ids_shuffle_depth[:num_visible_depth[i]]
-            x_depth_visible_list.append(x_depth[i:i+1, ids_keep_depth])
-            
-            mask_depth = torch.ones(L_depth, device=x_depth.device)
-            mask_depth[:num_visible_depth[i]] = 0
-            mask_depth = torch.gather(mask_depth, 0, ids_restore_depth)
-            mask_depth_list.append(mask_depth)
-            ids_restore_depth_list.append(ids_restore_depth)
-            
-            # Point cloud masking
-            noise_pc = torch.rand(L_pc, device=x_pc.device)
-            ids_shuffle_pc = torch.argsort(noise_pc)
-            ids_restore_pc = torch.argsort(ids_shuffle_pc)
-            
-            ids_keep_pc = ids_shuffle_pc[:num_visible_pc[i]]
-            x_pc_visible_list.append(x_pc[i:i+1, ids_keep_pc])
-            
-            mask_pc = torch.ones(L_pc, device=x_pc.device)
-            mask_pc[:num_visible_pc[i]] = 0
-            mask_pc = torch.gather(mask_pc, 0, ids_restore_pc)
-            mask_pc_list.append(mask_pc)
-            ids_restore_pc_list.append(ids_restore_pc)
-        
-        # Pad to max length for batching
-        max_visible_rgb = max(v.shape[1] for v in x_rgb_visible_list)
-        max_visible_depth = max(v.shape[1] for v in x_depth_visible_list)
-        max_visible_pc = max(v.shape[1] for v in x_pc_visible_list)
-        
-        x_rgb_visible = torch.zeros(B, max_visible_rgb, x_rgb.shape[2], device=x_rgb.device)
-        x_depth_visible = torch.zeros(B, max_visible_depth, x_depth.shape[2], device=x_depth.device)
-        x_pc_visible = torch.zeros(B, max_visible_pc, x_pc.shape[2], device=x_pc.device)
-        
-        for i in range(B):
-            x_rgb_visible[i, :x_rgb_visible_list[i].shape[1]] = x_rgb_visible_list[i]
-            x_depth_visible[i, :x_depth_visible_list[i].shape[1]] = x_depth_visible_list[i]
-            x_pc_visible[i, :x_pc_visible_list[i].shape[1]] = x_pc_visible_list[i]
-        
-        mask_rgb = torch.stack(mask_rgb_list)
-        mask_depth = torch.stack(mask_depth_list)
-        mask_pc = torch.stack(mask_pc_list)
-        
-        ids_restore_rgb = torch.stack(ids_restore_rgb_list)
-        ids_restore_depth = torch.stack(ids_restore_depth_list)
-        ids_restore_pc = torch.stack(ids_restore_pc_list)
-        
-        return (x_rgb_visible, x_depth_visible, x_pc_visible,
+        lambdas = torch.distributions.Dirichlet(alpha).sample()  # (3,)
+
+        # Each modality draws from its own lambda — symmetric allocation.
+        # Using the last modality as a remainder biases it toward full visibility.
+        num_visible_rgb   = max(1, min(int(lambdas[0].item() * num_visible_total), L_rgb))
+        num_visible_depth = max(1, min(int(lambdas[1].item() * num_visible_total), L_depth))
+        num_visible_pc    = max(1, min(int(lambdas[2].item() * num_visible_total), L_pc))
+
+        def _mask(x, num_visible, L):
+            noise = torch.rand(B, L, device=x.device)
+            ids_shuffle = torch.argsort(noise, dim=1)
+            ids_restore = torch.argsort(ids_shuffle, dim=1)
+
+            ids_keep = ids_shuffle[:, :num_visible]
+            x_vis = torch.gather(x, 1, ids_keep.unsqueeze(-1).expand(-1, -1, x.shape[2]))
+
+            mask = torch.ones(B, L, device=x.device)
+            mask[:, :num_visible] = 0
+            mask = torch.gather(mask, 1, ids_restore)
+
+            return x_vis, mask, ids_restore
+
+        x_rgb_vis, mask_rgb, ids_restore_rgb = _mask(x_rgb, num_visible_rgb, L_rgb)
+        x_depth_vis, mask_depth, ids_restore_depth = _mask(x_depth, num_visible_depth, L_depth)
+        x_pc_vis, mask_pc, ids_restore_pc = _mask(x_pc, num_visible_pc, L_pc)
+
+        return (x_rgb_vis, x_depth_vis, x_pc_vis,
                 mask_rgb, mask_depth, mask_pc,
                 ids_restore_rgb, ids_restore_depth, ids_restore_pc)
     
@@ -730,9 +662,8 @@ class EmbodiedMAE(nn.Module):
         if pred_pc.shape[1] > self.target_points:
             pred_pc = pred_pc[:, :self.target_points, :]
         elif pred_pc.shape[1] < self.target_points:
-            # Pad with zeros if we have fewer points
             padding = self.target_points - pred_pc.shape[1]
-            pred_pc = torch.cat([pred_pc, torch.zeros(B, padding, 3, device=pred_pc.device)], dim=1)
+            pred_pc = torch.cat([pred_pc, pred_pc[:, :padding, :]], dim=1)
         
         return pred_rgb, pred_depth, pred_pc
     
@@ -752,63 +683,26 @@ class EmbodiedMAE(nn.Module):
         loss_rgb = loss_rgb.mean(dim=-1)
         loss_rgb = (loss_rgb * mask_rgb).sum() / mask_rgb.sum()
         
-        # Depth loss
+        # Depth loss — normalize TARGET only; model learns to predict normalized values
         target_depth = self.patchify(imgs_depth, self.patch_size, imgs_depth.shape[1])
-        
-        # Global depth normalization before loss calculation
+
         if self.normalize_depth_global:
-            B = target_depth.shape[0]
-            N = target_depth.shape[1]  # Number of patches
-            
+            B_d = target_depth.shape[0]
+            N_d = target_depth.shape[1]
+            target_flat = target_depth.reshape(B_d, -1)
+
             if self.depth_norm_type == 'minmax':
-                # Min-max normalization per sample: (x - min) / (max - min)
-                # Reshape to (B, -1) to get per-sample min/max
-                target_flat = target_depth.reshape(B, -1)
-                pred_flat = pred_depth.reshape(B, -1)
-                
-                # Normalize per sample
-                target_normalized = torch.zeros_like(target_flat)
-                pred_normalized = torch.zeros_like(pred_flat)
-                
-                for b in range(B):
-                    target_min = target_flat[b].min()
-                    target_max = target_flat[b].max()
-                    
-                    if target_max > target_min:
-                        target_normalized[b] = (target_flat[b] - target_min) / (target_max - target_min)
-                        # Normalize prediction with same min/max as target
-                        pred_normalized[b] = (pred_flat[b] - target_min) / (target_max - target_min)
-                    else:
-                        target_normalized[b] = target_flat[b]
-                        pred_normalized[b] = pred_flat[b]
-                
-                target_depth = target_normalized.reshape(B, N, -1)
-                pred_depth = pred_normalized.reshape(B, N, -1)
-                
+                t_min = target_flat.min(dim=1, keepdim=True).values
+                t_max = target_flat.max(dim=1, keepdim=True).values
+                denom = (t_max - t_min).clamp(min=1e-6)
+                target_flat = (target_flat - t_min) / denom
             elif self.depth_norm_type == 'standard':
-                # Standardization per sample: (x - mean) / std
-                target_flat = target_depth.reshape(B, -1)
-                pred_flat = pred_depth.reshape(B, -1)
-                
-                target_normalized = torch.zeros_like(target_flat)
-                pred_normalized = torch.zeros_like(pred_flat)
-                
-                for b in range(B):
-                    target_mean = target_flat[b].mean()
-                    target_std = target_flat[b].std()
-                    
-                    if target_std > 1e-6:
-                        target_normalized[b] = (target_flat[b] - target_mean) / target_std
-                        # Normalize prediction with same mean/std as target
-                        pred_normalized[b] = (pred_flat[b] - target_mean) / target_std
-                    else:
-                        target_normalized[b] = target_flat[b]
-                        pred_normalized[b] = pred_flat[b]
-                
-                target_depth = target_normalized.reshape(B, N, -1)
-                pred_depth = pred_normalized.reshape(B, N, -1)
-        
-        # Per-patch normalization (only if global norm is not used)
+                t_mean = target_flat.mean(dim=1, keepdim=True)
+                t_std = target_flat.std(dim=1, keepdim=True).clamp(min=1e-6)
+                target_flat = (target_flat - t_mean) / t_std
+
+            target_depth = target_flat.reshape(B_d, N_d, -1)
+
         elif self.norm_pix_loss:
             mean = target_depth.mean(dim=-1, keepdim=True)
             var = target_depth.var(dim=-1, keepdim=True)
@@ -818,21 +712,8 @@ class EmbodiedMAE(nn.Module):
         loss_depth = loss_depth.mean(dim=-1)
         loss_depth = (loss_depth * mask_depth).sum() / mask_depth.sum()
         
-        # Point cloud loss - Use Chamfer Distance
-        # Now we reconstruct full point cloud: pred_pc (B, 2048, 3) vs pc (B, 2048, 3)
-        B = pred_pc.shape[0]
-        
-        # Compute Chamfer distance between full predicted and target point clouds
-        loss_pc_list = []
-        for i in range(B):
-            pred_sample = pred_pc[i]  # (2048, 3)
-            target_sample = pc[i]  # (2048, 3)
-            
-            # Compute Chamfer distance
-            cd = chamfer_distance(pred_sample.unsqueeze(0), target_sample.unsqueeze(0))
-            loss_pc_list.append(cd)
-        
-        loss_pc = torch.stack(loss_pc_list).mean()
+        # Point cloud loss - batched Chamfer Distance
+        loss_pc = chamfer_distance(pred_pc, pc)
         
         # Apply weight to point cloud loss to balance with RGB/Depth
         # Chamfer distance is naturally much smaller, so we scale it up

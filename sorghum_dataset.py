@@ -1,7 +1,6 @@
 """
 Custom Dataset Loader for Sorghum Data Structure
-Each sample is in a separate folder with *_nc.ply, rgb.png, and depth.png
-Automatically handles train/val split
+Loads data from separate train and val folders
 """
 
 import torch
@@ -15,24 +14,67 @@ import open3d as o3d
 
 class SorghumDataset(Dataset):
     """
-    Dataset for Sorghum data structure
+    Dataset for Sorghum data structure with separate train/val folders
     
     Expected structure:
+    Option 1:
     data_root/
+        train/
+            Sorghum_1_1/
+                Sorghum_1_nc.ply
+                rgb.png
+                depth_no_bg.png
+            Sorghum_2_2/
+                ...
+        val/
+            Sorghum_9_1/
+                Sorghum_9_nc.ply
+                rgb.png
+                depth_no_bg.png
+            ...
+    
+    Option 2:
+    train/
         Sorghum_1_1/
-            Sorghum_1_nc.ply  (or any file ending with _nc.ply)
-            rgb.png
-            depth.png
-        Sorghum_9_99/
-            Sorghum_9_nc.ply
-            rgb.png
-            depth.png
-        ...
+            ...
+    val/
+        Sorghum_9_1/
+            ...
+    
+    Usage:
+        # For training
+        train_dataset = SorghumDataset(data_root='./data/train')
+        # OR if using Option 1
+        train_dataset = SorghumDataset(data_root='./data', split='train')
+        
+        # For validation
+        val_dataset = SorghumDataset(data_root='./data/val')
+        # OR if using Option 1
+        val_dataset = SorghumDataset(data_root='./data', split='val')
     """
-    def __init__(self, data_root, img_size=224, num_points=2048, train=True, train_split=0.9, seed=42):
+    def __init__(self, data_root, img_size=224, num_points=10000, split=None):
+        """
+        Args:
+            data_root: Path to data directory
+            img_size: Image size for resizing
+            num_points: Number of points in point cloud
+            split: Optional split name ('train' or 'val'). If provided, will look for data_root/split/
+        """
         self.data_root = Path(data_root)
         self.img_size = img_size
         self.num_points = num_points
+        
+        # Determine the folder to load from
+        if split is not None:
+            # Option 1: data_root/train/ or data_root/val/
+            self.load_dir = self.data_root / split
+            if not self.load_dir.exists():
+                raise ValueError(f"Split directory not found: {self.load_dir}")
+        else:
+            # Option 2: data_root is already train/ or val/
+            self.load_dir = self.data_root
+        
+        print(f"Loading data from: {self.load_dir}")
         
         # Image transformations
         self.rgb_transform = transforms.Compose([
@@ -47,49 +89,36 @@ class SorghumDataset(Dataset):
         ])
         
         # Get all sample folders and verify they have required files
-        all_samples = []
-        for folder in sorted(self.data_root.iterdir()):
+        self.samples = []
+        for folder in sorted(self.load_dir.iterdir()):
             if not folder.is_dir():
                 continue
             
             # Check for required files
             rgb_path = folder / 'rgb.png'
-            depth_path = folder / 'depth_no_bg.png'
+            depth_path = folder / 'depth.png'
             
             # Find point cloud file ending with _nc.ply
-            pc_files = list(folder.glob('*_nc.ply'))
+            pc_files = list(folder.glob('*_nc_cam.ply'))
+            #print(pc_files)
             
             if rgb_path.exists() and depth_path.exists() and len(pc_files) > 0:
-                all_samples.append(folder)
+                self.samples.append(folder)
             else:
                 print(f"⚠️  Skipping {folder.name}: missing files (RGB={rgb_path.exists()}, Depth={depth_path.exists()}, PC={len(pc_files)>0})")
         
-        if len(all_samples) == 0:
-            raise ValueError(f"No valid samples found in {data_root}!\n"
-                           f"Expected structure: folder/*_nc.ply, folder/rgb.png, folder/depth_no_bg.png")
+        if len(self.samples) == 0:
+            raise ValueError(f"No valid samples found in {self.load_dir}!\n"
+                           f"Expected structure: folder/*_nc.ply, folder/rgb.png, folder/depth.png")
         
-        # Shuffle with fixed seed for reproducible splits
-        np.random.seed(seed)
-        indices = np.random.permutation(len(all_samples))
-        all_samples = [all_samples[i] for i in indices]
-        
-        # Split into train/val
-        split_idx = int(len(all_samples) * train_split)
-        if train:
-            self.samples = all_samples[:split_idx]
-            split_name = 'train'
-        else:
-            self.samples = all_samples[split_idx:]
-            split_name = 'val'
-        
-        print(f"✅ Loaded {len(self.samples)} samples for {split_name} split (total: {len(all_samples)})")
+        print(f"✅ Loaded {len(self.samples)} samples from {self.load_dir.name}")
     
     def __len__(self):
         return len(self.samples)
     
     def find_pointcloud_file(self, folder):
         """Find the point cloud file ending with _nc.ply"""
-        pc_files = list(folder.glob('*_nc.ply'))
+        pc_files = list(folder.glob('*_nc_cam.ply'))
         if len(pc_files) == 0:
             raise FileNotFoundError(f"No *_nc.ply file found in {folder}")
         return pc_files[0]  # Return the first one if multiple exist
@@ -135,7 +164,7 @@ class SorghumDataset(Dataset):
             rgb = self.rgb_transform(rgb)
             
             # Load Depth
-            depth_path = sample_dir / 'depth_no_bg.png'
+            depth_path = sample_dir / 'depth.png'
             depth = Image.open(depth_path).convert('L')
             depth = self.depth_transform(depth)
             
@@ -153,13 +182,14 @@ class SorghumDataset(Dataset):
 
 
 if __name__ == '__main__':
-    # Test the dataset
-    dataset = SorghumDataset('./data', train=True)
-    print(f"Dataset size: {len(dataset)}")
-    
-    if len(dataset) > 0:
-        rgb, depth, pc, name = dataset[0]
-        print(f"\nSample: {name}")
-        print(f"RGB shape: {rgb.shape}")
-        print(f"Depth shape: {depth.shape}")
-        print(f"Point cloud shape: {pc.shape}")
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('data_root', help='Path containing train/ and val/ subdirectories')
+    args = parser.parse_args()
+
+    for split in ('train', 'val'):
+        ds = SorghumDataset(args.data_root, split=split)
+        print(f"{split}: {len(ds)} samples")
+        if len(ds) > 0:
+            rgb, depth, pc, name = ds[0]
+            print(f"  sample={name}  rgb={tuple(rgb.shape)}  depth={tuple(depth.shape)}  pc={tuple(pc.shape)}")
