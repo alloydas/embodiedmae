@@ -1,5 +1,5 @@
 {
-    "data_root": "./Dataset/new_data",
+    "data_root": "/work/mech-ai-scratch/alloy/embodiedmae/Dataset/new_data",
     "img_size": 224,
     "num_points": 8196,
     "model_size": "base",
@@ -19,7 +19,7 @@
     "resume": "./outputs/4m_run_v3/checkpoints/checkpoint_epoch_1100.pth",
     "viz_freq": 50,
     "num_viz_samples": 12,
-    "world_size": 1,
+    "world_size": 4,
     "dist_backend": "nccl",
     "dist_url": "env://",
     "num_workers": 32,

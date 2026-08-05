@@ -46,7 +46,11 @@ from PIL import Image
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from embodied_mae import chamfer_distance, earth_movers_distance
+from embodied_mae import (
+    earth_movers_distance,
+    format_pc_threshold,
+    pointcloud_reconstruction_metrics,
+)
 from embodied_mae_4m import (
     N_PARAMS,
     embodied_mae_4m_base,
@@ -159,10 +163,16 @@ def build_params_record(target_norm: np.ndarray,
 # ── Metrics helpers ──────────────────────────────────────────────────────────
 
 def per_sample_metrics(rgb, pred_rgb_img, depth, pred_depth_img, pc, pred_pc,
-                       params, pred_params, text_valid, text_mask, compute_emd):
+                       params, pred_params, text_valid, text_mask, compute_emd,
+                       pc_metric_thresholds=(0.01, 0.02, 0.03),
+                       pc_metric_chunk_size=512):
     rgb_mse    = float(((pred_rgb_img - rgb) ** 2).mean())
     depth_mse  = float(((pred_depth_img - depth) ** 2).mean())
-    pc_chamfer = float(chamfer_distance(pred_pc.unsqueeze(0), pc.unsqueeze(0)))
+    pc_values = pointcloud_reconstruction_metrics(
+        pred_pc.unsqueeze(0), pc.unsqueeze(0),
+        thresholds=pc_metric_thresholds,
+        chunk_size=pc_metric_chunk_size,
+    )
     pc_emd     = (float(earth_movers_distance(pred_pc.unsqueeze(0), pc.unsqueeze(0), num_samples=500))
                   if compute_emd else 0.0)
 
@@ -171,14 +181,15 @@ def per_sample_metrics(rgb, pred_rgb_img, depth, pred_depth_img, pc, pred_pc,
     abs_diff   = (pred_params - params).abs()
     param_mae_all       = float(abs_diff[valid_mask].mean()) if valid_mask.any() else 0.0
     param_mae_masked    = float(abs_diff[eff_mask].mean())   if eff_mask.any()   else 0.0
-    return {
+    metrics = {
         'rgb_mse':           rgb_mse,
         'depth_mse':         depth_mse,
-        'pc_chamfer':        pc_chamfer,
         'pc_emd':            pc_emd,
         'param_mae_all':     param_mae_all,
         'param_mae_masked':  param_mae_masked,
     }
+    metrics.update({name: float(value[0]) for name, value in pc_values.items()})
+    return metrics
 
 
 # ── Per-sample writer ────────────────────────────────────────────────────────
@@ -269,9 +280,26 @@ def main():
     mask_ratio     = args.mask_ratio if args.mask_ratio is not None \
                      else cfg['model'].get('mask_ratio', 0.15)
     pc_loss_weight = cfg['model'].get('pc_loss_weight',     10.0)
+    pc_loss_name   = cfg['model'].get('loss_name',       'chamfer')
+    qal_threshold  = cfg['model'].get('qal_threshold',        0.01)
+    qal_alpha      = cfg['model'].get('qal_alpha',            100.0)
+    qal_squared    = cfg['model'].get('qal_use_squared',      False)
+    sinkhorn_weight = cfg['model'].get('sinkhorn_loss_weight', 0.0)
+    sinkhorn_num_points = cfg['model'].get('sinkhorn_num_points', 512)
+    sinkhorn_blur   = cfg['model'].get('sinkhorn_blur',        0.02)
+    sinkhorn_p      = cfg['model'].get('sinkhorn_p',               2)
+    sinkhorn_scaling = cfg['model'].get('sinkhorn_scaling',     0.8)
+    sinkhorn_backend = cfg['model'].get('sinkhorn_backend', 'tensorized')
+    sinkhorn_debias = cfg['model'].get('sinkhorn_debias',       True)
     spline_loss_w  = cfg['model'].get('spline_loss_weight',  5.0)
     depth_norm     = cfg['model'].get('depth_norm_type', 'minmax')
     max_leaves     = cfg['model'].get('max_leaves',         24)
+    pc_metric_thresholds = cfg.get('evaluation', {}).get(
+        'pc_metric_thresholds', [0.01, 0.02, 0.03])
+    pc_metric_chunk_size = cfg.get('evaluation', {}).get(
+        'pc_metric_chunk_size', 512)
+    pc_threshold_keys = [format_pc_threshold(value)
+                         for value in pc_metric_thresholds]
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -288,9 +316,23 @@ def main():
             'model_size':        model_size,
             'mask_ratio':        mask_ratio,
             'pc_loss_weight':    pc_loss_weight,
+            'loss_name':         pc_loss_name,
+            'qal_threshold':     qal_threshold,
+            'qal_alpha':         qal_alpha,
+            'qal_use_squared':   qal_squared,
+            'sinkhorn_loss_weight': sinkhorn_weight,
+            'sinkhorn_num_points': sinkhorn_num_points,
+            'sinkhorn_blur':     sinkhorn_blur,
+            'sinkhorn_p':        sinkhorn_p,
+            'sinkhorn_scaling':  sinkhorn_scaling,
+            'sinkhorn_backend':  sinkhorn_backend,
+            'sinkhorn_debias':   sinkhorn_debias,
+            'sinkhorn_loss_evaluated': False,
             'spline_loss_weight': spline_loss_w,
             'depth_norm_type':   depth_norm,
             'max_leaves':        max_leaves,
+            'pc_metric_thresholds': pc_metric_thresholds,
+            'pc_metric_chunk_size': pc_metric_chunk_size,
             'seed':              args.seed,
             'num_samples':       args.num_samples,
             'batch_size':        args.batch_size,
@@ -318,6 +360,17 @@ def main():
         num_pc_tokens=196,
         target_points=num_points,
         pc_loss_weight=pc_loss_weight,
+        pc_loss_name=pc_loss_name,
+        qal_threshold=qal_threshold,
+        qal_alpha=qal_alpha,
+        qal_use_squared=qal_squared,
+        sinkhorn_loss_weight=sinkhorn_weight,
+        sinkhorn_num_points=sinkhorn_num_points,
+        sinkhorn_blur=sinkhorn_blur,
+        sinkhorn_p=sinkhorn_p,
+        sinkhorn_scaling=sinkhorn_scaling,
+        sinkhorn_backend=sinkhorn_backend,
+        sinkhorn_debias=sinkhorn_debias,
         max_leaves=max_leaves,
         spline_loss_weight=spline_loss_w,
         depth_norm_type=depth_norm,
@@ -335,9 +388,14 @@ def main():
 
     # Eval loop
     n_saved = 0
+    pc_prf_names = [
+        f'pc_{metric}@{key}'
+        for key in pc_threshold_keys
+        for metric in ('precision', 'recall', 'f1')
+    ]
     agg_metrics = {k: 0.0 for k in
                    ('rgb_mse', 'depth_mse', 'pc_chamfer', 'pc_emd',
-                    'param_mae_all', 'param_mae_masked')}
+                    'param_mae_all', 'param_mae_masked', *pc_prf_names)}
 
     with torch.no_grad():
         for rgb, depth, pc, params, text_valid, names in tqdm(dl, desc='Eval'):
@@ -354,6 +412,9 @@ def main():
                 (m_rgb, m_depth, m_pc, m_text) = model(
                     rgb_d, depth_d, pc_d, params_d, text_valid_d,
                     mask_ratio=mask_ratio,
+                    # Metrics below are computed directly; do not pay for an
+                    # auxiliary objective whose scalar would be discarded.
+                    compute_sinkhorn=False,
             )
 
             B = rgb.shape[0]
@@ -376,6 +437,8 @@ def main():
                     params=params[i], pred_params=pred_params_cp[i],
                     text_valid=text_valid[i], text_mask=m_text_cp[i],
                     compute_emd=args.compute_emd,
+                    pc_metric_thresholds=pc_metric_thresholds,
+                    pc_metric_chunk_size=pc_metric_chunk_size,
                 )
                 save_sample(
                     out_dir, names[i],

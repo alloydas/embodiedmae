@@ -234,6 +234,13 @@ def main():
         img_size=cfg['data']['img_size'], num_pc_tokens=196,
         target_points=cfg['data']['num_points'],
         pc_loss_weight=cfg['model']['pc_loss_weight'],
+        pc_loss_name=cfg['model'].get('loss_name', 'chamfer'),
+        qal_threshold=cfg['model'].get('qal_threshold', 0.01),
+        qal_alpha=cfg['model'].get('qal_alpha', 100.0),
+        qal_use_squared=cfg['model'].get('qal_use_squared', False),
+        # Generation discards the training objective, so avoid the extra
+        # full-cloud Sinkhorn computation here.
+        sinkhorn_loss_weight=0.0,
         max_leaves=cfg['model']['max_leaves'],
         spline_loss_weight=cfg['model']['spline_loss_weight'],
         depth_norm_type=cfg['model']['depth_norm_type'])

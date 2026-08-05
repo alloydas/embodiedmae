@@ -36,7 +36,11 @@ from embodied_mae_4m import (
     _params_to_leaf_text,
     N_PARAMS,
 )
-from embodied_mae import chamfer_distance, earth_movers_distance
+from embodied_mae import (
+    earth_movers_distance,
+    format_pc_threshold,
+    pointcloud_reconstruction_metrics,
+)
 from sorghum_dataset_4m import SorghumDataset4M
 
 
@@ -51,11 +55,16 @@ def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
+                  'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
+                  'sinkhorn_loss_weight', 'sinkhorn_num_points',
+                  'sinkhorn_blur', 'sinkhorn_p',
+                  'sinkhorn_scaling', 'sinkhorn_backend', 'sinkhorn_debias',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
                      'warmup_epochs', 'val_freq'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
         'visualization': ['viz_freq', 'num_viz_samples'],
+        'evaluation': ['pc_metric_thresholds', 'pc_metric_chunk_size'],
         'distributed': ['world_size', 'dist_backend', 'dist_url'],
         'system': ['num_workers', 'device'],
         'wandb': ['use_wandb', 'wandb_project', 'wandb_entity', 'wandb_name'],
@@ -78,6 +87,17 @@ def config_to_namespace(config):
     ns.model_size         = config['model'].get('model_size', 'base')
     ns.mask_ratio         = config['model'].get('mask_ratio', 0.15)
     ns.pc_loss_weight     = config['model'].get('pc_loss_weight', 10.0)
+    ns.loss_name          = config['model'].get('loss_name', 'chamfer')
+    ns.qal_threshold      = config['model'].get('qal_threshold', 0.01)
+    ns.qal_alpha          = config['model'].get('qal_alpha', 100.0)
+    ns.qal_use_squared    = config['model'].get('qal_use_squared', False)
+    ns.sinkhorn_loss_weight = config['model'].get('sinkhorn_loss_weight', 0.0)
+    ns.sinkhorn_num_points = config['model'].get('sinkhorn_num_points', 512)
+    ns.sinkhorn_blur      = config['model'].get('sinkhorn_blur', 0.02)
+    ns.sinkhorn_p         = config['model'].get('sinkhorn_p', 2)
+    ns.sinkhorn_scaling   = config['model'].get('sinkhorn_scaling', 0.8)
+    ns.sinkhorn_backend   = config['model'].get('sinkhorn_backend', 'tensorized')
+    ns.sinkhorn_debias    = config['model'].get('sinkhorn_debias', True)
     ns.depth_norm_type    = config['model'].get('depth_norm_type', 'minmax')
     ns.spline_loss_weight = config['model'].get('spline_loss_weight', 1.0)
     ns.max_leaves         = config['model'].get('max_leaves', 24)
@@ -92,6 +112,10 @@ def config_to_namespace(config):
     ns.resume             = config['checkpointing'].get('resume', None)
     ns.viz_freq           = config['visualization'].get('viz_freq', 50)
     ns.num_viz_samples    = config['visualization'].get('num_viz_samples', 6)
+    ns.pc_metric_thresholds = config.get('evaluation', {}).get(
+        'pc_metric_thresholds', [0.01, 0.02, 0.03])
+    ns.pc_metric_chunk_size = config.get('evaluation', {}).get(
+        'pc_metric_chunk_size', 512)
     ns.world_size         = config['distributed'].get('world_size', 1)
     ns.dist_backend       = config['distributed'].get('dist_backend', 'nccl')
     ns.dist_url           = config['distributed'].get('dist_url', 'env://')
@@ -172,7 +196,8 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         total, (lr, ld, lp, lt), \
             (pred_rgb, pred_depth, pred_pc, pred_params), \
             (m_rgb, m_depth, m_pc, m_text) = model(
-                rgb_b, depth_b, pc_b, param_floats_b, text_valid_b
+                rgb_b, depth_b, pc_b, param_floats_b, text_valid_b,
+                compute_sinkhorn=False,
         )
 
         fps_indices = model.pc_embed.fps(pc_b, model.num_pc_tokens)
@@ -389,6 +414,8 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 def train_one_epoch(model, dataloader, optimizer, device, epoch):
     model.train()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
+    tot_pc_base = tot_sinkhorn = 0.0
+    model_core = model.module if hasattr(model, 'module') else model
 
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
     for rgb, depth, pc, param_floats, text_valid, _ in pbar:
@@ -410,6 +437,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
         tot_depth += ld.item()
         tot_pc  += lp.item()
         tot_txt += lt.item()
+        tot_pc_base += model_core.last_pc_base_loss.item()
+        tot_sinkhorn += model_core.last_sinkhorn_loss.item()
 
         pbar.set_postfix({
             'loss':  f'{loss.item():.4f}',
@@ -419,16 +448,39 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
             'text':  f'{lt.item():.4f}',
         })
 
-    n = len(dataloader)
-    return tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n
+    train_totals = torch.tensor([
+        tot, tot_rgb, tot_depth, tot_pc, tot_txt,
+        tot_pc_base, tot_sinkhorn, len(dataloader),
+    ], dtype=torch.float64, device=device)
+    if dist.is_available() and dist.is_initialized():
+        dist.all_reduce(train_totals, op=dist.ReduceOp.SUM)
+    (tot, tot_rgb, tot_depth, tot_pc, tot_txt,
+     tot_pc_base, tot_sinkhorn, n) = train_totals.tolist()
+    return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n,
+            tot_pc_base/n, tot_sinkhorn/n)
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, device, compute_emd=False):
+def evaluate(model, dataloader, device, compute_emd=False,
+             pc_metric_thresholds=(0.01, 0.02, 0.03),
+             pc_metric_chunk_size=512):
     model.eval()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
-    tot_rgb_mse = tot_depth_mse = tot_chamfer = tot_emd = 0.0
+    tot_pc_base = tot_sinkhorn = 0.0
+    tot_rgb_mse = tot_depth_mse = tot_emd = 0.0
     tot_param_mse = tot_param_mae = tot_param_mae_masked = tot_param_acc05 = 0.0
+
+    threshold_keys = [format_pc_threshold(value) for value in pc_metric_thresholds]
+    pc_metric_names = ['pc_chamfer'] + [
+        f'pc_{metric}@{key}'
+        for key in threshold_keys
+        for metric in ('precision', 'recall', 'f1')
+    ]
+    pc_metric_sums = {
+        name: torch.zeros((), dtype=torch.float64, device=device)
+        for name in pc_metric_names
+    }
+    num_pc_samples = 0
 
     m = model.module if hasattr(model, 'module') else model
 
@@ -450,6 +502,8 @@ def evaluate(model, dataloader, device, compute_emd=False):
         tot_depth += ld.item()
         tot_pc    += lp.item()
         tot_txt   += lt.item()
+        tot_pc_base += m.last_pc_base_loss.item()
+        tot_sinkhorn += m.last_sinkhorn_loss.item()
 
         B, _, H, W = rgb.shape
         p = m.patch_size; h = w = H // p
@@ -462,7 +516,16 @@ def evaluate(model, dataloader, device, compute_emd=False):
         tot_depth_mse += torch.mean((pred_depth_img - depth) ** 2).item()
         del pred_rgb_img, pred_depth_img
 
-        tot_chamfer += chamfer_distance(pred_pc, pc).item()
+        batch_pc_metrics = pointcloud_reconstruction_metrics(
+            pred_pc,
+            pc,
+            thresholds=pc_metric_thresholds,
+            chunk_size=pc_metric_chunk_size,
+        )
+        for name in pc_metric_names:
+            pc_metric_sums[name] += batch_pc_metrics[name].double().sum()
+        num_pc_samples += B
+
         if compute_emd:
             tot_emd += earth_movers_distance(pred_pc, pc, num_samples=500).item()
 
@@ -485,21 +548,51 @@ def evaluate(model, dataloader, device, compute_emd=False):
         del rgb, depth, pc, param_floats, text_valid
 
     n = len(dataloader)
+
+    # All ranks validate different DistributedSampler shards. Reduce before the
+    # rank-0 process prints, logs, and checkpoints the metrics.
+    batch_totals = torch.tensor([
+        tot, tot_rgb, tot_depth, tot_pc, tot_txt,
+        tot_pc_base, tot_sinkhorn,
+        tot_rgb_mse, tot_depth_mse, tot_emd,
+        tot_param_mse, tot_param_mae, tot_param_mae_masked, tot_param_acc05,
+        n,
+    ], dtype=torch.float64, device=device)
+    pc_totals = torch.stack(
+        [pc_metric_sums[name] for name in pc_metric_names]
+        + [torch.tensor(float(num_pc_samples), dtype=torch.float64, device=device)]
+    )
+    if dist.is_available() and dist.is_initialized():
+        dist.all_reduce(batch_totals, op=dist.ReduceOp.SUM)
+        dist.all_reduce(pc_totals, op=dist.ReduceOp.SUM)
+
+    (tot, tot_rgb, tot_depth, tot_pc, tot_txt, tot_pc_base, tot_sinkhorn,
+     tot_rgb_mse, tot_depth_mse, tot_emd,
+     tot_param_mse, tot_param_mae, tot_param_mae_masked, tot_param_acc05,
+     n) = batch_totals.tolist()
+    num_pc_samples = max(pc_totals[-1].item(), 1.0)
+    reduced_pc_metrics = {
+        name: pc_totals[index].item() / num_pc_samples
+        for index, name in enumerate(pc_metric_names)
+    }
+
     metrics = {
         'loss':              tot / n,
         'rgb_loss':          tot_rgb / n,
         'depth_loss':        tot_depth / n,
         'pc_loss':           tot_pc / n,
+        'pc_base_loss':      tot_pc_base / n,
+        'pc_sinkhorn_loss':  tot_sinkhorn / n,
         'text_loss':         tot_txt / n,
         'rgb_mse':           tot_rgb_mse / n,
         'depth_mse':         tot_depth_mse / n,
-        'pc_chamfer':        tot_chamfer / n,
         'pc_emd':            tot_emd / n,
         'param_mse':         tot_param_mse / n,
         'param_mae':         tot_param_mae / n,
         'param_mae_masked':  tot_param_mae_masked / n,
         'param_acc@0.05':    tot_param_acc05 / n,
     }
+    metrics.update(reduced_pc_metrics)
     return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n), metrics
 
 
@@ -547,7 +640,21 @@ def train_worker(rank, world_size, args):
                               shuffle=False, sampler=val_sampler,
                               num_workers=args.num_workers, pin_memory=True)
 
-    if is_main: print(f"\nInitializing EmbodiedMAE-4M-{args.model_size.capitalize()}...")
+    if is_main:
+        print(f"\nInitializing EmbodiedMAE-4M-{args.model_size.capitalize()}...")
+        if args.loss_name == 'qal_loss':
+            print(f"Point-cloud loss: QAL (threshold={args.qal_threshold}, "
+                  f"alpha={args.qal_alpha}, squared={args.qal_use_squared}, "
+                  f"weight={args.pc_loss_weight})")
+        else:
+            print(f"Point-cloud loss: Chamfer (weight={args.pc_loss_weight})")
+        if args.sinkhorn_loss_weight > 0:
+            print(f"Sinkhorn auxiliary: weight={args.sinkhorn_loss_weight}, "
+                  f"points={args.sinkhorn_num_points}, "
+                  f"p={args.sinkhorn_p}, blur={args.sinkhorn_blur}, "
+                  f"scaling={args.sinkhorn_scaling}, "
+                  f"backend={args.sinkhorn_backend}, "
+                  f"debias={args.sinkhorn_debias}")
 
     build_fn = embodied_mae_4m_small if args.model_size == 'small' else embodied_mae_4m_base
     model = build_fn(
@@ -555,6 +662,17 @@ def train_worker(rank, world_size, args):
         num_pc_tokens=196,
         target_points=args.num_points,
         pc_loss_weight=args.pc_loss_weight,
+        pc_loss_name=args.loss_name,
+        qal_threshold=args.qal_threshold,
+        qal_alpha=args.qal_alpha,
+        qal_use_squared=args.qal_use_squared,
+        sinkhorn_loss_weight=args.sinkhorn_loss_weight,
+        sinkhorn_num_points=args.sinkhorn_num_points,
+        sinkhorn_blur=args.sinkhorn_blur,
+        sinkhorn_p=args.sinkhorn_p,
+        sinkhorn_scaling=args.sinkhorn_scaling,
+        sinkhorn_backend=args.sinkhorn_backend,
+        sinkhorn_debias=args.sinkhorn_debias,
         max_leaves=args.max_leaves,
         spline_loss_weight=args.spline_loss_weight,
         depth_norm_type=args.depth_norm_type,
@@ -582,6 +700,18 @@ def train_worker(rank, world_size, args):
                        name=args.wandb_name, config={
                            'model_size': args.model_size, 'num_points': args.num_points,
                            'mask_ratio': args.mask_ratio, 'pc_loss_weight': args.pc_loss_weight,
+                           'pc_loss_name': args.loss_name,
+                           'qal_threshold': args.qal_threshold,
+                           'qal_alpha': args.qal_alpha,
+                           'qal_use_squared': args.qal_use_squared,
+                           'sinkhorn_loss_weight': args.sinkhorn_loss_weight,
+                           'sinkhorn_num_points': args.sinkhorn_num_points,
+                           'sinkhorn_blur': args.sinkhorn_blur,
+                           'sinkhorn_p': args.sinkhorn_p,
+                           'sinkhorn_scaling': args.sinkhorn_scaling,
+                           'sinkhorn_backend': args.sinkhorn_backend,
+                           'sinkhorn_debias': args.sinkhorn_debias,
+                           'pc_metric_thresholds': args.pc_metric_thresholds,
                            'text_loss_weight': args.spline_loss_weight,
                            'max_leaves': args.max_leaves,
                            'batch_size': args.batch_size, 'epochs': args.epochs,
@@ -603,15 +733,26 @@ def train_worker(rank, world_size, args):
 
     start_epoch   = 1
     best_val_loss = float('inf')
+    pc_threshold_keys = [format_pc_threshold(value)
+                         for value in args.pc_metric_thresholds]
+    pc_prf_metric_names = [
+        f'pc_{metric}@{key}'
+        for key in pc_threshold_keys
+        for metric in ('precision', 'recall', 'f1')
+    ]
 
     def empty_history():
-        return {
+        result = {
             'train_loss':[], 'train_rgb':[], 'train_depth':[], 'train_pc':[], 'train_text':[],
+            'train_pc_base':[], 'train_pc_sinkhorn':[],
             'val_loss':[],   'val_rgb':[],   'val_depth':[],   'val_pc':[],   'val_text':[],
+            'val_pc_base':[], 'val_pc_sinkhorn':[],
             'val_rgb_mse':[], 'val_depth_mse':[], 'val_pc_chamfer':[], 'val_pc_emd':[],
             'val_param_mse':[], 'val_param_mae':[], 'val_param_mae_masked':[],
             'val_param_acc05':[],
         }
+        result.update({f'val_{name}': [] for name in pc_prf_metric_names})
+        return result
     history = empty_history()
 
     if args.resume and os.path.exists(args.resume):
@@ -650,22 +791,33 @@ def train_worker(rank, world_size, args):
             print(f"Epoch {epoch}/{args.epochs}  lr={optimizer.param_groups[0]['lr']:.6f}")
             print(f"{'='*80}")
 
-        tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt = train_one_epoch(
-            model, train_loader, optimizer, device, epoch)
-        for k, v in zip(['train_loss','train_rgb','train_depth','train_pc','train_text'],
-                        [tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt]):
+        tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt, tr_pc_base, tr_sinkhorn = \
+            train_one_epoch(model, train_loader, optimizer, device, epoch)
+        for k, v in zip(
+                ['train_loss','train_rgb','train_depth','train_pc','train_text',
+                 'train_pc_base','train_pc_sinkhorn'],
+                [tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt,
+                 tr_pc_base, tr_sinkhorn]):
             history[k].append(v)
 
         if is_main:
             print(f"\nTrain — Loss: {tr_loss:.4f}  RGB: {tr_rgb:.4f}  "
                   f"Depth: {tr_depth:.4f}  PC: {tr_pc:.4f}  Text: {tr_txt:.4f}")
+            if args.sinkhorn_loss_weight > 0:
+                print(f"PC parts — {args.loss_name}: {tr_pc_base:.6f}  "
+                      f"Sinkhorn(raw): {tr_sinkhorn:.6f}  "
+                      f"Sinkhorn(weighted): "
+                      f"{args.sinkhorn_loss_weight * tr_sinkhorn:.6f}  "
+                      f"Combined: {tr_pc:.6f}")
 
         do_val = (epoch % args.val_freq == 0 or epoch == args.epochs or epoch == 1)
         if do_val:
             if is_main: print("\n🔍 Running validation…")
             compute_emd = (epoch == args.epochs)
             (vl, vr, vd, vp, vt), vm = evaluate(
-                model, val_loader, device, compute_emd=compute_emd)
+                model, val_loader, device, compute_emd=compute_emd,
+                pc_metric_thresholds=args.pc_metric_thresholds,
+                pc_metric_chunk_size=args.pc_metric_chunk_size)
             for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text',
                               'val_rgb_mse','val_depth_mse','val_pc_chamfer','val_pc_emd',
                               'val_param_mse','val_param_mae','val_param_mae_masked',
@@ -675,11 +827,25 @@ def train_worker(rank, world_size, args):
                              vm['param_mse'], vm['param_mae'], vm['param_mae_masked'],
                              vm['param_acc@0.05']]):
                 history[k].append(v)
+            for name in pc_prf_metric_names:
+                history[f'val_{name}'].append(vm[name])
+            history['val_pc_base'].append(vm['pc_base_loss'])
+            history['val_pc_sinkhorn'].append(vm['pc_sinkhorn_loss'])
             if is_main:
                 print(f"Val   — Loss: {vl:.4f}  RGB: {vr:.4f}  Depth: {vd:.4f}  "
                       f"PC: {vp:.4f}  Text: {vt:.4f}")
                 print(f"Metrics — RGB MSE: {vm['rgb_mse']:.6f}  Depth MSE: {vm['depth_mse']:.6f}  "
                       f"PC Chamfer: {vm['pc_chamfer']:.6f}  PC EMD: {vm['pc_emd']:.6f}")
+                if args.sinkhorn_loss_weight > 0:
+                    print(f"PC parts — {args.loss_name}: {vm['pc_base_loss']:.6f}  "
+                          f"Sinkhorn(raw): {vm['pc_sinkhorn_loss']:.6f}  "
+                          f"Sinkhorn(weighted): "
+                          f"{args.sinkhorn_loss_weight * vm['pc_sinkhorn_loss']:.6f}  "
+                          f"Combined: {vp:.6f}")
+                for key in pc_threshold_keys:
+                    print(f"PC @{key} — Precision: {vm[f'pc_precision@{key}']:.4f}  "
+                          f"Recall: {vm[f'pc_recall@{key}']:.4f}  "
+                          f"F1: {vm[f'pc_f1@{key}']:.4f}")
                 print(f"Param   — MSE: {vm['param_mse']:.6f}  MAE: {vm['param_mae']:.6f}  "
                       f"MAE(masked): {vm['param_mae_masked']:.6f}  "
                       f"acc@0.05: {vm['param_acc@0.05']:.4f}")
@@ -687,25 +853,46 @@ def train_worker(rank, world_size, args):
             vl = history['val_loss'][-1] if history['val_loss'] else float('inf')
             vm = {k: history[v][-1] if history[v] else 0.0 for k, v in {
                 'rgb_mse':'val_rgb_mse','depth_mse':'val_depth_mse',
+                'pc_loss':'val_pc',
                 'pc_chamfer':'val_pc_chamfer','pc_emd':'val_pc_emd',
                 'param_mse':'val_param_mse','param_mae':'val_param_mae',
                 'param_mae_masked':'val_param_mae_masked',
                 'param_acc@0.05':'val_param_acc05'}.items()}
+            vm['pc_base_loss'] = (history['val_pc_base'][-1]
+                                  if history['val_pc_base'] else 0.0)
+            vm['pc_sinkhorn_loss'] = (history['val_pc_sinkhorn'][-1]
+                                      if history['val_pc_sinkhorn'] else 0.0)
+            vm.update({
+                name: history[f'val_{name}'][-1] if history[f'val_{name}'] else 0.0
+                for name in pc_prf_metric_names
+            })
 
         if is_main and args.use_wandb and WANDB_AVAILABLE:
-            wandb.log({
+            wandb_metrics = {
                 'epoch': epoch,
                 'train/loss': tr_loss, 'train/rgb': tr_rgb, 'train/depth': tr_depth,
                 'train/pc': tr_pc, 'train/text': tr_txt,
+                'train/pc_base': tr_pc_base,
+                'train/pc_sinkhorn': tr_sinkhorn,
+                'train/pc_sinkhorn_weighted': (
+                    args.sinkhorn_loss_weight * tr_sinkhorn),
                 'val/loss': vl,
+                'val/pc': vm['pc_loss'],
                 'metrics/rgb_mse': vm['rgb_mse'], 'metrics/depth_mse': vm['depth_mse'],
                 'metrics/pc_chamfer': vm['pc_chamfer'], 'metrics/pc_emd': vm['pc_emd'],
+                'val/pc_base': vm['pc_base_loss'],
+                'val/pc_sinkhorn': vm['pc_sinkhorn_loss'],
+                'val/pc_sinkhorn_weighted': (
+                    args.sinkhorn_loss_weight * vm['pc_sinkhorn_loss']),
                 'metrics/param_mse': vm['param_mse'],
                 'metrics/param_mae': vm['param_mae'],
                 'metrics/param_mae_masked': vm['param_mae_masked'],
                 'metrics/param_acc@0.05': vm['param_acc@0.05'],
                 'learning_rate': scheduler.get_last_lr()[0],
-            })
+            }
+            wandb_metrics.update({f'metrics/{name}': vm[name]
+                                  for name in pc_prf_metric_names})
+            wandb.log(wandb_metrics)
 
         if is_main and (epoch % args.viz_freq == 0 or epoch == 1):
             print(f"\n📊 Generating visualizations for epoch {epoch}…")
@@ -773,6 +960,23 @@ def main():
     parser.add_argument('--model_size',         type=str,   default=None, choices=['small','base'])
     parser.add_argument('--mask_ratio',         type=float, default=None)
     parser.add_argument('--pc_loss_weight',     type=float, default=None)
+    parser.add_argument('--loss_name',          type=str,   default=None,
+                        choices=['chamfer', 'qal_loss'])
+    parser.add_argument('--qal_threshold',      type=float, default=None)
+    parser.add_argument('--qal_alpha',          type=float, default=None)
+    parser.add_argument('--qal_use_squared',    action='store_true', default=None)
+    parser.add_argument('--qal_use_unsquared',  action='store_false',
+                        dest='qal_use_squared')
+    parser.add_argument('--sinkhorn_loss_weight', type=float, default=None)
+    parser.add_argument('--sinkhorn_num_points', type=int, default=None)
+    parser.add_argument('--sinkhorn_blur',      type=float, default=None)
+    parser.add_argument('--sinkhorn_p',         type=int, default=None, choices=[1, 2])
+    parser.add_argument('--sinkhorn_scaling',   type=float, default=None)
+    parser.add_argument('--sinkhorn_backend',   type=str, default=None,
+                        choices=['auto', 'tensorized', 'online', 'multiscale'])
+    parser.add_argument('--sinkhorn_debias',    action='store_true', default=None)
+    parser.add_argument('--no_sinkhorn_debias', action='store_false',
+                        dest='sinkhorn_debias')
     parser.add_argument('--depth_norm_type',    type=str,   default=None, choices=['minmax','standard'])
     parser.add_argument('--spline_loss_weight', type=float, default=None)
     parser.add_argument('--max_leaves',         type=int,   default=None)
@@ -784,6 +988,8 @@ def main():
     parser.add_argument('--val_freq',           type=int,   default=None)
     parser.add_argument('--viz_freq',           type=int,   default=None)
     parser.add_argument('--num_viz_samples',    type=int,   default=None)
+    parser.add_argument('--pc_metric_thresholds', type=float, nargs='+', default=None)
+    parser.add_argument('--pc_metric_chunk_size', type=int, default=None)
     parser.add_argument('--output_dir',         type=str,   default=None)
     parser.add_argument('--save_freq',          type=int,   default=None)
     parser.add_argument('--resume',             type=str,   default=None)
@@ -808,17 +1014,50 @@ def main():
         default_cfg = {
             'data':          {'data_root': './Dataset/new_data', 'img_size': 224, 'num_points': 8196},
             'model':         {'model_size': 'base', 'mask_ratio': 0.15, 'pc_loss_weight': 10.0,
+                              'loss_name': 'chamfer', 'qal_threshold': 0.01,
+                              'qal_alpha': 100.0, 'qal_use_squared': False,
+                              'sinkhorn_loss_weight': 0.0,
+                              'sinkhorn_num_points': 512, 'sinkhorn_blur': 0.02,
+                              'sinkhorn_p': 2, 'sinkhorn_scaling': 0.8,
+                              'sinkhorn_backend': 'tensorized', 'sinkhorn_debias': True,
                               'depth_norm_type': 'minmax', 'spline_loss_weight': 1.0, 'max_leaves': 24},
             'training':      {'batch_size': 16, 'epochs': 2400, 'lr': 1.5e-4,
                               'weight_decay': 0.05, 'warmup_epochs': 10, 'val_freq': 20},
             'checkpointing': {'output_dir': './outputs/4m_run', 'save_freq': 100, 'resume': None},
             'visualization': {'viz_freq': 50, 'num_viz_samples': 6},
+            'evaluation':    {'pc_metric_thresholds': [0.01, 0.02, 0.03],
+                              'pc_metric_chunk_size': 512},
             'distributed':   {'world_size': 4, 'dist_backend': 'nccl', 'dist_url': 'env://'},
             'system':        {'num_workers': 8, 'device': 'cuda'},
             'wandb':         {'use_wandb': True, 'wandb_project': 'embodied-mae-4m',
                               'wandb_entity': None, 'wandb_name': None},
         }
         cfg = config_to_namespace(merge_config_with_args(default_cfg, args))
+
+    cfg.pc_metric_thresholds = [float(value) for value in cfg.pc_metric_thresholds]
+    if (not cfg.pc_metric_thresholds
+            or any(not np.isfinite(value) or value <= 0
+                   for value in cfg.pc_metric_thresholds)):
+        parser.error('pc_metric_thresholds must contain positive finite values')
+    metric_keys = [format_pc_threshold(value) for value in cfg.pc_metric_thresholds]
+    if len(set(metric_keys)) != len(metric_keys):
+        parser.error('pc_metric_thresholds produce duplicate metric names')
+    if cfg.pc_metric_chunk_size <= 0:
+        parser.error('pc_metric_chunk_size must be positive')
+    if cfg.sinkhorn_loss_weight < 0:
+        parser.error('sinkhorn_loss_weight must be non-negative')
+    if cfg.sinkhorn_num_points <= 0:
+        parser.error('sinkhorn_num_points must be positive')
+    if cfg.sinkhorn_blur <= 0:
+        parser.error('sinkhorn_blur must be positive')
+    if not 0 < cfg.sinkhorn_scaling < 1:
+        parser.error('sinkhorn_scaling must be between 0 and 1')
+    if (cfg.sinkhorn_loss_weight > 0
+            and cfg.sinkhorn_backend == 'tensorized'
+            and cfg.sinkhorn_num_points > 5000):
+        parser.error(
+            'tensorized Sinkhorn is limited to at most 5000 sampled points'
+        )
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))
     if local_rank >= 0:

@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import math
 
 
 def chamfer_distance(pred_pc, target_pc):
@@ -46,6 +47,126 @@ def chamfer_distance(pred_pc, target_pc):
     chamfer_dist = forward_loss + backward_loss
     
     return chamfer_dist
+
+
+def qal_loss(pred_pc, target_pc, threshold=0.01, alpha=100.0,
+             use_squared=False):
+    """Distance-aware, two-sided Chamfer loss used by the QAL runs.
+
+    Nearest-neighbour errors above ``threshold`` receive progressively larger
+    sigmoid weights.  This preserves both Chamfer directions while focusing
+    optimisation on poorly reconstructed geometry such as thin leaves.
+
+    Args:
+        pred_pc: (B, N, 3) predicted point cloud.
+        target_pc: (B, M, 3) target point cloud.
+        threshold: Euclidean distance at the sigmoid midpoint.
+        alpha: Sigmoid sharpness.
+        use_squared: Weight squared distances instead of Euclidean distances.
+
+    Returns:
+        Scalar QAL loss.
+    """
+    if threshold < 0:
+        raise ValueError(f"QAL threshold must be non-negative, got {threshold}")
+    if alpha <= 0:
+        raise ValueError(f"QAL alpha must be positive, got {alpha}")
+
+    distances = torch.cdist(pred_pc, target_pc, p=2)
+    pred_to_target = distances.min(dim=2).values
+    target_to_pred = distances.min(dim=1).values
+
+    pred_weights = torch.sigmoid(alpha * (pred_to_target - threshold))
+    target_weights = torch.sigmoid(alpha * (target_to_pred - threshold))
+
+    if use_squared:
+        pred_to_target = pred_to_target.square()
+        target_to_pred = target_to_pred.square()
+
+    return ((pred_weights * pred_to_target).mean()
+            + (target_weights * target_to_pred).mean())
+
+
+def format_pc_threshold(threshold):
+    """Stable compact formatting for point-cloud threshold metric names."""
+    return f"{float(threshold):.10g}"
+
+
+def pointcloud_reconstruction_metrics(pred_pc, target_pc,
+                                      thresholds=(0.01, 0.02, 0.03),
+                                      chunk_size=512):
+    """Compute exact per-sample Chamfer, precision, recall and F1 metrics.
+
+    Pairwise distances are evaluated in chunks so validation does not retain a
+    full ``B x N x M`` matrix.  Point clouds are expected in the loader's
+    centroid-zero, unit-radius coordinate system.
+
+    Returns:
+        A dictionary of ``(B,)`` tensors. ``pc_chamfer`` follows this project's
+        existing squared, two-sided Chamfer convention. Precision, recall and
+        F1 use Euclidean nearest-neighbour distances.
+    """
+    if pred_pc.ndim != 3 or pred_pc.shape[-1] != 3:
+        raise ValueError(f"pred_pc must have shape (B, N, 3), got {tuple(pred_pc.shape)}")
+    if target_pc.ndim != 3 or target_pc.shape[-1] != 3:
+        raise ValueError(
+            f"target_pc must have shape (B, M, 3), got {tuple(target_pc.shape)}"
+        )
+    if pred_pc.shape[0] != target_pc.shape[0]:
+        raise ValueError("pred_pc and target_pc must have the same batch size")
+    if pred_pc.shape[1] == 0 or target_pc.shape[1] == 0:
+        raise ValueError("point clouds must contain at least one point")
+    if pred_pc.device != target_pc.device:
+        raise ValueError("pred_pc and target_pc must be on the same device")
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+
+    thresholds = tuple(float(value) for value in thresholds)
+    if not thresholds or any(not math.isfinite(value) or value <= 0
+                             for value in thresholds):
+        raise ValueError("thresholds must contain one or more positive finite values")
+    threshold_keys = [format_pc_threshold(value) for value in thresholds]
+    if len(set(threshold_keys)) != len(threshold_keys):
+        raise ValueError("thresholds produce duplicate metric names")
+
+    # Metrics intentionally use float32 even if inference later enables AMP.
+    pred = pred_pc.detach().float()
+    target = target_pc.detach().float()
+    if not torch.isfinite(pred).all() or not torch.isfinite(target).all():
+        raise ValueError("point clouds contain NaN or infinite coordinates")
+
+    batch_size, num_pred, _ = pred.shape
+    num_target = target.shape[1]
+    pred_minima = []
+    target_minima = torch.full(
+        (batch_size, num_target), float('inf'),
+        dtype=pred.dtype, device=pred.device,
+    )
+
+    for start in range(0, num_pred, chunk_size):
+        distances = torch.cdist(pred[:, start:start + chunk_size], target, p=2)
+        pred_minima.append(distances.min(dim=2).values)
+        target_minima = torch.minimum(target_minima, distances.min(dim=1).values)
+
+    pred_minima = torch.cat(pred_minima, dim=1)
+    metrics = {
+        'pc_chamfer': (pred_minima.square().mean(dim=1)
+                       + target_minima.square().mean(dim=1)),
+    }
+
+    for threshold, key in zip(thresholds, threshold_keys):
+        precision = (pred_minima <= threshold).float().mean(dim=1)
+        recall = (target_minima <= threshold).float().mean(dim=1)
+        f1 = torch.where(
+            precision + recall > 0,
+            2.0 * precision * recall / (precision + recall).clamp_min(1e-12),
+            torch.zeros_like(precision),
+        )
+        metrics[f'pc_precision@{key}'] = precision
+        metrics[f'pc_recall@{key}'] = recall
+        metrics[f'pc_f1@{key}'] = f1
+
+    return metrics
 
 
 def earth_movers_distance(pred_pc, target_pc, num_samples=1000):
@@ -113,7 +234,6 @@ def earth_movers_distance(pred_pc, target_pc, num_samples=1000):
 
 
 from typing import Tuple, Optional, List
-import math
 
 
 class PatchEmbed(nn.Module):

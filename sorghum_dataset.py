@@ -8,6 +8,8 @@ from torch.utils.data import Dataset
 import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
+from torchvision.transforms import InterpolationMode
 from pathlib import Path
 import open3d as o3d
 
@@ -83,11 +85,6 @@ class SorghumDataset(Dataset):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
-        self.depth_transform = transforms.Compose([
-            transforms.Resize((img_size, img_size)),
-            transforms.ToTensor(),
-        ])
-        
         # Get all sample folders and verify they have required files
         self.samples = []
         for folder in sorted(self.load_dir.iterdir()):
@@ -153,6 +150,52 @@ class SorghumDataset(Dataset):
             return points.astype(np.float32)
         except Exception as e:
             raise RuntimeError(f"Error loading point cloud from {ply_path}: {e}")
+
+    def load_depth(self, depth_path):
+        """Load depth without collapsing packed RGBA values to luminance.
+
+        The active dataset stores one scalar depth value across four bytes in
+        big-endian RGBA order.  Grayscale 8/16-bit depth PNGs are also accepted.
+        In either case the returned tensor is float32 in [0, 1], shaped
+        (1, img_size, img_size).  Zero remains the background value.
+        """
+        with Image.open(depth_path) as image:
+            depth_array = np.asarray(image)
+
+        if depth_array.ndim == 3:
+            if depth_array.shape[2] != 4 or depth_array.dtype != np.uint8:
+                raise ValueError(
+                    f"Unsupported multi-channel depth image: shape={depth_array.shape}, "
+                    f"dtype={depth_array.dtype}"
+                )
+
+            # depth.png uses big-endian packed RGBA:
+            # scalar = R*256^3 + G*256^2 + B*256 + A.
+            rgba = depth_array.astype(np.float32)
+            depth_array = (
+                rgba[..., 0] * (256.0 ** 3)
+                + rgba[..., 1] * (256.0 ** 2)
+                + rgba[..., 2] * 256.0
+                + rgba[..., 3]
+            ) / float((256 ** 4) - 1)
+        elif depth_array.ndim == 2:
+            if np.issubdtype(depth_array.dtype, np.integer):
+                depth_array = depth_array.astype(np.float32) / np.iinfo(depth_array.dtype).max
+            else:
+                depth_array = depth_array.astype(np.float32)
+                if not np.isfinite(depth_array).all():
+                    raise ValueError(f"Depth image contains non-finite values: {depth_path}")
+        else:
+            raise ValueError(f"Unsupported depth image shape: {depth_array.shape}")
+
+        depth = torch.from_numpy(np.ascontiguousarray(depth_array)).unsqueeze(0)
+        depth = TF.resize(
+            depth,
+            [self.img_size, self.img_size],
+            interpolation=InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+        return depth
     
     def __getitem__(self, idx):
         sample_dir = self.samples[idx]
@@ -165,8 +208,7 @@ class SorghumDataset(Dataset):
             
             # Load Depth
             depth_path = sample_dir / 'depth.png'
-            depth = Image.open(depth_path).convert('L')
-            depth = self.depth_transform(depth)
+            depth = self.load_depth(depth_path)
             
             # Find and load Point Cloud
             pc_path = self.find_pointcloud_file(sample_dir)

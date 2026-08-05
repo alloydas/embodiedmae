@@ -26,6 +26,7 @@ from embodied_mae import (
     TransformerBlock,
     get_2d_sincos_pos_embed,
     chamfer_distance,
+    qal_loss,
     earth_movers_distance,
 )
 
@@ -156,6 +157,17 @@ class EmbodiedMAE4M(nn.Module):
         pc_group_size:       int   = 32,
         target_points:       int   = 10000,
         pc_loss_weight:      float = 50.0,
+        pc_loss_name:        str   = 'chamfer',
+        qal_threshold:       float = 0.01,
+        qal_alpha:           float = 100.0,
+        qal_use_squared:     bool  = False,
+        sinkhorn_loss_weight: float = 0.0,
+        sinkhorn_num_points: int   = 512,
+        sinkhorn_blur:       float = 0.02,
+        sinkhorn_p:          int   = 2,
+        sinkhorn_scaling:    float = 0.8,
+        sinkhorn_backend:    str   = 'tensorized',
+        sinkhorn_debias:     bool  = True,
         max_leaves:          int   = 24,
         spline_loss_weight:  float = 5.0,
         embed_dim:           int   = 768,
@@ -181,10 +193,83 @@ class EmbodiedMAE4M(nn.Module):
         self.norm_pix_loss      = norm_pix_loss
         self.dirichlet_alpha    = dirichlet_alpha
         self.pc_loss_weight     = pc_loss_weight
+        if pc_loss_name not in {'chamfer', 'qal_loss'}:
+            raise ValueError(
+                f"Unsupported point-cloud loss {pc_loss_name!r}; "
+                "expected 'chamfer' or 'qal_loss'"
+            )
+        if qal_threshold < 0:
+            raise ValueError("qal_threshold must be non-negative")
+        if qal_alpha <= 0:
+            raise ValueError("qal_alpha must be positive")
+        self.pc_loss_name       = pc_loss_name
+        self.qal_threshold      = qal_threshold
+        self.qal_alpha          = qal_alpha
+        self.qal_use_squared    = qal_use_squared
+        if sinkhorn_loss_weight < 0:
+            raise ValueError("sinkhorn_loss_weight must be non-negative")
+        if sinkhorn_num_points <= 0:
+            raise ValueError("sinkhorn_num_points must be positive")
+        if sinkhorn_blur <= 0:
+            raise ValueError("sinkhorn_blur must be positive")
+        if sinkhorn_p not in {1, 2}:
+            raise ValueError("sinkhorn_p must be 1 or 2")
+        if not 0 < sinkhorn_scaling < 1:
+            raise ValueError("sinkhorn_scaling must be between 0 and 1")
+        if sinkhorn_backend not in {'auto', 'tensorized', 'online', 'multiscale'}:
+            raise ValueError(
+                "sinkhorn_backend must be auto, tensorized, online, or multiscale"
+            )
+        if (sinkhorn_loss_weight > 0 and sinkhorn_backend == 'tensorized'
+                and sinkhorn_num_points > 5000):
+            raise ValueError(
+                "tensorized Sinkhorn is limited to at most 5000 sampled points"
+            )
+        self.sinkhorn_loss_weight = sinkhorn_loss_weight
+        self.sinkhorn_num_points = sinkhorn_num_points
+        self.sinkhorn_blur       = sinkhorn_blur
+        self.sinkhorn_p          = sinkhorn_p
+        self.sinkhorn_scaling    = sinkhorn_scaling
+        self.sinkhorn_backend    = sinkhorn_backend
+        self.sinkhorn_debias     = sinkhorn_debias
+        self.sinkhorn_loss_fn    = None
+        if sinkhorn_loss_weight > 0:
+            try:
+                from geomloss import SamplesLoss
+            except ImportError as exc:
+                raise ImportError(
+                    "Sinkhorn loss is enabled but geomloss is not installed. "
+                    "Install geomloss in the training environment."
+                ) from exc
+            self.sinkhorn_loss_fn = SamplesLoss(
+                loss='sinkhorn',
+                p=sinkhorn_p,
+                blur=sinkhorn_blur,
+                scaling=sinkhorn_scaling,
+                debias=sinkhorn_debias,
+                backend=sinkhorn_backend,
+            )
         self.spline_loss_weight = spline_loss_weight
         self.depth_norm_type    = depth_norm_type
         self.target_points      = target_points
-        self.points_per_token   = target_points // num_pc_tokens
+        if target_points < num_pc_tokens:
+            raise ValueError(
+                "target_points must be at least num_pc_tokens so every PC token "
+                "can generate a point"
+            )
+
+        # Distribute target_points exactly across PC tokens. For 8196 points and
+        # 196 tokens this yields 160 tokens with 42 points and 36 with 41,
+        # avoiding the previous forced duplication of the first 160 outputs.
+        boundaries = torch.div(
+            torch.arange(num_pc_tokens + 1, dtype=torch.long) * target_points,
+            num_pc_tokens,
+            rounding_mode='floor',
+        )
+        pc_points_per_token = boundaries[1:] - boundaries[:-1]
+        self.register_buffer(
+            '_pc_points_per_token', pc_points_per_token, persistent=False)
+        self.points_per_token = int(pc_points_per_token.max().item())
 
         # ── Embedders ─────────────────────────────────────────────────────
         self.rgb_embed   = PatchEmbed(img_size, patch_size, in_chans_rgb,   embed_dim)
@@ -395,24 +480,47 @@ class EmbodiedMAE4M(nn.Module):
         grid = grid.unsqueeze(0).unsqueeze(0).expand(B2, N_tok, -1, -1)
         pc_feat_e = pc_feat.unsqueeze(2).expand(-1,-1,self.points_per_token,-1)
         fold_in   = torch.cat([pc_feat_e, grid], dim=-1)
-        pred_pc   = self.decoder_pc_fold(
+        pred_pc_by_token = self.decoder_pc_fold(
             fold_in.reshape(B2 * N_tok * self.points_per_token, -1)
-        ).reshape(B2, N_tok * self.points_per_token, 3)
+        ).reshape(B2, N_tok, self.points_per_token, 3)
 
-        if pred_pc.shape[1] > self.target_points:
-            pred_pc = pred_pc[:, :self.target_points]
-        elif pred_pc.shape[1] < self.target_points:
-            pad = self.target_points - pred_pc.shape[1]
-            pred_pc = torch.cat([pred_pc, pred_pc[:, :pad]], dim=1)
+        point_slot = torch.arange(self.points_per_token, device=x.device)
+        keep = point_slot.unsqueeze(0) < self._pc_points_per_token.unsqueeze(1)
+        pred_pc = pred_pc_by_token[:, keep, :]
+        if pred_pc.shape[1] != self.target_points:
+            raise RuntimeError(
+                f"PC decoder produced {pred_pc.shape[1]} points; "
+                f"expected {self.target_points}"
+            )
 
         return pred_rgb, pred_depth, pred_pc, pred_params
+
+    @staticmethod
+    def _sinkhorn_subsample(points, num_points):
+        """Deterministically select evenly spaced representatives.
+
+        The point-cloud loader randomises target order on every fetch, while
+        evenly spaced decoder indices cover all PC tokens. ``index_select``
+        preserves gradients for the selected predictions.
+        """
+        total_points = points.shape[1]
+        if total_points <= num_points:
+            return points
+        positions = torch.arange(num_points, device=points.device)
+        indices = torch.div(
+            (2 * positions + 1) * total_points,
+            2 * num_points,
+            rounding_mode='floor',
+        )
+        return points.index_select(1, indices)
 
     # ── Loss ─────────────────────────────────────────────────────────────────
 
     def forward_loss(self,
                      imgs_rgb, imgs_depth, pc, param_floats, text_valid,
                      pred_rgb, pred_depth, pred_pc, pred_params,
-                     mask_rgb, mask_depth, mask_pc, mask_text):
+                     mask_rgb, mask_depth, mask_pc, mask_text,
+                     compute_sinkhorn=True):
         # RGB
         tgt_rgb = self.patchify(imgs_rgb, self.patch_size, imgs_rgb.shape[1])
         if self.norm_pix_loss:
@@ -436,8 +544,33 @@ class EmbodiedMAE4M(nn.Module):
         loss_depth = ((pred_depth - tgt_d) ** 2).mean(-1)
         loss_depth = (loss_depth * mask_depth).sum() / mask_depth.sum()
 
-        # PC (Chamfer)
-        loss_pc = chamfer_distance(pred_pc, pc)
+        # Point cloud: standard squared Chamfer or distance-aware QAL, with an
+        # optional balanced Sinkhorn term to discourage clustered predictions.
+        if self.pc_loss_name == 'qal_loss':
+            loss_pc_base = qal_loss(
+                pred_pc,
+                pc,
+                threshold=self.qal_threshold,
+                alpha=self.qal_alpha,
+                use_squared=self.qal_use_squared,
+            )
+        else:
+            loss_pc_base = chamfer_distance(pred_pc, pc)
+
+        if compute_sinkhorn and self.sinkhorn_loss_fn is not None:
+            pred_sinkhorn = self._sinkhorn_subsample(
+                pred_pc, self.sinkhorn_num_points)
+            target_sinkhorn = self._sinkhorn_subsample(
+                pc, self.sinkhorn_num_points)
+            loss_sinkhorn = self.sinkhorn_loss_fn(
+                pred_sinkhorn, target_sinkhorn).mean()
+        else:
+            loss_sinkhorn = loss_pc_base.new_zeros(())
+        loss_pc = loss_pc_base + self.sinkhorn_loss_weight * loss_sinkhorn
+
+        # Detached diagnostics keep the public forward signature compatible.
+        self.last_pc_base_loss = loss_pc_base.detach()
+        self.last_sinkhorn_loss = loss_sinkhorn.detach()
 
         # Parametric text — Smooth-L1 (Huber) on normalised float params.
         # All targets and predictions are in [0, 1] → well-conditioned gradients.
@@ -488,13 +621,14 @@ class EmbodiedMAE4M(nn.Module):
     # ── Full forward ──────────────────────────────────────────────────────────
 
     def forward(self, imgs_rgb, imgs_depth, pc, param_floats, text_valid,
-                mask_ratio: float = 0.75):
+                mask_ratio: float = 0.75, compute_sinkhorn: bool = True):
         """
         imgs_rgb    : (B, 3, H, W)
         imgs_depth  : (B, 1, H, W)
         pc          : (B, N, 3)
         param_floats: (B, 1+max_leaves, N_PARAMS)  float32 — encoder input + target
         text_valid  : (B, 1+max_leaves)            float32 — 1=real token, 0=pad
+        compute_sinkhorn: disable only for output-only visualization/dump passes
         """
         (latent,
          mr, md, mp, mt,
@@ -508,7 +642,7 @@ class EmbodiedMAE4M(nn.Module):
         total, loss_rgb, loss_depth, loss_pc, loss_text = self.forward_loss(
             imgs_rgb, imgs_depth, pc, param_floats, text_valid,
             pred_rgb, pred_depth, pred_pc, pred_params,
-            mr, md, mp, mt)
+            mr, md, mp, mt, compute_sinkhorn=compute_sinkhorn)
 
         return (total,
                 (loss_rgb, loss_depth, loss_pc, loss_text),

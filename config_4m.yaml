@@ -1,16 +1,32 @@
 # EmbodiedMAE-4M Training Configuration (RGB + Depth + PointCloud + Spline)
 
 data:
-  data_root: "./Dataset/new_data"
+  data_root: "/work/mech-ai-scratch/alloy/embodiedmae/Dataset/new_data"
   img_size: 224
   num_points: 8196
 
 model:
   model_size: "base"
   mask_ratio: 0.15
-  pc_loss_weight: 10.0
+  # QAL: sigmoid-weighted, two-sided Euclidean Chamfer distance.
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  # Additive objective: L_pc = L_QAL + 1.0 * L_Sinkhorn.
+  # (This does not reduce the QAL coefficient to 0.7.)
+  sinkhorn_loss_weight: 1.0
+  # PyTorch tensorized Sinkhorn on evenly sampled representatives. The full
+  # 8196-point clouds are still used by QAL.
+  sinkhorn_num_points: 512
+  sinkhorn_blur: 0.02
+  sinkhorn_p: 2
+  sinkhorn_scaling: 0.8
+  sinkhorn_backend: "tensorized"
+  sinkhorn_debias: true
+  pc_loss_weight: 1.0
   depth_norm_type: "minmax"
-  spline_loss_weight: 5.0   # weight for text cross-entropy loss (value chars only)
+  spline_loss_weight: 5.0    # weight for text cross-entropy loss (value chars only)
   max_leaves: 24             # max leaves per plant (pad shorter plants)
 
 training:
@@ -22,13 +38,18 @@ training:
   val_freq: 20
 
 checkpointing:
-  output_dir: "./outputs/4m_run_v3"
+  output_dir: "./outputs/4m_run_v4_qal_sinkhorn_no_duplicate_sk_loss_1.0"
   save_freq: 100
-  resume: "./outputs/4m_run_v3/checkpoints/checkpoint_epoch_1100.pth"
+  resume: null
 
 visualization:
   viz_freq: 50
   num_viz_samples: 12
+
+evaluation:
+  # Distances use the centroid-zero, unit-radius point-cloud coordinates.
+  pc_metric_thresholds: [0.01, 0.02, 0.03]
+  pc_metric_chunk_size: 512
 
 distributed:
   world_size: 8
@@ -43,4 +64,4 @@ wandb:
   use_wandb: true
   wandb_project: "embodied-mae-sorghum"
   wandb_entity: null
-  wandb_name: "Try_with_procedorial_parameters_v3"
+  wandb_name: "Try_with_procedorial_parameters_v4_qal_sinkhorn_sk_loss_1.0"

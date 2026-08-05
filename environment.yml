@@ -1,3 +1,5 @@
+# Reference environment export. train_4m.sbatch activates the existing
+# yongyun/envs/myenv environment and verifies Sinkhorn dependencies at runtime.
 name: det
 channels:
   - conda-forge
@@ -192,6 +194,7 @@ dependencies:
       - frozenlist==1.8.0
       - fsspec==2025.10.0
       - fvcore==0.1.5.post20221221
+      - geomloss==0.3.1
       - gitdb==4.0.12
       - gitpython==3.1.45
       - grpcio==1.76.0
@@ -210,6 +213,7 @@ dependencies:
       - jsonschema==4.25.1
       - jsonschema-specifications==2025.9.1
       - jupyterlab-widgets==3.0.16
+      - keopscore==2.3
       - kiwisolver==1.4.9
       - lazy-loader==0.4
       - lightning-utilities==0.15.2
@@ -234,6 +238,7 @@ dependencies:
       - pycocotools==2.0.10
       - pydantic==2.12.5
       - pydantic-core==2.41.5
+      - pykeops==2.3
       - pyparsing==3.2.5
       - pyquaternion==0.9.9
       - pytokens==0.3.0
