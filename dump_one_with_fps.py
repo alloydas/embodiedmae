@@ -33,7 +33,8 @@ def main():
     ap.add_argument('--checkpoint', required=True)
     ap.add_argument('--output_dir', required=True)
     ap.add_argument('--config',     default='config_4m.yaml')
-    ap.add_argument('--mask_ratio', type=float, default=0.15)
+    ap.add_argument('--mask_ratio', type=float, default=None,
+                    help='Override model.mask_ratio from the YAML config')
     ap.add_argument('--num_samples', type=int, default=8)
     ap.add_argument('--batch_size', type=int, default=1)
     ap.add_argument('--seed',       type=int, default=7)
@@ -49,6 +50,11 @@ def main():
     spline_w   = cfg['model'].get('spline_loss_weight', 5.0)
     depth_norm = cfg['model'].get('depth_norm_type', 'minmax')
     max_leaves = cfg['model'].get('max_leaves', 24)
+    mask_ratio = (args.mask_ratio if args.mask_ratio is not None
+                  else cfg['model'].get('mask_ratio', 0.15))
+    pc_deterministic_fps = cfg['model'].get('pc_deterministic_fps', False)
+    pc_add_center_coordinates = cfg['model'].get(
+        'pc_add_center_coordinates', False)
 
     out_dir = Path(args.output_dir); out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -63,7 +69,9 @@ def main():
     build_fn = embodied_mae_4m_small if model_size == 'small' else embodied_mae_4m_base
     model = build_fn(img_size=img_size, num_pc_tokens=196, target_points=num_points,
                     pc_loss_weight=pc_loss_w, max_leaves=max_leaves,
-                    spline_loss_weight=spline_w, depth_norm_type=depth_norm).to(device)
+                    spline_loss_weight=spline_w, depth_norm_type=depth_norm,
+                    pc_deterministic_fps=pc_deterministic_fps,
+                    pc_add_center_coordinates=pc_add_center_coordinates).to(device)
 
     ck = torch.load(args.checkpoint, map_location=device, weights_only=False)
     sd = ck['model_state_dict']
@@ -104,7 +112,8 @@ def main():
 
             _, _, (pred_rgb_p, pred_depth_p, pred_pc, pred_params), \
                 (m_rgb, m_depth, m_pc, m_text) = model(
-                    rgb_d, depth_d, pc_d, params_d, tv_d, mask_ratio=args.mask_ratio)
+                    rgb_d, depth_d, pc_d, params_d, tv_d,
+                    mask_ratio=mask_ratio)
 
             B = rgb.shape[0]
             pred_rgb_img   = unpatchify(pred_rgb_p,   model.patch_size, 3, model.img_size).cpu()

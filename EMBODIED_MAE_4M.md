@@ -119,11 +119,14 @@ already in [0, 1], so the model effectively learns a regression in that range.
 
 - A single `Dirichlet(α=1)` draw of dimension 4 splits the visible-token budget
   across `[rgb, depth, pc, text]`.
-- Per-modality visible counts are clamped both ways:
-  - at least **1** visible token per modality (avoids empty token streams),
-  - at most `length × (1 − min_mask_ratio)`, with `min_mask_ratio=0.25` —
-    i.e. **every modality is at least 25 % masked, every step**. This is
-    stricter than the 3M version and is unique to 4M.
+- The integer allocation preserves the requested global visible-token budget
+  exactly (up to flooring a fractional token) and redistributes any share that
+  hits a per-modality bound.
+- Every modality keeps at least **1** visible token and, whenever the global
+  budget permits, at least **1** masked reconstruction target. The
+  `min_mask_ratio=0.25` per-modality cap is enforced whenever it is compatible
+  with the requested global ratio. For a smaller global mask such as `0.15`,
+  only the mathematically unavoidable overflow relaxes that cap.
 - All samples in a batch share the same per-modality count (so token streams
   concatenate cleanly), but the *which-tokens-are-visible* draw is still
   per-sample.
@@ -221,6 +224,10 @@ Given a batch `(rgb, depth, pc, param_floats, text_valid)`:
 - An extension of `__getitem__` that calls `load_spline_params(yml,
   max_leaves)` and appends `(param_floats, text_valid)` to the tuple
   returned by the parent class.
+- The parent loader establishes centroid-zero, unit-radius coordinates from
+  the complete raw cloud before choosing `num_points`. Training keeps random
+  point sampling as density augmentation; validation/test use a stable
+  per-file sample so metrics are repeatable.
 
 So a 4M sample tuple is:
 
@@ -249,6 +256,8 @@ In `config_4m.yaml`:
 | `model.spline_loss_weight`   | Multiplier on `loss_text` in the total loss                       | 5.0     |
 | `model.max_leaves`           | Padding length for leaf tokens (also fixes `n_text_tokens=1+M`)   | 24      |
 | `model.model_size`           | One of `small / base / large` (no `giant`)                        | base    |
+| `model.pc_deterministic_fps` | Use a stable, geometry-derived FPS starting point                 | true    |
+| `model.pc_add_center_coordinates` | Add normalized FPS-center XYZ to each local PC token        | true    |
 
 All other keys (`mask_ratio`, `pc_loss_weight`, `depth_norm_type`, distributed
 config, etc.) behave the same as in `config.yaml`. Note that `mask_ratio` is
@@ -333,8 +342,9 @@ masked-and-real tokens.
   4. `N_PARAMS` if the per-token dimension grows,
   5. The decoder param head's output dim (it uses `N_PARAMS`).
   Then re-run `check_param_ranges_fast.py` to confirm nothing clips.
-- The `min_mask_ratio=0.25` floor in `random_masking_dirichlet` is hard-coded;
-  it exists to stop the Dirichlet draw from starving any one modality.
+- `random_masking_dirichlet` preserves the global mask budget. Its
+  `min_mask_ratio=0.25` per-modality cap is relaxed only when that cap is
+  incompatible with the configured global ratio.
 - The param loss is masked by `text_valid` *and* `mask_text`. Don't drop
   either factor without thinking through what it means — `text_valid`
   prevents loss on padded leaves, `mask_text` keeps the objective an MAE

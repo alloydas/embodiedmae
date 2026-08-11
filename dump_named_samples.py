@@ -27,7 +27,7 @@ def main():
     ap.add_argument('--checkpoint', required=True)
     ap.add_argument('--output_dir', required=True)
     ap.add_argument('--config', default='config_4m.yaml')
-    ap.add_argument('--split', default='val', choices=['train', 'val'])
+    ap.add_argument('--split', default='val', choices=['train', 'val', 'test'])
     ap.add_argument('--mask_ratio', type=float, default=None)
     ap.add_argument('--names', nargs='+', required=True,
                     help='Sample folder names (e.g. Sorghum_3_05)')
@@ -48,6 +48,9 @@ def main():
     spline_w   = cfg['model'].get('spline_loss_weight', 5.0)
     depth_norm = cfg['model'].get('depth_norm_type', 'minmax')
     max_leaves = cfg['model'].get('max_leaves', 24)
+    pc_deterministic_fps = cfg['model'].get('pc_deterministic_fps', False)
+    pc_add_center_coordinates = cfg['model'].get(
+        'pc_add_center_coordinates', False)
 
     out_dir = Path(args.output_dir); out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -65,6 +68,8 @@ def main():
             'spline_loss_weight': spline_w,
             'depth_norm_type':   depth_norm,
             'max_leaves':        max_leaves,
+            'pc_deterministic_fps': pc_deterministic_fps,
+            'pc_add_center_coordinates': pc_add_center_coordinates,
             'seed':              args.seed,
             'names':             args.names,
             'compute_emd':       args.compute_emd,
@@ -95,6 +100,8 @@ def main():
         img_size=img_size, num_pc_tokens=196, target_points=num_points,
         pc_loss_weight=pc_w, max_leaves=max_leaves,
         spline_loss_weight=spline_w, depth_norm_type=depth_norm,
+        pc_deterministic_fps=pc_deterministic_fps,
+        pc_add_center_coordinates=pc_add_center_coordinates,
     ).to(device)
 
     print(f"Loading checkpoint: {args.checkpoint}")

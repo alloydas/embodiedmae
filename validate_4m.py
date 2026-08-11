@@ -255,7 +255,7 @@ def main():
     parser.add_argument('--data_root',      type=str, default=None,
                         help='Override data.data_root from the YAML')
     parser.add_argument('--split',          type=str, default='val',
-                        choices=['train', 'val'])
+                        choices=['train', 'val', 'test'])
     parser.add_argument('--mask_ratio',     type=float, default=None,
                         help='Override model.mask_ratio (the only knob you '
                              'usually want to sweep at eval time)')
@@ -294,6 +294,9 @@ def main():
     spline_loss_w  = cfg['model'].get('spline_loss_weight',  5.0)
     depth_norm     = cfg['model'].get('depth_norm_type', 'minmax')
     max_leaves     = cfg['model'].get('max_leaves',         24)
+    pc_deterministic_fps = cfg['model'].get('pc_deterministic_fps', False)
+    pc_add_center_coordinates = cfg['model'].get(
+        'pc_add_center_coordinates', False)
     pc_metric_thresholds = cfg.get('evaluation', {}).get(
         'pc_metric_thresholds', [0.01, 0.02, 0.03])
     pc_metric_chunk_size = cfg.get('evaluation', {}).get(
@@ -331,6 +334,8 @@ def main():
             'spline_loss_weight': spline_loss_w,
             'depth_norm_type':   depth_norm,
             'max_leaves':        max_leaves,
+            'pc_deterministic_fps': pc_deterministic_fps,
+            'pc_add_center_coordinates': pc_add_center_coordinates,
             'pc_metric_thresholds': pc_metric_thresholds,
             'pc_metric_chunk_size': pc_metric_chunk_size,
             'seed':              args.seed,
@@ -374,6 +379,8 @@ def main():
         max_leaves=max_leaves,
         spline_loss_weight=spline_loss_w,
         depth_norm_type=depth_norm,
+        pc_deterministic_fps=pc_deterministic_fps,
+        pc_add_center_coordinates=pc_add_center_coordinates,
     ).to(device)
 
     # Checkpoint

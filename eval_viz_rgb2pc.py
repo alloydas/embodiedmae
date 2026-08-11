@@ -45,6 +45,9 @@ class FolderDS(SorghumDataset4M):
         Dataset.__init__(self)
         self.samples, self.img_size = list(folders), img_size
         self.num_points, self.max_leaves = num_points, max_leaves
+        # This evaluation-only subclass intentionally bypasses
+        # SorghumDataset4M.__init__, so initialise the sampling policy here.
+        self._deterministic_point_sampling = True
         self.rgb_transform = T.Compose([T.Resize((img_size, img_size)), T.ToTensor(),
                                         T.Normalize(*IMNET)])
         self.depth_transform = T.Compose([T.Resize((img_size, img_size)), T.ToTensor()])
@@ -90,7 +93,11 @@ def main():
                   sinkhorn_loss_weight=0.0,
                   max_leaves=cfg['model']['max_leaves'],
                   spline_loss_weight=cfg['model']['spline_loss_weight'],
-                  depth_norm_type=cfg['model']['depth_norm_type'])
+                  depth_norm_type=cfg['model']['depth_norm_type'],
+                  pc_deterministic_fps=cfg['model'].get(
+                      'pc_deterministic_fps', False),
+                  pc_add_center_coordinates=cfg['model'].get(
+                      'pc_add_center_coordinates', False))
     ck = torch.load(args.checkpoint, map_location=dev, weights_only=False)
     sd = ck['model_state_dict']
     if list(sd)[0].startswith('module.'):

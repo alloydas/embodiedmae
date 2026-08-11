@@ -3,6 +3,8 @@ Custom Dataset Loader for Sorghum Data Structure
 Loads data from separate train and val folders
 """
 
+import hashlib
+
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -60,7 +62,8 @@ class SorghumDataset(Dataset):
             data_root: Path to data directory
             img_size: Image size for resizing
             num_points: Number of points in point cloud
-            split: Optional split name ('train' or 'val'). If provided, will look for data_root/split/
+            split: Optional split name (for example 'train', 'val', or 'test').
+                If provided, load from data_root/split/.
         """
         self.data_root = Path(data_root)
         self.img_size = img_size
@@ -75,6 +78,15 @@ class SorghumDataset(Dataset):
         else:
             # Option 2: data_root is already train/ or val/
             self.load_dir = self.data_root
+
+        # Training keeps random point sampling as augmentation.  Evaluation
+        # splits use a per-file stable seed so repeated validation/test passes
+        # see the same target cloud.  Infer the split from the directory name
+        # as well, preserving the documented ``data_root=/path/to/val`` usage.
+        sampling_split = str(split if split is not None else self.load_dir.name).lower()
+        self._deterministic_point_sampling = sampling_split in {
+            'val', 'validation', 'test', 'testing'
+        }
         
         print(f"Loading data from: {self.load_dir}")
         
@@ -119,6 +131,24 @@ class SorghumDataset(Dataset):
         if len(pc_files) == 0:
             raise FileNotFoundError(f"No *_nc.ply file found in {folder}")
         return pc_files[0]  # Return the first one if multiple exist
+
+    def _pointcloud_rng(self, ply_path):
+        """Return the sampling RNG for a point-cloud file.
+
+        Python's built-in ``hash`` is process-randomised, so evaluation uses a
+        SHA-256-derived seed.  Including both the sample directory and file
+        name distinguishes camera-view folders whose PLY basenames are equal.
+        A fresh generator makes every fetch of a val/test file deterministic.
+        """
+        # Keep subclasses that predate this attribute working; evaluation
+        # subclasses should still opt in explicitly to deterministic sampling.
+        if not getattr(self, '_deterministic_point_sampling', False):
+            return np.random
+
+        path = Path(ply_path)
+        sample_key = f'{path.parent.name}/{path.name}'.encode('utf-8')
+        seed = int.from_bytes(hashlib.sha256(sample_key).digest()[:8], 'little')
+        return np.random.default_rng(seed)
     
     def load_pointcloud(self, ply_path):
         """Load point cloud from PLY file"""
@@ -128,25 +158,30 @@ class SorghumDataset(Dataset):
             
             if len(points) == 0:
                 raise ValueError(f"Empty point cloud in {ply_path}")
-            
-            # Sample or pad to fixed size
-            num_points = points.shape[0]
-            if num_points >= self.num_points:
-                indices = np.random.choice(num_points, self.num_points, replace=False)
-                points = points[indices]
-            else:
-                # Pad with duplicated points
-                indices = np.random.choice(num_points, self.num_points - num_points, replace=True)
-                padding = points[indices]
-                points = np.vstack([points, padding])
-            
-            # Normalize point cloud
+
+            # Establish a canonical coordinate frame from the complete cloud.
+            # Computing these statistics after a random crop makes the target's
+            # translation and scale change on every fetch.
             centroid = np.mean(points, axis=0)
             points = points - centroid
             max_dist = np.max(np.linalg.norm(points, axis=1))
             if max_dist > 0:
                 points = points / max_dist
-            
+
+            # Sample or pad to fixed size
+            num_points = points.shape[0]
+            rng = self._pointcloud_rng(ply_path)
+            if num_points >= self.num_points:
+                indices = rng.choice(num_points, self.num_points, replace=False)
+                points = points[indices]
+            else:
+                # Pad with duplicated points
+                indices = rng.choice(
+                    num_points, self.num_points - num_points, replace=True
+                )
+                padding = points[indices]
+                points = np.vstack([points, padding])
+
             return points.astype(np.float32)
         except Exception as e:
             raise RuntimeError(f"Error loading point cloud from {ply_path}: {e}")

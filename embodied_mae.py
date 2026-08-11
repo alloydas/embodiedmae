@@ -194,18 +194,24 @@ def earth_movers_distance(pred_pc, target_pc, num_samples=1000):
     B, N, _ = pred_pc.shape
     _, M, _ = target_pc.shape
     
-    # For large point clouds, subsample for efficiency
+    # For large point clouds, subsample for efficiency.  Use local generators
+    # so metric computation is repeatable and cannot perturb the random masks
+    # generated for the next validation batch.
     if N > num_samples:
-        # Randomly sample points from pred
-        indices_pred = torch.randperm(N, device=pred_pc.device)[:num_samples]
+        pred_generator = torch.Generator(device=pred_pc.device).manual_seed(0)
+        indices_pred = torch.randperm(
+            N, device=pred_pc.device, generator=pred_generator
+        )[:num_samples]
         pred_sampled = pred_pc[:, indices_pred, :]
     else:
         pred_sampled = pred_pc
         num_samples = N
-    
+
     if M > num_samples:
-        # Randomly sample points from target
-        indices_target = torch.randperm(M, device=target_pc.device)[:num_samples]
+        target_generator = torch.Generator(device=target_pc.device).manual_seed(1)
+        indices_target = torch.randperm(
+            M, device=target_pc.device, generator=target_generator
+        )[:num_samples]
         target_sampled = target_pc[:, indices_target, :]
     else:
         target_sampled = target_pc
@@ -260,10 +266,13 @@ class PointCloudEmbed(nn.Module):
     Point Cloud to Token Embedding
     Uses FPS (Farthest Point Sampling) and grouping
     """
-    def __init__(self, num_tokens=196, group_size=32, embed_dim=768):
+    def __init__(self, num_tokens=196, group_size=32, embed_dim=768,
+                 deterministic_fps=False, add_center_coordinates=False):
         super().__init__()
         self.num_tokens = num_tokens
         self.group_size = group_size
+        self.deterministic_fps = bool(deterministic_fps)
+        self.add_center_coordinates = bool(add_center_coordinates)
         
         # Local feature extraction
         self.first_conv = nn.Sequential(
@@ -288,7 +297,14 @@ class PointCloudEmbed(nn.Module):
         B, N, C = xyz.shape
         centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)
         distance = torch.ones(B, N).to(device) * 1e10
-        farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device)
+        if self.deterministic_fps:
+            # A stable, translation-invariant starting point makes the FPS slot
+            # order independent of RNG state (and, except for exact ties, input
+            # point order). This lets learned PC slot embeddings retain meaning.
+            cloud_centroid = xyz.mean(dim=1, keepdim=True)
+            farthest = ((xyz - cloud_centroid) ** 2).sum(dim=-1).argmax(dim=1)
+        else:
+            farthest = torch.randint(0, N, (B,), dtype=torch.long, device=device)
         batch_indices = torch.arange(B, dtype=torch.long).to(device)
         
         for i in range(npoint):
@@ -308,7 +324,8 @@ class PointCloudEmbed(nn.Module):
         B, N, C = xyz.shape
         _, S, _ = centroids_idx.shape if len(centroids_idx.shape) == 3 else (B, centroids_idx.shape[1], 3)
         
-        centroids = xyz[torch.arange(B)[:, None], centroids_idx]
+        batch_indices = torch.arange(B, device=xyz.device)[:, None]
+        centroids = xyz[batch_indices, centroids_idx]
         
         # Compute distances
         dist = torch.cdist(centroids, xyz)  # (B, S, N)
@@ -317,11 +334,11 @@ class PointCloudEmbed(nn.Module):
         _, idx = torch.topk(dist, self.group_size, dim=2, largest=False)
         
         # Group points
-        grouped_xyz = xyz[torch.arange(B)[:, None, None], idx]  # (B, S, k, 3)
+        grouped_xyz = xyz[batch_indices.unsqueeze(-1), idx]  # (B, S, k, 3)
         grouped_xyz = grouped_xyz - centroids.unsqueeze(2)  # Normalize
         
         if points is not None:
-            grouped_points = points[torch.arange(B)[:, None, None], idx]
+            grouped_points = points[batch_indices.unsqueeze(-1), idx]
             grouped_points = torch.cat([grouped_xyz, grouped_points], dim=-1)
         else:
             grouped_points = grouped_xyz
@@ -339,6 +356,8 @@ class PointCloudEmbed(nn.Module):
         
         # Farthest point sampling
         fps_idx = self.fps(xyz, self.num_tokens)
+        batch_indices = torch.arange(B, device=xyz.device)[:, None]
+        centers = xyz[batch_indices, fps_idx]
         
         # Grouping
         grouped_points = self.knn_grouping(xyz, None, fps_idx)  # (B, num_tokens, group_size, 3)
@@ -356,6 +375,18 @@ class PointCloudEmbed(nn.Module):
         features = torch.max(features, dim=2)[0]  # (B*S, embed_dim)
         
         tokens = features.reshape(B, S, -1)  # (B, num_tokens, embed_dim)
+
+        if self.add_center_coordinates:
+            # The PointNet branch above only sees center-relative neighborhoods.
+            # Add absolute normalized XYZ without introducing parameters or
+            # changing the tensor/state-dict API.
+            coord_dim = min(tokens.shape[-1], centers.shape[-1])
+            tokens = torch.cat(
+                (tokens[..., :coord_dim]
+                 + centers[..., :coord_dim].to(dtype=tokens.dtype),
+                 tokens[..., coord_dim:]),
+                dim=-1,
+            )
         
         return tokens
 

@@ -87,7 +87,7 @@ Both training entry points layer config in this order: YAML → CLI flags → de
    - Point cloud → `PointCloudEmbed`: FPS samples `num_pc_tokens=196` centres, kNN groups `group_size=32` neighbours per centre, two PointNet-style Conv1d blocks produce per-token features.
    - (4M only) Spline params → `TextLeafEmbed`: char embeddings + learned positional → mean-pool → linear → D. `n_text_tokens = 1 + max_leaves` (1 plant token + up to 24 leaf tokens).
 2. **Add positional + modality embeddings** (each modality has its own learned modality bias).
-3. **Dirichlet masking** in `random_masking_dirichlet`: a single Dirichlet draw decides the visible-token split across modalities for the whole batch step. Each sample's visible indices are independently random, but the per-modality count is identical batch-wide — this avoids zero-token batch elements that would corrupt encoder norms. The 4M variant also enforces `min_mask_ratio=0.25` per modality.
+3. **Dirichlet masking** in `random_masking_dirichlet`: a single Dirichlet draw decides the visible-token split across modalities for the whole batch step. Each sample's visible indices are independently random, but the per-modality count is identical batch-wide — this avoids zero-token batch elements that would corrupt encoder norms. The 4M allocator preserves the configured global mask budget and enforces `min_mask_ratio=0.25` per modality whenever that constraint is globally feasible.
 4. **Encoder**: visible tokens from all modalities are concatenated with a CLS token and fed through `depth` shared transformer blocks (`embed_dim=768` for base).
 5. **Decoder**: project to `decoder_embed_dim=512`, restore mask tokens at original positions per modality, add decoder positional embeddings, run `decoder_depth=8` transformer blocks, then split back into modality-specific heads:
    - RGB / Depth → linear → `patch_size² × C` per token (unpatchified for visualisation).
@@ -116,9 +116,10 @@ data_root/{train,val}/<sample_name>/
     *_spline.yml         # 4M only — procedural generation params
 ```
 
-The PC loader uniformly samples / pads to `num_points`, then centres at the centroid and scales so the max-distance point lands on the unit sphere. RGB uses ImageNet mean/std normalisation; depth is loaded as single-channel L and only `ToTensor`'d (no normalisation at load — normalisation happens inside the loss).
+The PC loader first centres and unit-radius normalises the complete raw cloud, then samples / pads to `num_points`. Training sampling is random; validation and test sampling is stable per file so repeated evaluation uses the same target. RGB uses ImageNet mean/std normalisation; depth is loaded as single-channel L and only `ToTensor`'d (no normalisation at load — normalisation happens inside the loss).
 
-`Dataset/new_data/{train,val}/Sorghum_<n>_<m>/` is the active dataset on this filesystem.
+The active dataset root and available splits are selected by `data.data_root`
+in the training config.
 
 ## Outputs
 

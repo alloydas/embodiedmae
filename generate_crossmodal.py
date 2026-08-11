@@ -243,7 +243,10 @@ def main():
         sinkhorn_loss_weight=0.0,
         max_leaves=cfg['model']['max_leaves'],
         spline_loss_weight=cfg['model']['spline_loss_weight'],
-        depth_norm_type=cfg['model']['depth_norm_type'])
+        depth_norm_type=cfg['model']['depth_norm_type'],
+        pc_deterministic_fps=cfg['model'].get('pc_deterministic_fps', False),
+        pc_add_center_coordinates=cfg['model'].get(
+            'pc_add_center_coordinates', False))
 
     ckpt = torch.load(args.checkpoint, map_location=dev, weights_only=False)
     sd = ckpt['model_state_dict']

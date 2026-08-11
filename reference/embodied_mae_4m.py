@@ -15,8 +15,6 @@ Parameter layout (N_PARAMS = 9 per token):
   All values normalised to [0, 1] — see _PLANT_SCALE / _LEAF_SCALE below.
 """
 
-import math
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -28,7 +26,6 @@ from embodied_mae import (
     TransformerBlock,
     get_2d_sincos_pos_embed,
     chamfer_distance,
-    qal_loss,
     earth_movers_distance,
 )
 
@@ -36,157 +33,6 @@ from embodied_mae import (
 # ── Numeric parameter layout ──────────────────────────────────────────────────
 
 N_PARAMS = 9   # fixed-size float vector per token
-
-
-def _bounded_proportional_allocation(total, weights, lower, upper):
-    """Allocate an integer total proportionally while respecting bounds.
-
-    The continuous allocation is a capped water-filling solution.  Largest
-    remainders then convert it to integers without changing ``total``.  This is
-    deliberately a pure-Python helper: modality counts are shared by the whole
-    batch, tiny, and easy to unit-test independently of model construction.
-    """
-    n_items = len(weights)
-    if n_items == 0 or len(lower) != n_items or len(upper) != n_items:
-        raise ValueError("weights, lower, and upper must have the same non-zero length")
-    if not isinstance(total, int) or isinstance(total, bool):
-        raise TypeError("total must be an integer")
-    if any(not isinstance(value, int) or isinstance(value, bool)
-           for value in (*lower, *upper)):
-        raise TypeError("allocation bounds must be integers")
-    if any(lo < 0 or hi < lo for lo, hi in zip(lower, upper)):
-        raise ValueError("allocation bounds must satisfy 0 <= lower <= upper")
-    if total < sum(lower) or total > sum(upper):
-        raise ValueError("total is outside the feasible allocation bounds")
-
-    weights = tuple(float(value) for value in weights)
-    if any(not math.isfinite(value) or value < 0 for value in weights):
-        raise ValueError("allocation weights must be finite and non-negative")
-    if sum(weights) <= 0:
-        raise ValueError("at least one allocation weight must be positive")
-
-    continuous = [float(value) for value in lower]
-    remaining = float(total - sum(lower))
-    active = {index for index, (lo, hi) in enumerate(zip(lower, upper))
-              if lo < hi}
-
-    # Redistribute the share of every saturated item across all items that
-    # still have capacity.  Zero-weight survivors use a uniform fallback once
-    # all positive-weight items have saturated.
-    while remaining > 1e-12:
-        if not active:
-            raise RuntimeError("allocation exhausted capacity before reaching total")
-        active_weight = sum(weights[index] for index in active)
-        if active_weight > 0:
-            shares = {
-                index: remaining * weights[index] / active_weight
-                for index in active
-            }
-        else:
-            uniform_share = remaining / len(active)
-            shares = {index: uniform_share for index in active}
-
-        saturated = [
-            index for index in active
-            if shares[index] >= upper[index] - continuous[index] - 1e-12
-        ]
-        if saturated:
-            for index in saturated:
-                capacity = upper[index] - continuous[index]
-                continuous[index] = float(upper[index])
-                remaining -= capacity
-                active.remove(index)
-            remaining = max(remaining, 0.0)
-        else:
-            for index in active:
-                continuous[index] += shares[index]
-            remaining = 0.0
-
-    allocation = [int(math.floor(value)) for value in continuous]
-    remainder = total - sum(allocation)
-    while remainder > 0:
-        candidates = [index for index in range(n_items)
-                      if allocation[index] < upper[index]]
-        if not candidates:
-            raise RuntimeError("integer allocation exhausted capacity")
-        index = max(
-            candidates,
-            key=lambda item: (
-                continuous[item] - allocation[item], weights[item], -item,
-            ),
-        )
-        allocation[index] += 1
-        remainder -= 1
-
-    return tuple(allocation)
-
-
-def _visible_token_counts(lengths, weights, mask_ratio_total,
-                          min_mask_ratio=0.25):
-    """Return bounded visible-token counts whose sum matches the global ratio.
-
-    At least one token stays visible in every modality.  ``min_mask_ratio`` is
-    treated as a per-modality upper bound on visibility whenever those bounds
-    can accommodate the requested global total.  If they cannot, the minimum
-    masking constraint is relaxed only by the unavoidable overflow, which is
-    redistributed according to ``weights``.
-    """
-    lengths = tuple(lengths)
-    if not lengths:
-        raise ValueError("at least one modality is required")
-    if any(not isinstance(length, int) or isinstance(length, bool) or length <= 0
-           for length in lengths):
-        raise ValueError("all modality lengths must be positive integers")
-    if len(weights) != len(lengths):
-        raise ValueError("weights and modality lengths must have the same length")
-
-    try:
-        mask_ratio_total = float(mask_ratio_total)
-        min_mask_ratio = float(min_mask_ratio)
-    except (TypeError, ValueError) as exc:
-        raise TypeError("mask ratios must be real numbers") from exc
-    if not math.isfinite(mask_ratio_total) or not 0.0 <= mask_ratio_total <= 1.0:
-        raise ValueError("mask_ratio_total must be finite and in [0, 1]")
-    if not math.isfinite(min_mask_ratio) or not 0.0 <= min_mask_ratio <= 1.0:
-        raise ValueError("min_mask_ratio must be finite and in [0, 1]")
-
-    total_tokens = sum(lengths)
-    # Preserve the model's existing floor convention for a fractional token.
-    total_visible = int(math.floor(total_tokens * (1.0 - mask_ratio_total)))
-    minimum_visible = len(lengths)
-    if total_visible < minimum_visible:
-        raise ValueError(
-            f"mask_ratio_total leaves {total_visible} visible tokens, but at "
-            f"least {minimum_visible} are required to keep one per modality"
-        )
-
-    lower = (1,) * len(lengths)
-    constrained_upper = tuple(
-        max(1, int(math.floor(
-            length * (1.0 - min_mask_ratio) + 1e-12
-        )))
-        for length in lengths
-    )
-
-    if total_visible <= sum(constrained_upper):
-        upper = constrained_upper
-        allocation_lower = lower
-    else:
-        # The global ratio has priority.  Starting at every constrained upper
-        # bound makes the amount of min-mask relaxation exactly the unavoidable
-        # overflow, rather than relaxing a modality that could stay bounded.
-        # Keep at least one reconstruction target per modality whenever the
-        # global budget contains enough masked tokens to do so.  Besides being
-        # a better MAE objective, this prevents empty masked-loss denominators.
-        total_masked = total_tokens - total_visible
-        if total_masked >= len(lengths) and all(length > 1 for length in lengths):
-            upper = tuple(length - 1 for length in lengths)
-        else:
-            upper = lengths
-        allocation_lower = constrained_upper
-
-    return _bounded_proportional_allocation(
-        total_visible, weights, allocation_lower, upper)
 
 # norm = (raw + shift) / scale  →  raw = norm * scale - shift
 # All outputs land in [0, 1] for the expected data ranges.
@@ -197,6 +43,7 @@ _PLANT_SHIFT = np.array([0.0, 1.0, 1.0, 1.0,  0.0, 0.0, 0.0,  0.0,  0.0], np.flo
 _LEAF_SCALE  = np.array([1.0, 1.0, 360.0, 180.0, 0.1, 360.0, 360.0, 1.0, 1.0], np.float32)
 _LEAF_SHIFT  = np.array([0.0, 0.0,   0.0,   0.0, 0.0,   0.0,   0.0, 0.0, 0.0], np.float32)
 # [sp,  ln,  ra,   ba,   wf,  wp0,  wp1, (unused×2)]
+
 
 def _plant_to_params(plant: dict) -> np.ndarray:
     p  = plant['Parameters']
@@ -253,18 +100,12 @@ def load_spline_params(yml_path, max_leaves: int = 24):
     with open(yml_path) as f:
         data = yaml.safe_load(f)
 
-    plant = data['Sorghums'][0]
+    plant  = data['Sorghums'][0]
     # Some leaves are geometry-only (Center/Left/Right Points but no procedural
-    # params). Skip them so they do not become parameter tokens or crash the
-    # parameter conversion.
-    required_leaf = (
-        'starting_point', 'length', 'roll_angle', 'branching_angle',
-        'waviness_frequency', 'waviness_period_start',
-    )
-    leaves = [
-        leaf for leaf in plant['Leaves']
-        if all(key in leaf for key in required_leaf)
-    ]
+    # params) — skip them so they don't become param tokens and crash _leaf_to_params.
+    _REQ_LEAF = ('starting_point', 'length', 'roll_angle', 'branching_angle',
+                 'waviness_frequency', 'waviness_period_start')
+    leaves = [lf for lf in plant['Leaves'] if all(k in lf for k in _REQ_LEAF)]
 
     n_tokens     = 1 + max_leaves
     valid        = np.zeros(n_tokens,            dtype=np.float32)
@@ -319,17 +160,6 @@ class EmbodiedMAE4M(nn.Module):
         pc_group_size:       int   = 32,
         target_points:       int   = 10000,
         pc_loss_weight:      float = 50.0,
-        pc_loss_name:        str   = 'chamfer',
-        qal_threshold:       float = 0.01,
-        qal_alpha:           float = 100.0,
-        qal_use_squared:     bool  = False,
-        sinkhorn_loss_weight: float = 0.0,
-        sinkhorn_num_points: int   = 512,
-        sinkhorn_blur:       float = 0.02,
-        sinkhorn_p:          int   = 2,
-        sinkhorn_scaling:    float = 0.8,
-        sinkhorn_backend:    str   = 'tensorized',
-        sinkhorn_debias:     bool  = True,
         max_leaves:          int   = 24,
         spline_loss_weight:  float = 5.0,
         embed_dim:           int   = 768,
@@ -342,8 +172,6 @@ class EmbodiedMAE4M(nn.Module):
         norm_pix_loss:       bool  = True,
         dirichlet_alpha:     float = 1.0,
         depth_norm_type:     str   = 'minmax',
-        pc_deterministic_fps: bool = False,
-        pc_add_center_coordinates: bool = False,
     ):
         super().__init__()
 
@@ -355,102 +183,17 @@ class EmbodiedMAE4M(nn.Module):
         self.n_text_tokens      = 1 + max_leaves
         self.embed_dim          = embed_dim
         self.norm_pix_loss      = norm_pix_loss
-        try:
-            dirichlet_alpha = float(dirichlet_alpha)
-        except (TypeError, ValueError) as exc:
-            raise TypeError("dirichlet_alpha must be a real number") from exc
-        if not math.isfinite(dirichlet_alpha) or dirichlet_alpha <= 0:
-            raise ValueError("dirichlet_alpha must be positive and finite")
         self.dirichlet_alpha    = dirichlet_alpha
         self.pc_loss_weight     = pc_loss_weight
-        if pc_loss_name not in {'chamfer', 'qal_loss'}:
-            raise ValueError(
-                f"Unsupported point-cloud loss {pc_loss_name!r}; "
-                "expected 'chamfer' or 'qal_loss'"
-            )
-        if qal_threshold < 0:
-            raise ValueError("qal_threshold must be non-negative")
-        if qal_alpha <= 0:
-            raise ValueError("qal_alpha must be positive")
-        self.pc_loss_name       = pc_loss_name
-        self.qal_threshold      = qal_threshold
-        self.qal_alpha          = qal_alpha
-        self.qal_use_squared    = qal_use_squared
-        if sinkhorn_loss_weight < 0:
-            raise ValueError("sinkhorn_loss_weight must be non-negative")
-        if sinkhorn_num_points <= 0:
-            raise ValueError("sinkhorn_num_points must be positive")
-        if sinkhorn_blur <= 0:
-            raise ValueError("sinkhorn_blur must be positive")
-        if sinkhorn_p not in {1, 2}:
-            raise ValueError("sinkhorn_p must be 1 or 2")
-        if not 0 < sinkhorn_scaling < 1:
-            raise ValueError("sinkhorn_scaling must be between 0 and 1")
-        if sinkhorn_backend not in {'auto', 'tensorized', 'online', 'multiscale'}:
-            raise ValueError(
-                "sinkhorn_backend must be auto, tensorized, online, or multiscale"
-            )
-        if (sinkhorn_loss_weight > 0 and sinkhorn_backend == 'tensorized'
-                and sinkhorn_num_points > 5000):
-            raise ValueError(
-                "tensorized Sinkhorn is limited to at most 5000 sampled points"
-            )
-        self.sinkhorn_loss_weight = sinkhorn_loss_weight
-        self.sinkhorn_num_points = sinkhorn_num_points
-        self.sinkhorn_blur       = sinkhorn_blur
-        self.sinkhorn_p          = sinkhorn_p
-        self.sinkhorn_scaling    = sinkhorn_scaling
-        self.sinkhorn_backend    = sinkhorn_backend
-        self.sinkhorn_debias     = sinkhorn_debias
-        self.sinkhorn_loss_fn    = None
-        if sinkhorn_loss_weight > 0:
-            try:
-                from geomloss import SamplesLoss
-            except ImportError as exc:
-                raise ImportError(
-                    "Sinkhorn loss is enabled but geomloss is not installed. "
-                    "Install geomloss in the training environment."
-                ) from exc
-            self.sinkhorn_loss_fn = SamplesLoss(
-                loss='sinkhorn',
-                p=sinkhorn_p,
-                blur=sinkhorn_blur,
-                scaling=sinkhorn_scaling,
-                debias=sinkhorn_debias,
-                backend=sinkhorn_backend,
-            )
         self.spline_loss_weight = spline_loss_weight
         self.depth_norm_type    = depth_norm_type
         self.target_points      = target_points
-        if target_points < num_pc_tokens:
-            raise ValueError(
-                "target_points must be at least num_pc_tokens so every PC token "
-                "can generate a point"
-            )
-
-        # Distribute target_points exactly across PC tokens. For 8196 points and
-        # 196 tokens this yields 160 tokens with 42 points and 36 with 41,
-        # avoiding the previous forced duplication of the first 160 outputs.
-        boundaries = torch.div(
-            torch.arange(num_pc_tokens + 1, dtype=torch.long) * target_points,
-            num_pc_tokens,
-            rounding_mode='floor',
-        )
-        pc_points_per_token = boundaries[1:] - boundaries[:-1]
-        self.register_buffer(
-            '_pc_points_per_token', pc_points_per_token, persistent=False)
-        self.points_per_token = int(pc_points_per_token.max().item())
+        self.points_per_token   = target_points // num_pc_tokens
 
         # ── Embedders ─────────────────────────────────────────────────────
         self.rgb_embed   = PatchEmbed(img_size, patch_size, in_chans_rgb,   embed_dim)
         self.depth_embed = PatchEmbed(img_size, patch_size, in_chans_depth, embed_dim)
-        self.pc_embed    = PointCloudEmbed(
-            num_pc_tokens,
-            pc_group_size,
-            embed_dim,
-            deterministic_fps=pc_deterministic_fps,
-            add_center_coordinates=pc_add_center_coordinates,
-        )
+        self.pc_embed    = PointCloudEmbed(num_pc_tokens, pc_group_size, embed_dim)
         self.param_embed = ParamEmbed(N_PARAMS, embed_dim)
 
         # ── Modality embeddings ───────────────────────────────────────────
@@ -548,42 +291,20 @@ class EmbodiedMAE4M(nn.Module):
 
     def random_masking_dirichlet(self, x_rgb, x_depth, x_pc, x_text,
                                   mask_ratio_total=0.75, min_mask_ratio=0.25):
-        """Mask random positions with an exact, bounded global token budget.
-
-        A single Dirichlet draw allocates visible-token counts across modalities
-        for the batch; positions are shuffled independently for every sample.
-        """
-        names = ('rgb', 'depth', 'pc', 'text')
-        tensors = (x_rgb, x_depth, x_pc, x_text)
-        for name, tensor in zip(names, tensors):
-            if not isinstance(tensor, torch.Tensor):
-                raise TypeError(f"x_{name} must be a torch.Tensor")
-            if tensor.ndim != 3:
-                raise ValueError(
-                    f"x_{name} must have shape (B, L, D), got {tuple(tensor.shape)}"
-                )
-            if tensor.shape[0] <= 0 or tensor.shape[1] <= 0 or tensor.shape[2] <= 0:
-                raise ValueError(f"x_{name} dimensions must all be positive")
-
         B = x_rgb.shape[0]
-        embed_dim = x_rgb.shape[2]
-        device = x_rgb.device
-        dtype = x_rgb.dtype
-        for name, tensor in zip(names[1:], tensors[1:]):
-            if tensor.shape[0] != B:
-                raise ValueError("all modalities must have the same batch size")
-            if tensor.shape[2] != embed_dim:
-                raise ValueError("all modalities must have the same embedding dimension")
-            if tensor.device != device:
-                raise ValueError("all modalities must be on the same device")
-            if tensor.dtype != dtype:
-                raise ValueError("all modalities must have the same dtype")
+        L = {m: x.shape[1] for m, x in
+             zip(['rgb','depth','pc','text'], [x_rgb, x_depth, x_pc, x_text])}
+        total    = sum(L.values())
+        nv_total = int(total * (1 - mask_ratio_total))
+        alpha    = torch.ones(4) * self.dirichlet_alpha
+        lambdas  = torch.distributions.Dirichlet(alpha).sample()
 
-        lengths = tuple(tensor.shape[1] for tensor in tensors)
-        alpha = torch.full((len(tensors),), self.dirichlet_alpha)
-        proportions = torch.distributions.Dirichlet(alpha).sample().tolist()
-        nv = _visible_token_counts(
-            lengths, proportions, mask_ratio_total, min_mask_ratio)
+        def _nvis(lam, length):
+            return max(1, min(int(lam.item() * nv_total),
+                               max(1, int(length * (1 - min_mask_ratio)))))
+
+        nv = [_nvis(lambdas[i], L[k])
+              for i, k in enumerate(['rgb','depth','pc','text'])]
 
         def _mask(x, nv_, L_):
             noise    = torch.rand(B, L_, device=x.device)
@@ -596,10 +317,10 @@ class EmbodiedMAE4M(nn.Module):
             mask     = torch.gather(mask, 1, ids_rest)
             return x_vis, mask, ids_rest
 
-        xr_v, mr, rr = _mask(x_rgb,   nv[0], lengths[0])
-        xd_v, md, rd = _mask(x_depth, nv[1], lengths[1])
-        xp_v, mp, rp = _mask(x_pc,    nv[2], lengths[2])
-        xt_v, mt, rt = _mask(x_text,  nv[3], lengths[3])
+        xr_v, mr, rr = _mask(x_rgb,   nv[0], L['rgb'])
+        xd_v, md, rd = _mask(x_depth, nv[1], L['depth'])
+        xp_v, mp, rp = _mask(x_pc,    nv[2], L['pc'])
+        xt_v, mt, rt = _mask(x_text,  nv[3], L['text'])
 
         return (xr_v, xd_v, xp_v, xt_v,
                 mr, md, mp, mt,
@@ -630,9 +351,58 @@ class EmbodiedMAE4M(nn.Module):
                 rr, rd, rp, rt,
                 xr_v.shape[1], xd_v.shape[1], xp_v.shape[1], xt_v.shape[1])
 
+    # ── Encoder with explicit modality visibility (cross-modal) ─────────────────
+
+    def forward_encoder_select(self, x_rgb, x_depth, x_pc, x_param, visible):
+        """Encoder where each modality is EITHER fully visible OR fully masked
+        (0 visible tokens), instead of Dirichlet token-level masking.
+
+        `visible` : iterable subset of {'rgb','depth','pc','text'}. Modalities in
+        the set keep all their tokens; the rest contribute 0 encoder tokens and
+        are entirely reconstructed by the decoder. This is the training-time
+        analogue of generate_crossmodal.py's probe.
+
+        Returns the same 13-tuple as forward_encoder so forward_decoder /
+        forward_loss can be reused unchanged. mask_* = 1 everywhere for a masked
+        modality, 0 everywhere for a visible one.
+        """
+        visible = set(visible)
+        x_rgb   = self.rgb_embed(x_rgb)     + self.pos_embed_2d    + self.modality_embed_rgb
+        x_depth = self.depth_embed(x_depth) + self.pos_embed_2d    + self.modality_embed_depth
+        x_pc    = self.pc_embed(x_pc)       + self.pos_embed_pc    + self.modality_embed_pc
+        x_text  = self.param_embed(x_param) + self.pos_embed_text  + self.modality_embed_text
+
+        B   = x_rgb.shape[0]
+        dev = x_rgb.device
+
+        def _sel(name, e):
+            L        = e.shape[1]
+            ids_rest = torch.arange(L, device=dev).unsqueeze(0).expand(B, L)
+            if name in visible:
+                return e, torch.zeros(B, L, device=dev), ids_rest
+            return e[:, :0], torch.ones(B, L, device=dev), ids_rest
+
+        xr_v, mr, rr = _sel('rgb',   x_rgb)
+        xd_v, md, rd = _sel('depth', x_depth)
+        xp_v, mp, rp = _sel('pc',    x_pc)
+        xt_v, mt, rt = _sel('text',  x_text)
+
+        x   = torch.cat([xr_v, xd_v, xp_v, xt_v], dim=1)
+        cls = self.cls_token.expand(B, -1, -1)
+        x   = torch.cat([cls, x], dim=1)
+        for blk in self.encoder_blocks:
+            x = blk(x)
+        x = self.encoder_norm(x)
+
+        return (x,
+                mr, md, mp, mt,
+                rr, rd, rp, rt,
+                xr_v.shape[1], xd_v.shape[1], xp_v.shape[1], xt_v.shape[1])
+
     # ── Decoder ───────────────────────────────────────────────────────────────
 
-    def forward_decoder(self, x, rr, rd, rp, rt, lr_, ld_, lp_, lt_):
+    def forward_decoder(self, x, rr, rd, rp, rt, lr_, ld_, lp_, lt_,
+                        return_features=False):
         x    = self.decoder_embed(x)
         x_nc = x[:, 1:, :]
 
@@ -659,6 +429,14 @@ class EmbodiedMAE4M(nn.Module):
             x = blk(x)
         x = self.decoder_norm(x)
 
+        # Token-aligned decoder features (B, L_total, decoder_dim). The layout is
+        # [rgb (num_patches) | depth (num_patches) | pc (num_pc_tokens) |
+        #  text (n_text_tokens)] and is IDENTICAL regardless of which tokens were
+        # masked — so these line up position-for-position between any two forward
+        # passes (e.g. a full-modal teacher and a single-modal student). Used as
+        # the feature-distillation target.
+        feats = x
+
         n1 = self.num_patches
         n2 = 2 * n1
         n3 = n2 + self.num_pc_tokens
@@ -678,47 +456,26 @@ class EmbodiedMAE4M(nn.Module):
         grid = grid.unsqueeze(0).unsqueeze(0).expand(B2, N_tok, -1, -1)
         pc_feat_e = pc_feat.unsqueeze(2).expand(-1,-1,self.points_per_token,-1)
         fold_in   = torch.cat([pc_feat_e, grid], dim=-1)
-        pred_pc_by_token = self.decoder_pc_fold(
+        pred_pc   = self.decoder_pc_fold(
             fold_in.reshape(B2 * N_tok * self.points_per_token, -1)
-        ).reshape(B2, N_tok, self.points_per_token, 3)
+        ).reshape(B2, N_tok * self.points_per_token, 3)
 
-        point_slot = torch.arange(self.points_per_token, device=x.device)
-        keep = point_slot.unsqueeze(0) < self._pc_points_per_token.unsqueeze(1)
-        pred_pc = pred_pc_by_token[:, keep, :]
-        if pred_pc.shape[1] != self.target_points:
-            raise RuntimeError(
-                f"PC decoder produced {pred_pc.shape[1]} points; "
-                f"expected {self.target_points}"
-            )
+        if pred_pc.shape[1] > self.target_points:
+            pred_pc = pred_pc[:, :self.target_points]
+        elif pred_pc.shape[1] < self.target_points:
+            pad = self.target_points - pred_pc.shape[1]
+            pred_pc = torch.cat([pred_pc, pred_pc[:, :pad]], dim=1)
 
+        if return_features:
+            return pred_rgb, pred_depth, pred_pc, pred_params, feats
         return pred_rgb, pred_depth, pred_pc, pred_params
-
-    @staticmethod
-    def _sinkhorn_subsample(points, num_points):
-        """Deterministically select evenly spaced representatives.
-
-        The point-cloud loader randomises target order on every fetch, while
-        evenly spaced decoder indices cover all PC tokens. ``index_select``
-        preserves gradients for the selected predictions.
-        """
-        total_points = points.shape[1]
-        if total_points <= num_points:
-            return points
-        positions = torch.arange(num_points, device=points.device)
-        indices = torch.div(
-            (2 * positions + 1) * total_points,
-            2 * num_points,
-            rounding_mode='floor',
-        )
-        return points.index_select(1, indices)
 
     # ── Loss ─────────────────────────────────────────────────────────────────
 
     def forward_loss(self,
                      imgs_rgb, imgs_depth, pc, param_floats, text_valid,
                      pred_rgb, pred_depth, pred_pc, pred_params,
-                     mask_rgb, mask_depth, mask_pc, mask_text,
-                     compute_sinkhorn=True):
+                     mask_rgb, mask_depth, mask_pc, mask_text):
         # RGB
         tgt_rgb = self.patchify(imgs_rgb, self.patch_size, imgs_rgb.shape[1])
         if self.norm_pix_loss:
@@ -726,6 +483,9 @@ class EmbodiedMAE4M(nn.Module):
             v = tgt_rgb.var(-1,  keepdim=True)
             tgt_rgb = (tgt_rgb - m) / (v + 1e-6) ** .5
         loss_rgb = ((pred_rgb - tgt_rgb) ** 2).mean(-1)
+        # clamp(min=1): when RGB is the fully-visible cross-modal source, mask_rgb
+        # is all-zero → guard against 0/0 (yields 0 loss, no NaN). No-op for normal
+        # Dirichlet masking where some RGB tokens are always masked.
         loss_rgb = (loss_rgb * mask_rgb).sum() / mask_rgb.sum().clamp(min=1)
 
         # Depth
@@ -742,33 +502,8 @@ class EmbodiedMAE4M(nn.Module):
         loss_depth = ((pred_depth - tgt_d) ** 2).mean(-1)
         loss_depth = (loss_depth * mask_depth).sum() / mask_depth.sum().clamp(min=1)
 
-        # Point cloud: standard squared Chamfer or distance-aware QAL, with an
-        # optional balanced Sinkhorn term to discourage clustered predictions.
-        if self.pc_loss_name == 'qal_loss':
-            loss_pc_base = qal_loss(
-                pred_pc,
-                pc,
-                threshold=self.qal_threshold,
-                alpha=self.qal_alpha,
-                use_squared=self.qal_use_squared,
-            )
-        else:
-            loss_pc_base = chamfer_distance(pred_pc, pc)
-
-        if compute_sinkhorn and self.sinkhorn_loss_fn is not None:
-            pred_sinkhorn = self._sinkhorn_subsample(
-                pred_pc, self.sinkhorn_num_points)
-            target_sinkhorn = self._sinkhorn_subsample(
-                pc, self.sinkhorn_num_points)
-            loss_sinkhorn = self.sinkhorn_loss_fn(
-                pred_sinkhorn, target_sinkhorn).mean()
-        else:
-            loss_sinkhorn = loss_pc_base.new_zeros(())
-        loss_pc = loss_pc_base + self.sinkhorn_loss_weight * loss_sinkhorn
-
-        # Detached diagnostics keep the public forward signature compatible.
-        self.last_pc_base_loss = loss_pc_base.detach()
-        self.last_sinkhorn_loss = loss_sinkhorn.detach()
+        # PC (Chamfer)
+        loss_pc = chamfer_distance(pred_pc, pc)
 
         # Parametric text — Smooth-L1 (Huber) on normalised float params.
         # All targets and predictions are in [0, 1] → well-conditioned gradients.
@@ -819,33 +554,55 @@ class EmbodiedMAE4M(nn.Module):
     # ── Full forward ──────────────────────────────────────────────────────────
 
     def forward(self, imgs_rgb, imgs_depth, pc, param_floats, text_valid,
-                mask_ratio: float = 0.75, compute_sinkhorn: bool = True):
+                mask_ratio: float = 0.75, visible=None, return_features: bool = False):
         """
         imgs_rgb    : (B, 3, H, W)
         imgs_depth  : (B, 1, H, W)
         pc          : (B, N, 3)
         param_floats: (B, 1+max_leaves, N_PARAMS)  float32 — encoder input + target
         text_valid  : (B, 1+max_leaves)            float32 — 1=real token, 0=pad
-        compute_sinkhorn: disable only for output-only visualization/dump passes
-        """
-        (latent,
-         mr, md, mp, mt,
-         rr, rd, rp, rt,
-         lr_, ld_, lp_, lt_) = self.forward_encoder(
-            imgs_rgb, imgs_depth, pc, param_floats, mask_ratio)
 
-        pred_rgb, pred_depth, pred_pc, pred_params = self.forward_decoder(
-            latent, rr, rd, rp, rt, lr_, ld_, lp_, lt_)
+        visible : None  → standard Dirichlet token masking (original behaviour).
+                  iterable subset of {'rgb','depth','pc','text'} → cross-modal mode:
+                  those modalities are fully visible, the rest fully masked and
+                  reconstructed from them.
+        return_features : if True, append (decoder_feats, cls_latent) to the output
+                  for distillation. decoder_feats is token-aligned across masking
+                  regimes; cls_latent is the encoder CLS token (B, embed_dim).
+        """
+        if visible is None:
+            (latent,
+             mr, md, mp, mt,
+             rr, rd, rp, rt,
+             lr_, ld_, lp_, lt_) = self.forward_encoder(
+                imgs_rgb, imgs_depth, pc, param_floats, mask_ratio)
+        else:
+            (latent,
+             mr, md, mp, mt,
+             rr, rd, rp, rt,
+             lr_, ld_, lp_, lt_) = self.forward_encoder_select(
+                imgs_rgb, imgs_depth, pc, param_floats, visible)
+
+        dec = self.forward_decoder(
+            latent, rr, rd, rp, rt, lr_, ld_, lp_, lt_,
+            return_features=return_features)
+        if return_features:
+            pred_rgb, pred_depth, pred_pc, pred_params, feats = dec
+        else:
+            pred_rgb, pred_depth, pred_pc, pred_params = dec
 
         total, loss_rgb, loss_depth, loss_pc, loss_text = self.forward_loss(
             imgs_rgb, imgs_depth, pc, param_floats, text_valid,
             pred_rgb, pred_depth, pred_pc, pred_params,
-            mr, md, mp, mt, compute_sinkhorn=compute_sinkhorn)
+            mr, md, mp, mt)
 
-        return (total,
-                (loss_rgb, loss_depth, loss_pc, loss_text),
-                (pred_rgb, pred_depth, pred_pc, pred_params),
-                (mr, md, mp, mt))
+        out = (total,
+               (loss_rgb, loss_depth, loss_pc, loss_text),
+               (pred_rgb, pred_depth, pred_pc, pred_params),
+               (mr, md, mp, mt))
+        if return_features:
+            out = out + ((feats, latent[:, 0]),)
+        return out
 
 
 # ── Convenience constructors ─────────────────────────────────────────────────

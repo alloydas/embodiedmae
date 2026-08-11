@@ -315,6 +315,58 @@ python train_sorghum_multi.py --config experiments/exp2.yaml
 
 **See:** `YAML_CONFIG_GUIDE.md`
 
+## Four-Modality Latent Alignment
+
+Use `analyze_modality_alignment_4m.py` to compare RGB, depth, point-cloud, and
+numeric spline-parameter representations. The probe reports Linear CKA,
+paired-versus-negative cosine similarity, exact-view retrieval, plant-aware
+retrieval, and 2-D latent-space visualizations.
+
+```bash
+/work/mech-ai-scratch/yongyun/envs/myenv/bin/python \
+  analyze_modality_alignment_4m.py \
+  --checkpoint outputs/4m_run_v4_qal_sinkhorn_no_duplicate_sk_loss_1.0/checkpoints/checkpoint_epoch_800.pth \
+  --split val \
+  --num_samples 1000 \
+  --output_dir outputs/4m_run_v4_qal_sinkhorn_no_duplicate_sk_loss_1.0/latent_alignment_ep800 \
+  --device cuda \
+  --projection pca \
+  --amp
+```
+
+By default, capped analyses sample two views per plant. The views share identical
+spline parameters, so use plant/group retrieval as the primary retrieval result;
+exact-view retrieval is retained as a stricter, tie-aware secondary measurement.
+For a larger independent-sample analysis, sample one view from each of up to
+5,000 training plants:
+
+```bash
+/work/mech-ai-scratch/yongyun/envs/myenv/bin/python \
+  analyze_modality_alignment_4m.py \
+  --checkpoint /path/to/checkpoint.pth \
+  --config config_4m.yaml \
+  --split train \
+  --num_samples 5000 \
+  --one_per_group \
+  --output_dir latent_alignment_train
+```
+
+The output directory contains:
+
+- `metrics.json`: all directional and bidirectional metrics plus random baselines.
+- `metrics.csv`: compact pair-by-pair summary.
+- `embeddings.npz`: paired pre-encoder and post-encoder embeddings.
+- `pairwise_metrics_*.png`: CKA, cosine-gap, and retrieval heatmaps.
+- `latent_space_*.png`: L2-normalized and modality-centered 2-D projections;
+  gray lines connect the four embeddings belonging to the same sample.
+
+PCA is dependency-free beyond NumPy. `--projection tsne` uses scikit-learn;
+`--projection umap` additionally requires `umap-learn`.
+
+When `--config` is omitted, the analyzer uses the immutable `config.json` saved
+beside the checkpoint. Pass `--config` or `--data_root` only when an intentional
+cross-dataset/OOD comparison is desired; that mismatch is recorded in metadata.
+
 ## Output Structure
 
 ```
@@ -381,5 +433,3 @@ scipy>=1.10.0        # For EMD calculation
 wandb>=0.15.0        # For experiment tracking
 open3d>=0.17.0       # For point cloud visualization
 ```
-
-

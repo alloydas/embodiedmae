@@ -59,12 +59,14 @@ def merge_config_with_args(config, args):
                   'sinkhorn_loss_weight', 'sinkhorn_num_points',
                   'sinkhorn_blur', 'sinkhorn_p',
                   'sinkhorn_scaling', 'sinkhorn_backend', 'sinkhorn_debias',
-                  'depth_norm_type', 'spline_loss_weight', 'max_leaves'],
+                  'depth_norm_type', 'spline_loss_weight', 'max_leaves',
+                  'pc_deterministic_fps', 'pc_add_center_coordinates'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
                      'warmup_epochs', 'val_freq'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
         'visualization': ['viz_freq', 'num_viz_samples'],
-        'evaluation': ['pc_metric_thresholds', 'pc_metric_chunk_size'],
+        'evaluation': ['pc_metric_thresholds', 'pc_metric_chunk_size',
+                       'val_mask_seed'],
         'distributed': ['world_size', 'dist_backend', 'dist_url'],
         'system': ['num_workers', 'device'],
         'wandb': ['use_wandb', 'wandb_project', 'wandb_entity', 'wandb_name'],
@@ -101,6 +103,9 @@ def config_to_namespace(config):
     ns.depth_norm_type    = config['model'].get('depth_norm_type', 'minmax')
     ns.spline_loss_weight = config['model'].get('spline_loss_weight', 1.0)
     ns.max_leaves         = config['model'].get('max_leaves', 24)
+    ns.pc_deterministic_fps = config['model'].get('pc_deterministic_fps', False)
+    ns.pc_add_center_coordinates = config['model'].get(
+        'pc_add_center_coordinates', False)
     ns.batch_size         = config['training'].get('batch_size', 16)
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
@@ -116,6 +121,7 @@ def config_to_namespace(config):
         'pc_metric_thresholds', [0.01, 0.02, 0.03])
     ns.pc_metric_chunk_size = config.get('evaluation', {}).get(
         'pc_metric_chunk_size', 512)
+    ns.val_mask_seed      = config.get('evaluation', {}).get('val_mask_seed', 42)
     ns.world_size         = config['distributed'].get('world_size', 1)
     ns.dist_backend       = config['distributed'].get('dist_backend', 'nccl')
     ns.dist_url           = config['distributed'].get('dist_url', 'env://')
@@ -176,7 +182,7 @@ def _scatter3d(ax, pts, c, s=2, alpha=0.7, **kw):
 # ── Visualisation ─────────────────────────────────────────────────────────────
 
 def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
-                                  num_samples=4):
+                                  num_samples=4, *, mask_ratio):
     """5-row × 3-col grid per sample.
     Row 5 shows target vs predicted text for masked tokens.
     """
@@ -197,6 +203,7 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
             (pred_rgb, pred_depth, pred_pc, pred_params), \
             (m_rgb, m_depth, m_pc, m_text) = model(
                 rgb_b, depth_b, pc_b, param_floats_b, text_valid_b,
+                mask_ratio=mask_ratio,
                 compute_sinkhorn=False,
         )
 
@@ -411,7 +418,7 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
-def train_one_epoch(model, dataloader, optimizer, device, epoch):
+def train_one_epoch(model, dataloader, optimizer, device, epoch, *, mask_ratio):
     model.train()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     tot_pc_base = tot_sinkhorn = 0.0
@@ -425,7 +432,10 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
         param_floats = param_floats.to(device)
         text_valid   = text_valid.to(device)
 
-        loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid)
+        loss, (lr, ld, lp, lt), _, _ = model(
+            rgb, depth, pc, param_floats, text_valid,
+            mask_ratio=mask_ratio,
+        )
 
         optimizer.zero_grad()
         loss.backward()
@@ -461,7 +471,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, device, compute_emd=False,
+def evaluate(model, dataloader, device, *, mask_ratio, val_mask_seed=42,
+             compute_emd=False,
              pc_metric_thresholds=(0.01, 0.02, 0.03),
              pc_metric_chunk_size=512):
     model.eval()
@@ -484,6 +495,21 @@ def evaluate(model, dataloader, device, compute_emd=False,
 
     m = model.module if hasattr(model, 'module') else model
 
+    # Validation must use the same missing-token pattern at every epoch. Keep
+    # this local to evaluation so validation does not perturb the subsequent
+    # training RNG stream. Each DDP rank gets a stable, distinct stream.
+    rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+    eval_seed = int(val_mask_seed) + rank
+    device_obj = torch.device(device)
+    cpu_rng_state = torch.random.get_rng_state()
+    eval_cpu_generator = torch.Generator(device='cpu').manual_seed(eval_seed)
+    torch.random.set_rng_state(eval_cpu_generator.get_state())
+    cuda_rng_state = None
+    if device_obj.type == 'cuda':
+        cuda_rng_state = torch.cuda.get_rng_state(device_obj)
+        eval_cuda_generator = torch.Generator(device=device_obj).manual_seed(eval_seed)
+        torch.cuda.set_rng_state(eval_cuda_generator.get_state(), device_obj)
+
     for rgb, depth, pc, param_floats, text_valid, _ in tqdm(dataloader, desc='Evaluating'):
         rgb          = rgb.to(device)
         depth        = depth.to(device)
@@ -494,7 +520,8 @@ def evaluate(model, dataloader, device, compute_emd=False,
         loss, (lr, ld, lp, lt), \
             (pred_rgb_p, pred_depth_p, pred_pc, pred_params), \
             (_, _, _, mask_text) = model(
-                rgb, depth, pc, param_floats, text_valid
+                rgb, depth, pc, param_floats, text_valid,
+                mask_ratio=mask_ratio,
         )
 
         tot       += loss.item()
@@ -546,6 +573,10 @@ def evaluate(model, dataloader, device, compute_emd=False,
 
         del pred_pc, pred_params, mask_text
         del rgb, depth, pc, param_floats, text_valid
+
+    torch.random.set_rng_state(cpu_rng_state)
+    if cuda_rng_state is not None:
+        torch.cuda.set_rng_state(cuda_rng_state, device_obj)
 
     n = len(dataloader)
 
@@ -676,6 +707,8 @@ def train_worker(rank, world_size, args):
         max_leaves=args.max_leaves,
         spline_loss_weight=args.spline_loss_weight,
         depth_norm_type=args.depth_norm_type,
+        pc_deterministic_fps=args.pc_deterministic_fps,
+        pc_add_center_coordinates=args.pc_add_center_coordinates,
     ).to(device)
 
     if world_size > 1:
@@ -712,8 +745,11 @@ def train_worker(rank, world_size, args):
                            'sinkhorn_backend': args.sinkhorn_backend,
                            'sinkhorn_debias': args.sinkhorn_debias,
                            'pc_metric_thresholds': args.pc_metric_thresholds,
+                           'val_mask_seed': args.val_mask_seed,
                            'text_loss_weight': args.spline_loss_weight,
                            'max_leaves': args.max_leaves,
+                           'pc_deterministic_fps': args.pc_deterministic_fps,
+                           'pc_add_center_coordinates': args.pc_add_center_coordinates,
                            'batch_size': args.batch_size, 'epochs': args.epochs,
                            'lr': args.lr, 'total_params': total_params,
                            'train_samples': len(train_ds), 'val_samples': len(val_ds),
@@ -792,7 +828,10 @@ def train_worker(rank, world_size, args):
             print(f"{'='*80}")
 
         tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt, tr_pc_base, tr_sinkhorn = \
-            train_one_epoch(model, train_loader, optimizer, device, epoch)
+            train_one_epoch(
+                model, train_loader, optimizer, device, epoch,
+                mask_ratio=args.mask_ratio,
+            )
         for k, v in zip(
                 ['train_loss','train_rgb','train_depth','train_pc','train_text',
                  'train_pc_base','train_pc_sinkhorn'],
@@ -817,7 +856,9 @@ def train_worker(rank, world_size, args):
             (vl, vr, vd, vp, vt), vm = evaluate(
                 model, val_loader, device, compute_emd=compute_emd,
                 pc_metric_thresholds=args.pc_metric_thresholds,
-                pc_metric_chunk_size=args.pc_metric_chunk_size)
+                pc_metric_chunk_size=args.pc_metric_chunk_size,
+                mask_ratio=args.mask_ratio,
+                val_mask_seed=args.val_mask_seed)
             for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text',
                               'val_rgb_mse','val_depth_mse','val_pc_chamfer','val_pc_emd',
                               'val_param_mse','val_param_mae','val_param_mae_masked',
@@ -898,7 +939,8 @@ def train_worker(rank, world_size, args):
             print(f"\n📊 Generating visualizations for epoch {epoch}…")
             mv = model.module if world_size > 1 else model
             paths = visualize_reconstruction_4m(
-                mv, val_loader, device, epoch, viz_dir, args.num_viz_samples)
+                mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
+                mask_ratio=args.mask_ratio)
             if args.use_wandb and WANDB_AVAILABLE:
                 wandb.log({'visualizations': [wandb.Image(p, caption=Path(p).name)
                                                for p in paths], 'epoch': epoch})
@@ -980,6 +1022,13 @@ def main():
     parser.add_argument('--depth_norm_type',    type=str,   default=None, choices=['minmax','standard'])
     parser.add_argument('--spline_loss_weight', type=float, default=None)
     parser.add_argument('--max_leaves',         type=int,   default=None)
+    parser.add_argument('--pc_deterministic_fps', action='store_true', default=None)
+    parser.add_argument('--pc_random_fps', action='store_false',
+                        dest='pc_deterministic_fps')
+    parser.add_argument('--pc_add_center_coordinates', action='store_true',
+                        default=None)
+    parser.add_argument('--pc_no_center_coordinates', action='store_false',
+                        dest='pc_add_center_coordinates')
     parser.add_argument('--batch_size',         type=int,   default=None)
     parser.add_argument('--epochs',             type=int,   default=None)
     parser.add_argument('--lr',                 type=float, default=None)
@@ -990,6 +1039,7 @@ def main():
     parser.add_argument('--num_viz_samples',    type=int,   default=None)
     parser.add_argument('--pc_metric_thresholds', type=float, nargs='+', default=None)
     parser.add_argument('--pc_metric_chunk_size', type=int, default=None)
+    parser.add_argument('--val_mask_seed',        type=int, default=None)
     parser.add_argument('--output_dir',         type=str,   default=None)
     parser.add_argument('--save_freq',          type=int,   default=None)
     parser.add_argument('--resume',             type=str,   default=None)
@@ -1020,13 +1070,15 @@ def main():
                               'sinkhorn_num_points': 512, 'sinkhorn_blur': 0.02,
                               'sinkhorn_p': 2, 'sinkhorn_scaling': 0.8,
                               'sinkhorn_backend': 'tensorized', 'sinkhorn_debias': True,
-                              'depth_norm_type': 'minmax', 'spline_loss_weight': 1.0, 'max_leaves': 24},
+                              'depth_norm_type': 'minmax', 'spline_loss_weight': 1.0,
+                              'max_leaves': 24, 'pc_deterministic_fps': True,
+                              'pc_add_center_coordinates': True},
             'training':      {'batch_size': 16, 'epochs': 2400, 'lr': 1.5e-4,
                               'weight_decay': 0.05, 'warmup_epochs': 10, 'val_freq': 20},
             'checkpointing': {'output_dir': './outputs/4m_run', 'save_freq': 100, 'resume': None},
             'visualization': {'viz_freq': 50, 'num_viz_samples': 6},
             'evaluation':    {'pc_metric_thresholds': [0.01, 0.02, 0.03],
-                              'pc_metric_chunk_size': 512},
+                              'pc_metric_chunk_size': 512, 'val_mask_seed': 42},
             'distributed':   {'world_size': 4, 'dist_backend': 'nccl', 'dist_url': 'env://'},
             'system':        {'num_workers': 8, 'device': 'cuda'},
             'wandb':         {'use_wandb': True, 'wandb_project': 'embodied-mae-4m',
@@ -1035,6 +1087,8 @@ def main():
         cfg = config_to_namespace(merge_config_with_args(default_cfg, args))
 
     cfg.pc_metric_thresholds = [float(value) for value in cfg.pc_metric_thresholds]
+    if not np.isfinite(cfg.mask_ratio) or not 0.0 < cfg.mask_ratio < 1.0:
+        parser.error('mask_ratio must be finite and strictly between 0 and 1')
     if (not cfg.pc_metric_thresholds
             or any(not np.isfinite(value) or value <= 0
                    for value in cfg.pc_metric_thresholds)):
@@ -1044,6 +1098,8 @@ def main():
         parser.error('pc_metric_thresholds produce duplicate metric names')
     if cfg.pc_metric_chunk_size <= 0:
         parser.error('pc_metric_chunk_size must be positive')
+    if cfg.val_mask_seed < 0:
+        parser.error('val_mask_seed must be non-negative')
     if cfg.sinkhorn_loss_weight < 0:
         parser.error('sinkhorn_loss_weight must be non-negative')
     if cfg.sinkhorn_num_points <= 0:
