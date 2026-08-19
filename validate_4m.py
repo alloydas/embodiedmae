@@ -17,6 +17,8 @@ Output layout:
     output_dir/
         config_used.json            — every knob this run was launched with
         metrics_aggregate.json      — averaged metrics across saved samples
+        masking_per_sample.json     — masking counts/percentages for each sample
+        masking_per_sample.csv      — same per-sample masking table as CSV
         sample_<name>/
             inputs/
                 rgb.png, rgb.pt
@@ -31,10 +33,12 @@ Output layout:
             masks/
                 rgb_mask.npy, depth_mask.npy
                 pc_mask.npy, text_mask.npy
+            masking.json
             metrics.json
 """
 
 import argparse
+import csv
 import json
 from datetime import datetime
 from pathlib import Path
@@ -162,6 +166,92 @@ def build_params_record(target_norm: np.ndarray,
 
 # ── Metrics helpers ──────────────────────────────────────────────────────────
 
+def _single_mask_stats(mask: torch.Tensor) -> dict:
+    """Return JSON-safe masked/visible token counts and percentages."""
+    total = mask.numel()
+    if total == 0:
+        raise ValueError("mask tensors must contain at least one token")
+    masked = int((mask > 0.5).sum().item())
+    visible = total - masked
+    return {
+        'masked_tokens': masked,
+        'visible_tokens': visible,
+        'total_tokens': total,
+        'masked_percent': 100.0 * masked / total,
+        'visible_percent': 100.0 * visible / total,
+    }
+
+
+def masking_summary(m_rgb, m_depth, m_pc, m_text) -> dict:
+    """Summarize the four modality masks plus their global allocation."""
+    summary = {
+        'rgb':         _single_mask_stats(m_rgb),
+        'depth':       _single_mask_stats(m_depth),
+        'point_cloud': _single_mask_stats(m_pc),
+        'parameters':  _single_mask_stats(m_text),
+    }
+    masked = sum(stats['masked_tokens'] for stats in summary.values())
+    total = sum(stats['total_tokens'] for stats in summary.values())
+    visible = total - masked
+    summary['overall'] = {
+        'masked_tokens': masked,
+        'visible_tokens': visible,
+        'total_tokens': total,
+        'masked_percent': 100.0 * masked / total,
+        'visible_percent': 100.0 * visible / total,
+    }
+    return summary
+
+
+def format_masking_summary(name: str, summary: dict) -> str:
+    """Format one concise per-sample line for the Slurm/stdout log."""
+    labels = (
+        ('RGB', 'rgb'),
+        ('Depth', 'depth'),
+        ('PC', 'point_cloud'),
+        ('Params', 'parameters'),
+        ('Overall', 'overall'),
+    )
+    parts = []
+    for label, key in labels:
+        stats = summary[key]
+        parts.append(
+            f"{label} {stats['masked_tokens']}/{stats['total_tokens']} "
+            f"({stats['masked_percent']:.2f}%)"
+        )
+    return f"Masking [{name}]: " + ' | '.join(parts)
+
+
+def _flatten_masking_record(record: dict) -> dict:
+    """Flatten one per-sample masking record for a human-readable CSV."""
+    row = {'sample': record['sample']}
+    for prefix, key in (
+            ('rgb', 'rgb'),
+            ('depth', 'depth'),
+            ('point_cloud', 'point_cloud'),
+            ('parameters', 'parameters'),
+            ('overall', 'overall')):
+        stats = record['masking'][key]
+        row[f'{prefix}_masked_tokens'] = stats['masked_tokens']
+        row[f'{prefix}_total_tokens'] = stats['total_tokens']
+        row[f'{prefix}_masked_percent'] = stats['masked_percent']
+    return row
+
+
+def write_masking_reports(out_dir: Path, records: list) -> None:
+    """Write one root-level JSON and CSV row for every evaluated sample."""
+    with open(out_dir / 'masking_per_sample.json', 'w') as f:
+        json.dump(records, f, indent=2)
+
+    rows = [_flatten_masking_record(record) for record in records]
+    if not rows:
+        return
+    with open(out_dir / 'masking_per_sample.csv', 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def per_sample_metrics(rgb, pred_rgb_img, depth, pred_depth_img, pc, pred_pc,
                        params, pred_params, text_valid, text_mask, compute_emd,
                        pc_metric_thresholds=(0.01, 0.02, 0.03),
@@ -198,7 +288,7 @@ def save_sample(out_dir: Path, name: str,
                 rgb, depth, pc, params_norm, text_valid,
                 pred_rgb_img, pred_depth_img, pred_pc, pred_params_norm,
                 m_rgb, m_depth, m_pc, m_text,
-                metrics: dict):
+                metrics: dict, masking: dict = None):
     s = out_dir / f'sample_{name}'
     (s / 'inputs').mkdir(parents=True, exist_ok=True)
     (s / 'outputs').mkdir(parents=True, exist_ok=True)
@@ -240,8 +330,14 @@ def save_sample(out_dir: Path, name: str,
     np.save(s / 'masks' / 'pc_mask.npy',    m_pc.numpy().astype(np.uint8))
     np.save(s / 'masks' / 'text_mask.npy',  m_text.numpy().astype(np.uint8))
 
+    if masking is None:
+        masking = masking_summary(m_rgb, m_depth, m_pc, m_text)
+    metrics_record = dict(metrics)
+    metrics_record['masking'] = masking
     with open(s / 'metrics.json', 'w') as f:
-        json.dump(metrics, f, indent=2)
+        json.dump(metrics_record, f, indent=2)
+    with open(s / 'masking.json', 'w') as f:
+        json.dump(masking, f, indent=2)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -403,6 +499,11 @@ def main():
     agg_metrics = {k: 0.0 for k in
                    ('rgb_mse', 'depth_mse', 'pc_chamfer', 'pc_emd',
                     'param_mae_all', 'param_mae_masked', *pc_prf_names)}
+    agg_masking_percent = {
+        name: 0.0
+        for name in ('rgb', 'depth', 'point_cloud', 'parameters', 'overall')
+    }
+    per_sample_masking = []
 
     with torch.no_grad():
         for rgb, depth, pc, params, text_valid, names in tqdm(dl, desc='Eval'):
@@ -447,6 +548,8 @@ def main():
                     pc_metric_thresholds=pc_metric_thresholds,
                     pc_metric_chunk_size=pc_metric_chunk_size,
                 )
+                masking = masking_summary(
+                    m_rgb_cp[i], m_depth_cp[i], m_pc_cp[i], m_text_cp[i])
                 save_sample(
                     out_dir, names[i],
                     rgb=rgb[i], depth=depth[i], pc=pc[i],
@@ -455,10 +558,17 @@ def main():
                     pred_pc=pred_pc_cpu[i], pred_params_norm=pred_params_cp[i],
                     m_rgb=m_rgb_cp[i], m_depth=m_depth_cp[i],
                     m_pc=m_pc_cp[i], m_text=m_text_cp[i],
-                    metrics=metrics,
+                    metrics=metrics, masking=masking,
                 )
                 for k, v in metrics.items():
                     agg_metrics[k] += v
+                for modality, stats in masking.items():
+                    agg_masking_percent[modality] += stats['masked_percent']
+                per_sample_masking.append({
+                    'sample': names[i],
+                    'masking': masking,
+                })
+                tqdm.write(format_masking_summary(names[i], masking))
                 n_saved += 1
 
     if n_saved == 0:
@@ -468,6 +578,11 @@ def main():
     agg = {k: v / n_saved for k, v in agg_metrics.items()}
     agg['n_samples']     = n_saved
     agg['mask_ratio']    = mask_ratio
+    agg['mean_masked_percent'] = {
+        modality: total / n_saved
+        for modality, total in agg_masking_percent.items()
+    }
+    write_masking_reports(out_dir, per_sample_masking)
     with open(out_dir / 'metrics_aggregate.json', 'w') as f:
         json.dump(agg, f, indent=2)
 
