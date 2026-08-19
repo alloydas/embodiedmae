@@ -1,0 +1,548 @@
+<title>EmbodiedMAE-4M — reconstruction plates, epoch {{EPOCH}}</title>
+
+<style>
+  :root {
+    --paper:   #f1f3ef;
+    --card:    #ffffff;
+    --ink:     #171c18;
+    --ink-2:   #3d453f;
+    --muted:   #6b756d;
+    --rule:    #d8ded7;
+    --accent:  #2e8b57;
+    --signal:  #c0563a;
+    --plate-frame: #e2e7df;
+
+    --f-head: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --f-body: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+    --f-data: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --step--1: clamp(0.76rem, 0.74rem + 0.1vw, 0.82rem);
+    --step-0:  clamp(0.95rem, 0.92rem + 0.15vw, 1.02rem);
+    --step-1:  clamp(1.14rem, 1.08rem + 0.3vw, 1.3rem);
+    --step-2:  clamp(1.42rem, 1.3rem + 0.6vw, 1.75rem);
+    --step-3:  clamp(1.85rem, 1.6rem + 1.2vw, 2.6rem);
+
+    --gap: clamp(1.6rem, 1rem + 2vw, 3rem);
+    --shell: min(1140px, 100% - clamp(1.5rem, 4vw, 4rem));
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131711;
+      --card:  #1b201a;
+      --ink:   #e8ece5;
+      --ink-2: #bcc4bb;
+      --muted: #97a199;
+      --rule:  #2b322c;
+      --accent: #57b581;
+      --signal: #d97757;
+      --plate-frame: #333b33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #131711;
+    --card:  #1b201a;
+    --ink:   #e8ece5;
+    --ink-2: #bcc4bb;
+    --muted: #97a199;
+    --rule:  #2b322c;
+    --accent: #57b581;
+    --signal: #d97757;
+    --plate-frame: #333b33;
+  }
+  :root[data-theme="light"] {
+    --paper: #f1f3ef;
+    --card:  #ffffff;
+    --ink:   #171c18;
+    --ink-2: #3d453f;
+    --muted: #6b756d;
+    --rule:  #d8ded7;
+    --accent: #2e8b57;
+    --signal: #c0563a;
+    --plate-frame: #e2e7df;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-head);
+    font-size: var(--step-0);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell { width: var(--shell); margin-inline: auto; }
+
+  /* ── Header ───────────────────────────────────────────────── */
+
+  header.masthead {
+    display: flex; flex-direction: column; gap: 1.4rem;
+    padding: clamp(2.5rem, 6vw, 4.5rem) 0 1.8rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .eyebrow {
+    font-size: var(--step--1);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 {
+    font-size: var(--step-3);
+    line-height: 1.08;
+    letter-spacing: -0.022em;
+    font-weight: 620;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  .standfirst {
+    font-family: var(--f-body);
+    font-size: var(--step-1);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 64ch;
+  }
+
+  /* run-status rail */
+  .rail {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.4rem;
+    padding: 0.9rem 1.1rem;
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--signal);
+    background: color-mix(in srgb, var(--signal) 5%, transparent);
+    font-size: var(--step--1);
+  }
+  .rail .label {
+    text-transform: uppercase; letter-spacing: 0.12em;
+    font-weight: 650; color: var(--signal);
+  }
+  .rail .bar {
+    flex: 1 1 180px; min-width: 140px; height: 6px;
+    background: var(--rule); position: relative; overflow: hidden;
+  }
+  .rail .bar > i {
+    position: absolute; inset: 0 auto 0 0;
+    width: var(--pct); background: var(--signal);
+  }
+  .rail .num { font-family: var(--f-data); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+  /* ── Metric tiles ─────────────────────────────────────────── */
+
+  .tiles {
+    display: grid; gap: 1px;
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: var(--gap) 0;
+  }
+  .tile { background: var(--paper); padding: 1rem 1.05rem 1.05rem; display: flex; flex-direction: column; gap: 0.3rem; }
+  .tile dt {
+    font-size: var(--step--1); color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.09em; font-weight: 600;
+  }
+  .tile dd {
+    font-family: var(--f-data); font-variant-numeric: tabular-nums;
+    font-size: var(--step-2); line-height: 1.1; letter-spacing: -0.02em;
+  }
+  .tile .foot { font-size: var(--step--1); color: var(--muted); font-family: var(--f-data); }
+  .tile.is-key dd { color: var(--accent); }
+
+  /* ── Plates ───────────────────────────────────────────────── */
+
+  section.plate { margin: var(--gap) 0; scroll-margin-top: 1.5rem; }
+
+  .plate-head {
+    display: flex; align-items: baseline; gap: 0.9rem;
+    padding-bottom: 0.7rem; margin-bottom: 1.1rem;
+    border-bottom: 1px solid var(--rule);
+    flex-wrap: wrap;
+  }
+  .plate-no {
+    font-family: var(--f-data); font-size: var(--step--1);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; white-space: nowrap;
+  }
+  .plate-head h2 {
+    font-size: var(--step-2); font-weight: 600;
+    letter-spacing: -0.015em; line-height: 1.2; text-wrap: balance;
+  }
+
+  figure.plate-frame {
+    background: #ffffff;
+    border: 1px solid var(--plate-frame);
+    padding: clamp(0.5rem, 1.4vw, 1.1rem);
+    overflow-x: auto;
+  }
+  figure.plate-frame img {
+    display: block; width: 100%; height: auto; max-width: 100%;
+    cursor: zoom-in;
+  }
+  figcaption {
+    font-family: var(--f-body);
+    font-size: var(--step-0);
+    line-height: 1.6;
+    color: var(--ink-2);
+    max-width: 72ch;
+    margin-top: 1rem;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+  figcaption code {
+    font-family: var(--f-data); font-size: 0.92em;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    padding: 0.08em 0.34em;
+  }
+
+  /* plant selector */
+  .switch { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.9rem; }
+  .switch button {
+    font-family: var(--f-data); font-size: var(--step--1);
+    padding: 0.42rem 0.8rem;
+    background: transparent; color: var(--ink-2);
+    border: 1px solid var(--rule); cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .switch button:hover { border-color: var(--accent); color: var(--ink); }
+  .switch button[aria-selected="true"] {
+    background: var(--accent); border-color: var(--accent); color: #ffffff;
+  }
+  .switch button:focus-visible,
+  figure.plate-frame img:focus-visible,
+  .lightbox button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ── Tables ───────────────────────────────────────────────── */
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); }
+  table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+  th, td { padding: 0.5rem 0.85rem; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  thead th {
+    text-transform: uppercase; letter-spacing: 0.09em; font-size: 0.78rem;
+    color: var(--muted); font-weight: 650; background: color-mix(in srgb, var(--ink) 3%, transparent);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.n { font-family: var(--f-data); font-variant-numeric: tabular-nums; text-align: right; }
+  td.name { font-family: var(--f-data); }
+  .bar-cell { position: relative; min-width: 96px; }
+  .bar-cell > i {
+    display: block; height: 7px; background: var(--accent); width: var(--w);
+  }
+
+  /* ── Prose blocks ─────────────────────────────────────────── */
+
+  .note {
+    font-family: var(--f-body); font-size: var(--step-0);
+    line-height: 1.62; color: var(--ink-2); max-width: 70ch;
+  }
+  .note + .note { margin-top: 0.85rem; }
+  .note strong { color: var(--ink); font-weight: 600; }
+
+  footer.colophon {
+    margin: var(--gap) 0 4rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    display: grid; gap: 1.4rem;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    font-size: var(--step--1);
+  }
+  .colophon h3 {
+    text-transform: uppercase; letter-spacing: 0.11em;
+    font-size: 0.76rem; color: var(--muted); font-weight: 650; margin-bottom: 0.45rem;
+  }
+  .colophon p, .colophon li { color: var(--ink-2); font-family: var(--f-data); line-height: 1.65; }
+  .colophon ul { list-style: none; }
+
+  /* ── Lightbox ─────────────────────────────────────────────── */
+
+  .lightbox {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(10, 14, 10, 0.92);
+    display: none; place-items: center; padding: 1.2rem;
+  }
+  .lightbox[data-open] { display: grid; }
+  .lightbox img {
+    max-width: 100%; max-height: 92vh; width: auto;
+    background: #fff; cursor: zoom-out;
+  }
+  .lightbox button {
+    position: absolute; top: 1rem; right: 1.2rem;
+    background: transparent; border: 1px solid rgba(255,255,255,0.4);
+    color: #fff; font-family: var(--f-data); font-size: 0.85rem;
+    padding: 0.35rem 0.7rem; cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <div class="eyebrow">Sorghum_15K · held-out test split</div>
+    <h1>What the 4-modality masked autoencoder sees at epoch {{EPOCH}}</h1>
+    <p class="standfirst">
+      One encoder is shown a small, randomly chosen slice of a sorghum plant — a few RGB patches,
+      a few depth patches, a handful of point-cloud groups, some growth parameters — and asked to
+      put the whole plant back together in all four modalities at once. These plates compare what
+      it produces against ground truth on plants it has never been trained on.
+    </p>
+    <div class="rail">
+      <span class="label">Run in progress</span>
+      <span class="bar" style="--pct: {{PCT}}%"><i></i></span>
+      <span class="num">epoch {{EPOCH}} / {{TOTAL_EPOCHS}} ({{PCT}}%)</span>
+      <span class="num">· job resumed, ~{{DAYS_LEFT}} days to finish</span>
+    </div>
+  </header>
+
+  <dl class="tiles">
+    <div class="tile is-key">
+      <dt>Best val loss</dt>
+      <dd>{{VAL_LOSS}}</dd>
+      <div class="foot">epoch {{EPOCH}}</div>
+    </div>
+    <div class="tile">
+      <dt>Test loss</dt>
+      <dd>{{TEST_LOSS}}</dd>
+      <div class="foot">epoch {{TEST_EPOCH}}</div>
+    </div>
+    <div class="tile">
+      <dt>Chamfer, test</dt>
+      <dd>{{TEST_CHAMFER}}</dd>
+      <div class="foot">unit-sphere scale</div>
+    </div>
+    <div class="tile is-key">
+      <dt>Param acc @0.05</dt>
+      <dd>{{TEST_ACC}}</dd>
+      <div class="foot">hidden tokens</div>
+    </div>
+    <div class="tile">
+      <dt>Param MAE</dt>
+      <dd>{{TEST_MAE}}</dd>
+      <div class="foot">normalised, hidden</div>
+    </div>
+    <div class="tile">
+      <dt>Test plants</dt>
+      <dd>{{N_TEST}}</dd>
+      <div class="foot">never trained on</div>
+    </div>
+  </dl>
+
+  <p class="note">
+    Everything below comes from a single pinned checkpoint at <strong>epoch {{EPOCH}}</strong>, evaluated on the
+    held-out <strong>test</strong> split — plants held out <em>by plant</em>, so no view of them appears in training.
+    The split is deliberately enriched for morphological extremes, so these are harder than average plants.
+    Masking is the same <strong>{{MASK_RATIO}}</strong> total ratio used during training, and the mask is seeded
+    identically wherever two panels are meant to be compared.
+  </p>
+  <p class="note">
+    Two things to read carefully. The RGB head is trained with <code>norm_pix_loss</code>, which divides each
+    patch's mean and variance out of the target — so the head never learns them, and every RGB reconstruction
+    here has the <em>target's</em> per-patch mean and variance restored before display. Judge structure in
+    those panels, not absolute colour. And the loader subsamples each cloud to 8,196 points with a fresh draw
+    per run, so a <em>single</em> plant's Chamfer carries a few percent of sampling noise — the aggregate
+    figures over many plants are the ones to quote.
+  </p>
+
+  <!-- ── Plate 1 ── -->
+  <section class="plate" id="fig1">
+    <div class="plate-head">
+      <span class="plate-no">Fig. 1</span>
+      <h2>All four modalities, reconstructed from {{MASK_PCT}} hidden input</h2>
+    </div>
+    <div class="switch" role="tablist" aria-label="Choose a test plant">{{GALLERY_TABS}}</div>
+    {{GALLERY_PANELS}}
+    <figcaption>
+      Left column is ground truth, middle is what the encoder actually receives, right is the
+      reconstruction. The three modalities do not get equal shares of the visible budget — a
+      Dirichlet draw splits it per step, which is why the hidden percentages differ per row.
+      The point cloud is drawn in one colour at every stage so it reads as the same object;
+      grey markers in the middle panel are the token centres that were withheld.
+      <b>Depth comes back sharpest of the three</b> — near-indistinguishable from ground truth even
+      when four fifths of it is withheld. RGB recovers the silhouette, leaf arrangement and colour
+      from a handful of patches but stays soft: with <code>norm_pix_loss</code> the head is only
+      scored on within-patch structure, so fine leaf texture was never part of the objective.
+      The point cloud keeps the plant's topology and loses the crispness of individual leaf edges.
+    </figcaption>
+  </section>
+
+  <!-- ── Plate 2 ── -->
+  <section class="plate" id="fig2">
+    <div class="plate-head">
+      <span class="plate-no">Fig. 2</span>
+      <h2>How far the masking can be pushed</h2>
+    </div>
+    <figure class="plate-frame">
+      <img src="{{IMG_MASK_SWEEP}}" alt="Reconstructions of one plant at mask ratios from 50% to 95%, in RGB, depth and point cloud" loading="lazy">
+    </figure>
+    <figcaption>
+      The same plant, the same seed, only the fraction of hidden tokens changes.
+      {{MASK_SWEEP_SENTENCE}}
+      This matters because the pretraining objective is only useful if the encoder is forced to
+      infer structure rather than copy it — a model that degrades gracefully here is carrying the
+      plant's shape in its representation, not in the visible patches.
+    </figcaption>
+  </section>
+
+  <!-- ── Plate 3 ── -->
+  <section class="plate" id="fig3">
+    <div class="plate-head">
+      <span class="plate-no">Fig. 3</span>
+      <h2>One modality in, all four out</h2>
+    </div>
+    <figure class="plate-frame">
+      <img src="{{IMG_CROSSMODAL}}" alt="Cross-modal generation: each column gives the encoder a single modality and shows the other three generated" loading="lazy">
+    </figure>
+    <figcaption>
+      A harder regime than training ever asked for: each column hands the encoder <em>one</em> complete
+      modality and blanks the other three entirely. The green outline marks what was given.
+      {{CROSSMODAL_SENTENCE}}
+      Nothing here was trained for explicitly — the shared encoder learned it as a side effect of
+      mixed-modality masking.
+    </figcaption>
+    <div class="table-wrap" style="margin-top:1.2rem">
+      <table>
+        <thead>
+          <tr><th>Modality given to the encoder</th><th style="text-align:right">Mean Chamfer</th><th>&nbsp;</th><th style="text-align:right">Median</th><th style="text-align:right">Plants</th></tr>
+        </thead>
+        <tbody>{{CROSSMODAL_ROWS}}</tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:0.9rem">{{CROSSMODAL_NOTE}}</p>
+  </section>
+
+  <!-- ── Plate 4 ── -->
+  <section class="plate" id="fig4">
+    <div class="plate-head">
+      <span class="plate-no">Fig. 4</span>
+      <h2>The same plant, reconstructed by successive checkpoints</h2>
+    </div>
+    <figure class="plate-frame">
+      <img src="{{IMG_CKPT}}" alt="Reconstructions of one plant by checkpoints at increasing epochs, showing progressive improvement" loading="lazy">
+    </figure>
+    <figcaption>
+      Identical input, identical mask, five points along the run.
+      {{CKPT_SENTENCE}}
+      Geometry is learned early and refined slowly; the visible gains after the first hundred epochs
+      are mostly in the point cloud and the parameters rather than in the images.
+    </figcaption>
+  </section>
+
+  <!-- ── Plate 5 ── -->
+  <section class="plate" id="fig5">
+    <div class="plate-head">
+      <span class="plate-no">Fig. 5</span>
+      <h2>Recovering the growth parameters it was not shown</h2>
+    </div>
+    <figure class="plate-frame">
+      <img src="{{IMG_PARAM}}" alt="Scatter plots of ground-truth versus predicted spline parameters for leaf and plant tokens" loading="lazy">
+    </figure>
+    <figcaption>
+      This is the modality that separates this model from a standard RGB-D-point-cloud MAE.
+      Each panel is one procedural generation parameter, plotted ground truth against prediction,
+      counting only tokens that were <em>hidden</em> from the encoder — so the model is inferring
+      each leaf's geometry parameters from the pixels and points of the rest of the plant.
+      {{PARAM_SENTENCE}}
+    </figcaption>
+    <div class="table-wrap" style="margin-top:1.2rem">
+      <table>
+        <thead>
+          <tr><th>Parameter</th><th>Token</th><th style="text-align:right">R²</th><th>&nbsp;</th><th style="text-align:right">MAE (raw units)</th><th style="text-align:right">n</th></tr>
+        </thead>
+        <tbody>{{PARAM_ROWS}}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Plate 6 ── -->
+  <section class="plate" id="fig6">
+    <div class="plate-head">
+      <span class="plate-no">Fig. 6</span>
+      <h2>{{EPOCHS_DONE}} epochs of training, val and test tracked together</h2>
+    </div>
+    <figure class="plate-frame">
+      <img src="{{IMG_CURVES}}" alt="Loss curves for total loss and each modality, plus parameter accuracy, over training epochs" loading="lazy">
+    </figure>
+    <figcaption>
+      Train, validation and test move together across every panel — <b>no separation has opened up</b>
+      after {{EPOCHS_DONE}} epochs, on a split deliberately enriched for extreme morphologies.
+      The curves are still descending at the point this checkpoint was taken, and the last validation
+      produced the largest single improvement of the run, so <strong>this is not a converged model</strong>.
+      Read the plates above as a progress report, not a final result.
+    </figcaption>
+  </section>
+
+  <footer class="colophon">
+    <div>
+      <h3>Checkpoint</h3>
+      <p>{{CKPT_NAME}}<br>epoch {{EPOCH}} of {{TOTAL_EPOCHS}}<br>114,280,716 parameters</p>
+    </div>
+    <div>
+      <h3>Evaluation</h3>
+      <p>Sorghum_15K test split<br>{{N_TEST}} plants, held out by plant<br>mask ratio {{MASK_RATIO}}</p>
+    </div>
+    <div>
+      <h3>Model</h3>
+      <p>EmbodiedMAE-4M base<br>RGB · depth · point cloud · spline params<br>shared encoder, per-modality heads</p>
+    </div>
+    <div>
+      <h3>Reproduce</h3>
+      <ul>
+        <li>make_comparison_figs.py</li>
+        <li>slurm/compare_figs.sbatch</li>
+        <li>figures_compare/metrics.json</li>
+      </ul>
+    </div>
+  </footer>
+
+</div>
+
+<div class="lightbox" id="lb" role="dialog" aria-modal="true" aria-label="Enlarged figure">
+  <button type="button" id="lb-close">Close ✕</button>
+  <img id="lb-img" alt="">
+</div>
+
+<script>
+  // Plant selector for Fig. 1
+  document.querySelectorAll('[role="tablist"]').forEach(function (list) {
+    var tabs = Array.prototype.slice.call(list.querySelectorAll('button'));
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        tabs.forEach(function (t) {
+          var on = t === tab;
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          var panel = document.getElementById(t.getAttribute('aria-controls'));
+          if (panel) panel.hidden = !on;
+        });
+      });
+    });
+  });
+
+  // Click-to-zoom
+  var lb = document.getElementById('lb');
+  var lbImg = document.getElementById('lb-img');
+  var opener = null;
+  function openLb(img) {
+    opener = img;
+    lbImg.src = img.src;
+    lbImg.alt = img.alt;
+    lb.setAttribute('data-open', '');
+    document.getElementById('lb-close').focus();
+  }
+  function closeLb() {
+    lb.removeAttribute('data-open');
+    lbImg.removeAttribute('src');
+    if (opener) { opener.focus(); opener = null; }
+  }
+  document.querySelectorAll('figure.plate-frame img').forEach(function (img) {
+    img.tabIndex = 0;
+    img.setAttribute('role', 'button');
+    img.addEventListener('click', function () { openLb(img); });
+    img.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLb(img); }
+    });
+  });
+  lb.addEventListener('click', closeLb);
+  document.getElementById('lb-close').addEventListener('click', closeLb);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && lb.hasAttribute('data-open')) closeLb();
+  });
+</script>

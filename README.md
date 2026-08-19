@@ -6,6 +6,19 @@
 
 **Multi-modal Masked Autoencoder for RGB, Depth, and Point Cloud reconstruction of Sorghum plants.**
 
+## Results
+
+📊 **[Reconstruction plates — EmbodiedMAE-4M, epoch 760](https://claude.ai/code/artifact/6f635945-241e-4ea5-85dd-a46749a30a4b)**
+
+Interim results from the 4-modality model (RGB + depth + point cloud + procedural spline
+parameters), evaluated on the held-out Sorghum_15K test split. Covers per-plant reconstruction
+across all four modalities, robustness from 50% to 95% masking, cross-modal generation from a
+single modality, checkpoint progression, and per-parameter recovery of the growth parameters.
+Regenerate with `python make_comparison_figs.py` followed by `python build_artifact.py`.
+
+> Training is still in progress (epoch 760 of 1000) — read these as a progress report, not
+> converged results.
+
 ## Overview
 
 This repository implements **EmbodiedMAE** (Embodied Multi-modal Masked Autoencoder) adapted for agricultural plant reconstruction. The model jointly learns from RGB images, depth maps, and point clouds to reconstruct masked portions of each modality, enabling robust 3D plant understanding.
