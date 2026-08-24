@@ -8,16 +8,33 @@
 
 ## Results
 
+📊 **[Less Left to Teach — v2 pretrain + cross-modal distillation, Sorghum 15K](https://claude.ai/code/artifact/5fa61dad-5d3f-4f55-add0-7226dec0a2d2)**
+
+Completed results for the two-stage run on the extreme-enriched Sorghum_15K split. Stage 1 is
+the v2 pretrain (depth fix + QAL + exact mask allocation), 1000 epochs, best validation loss
+**0.1811** at epoch 960. Stage 2 distills cross-modal generation on top of it — every modality
+in turn conditions the student while the rest are masked — for 100 epochs, moving `mean_gen`
+from a measured warm start of **0.3440** to **0.2779**.
+
+The headline is the ratio, not the number: the same procedure gained −54% from the weaker 10k
+teacher and −19.2% from this one. A distillation gain is a property of the teacher it was
+measured against, so quote the two together. Reconstruction plates and the before/after
+generation frames are included; regenerate with `python regen_figures.py`, and the warm-start
+baseline with `python eval_warmstart.py`.
+
 📊 **[Reconstruction plates — EmbodiedMAE-4M, epoch 760](https://claude.ai/code/artifact/6f635945-241e-4ea5-85dd-a46749a30a4b)**
 
-Interim results from the 4-modality model (RGB + depth + point cloud + procedural spline
-parameters), evaluated on the held-out Sorghum_15K test split. Covers per-plant reconstruction
-across all four modalities, robustness from 50% to 95% masking, cross-modal generation from a
-single modality, checkpoint progression, and per-parameter recovery of the growth parameters.
+Earlier progress report from the same 4-modality model at epoch 760 of that 1000-epoch run,
+evaluated on the held-out Sorghum_15K test split. Covers per-plant reconstruction across all
+four modalities, robustness from 50% to 95% masking, cross-modal generation from a single
+modality, checkpoint progression, and per-parameter recovery of the growth parameters.
 Regenerate with `python make_comparison_figs.py` followed by `python build_artifact.py`.
 
-> Training is still in progress (epoch 760 of 1000) — read these as a progress report, not
-> converged results.
+> Superseded by the completed run above — kept for the masking-robustness and per-parameter
+> sweeps, which the newer page does not repeat.
+
+> **Note:** both links are Claude Artifacts, which are private to the owner until shared from
+> the page's share menu. Share them before expecting anyone else to open them.
 
 ## Overview
 
