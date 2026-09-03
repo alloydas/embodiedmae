@@ -240,6 +240,43 @@ class PointCloudEmbed(nn.Module):
         return tokens
 
 
+def qal_loss(pred_pc, target_pc, threshold=0.01, alpha=100.0,
+             use_squared=False):
+    """Distance-aware, two-sided Chamfer loss used by the QAL runs.
+
+    Nearest-neighbour errors above ``threshold`` receive progressively larger
+    sigmoid weights.  This preserves both Chamfer directions while focusing
+    optimisation on poorly reconstructed geometry such as thin leaves.
+
+    Args:
+        pred_pc: (B, N, 3) predicted point cloud.
+        target_pc: (B, M, 3) target point cloud.
+        threshold: Euclidean distance at the sigmoid midpoint.
+        alpha: Sigmoid sharpness.
+        use_squared: Weight squared distances instead of Euclidean distances.
+
+    Returns:
+        Scalar QAL loss.
+    """
+    if threshold < 0:
+        raise ValueError(f"QAL threshold must be non-negative, got {threshold}")
+    if alpha <= 0:
+        raise ValueError(f"QAL alpha must be positive, got {alpha}")
+
+    distances = torch.cdist(pred_pc, target_pc, p=2)
+    pred_to_target = distances.min(dim=2).values
+    target_to_pred = distances.min(dim=1).values
+
+    pred_weights = torch.sigmoid(alpha * (pred_to_target - threshold))
+    target_weights = torch.sigmoid(alpha * (target_to_pred - threshold))
+
+    if use_squared:
+        pred_to_target = pred_to_target.square()
+        target_to_pred = target_to_pred.square()
+
+    return ((pred_weights * pred_to_target).mean()
+            + (target_weights * target_to_pred).mean())
+
 def get_2d_sincos_pos_embed(embed_dim, grid_size):
     """
     Generate 2D sinusoidal positional embeddings

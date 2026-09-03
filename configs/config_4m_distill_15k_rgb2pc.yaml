@@ -1,0 +1,79 @@
+# EmbodiedMAE-4M RGB -> POINT-CLOUD specialist distillation on the 15k split.
+# Every step conditions on RGB alone (rest masked); the reconstruction loss,
+# feature distillation and best-model metric are all restricted to the point
+# cloud (Chamfer). Teacher AND student warm-start from the completed 15k
+# pretrain (best_model.pth, epoch 980, val 0.2109) — the counterpart of the old
+# job-11468052 run, which used the 10k 4m_run_v3 ep-2400 base.
+#
+# Epoch budget note: see config_4m_distill_15k_all.yaml — 100 epochs on the 105k
+# train split is already more optimizer steps than the old 500-epoch run.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: base
+  mask_ratio: 0.80          # unused at crossmodal_prob 1.0 (no full-recon steps)
+  # QAL: sigmoid-weighted two-sided Chamfer (ported from yongyun). Errors past
+  # qal_threshold get up-weighted, targeting thin-leaf geometry where Chamfer
+  # plateaued. pc_loss_weight drops 10.0 -> 1.0 to match the new loss scale,
+  # as on the yongyun branch.
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+distill:
+  # v2 teacher: trained with corrected depth decoding, exact mask allocation and
+  # the QAL point-cloud loss. The old ./outputs/4m_pretrain_15k/best_model.pth is
+  # NOT valid here — it learned luminance-collapsed depth at an effective 0.83 mask.
+  teacher_checkpoint: ./outputs/4m_pretrain_15k_v2_depthfix_qal/best_model.pth
+  student_init:       ./outputs/4m_pretrain_15k_v2_depthfix_qal/best_model.pth
+  crossmodal_prob: 1.0      # every step is RGB->PC
+  sources: [rgb]
+  target: pc                # train + monitor the point cloud only
+  feat_distill_weight: 1.0
+  cls_distill_weight: 0.5
+  output_distill_weight: 0.0
+  distill_masked_only: true
+  viz_source: rgb
+
+training:
+  batch_size: 16           # PROVISIONAL — distillation adds a frozen-teacher forward,
+                           # so memory/sample is ~2x the pretrain. Sweep before launching.
+  epochs: 100
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 5
+  val_freq: 5
+  val_max_batches: 100      # 1600 val samples (single source)
+
+checkpointing:
+  output_dir: ./outputs/4m_distill_15k_rgb2pc
+  save_freq: 2            # scavenger is preemptible — keep the resume point close
+  resume: null
+
+visualization:
+  viz_freq: 10
+  num_viz_samples: 6
+
+distributed:
+  world_size: 8            # nova26-gpu-1 has 8x RTX PRO 6000 (torchrun overrides this anyway)
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 44          # 384 CPUs / 8 ranks, matching the v2 pretrain
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: distill_15k_rgb2pc_100ep

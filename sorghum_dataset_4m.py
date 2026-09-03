@@ -12,7 +12,9 @@ Each sample returns:
 
 from pathlib import Path
 import torch
-from sorghum_dataset import SorghumDataset
+from sorghum_dataset import (
+    SorghumDataset, _read_index_cache, _write_index_cache,
+)
 from embodied_mae_4m import load_spline_params
 
 
@@ -24,20 +26,32 @@ class SorghumDataset4M(SorghumDataset):
                          num_points=num_points, split=split)
         self.max_leaves = max_leaves
 
-        valid = []
-        for folder in self.samples:
-            if list(folder.glob('*_spline.yml')):
-                valid.append(folder)
-            else:
-                print(f"⚠️  Skipping {folder.name}: no *_spline.yml")
-        self.samples = valid
+        # Same caching treatment as the base index: one glob per folder over 105k
+        # folders is minutes of shared-filesystem traffic at every job start, and
+        # the resolved name also removes the per-__getitem__ glob below.
+        entries = _read_index_cache(self.load_dir, 'spline')
+        if entries is None:
+            entries = []
+            for folder in self.samples:
+                ymls = list(folder.glob('*_spline.yml'))
+                if ymls:
+                    entries.append([folder.name, ymls[0].name])
+                else:
+                    print(f"⚠️  Skipping {folder.name}: no *_spline.yml")
+            _write_index_cache(self.load_dir, 'spline', entries)
+        else:
+            print(f"⚡ spline index cache hit ({len(entries)} samples)")
+
+        self._spline_names = {name: yml for name, yml in entries}
+        self.samples = [self.load_dir / name for name, _ in entries]
         print(f"✅ {len(self.samples)} samples have spline data")
 
     def __getitem__(self, idx):
         rgb, depth, pc, name = super().__getitem__(idx)
 
         folder = self.samples[idx]
-        yml    = list(folder.glob('*_spline.yml'))[0]
+        cached = self._spline_names.get(folder.name)
+        yml    = (folder / cached) if cached else list(folder.glob('*_spline.yml'))[0]
         text_valid, param_floats = load_spline_params(yml, self.max_leaves)
 
         return rgb, depth, pc, param_floats, text_valid, name

@@ -1,0 +1,111 @@
+# RGB -> POINT CLOUD specialist distillation, full Sorghum_15K.
+#
+# One job: from a single RGB render, generate the plant's 3D point cloud.
+# Unlike runs A-D (SPECIALIST_DISTILL_rgb2pc_spline.md) the target is PC ALONE,
+# not pc+text, so `mean_gen` in this run's history IS the RGB->PC Chamfer and
+# nothing else -- the headline number is the metric, with no param term mixed in.
+#
+# Differences from run D that matter, and why:
+#   * target: [pc]        (D was [pc, text]) -- the single number under test.
+#   * student_init = the v2 teacher itself, NOT run A's init_ep10_best.pth.
+#     Runs B/C/D chained off each other, so each inherited the previous run's
+#     drift and its best checkpoint was epoch 1. Starting from the pretrain
+#     gives a clean epoch-0 baseline and one undivided cosine.
+#   * fresh output_dir -- the sbatch auto-resume picks the highest-numbered
+#     checkpoint in its own CKPT_DIR, so sharing a directory with run D would
+#     silently resume epoch 30 of a different experiment (this happened on
+#     2026-09-02, job 12161772).
+#
+# Whole dataset: 10,500 train plants x 10 views = 105,000 renders; val 2,250
+# plants x 10 = 22,500. Splits are plant-disjoint (verified: 0 id overlap).
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: base
+  mask_ratio: 0.80          # matches the v2 teacher's own pretraining regime;
+                            # governs the ~1-in-5 full-reconstruction steps.
+  loss_name: "qal_loss"     # sigmoid-weighted two-sided Chamfer, as the teacher
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0   # inactive as a target, but still applied on the
+                            # 20% full-recon steps
+  max_leaves: 24
+
+distill:
+  teacher_checkpoint: ./outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth
+  # Student starts as a copy of the teacher. student_init (not resume): resume
+  # would restore an optimizer/scheduler from another run.
+  student_init:       ./outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth
+  crossmodal_prob: 0.8      # 4 of 5 steps are RGB->PC; the 5th is a normal
+                            # Dirichlet full-recon step. At 1.0 the non-target
+                            # modalities get no gradient and depth collapses
+                            # (+606% in run A); one full-recon step in five
+                            # repairs it within a single epoch and holds it.
+  sources: [rgb]
+  target:  [pc]
+  feat_distill_weight: 1.0  # MSE(student, teacher) decoder features, restricted
+                            # by target_token_weight to the 196 PC tokens
+  cls_distill_weight: 0.5
+  output_distill_weight: 0.0   # outputs supervised by GROUND TRUTH, not by the
+                               # teacher's predictions
+  distill_masked_only: true
+  viz_source: rgb
+
+training:
+  batch_size: 16            # x 8 GPUs = global 128. Measured 54.4 GiB/card on
+                            # RTX PRO 6000 incl. val+viz (bs24 -> 80.5 GiB, 83%).
+  epochs: 200               # extended from 100. SAFE TO CHANGE ON A RESUME: the
+                            # LambdaLR lr_lambda is a plain function, so
+                            # state_dict stores lr_lambdas=[None] and the lambda
+                            # is REBUILT from args.epochs on load -- only
+                            # last_epoch is restored. Verified 2026-09-02.
+                            # Consequence: resuming at epoch 101 under T=200
+                            # gives lr = 3e-5 * 0.5*(1+cos(pi*96/195)) = 1.54e-5,
+                            # a warm restart at ~half base lr annealing to 0 by
+                            # epoch 200. Not a single unbroken 200-epoch cosine
+                            # -- epochs 1-100 annealed under T=100 -- so describe
+                            # it as a two-cycle schedule, not one cosine.
+  lr: 3.0e-5                # 1e-4 diverged from epoch 10 in run A; 3e-5 is the
+                            # highest rate that held.
+  weight_decay: 0.05
+  warmup_epochs: 5
+  val_freq: 1               # every epoch: every prior run peaked at epoch 1-10,
+                            # so a coarse grid samples the whole interesting
+                            # region at two points.
+  val_max_batches: 100      # 1600 val samples, same subset as runs A-D
+  max_steps: 0
+
+checkpointing:
+  output_dir: ./outputs/4m_distill_15k_rgb2pc_full
+  save_freq: 2              # scavenger is preemptible -- keep the resume point
+                            # close. Note a run must complete 2 epochs before
+                            # anything resumable exists.
+  resume: null
+
+visualization:
+  viz_freq: 10
+  num_viz_samples: 6
+
+distributed:
+  world_size: 8
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14           # 8 x 14 = 112 workers + 8 mains = 120, inside the
+                            # 128-CPU request. 44/rank starved rank 0 at load
+                            # 354/360 on this node.
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: distill_15k_rgb2pc_full

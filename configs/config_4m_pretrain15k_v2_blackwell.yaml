@@ -1,0 +1,71 @@
+# EmbodiedMAE-4M Pretraining v2 — 15k extreme-enriched split, CORRECTED DATA PATH.
+#
+# Supersedes config_4m_pretrain15k.yaml. Two corrections vs the completed v1 run
+# (outputs/4m_pretrain_15k, best val 0.2109 @ ep 980):
+#   1. DEPTH: sorghum_dataset.py now decodes the big-endian packed-RGBA depth.png
+#      instead of Image.convert('L'). v1 trained against a luminance mix of the
+#      packed bytes — 180 distinct values instead of ~42k, and not monotonic in
+#      depth. Every v1 depth number is against a scrambled target.
+#   2. PC LOSS: qal_loss (sigmoid-weighted two-sided Euclidean Chamfer, ported
+#      from the yongyun branch) replaces squared Chamfer. Errors past
+#      qal_threshold are up-weighted, targeting thin-leaf geometry.
+#      pc_loss_weight 10.0 -> 1.0 to match the new scale (Euclidean, not squared).
+#
+# Global batch is held at 64 (8 x 8 GPUs) and lr at 1.5e-4 to match v1 exactly,
+# so the two runs stay directly comparable and any delta is attributable to the
+# two corrections above.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: base
+  mask_ratio: 0.80
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+training:
+  # Batch sized from a measured sweep on the RTX PRO 6000 (95 GiB): throughput
+  # saturates at 32/GPU (73.7 samples/s, 43.4 GiB). Going to 48 or 64 buys only
+  # +2% / +5% while doubling memory, so 32 is the knee with real headroom left.
+  batch_size: 32           # per-GPU; global = 32 x 8 = 256 (v1 and the L40S run were 64)
+  epochs: 1000
+  # Linear LR scaling for the 4x larger global batch, the standard MAE rule
+  # (lr = base_lr * batch/256): v1's 1.5e-4 at batch 64 -> 6.0e-4 at batch 256.
+  lr: 6.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 20        # doubled: a 4x batch and 4x lr needs a longer ramp
+  val_freq: 20
+  test_freq: 50
+
+checkpointing:
+  output_dir: ./outputs/4m_pretrain_15k_v2_depthfix_qal
+  save_freq: 5             # scavenger is preemptible — keep the resume point close
+  resume: null             # from scratch: the depth change invalidates v1 weights
+
+visualization:
+  viz_freq: 20
+  num_viz_samples: 12
+
+distributed:
+  world_size: 8
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 44          # 384 CPUs / 8 ranks — 3x the L40S node
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: pretrain_15k_v2_depthfix_qal_bw

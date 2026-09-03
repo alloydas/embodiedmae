@@ -51,9 +51,10 @@ def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
-                  'depth_norm_type', 'spline_loss_weight', 'max_leaves'],
+                  'depth_norm_type', 'spline_loss_weight', 'max_leaves',
+                  'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
-                     'warmup_epochs', 'val_freq'],
+                     'warmup_epochs', 'val_freq', 'test_freq'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
         'visualization': ['viz_freq', 'num_viz_samples'],
         'distributed': ['world_size', 'dist_backend', 'dist_url'],
@@ -81,12 +82,19 @@ def config_to_namespace(config):
     ns.depth_norm_type    = config['model'].get('depth_norm_type', 'minmax')
     ns.spline_loss_weight = config['model'].get('spline_loss_weight', 1.0)
     ns.max_leaves         = config['model'].get('max_leaves', 24)
+    # Point-cloud objective: 'chamfer' (previous behaviour) or 'qal_loss', the
+    # sigmoid-weighted two-sided Chamfer ported from the yongyun branch.
+    ns.pc_loss_name       = config['model'].get('loss_name', 'chamfer')
+    ns.qal_threshold      = config['model'].get('qal_threshold', 0.01)
+    ns.qal_alpha          = config['model'].get('qal_alpha', 100.0)
+    ns.qal_use_squared    = config['model'].get('qal_use_squared', False)
     ns.batch_size         = config['training'].get('batch_size', 16)
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
     ns.weight_decay       = config['training'].get('weight_decay', 0.05)
     ns.warmup_epochs      = config['training'].get('warmup_epochs', 10)
     ns.val_freq           = config['training'].get('val_freq', 20)
+    ns.test_freq          = config['training'].get('test_freq', 50)
     ns.output_dir         = config['checkpointing'].get('output_dir', './outputs/4m_run')
     ns.save_freq          = config['checkpointing'].get('save_freq', 100)
     ns.resume             = config['checkpointing'].get('resume', None)
@@ -151,8 +159,28 @@ def _scatter3d(ax, pts, c, s=2, alpha=0.7, **kw):
 
 # ── Visualisation ─────────────────────────────────────────────────────────────
 
+def _unnorm_pix(model, pred_patches, gt_img):
+    """Invert norm_pix_loss so a prediction can be rendered.
+
+    With norm_pix_loss=True (the model default) the RGB head predicts PER-PATCH
+    standardised values, so the raw prediction is not in image space at all.
+    De-normalising it straight with ImageNet statistics — which this code used to
+    do — mismatches the spaces and is what turned reconstructed backgrounds blue.
+    The per-patch mean/var cannot be recovered from the prediction, so use the
+    ground-truth patch statistics, the same convention the original MAE
+    visualisations use. Affects the figure only; the loss was always correct.
+    """
+    if not getattr(model, 'norm_pix_loss', False):
+        return pred_patches
+    tgt = model.patchify(gt_img, model.patch_size, gt_img.shape[1])
+    mean = tgt.mean(dim=-1, keepdim=True)
+    var = tgt.var(dim=-1, keepdim=True)
+    return pred_patches * (var + 1.e-6) ** .5 + mean
+
+
+
 def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
-                                  num_samples=4):
+                                  num_samples=4, mask_ratio=0.75):
     """5-row × 3-col grid per sample.
     Row 5 shows target vs predicted text for masked tokens.
     """
@@ -172,7 +200,7 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         total, (lr, ld, lp, lt), \
             (pred_rgb, pred_depth, pred_pc, pred_params), \
             (m_rgb, m_depth, m_pc, m_text) = model(
-                rgb_b, depth_b, pc_b, param_floats_b, text_valid_b
+                rgb_b, depth_b, pc_b, param_floats_b, text_valid_b, mask_ratio=mask_ratio
         )
 
         fps_indices = model.pc_embed.fps(pc_b, model.num_pc_tokens)
@@ -193,7 +221,8 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         pred_text_strs = model.decode_params_to_text(pred_params)  # list[list[str]]
         tgt_text_strs  = model.decode_params_to_text(param_floats_b)  # ground truth
 
-        pred_rgb_img   = unpatchify(pred_rgb,   model.patch_size, 3, model.img_size)
+        pred_rgb_vis   = _unnorm_pix(model, pred_rgb, rgb_b)
+        pred_rgb_img   = unpatchify(pred_rgb_vis, model.patch_size, 3, model.img_size)
         pred_depth_img = unpatchify(pred_depth, model.patch_size, 1, model.img_size)
         pred_rgb_np    = (pred_rgb_img * rgb_std + rgb_mean).clamp(0,1).cpu().numpy()
         pred_depth_np  = pred_depth_img.cpu().numpy()
@@ -370,9 +399,11 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
             f'Epoch {epoch}  |  {names[idx]}  |  '
             f'Total: {loss_val:.4f}  RGB: {lr_val:.4f}  '
             f'Depth: {ld_val:.4f}  PC: {lp_val:.4f}  Text: {lt_val:.4f}',
-            fontsize=11, fontweight='bold'
+            fontsize=11, fontweight='bold', y=0.997
         )
-        plt.tight_layout()
+        # reserve headroom for the suptitle - plain tight_layout() ignores it and
+        # the first row's axis titles collide with the header
+        plt.tight_layout(rect=[0, 0, 1, 0.978])
 
         path = save_dir / f'epoch_{epoch:03d}_sample_{idx+1}_{names[idx]}.png'
         plt.savefig(path, dpi=120, bbox_inches='tight')
@@ -386,7 +417,7 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
-def train_one_epoch(model, dataloader, optimizer, device, epoch):
+def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75):
     model.train()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
 
@@ -398,7 +429,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
         param_floats = param_floats.to(device)
         text_valid   = text_valid.to(device)
 
-        loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid)
+        loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
+                                              mask_ratio=mask_ratio)
 
         optimizer.zero_grad()
         loss.backward()
@@ -424,7 +456,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch):
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, device, compute_emd=False):
+def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
+             distributed=False):
     model.eval()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     tot_rgb_mse = tot_depth_mse = tot_chamfer = tot_emd = 0.0
@@ -442,7 +475,7 @@ def evaluate(model, dataloader, device, compute_emd=False):
         loss, (lr, ld, lp, lt), \
             (pred_rgb_p, pred_depth_p, pred_pc, pred_params), \
             (_, _, _, mask_text) = model(
-                rgb, depth, pc, param_floats, text_valid
+                rgb, depth, pc, param_floats, text_valid, mask_ratio=mask_ratio
         )
 
         tot       += loss.item()
@@ -485,6 +518,22 @@ def evaluate(model, dataloader, device, compute_emd=False):
         del rgb, depth, pc, param_floats, text_valid
 
     n = len(dataloader)
+
+    # Aggregate per-batch sums across all DDP ranks so the reported metric covers
+    # the FULL split, not just this rank's DistributedSampler shard. Each rank holds
+    # a sum over its own batches; SUM-reduce the sums and the batch counts, then divide.
+    if distributed and dist.is_available() and dist.is_initialized():
+        packed = torch.tensor(
+            [tot, tot_rgb, tot_depth, tot_pc, tot_txt,
+             tot_rgb_mse, tot_depth_mse, tot_chamfer, tot_emd,
+             tot_param_mse, tot_param_mae, tot_param_mae_masked, tot_param_acc05,
+             float(n)], dtype=torch.float64, device=device)
+        dist.all_reduce(packed, op=dist.ReduceOp.SUM)
+        (tot, tot_rgb, tot_depth, tot_pc, tot_txt,
+         tot_rgb_mse, tot_depth_mse, tot_chamfer, tot_emd,
+         tot_param_mse, tot_param_mae, tot_param_mae_masked, tot_param_acc05,
+         n) = packed.tolist()
+
     metrics = {
         'loss':              tot / n,
         'rgb_loss':          tot_rgb / n,
@@ -515,10 +564,12 @@ def train_worker(rank, world_size, args):
 
     output_dir     = Path(args.output_dir)
     viz_dir        = output_dir / 'visualizations'
+    test_viz_dir   = output_dir / 'test_visualizations'
     checkpoint_dir = output_dir / 'checkpoints'
     if is_main:
         output_dir.mkdir(parents=True, exist_ok=True)
         viz_dir.mkdir(exist_ok=True)
+        test_viz_dir.mkdir(exist_ok=True)
         checkpoint_dir.mkdir(exist_ok=True)
         with open(output_dir / 'config.json', 'w') as f:
             json.dump(vars(args), f, indent=4)
@@ -531,13 +582,17 @@ def train_worker(rank, world_size, args):
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves)
+    test_ds  = SorghumDataset4M(args.data_root, img_size=args.img_size,
+                                 num_points=args.num_points, split='test',
+                                 max_leaves=args.max_leaves)
 
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
         val_sampler   = DistributedSampler(val_ds,   world_size, rank, shuffle=False)
+        test_sampler  = DistributedSampler(test_ds,  world_size, rank, shuffle=False)
         shuffle_train = False
     else:
-        train_sampler = val_sampler = None
+        train_sampler = val_sampler = test_sampler = None
         shuffle_train = True
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size,
@@ -545,6 +600,9 @@ def train_worker(rank, world_size, args):
                               num_workers=args.num_workers, pin_memory=True)
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size,
                               shuffle=False, sampler=val_sampler,
+                              num_workers=args.num_workers, pin_memory=True)
+    test_loader  = DataLoader(test_ds,  batch_size=args.batch_size,
+                              shuffle=False, sampler=test_sampler,
                               num_workers=args.num_workers, pin_memory=True)
 
     if is_main: print(f"\nInitializing EmbodiedMAE-4M-{args.model_size.capitalize()}...")
@@ -558,6 +616,10 @@ def train_worker(rank, world_size, args):
         max_leaves=args.max_leaves,
         spline_loss_weight=args.spline_loss_weight,
         depth_norm_type=args.depth_norm_type,
+        pc_loss_name=args.pc_loss_name,
+        qal_threshold=args.qal_threshold,
+        qal_alpha=args.qal_alpha,
+        qal_use_squared=args.qal_use_squared,
     ).to(device)
 
     if world_size > 1:
@@ -572,7 +634,7 @@ def train_worker(rank, world_size, args):
             args.wandb_name = f"4m_{args.model_size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         wandb_run_id = None
         if args.resume and os.path.exists(args.resume):
-            ckpt = torch.load(args.resume, map_location='cpu')
+            ckpt = torch.load(args.resume, map_location='cpu', weights_only=False)
             wandb_run_id = ckpt.get('wandb_run_id')
         if wandb_run_id:
             wandb.init(project=args.wandb_project, entity=args.wandb_entity,
@@ -611,12 +673,17 @@ def train_worker(rank, world_size, args):
             'val_rgb_mse':[], 'val_depth_mse':[], 'val_pc_chamfer':[], 'val_pc_emd':[],
             'val_param_mse':[], 'val_param_mae':[], 'val_param_mae_masked':[],
             'val_param_acc05':[],
+            'test_epoch':[],
+            'test_loss':[],  'test_rgb':[],  'test_depth':[],  'test_pc':[],  'test_text':[],
+            'test_rgb_mse':[], 'test_depth_mse':[], 'test_pc_chamfer':[],
+            'test_param_mse':[], 'test_param_mae':[], 'test_param_mae_masked':[],
+            'test_param_acc05':[],
         }
     history = empty_history()
 
     if args.resume and os.path.exists(args.resume):
         if is_main: print(f"\n📂 Resuming from {args.resume}")
-        ckpt = torch.load(args.resume, map_location=device)
+        ckpt = torch.load(args.resume, map_location=device, weights_only=False)
         sd   = ckpt['model_state_dict']
         if world_size > 1 and not list(sd.keys())[0].startswith('module.'):
             sd = {'module.' + k: v for k, v in sd.items()}
@@ -651,7 +718,7 @@ def train_worker(rank, world_size, args):
             print(f"{'='*80}")
 
         tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt = train_one_epoch(
-            model, train_loader, optimizer, device, epoch)
+            model, train_loader, optimizer, device, epoch, mask_ratio=args.mask_ratio)
         for k, v in zip(['train_loss','train_rgb','train_depth','train_pc','train_text'],
                         [tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt]):
             history[k].append(v)
@@ -665,7 +732,8 @@ def train_worker(rank, world_size, args):
             if is_main: print("\n🔍 Running validation…")
             compute_emd = (epoch == args.epochs)
             (vl, vr, vd, vp, vt), vm = evaluate(
-                model, val_loader, device, compute_emd=compute_emd)
+                model, val_loader, device, compute_emd=compute_emd,
+                mask_ratio=args.mask_ratio, distributed=(world_size > 1))
             for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text',
                               'val_rgb_mse','val_depth_mse','val_pc_chamfer','val_pc_emd',
                               'val_param_mse','val_param_mae','val_param_mae_masked',
@@ -711,10 +779,63 @@ def train_worker(rank, world_size, args):
             print(f"\n📊 Generating visualizations for epoch {epoch}…")
             mv = model.module if world_size > 1 else model
             paths = visualize_reconstruction_4m(
-                mv, val_loader, device, epoch, viz_dir, args.num_viz_samples)
+                mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
+                mask_ratio=args.mask_ratio)
             if args.use_wandb and WANDB_AVAILABLE:
                 wandb.log({'visualizations': [wandb.Image(p, caption=Path(p).name)
                                                for p in paths], 'epoch': epoch})
+
+        # ── Test-set evaluation + visualizations every test_freq epochs ──────────
+        do_test = (epoch % args.test_freq == 0 or epoch == args.epochs)
+        if do_test:
+            if is_main: print(f"\n🧪 Running TEST-set evaluation (epoch {epoch})…")
+            compute_emd_test = (epoch == args.epochs)
+            # evaluate() runs on ALL ranks (each on its DistributedSampler shard) to
+            # keep DDP in lockstep; only rank 0 logs the result.
+            (tl, tr_, td_, tp_, tt_), tmet = evaluate(
+                model, test_loader, device, compute_emd=compute_emd_test,
+                mask_ratio=args.mask_ratio, distributed=(world_size > 1))
+            if is_main:
+                history['test_epoch'].append(epoch)
+                for k, v in zip(
+                        ['test_loss','test_rgb','test_depth','test_pc','test_text',
+                         'test_rgb_mse','test_depth_mse','test_pc_chamfer',
+                         'test_param_mse','test_param_mae','test_param_mae_masked',
+                         'test_param_acc05'],
+                        [tl, tr_, td_, tp_, tt_,
+                         tmet['rgb_mse'], tmet['depth_mse'], tmet['pc_chamfer'],
+                         tmet['param_mse'], tmet['param_mae'], tmet['param_mae_masked'],
+                         tmet['param_acc@0.05']]):
+                    history[k].append(v)
+                print(f"Test  — Loss: {tl:.4f}  RGB: {tr_:.4f}  Depth: {td_:.4f}  "
+                      f"PC: {tp_:.4f}  Text: {tt_:.4f}")
+                print(f"Test Metrics — RGB MSE: {tmet['rgb_mse']:.6f}  "
+                      f"Depth MSE: {tmet['depth_mse']:.6f}  "
+                      f"PC Chamfer: {tmet['pc_chamfer']:.6f}")
+                print(f"Test Param   — MAE(masked): {tmet['param_mae_masked']:.6f}  "
+                      f"acc@0.05: {tmet['param_acc@0.05']:.4f}")
+                if args.use_wandb and WANDB_AVAILABLE:
+                    wandb.log({
+                        'epoch': epoch,
+                        'test/loss': tl, 'test/rgb': tr_, 'test/depth': td_,
+                        'test/pc': tp_, 'test/text': tt_,
+                        'test_metrics/rgb_mse': tmet['rgb_mse'],
+                        'test_metrics/depth_mse': tmet['depth_mse'],
+                        'test_metrics/pc_chamfer': tmet['pc_chamfer'],
+                        'test_metrics/param_mse': tmet['param_mse'],
+                        'test_metrics/param_mae': tmet['param_mae'],
+                        'test_metrics/param_mae_masked': tmet['param_mae_masked'],
+                        'test_metrics/param_acc@0.05': tmet['param_acc@0.05'],
+                    })
+                print(f"📊 Generating TEST visualizations (epoch {epoch})…")
+                mv = model.module if world_size > 1 else model
+                tpaths = visualize_reconstruction_4m(
+                    mv, test_loader, device, epoch, test_viz_dir,
+                    args.num_viz_samples, mask_ratio=args.mask_ratio)
+                if args.use_wandb and WANDB_AVAILABLE:
+                    wandb.log({'test_visualizations':
+                               [wandb.Image(p, caption=Path(p).name) for p in tpaths],
+                               'epoch': epoch})
 
         scheduler.step()
 
@@ -782,6 +903,7 @@ def main():
     parser.add_argument('--weight_decay',       type=float, default=None)
     parser.add_argument('--warmup_epochs',      type=int,   default=None)
     parser.add_argument('--val_freq',           type=int,   default=None)
+    parser.add_argument('--test_freq',          type=int,   default=None)
     parser.add_argument('--viz_freq',           type=int,   default=None)
     parser.add_argument('--num_viz_samples',    type=int,   default=None)
     parser.add_argument('--output_dir',         type=str,   default=None)
@@ -810,7 +932,8 @@ def main():
             'model':         {'model_size': 'base', 'mask_ratio': 0.15, 'pc_loss_weight': 10.0,
                               'depth_norm_type': 'minmax', 'spline_loss_weight': 1.0, 'max_leaves': 24},
             'training':      {'batch_size': 16, 'epochs': 2400, 'lr': 1.5e-4,
-                              'weight_decay': 0.05, 'warmup_epochs': 10, 'val_freq': 20},
+                              'weight_decay': 0.05, 'warmup_epochs': 10, 'val_freq': 20,
+                              'test_freq': 50},
             'checkpointing': {'output_dir': './outputs/4m_run', 'save_freq': 100, 'resume': None},
             'visualization': {'viz_freq': 50, 'num_viz_samples': 6},
             'distributed':   {'world_size': 4, 'dist_backend': 'nccl', 'dist_url': 'env://'},

@@ -1,0 +1,58 @@
+# EmbodiedMAE-4M cross-modal distillation — H200 demonstration run.
+# Warm-started from the trustworthy epoch-2400 checkpoint; pushes single-modal→all.
+
+data:
+  data_root: "./Dataset/new_data"
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: "base"
+  mask_ratio: 0.75
+  pc_loss_weight: 10.0
+  depth_norm_type: "minmax"
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+distill:
+  teacher_checkpoint: "./outputs/4m_run_v3/checkpoints/checkpoint_epoch_2400.pth"
+  student_init:       "./outputs/4m_run_v3/checkpoints/checkpoint_epoch_2400.pth"
+  crossmodal_prob: 0.8
+  sources: ["rgb", "depth", "pc", "text"]
+  feat_distill_weight: 1.0
+  cls_distill_weight: 0.5
+  output_distill_weight: 0.0
+  distill_masked_only: true
+  viz_source: "pc"          # render the hardest source so progress is visible
+
+training:
+  batch_size: 16
+  epochs: 25
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 3
+  val_freq: 3
+
+checkpointing:
+  output_dir: "./outputs/4m_distill_v1"
+  save_freq: 5
+  resume: null
+
+visualization:
+  viz_freq: 6
+  num_viz_samples: 6
+
+distributed:
+  world_size: 1
+  dist_backend: "nccl"
+  dist_url: "env://"
+
+system:
+  num_workers: 14
+  device: "cuda"
+
+wandb:
+  use_wandb: false
+  wandb_project: "embodied-mae-sorghum"
+  wandb_entity: null
+  wandb_name: "4m_crossmodal_distill_v1"
