@@ -1,0 +1,81 @@
+# EmbodiedMAE-4M  RGB -> {POINT CLOUD, SPLINE PARAMS}  specialist distillation.
+#
+# Every step conditions on RGB alone (depth, PC and spline all masked) and the
+# student must generate the point cloud AND the growth parameters. Reconstruction
+# loss, feature distillation and the best-model metric are all restricted to
+# those two targets — depth and RGB self-reconstruction are not trained here.
+#
+# Multi-target: `target` takes a list. The recon term is lp + lt (each already
+# scaled by pc_loss_weight / spline_loss_weight inside forward_loss), and the
+# best-model metric is that same sum — Chamfer (~1e-3) and param MAE (~3e-2)
+# cannot share one metric without the larger scale deciding on its own.
+#
+# 500 epochs on the 105k train split at global batch 128 is ~410k optimizer
+# steps, well past the 100-epoch all-source run. At the measured ~5.7 min/epoch
+# expect ~48h of compute, plus scavenger preemption.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: base
+  mask_ratio: 0.80          # unused at crossmodal_prob 1.0 (no full-recon steps)
+  loss_name: "qal_loss"     # sigmoid-weighted two-sided Chamfer; matches the teacher
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+distill:
+  # Frozen snapshot of the v2 pretrain best (epoch 960, val 0.1811). Use the
+  # snapshot rather than best_model.pth: that file is rewritten whenever a run
+  # improves, and a preempted job re-reads its teacher on every requeue.
+  teacher_checkpoint: ./outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth
+  student_init:       ./outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth
+  crossmodal_prob: 1.0      # every step is RGB -> {pc, text}
+  sources: [rgb]
+  target: [pc, text]
+  feat_distill_weight: 1.0
+  cls_distill_weight: 0.5
+  output_distill_weight: 0.0
+  distill_masked_only: true
+  viz_source: rgb
+
+training:
+  batch_size: 16            # measured: 54.4 GiB/card on 8x RTX PRO 6000 incl. val+viz
+  epochs: 500
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 5
+  val_freq: 10              # 50 val points over the run; one source, so cheap
+  val_max_batches: 100      # 1600 val samples
+  max_steps: 0
+
+checkpointing:
+  output_dir: ./outputs/4m_distill_15k_rgb2pc_spline
+  save_freq: 2              # scavenger is preemptible — keep the resume point close
+  resume: null
+
+visualization:
+  viz_freq: 20
+  num_viz_samples: 6
+
+distributed:
+  world_size: 8
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 24           # 192 workers total; 44 starved rank 0 at load 354/360
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: distill_15k_rgb2pcspline_500ep

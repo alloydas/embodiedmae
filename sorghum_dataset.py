@@ -8,8 +8,83 @@ from torch.utils.data import Dataset
 import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
+from torchvision.transforms import InterpolationMode
 from pathlib import Path
 import open3d as o3d
+
+import hashlib
+import json
+import os
+import tempfile
+
+
+# ── Dataset index cache ───────────────────────────────────────────────────────
+# Scanning the sample folders is expensive on the shared filesystem: every folder
+# costs an iterdir + a glob, which is ~311 s for the 22.5k-folder val split and
+# ~24 min for the 105k train split. Every DDP rank pays it at every job start and
+# every preemption-requeue. We cache the resolved file names instead, which also
+# removes the per-__getitem__ glob in find_pointcloud_file / the 4M spline lookup.
+#
+# Validity is keyed on the split directory's mtime, which changes when sample
+# folders are added or removed. It does NOT change when files inside an existing
+# sample folder change — set SORGHUM_INDEX_REBUILD=1 to force a rescan in that case.
+INDEX_CACHE_VERSION = 1
+
+
+def _index_cache_dir():
+    return Path(os.environ.get(
+        'SORGHUM_INDEX_CACHE',
+        Path(__file__).resolve().parent / '.dataset_index_cache'))
+
+
+def _index_cache_path(load_dir, tag):
+    key = f"{Path(load_dir).resolve()}|{tag}|v{INDEX_CACHE_VERSION}"
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return _index_cache_dir() / f"{Path(load_dir).name}_{tag}_{digest}.json"
+
+
+def _read_index_cache(load_dir, tag):
+    if os.environ.get('SORGHUM_INDEX_REBUILD'):
+        return None
+    path = _index_cache_path(load_dir, tag)
+    try:
+        with open(path) as fh:
+            blob = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    try:
+        if blob.get('version') != INDEX_CACHE_VERSION:
+            return None
+        if blob.get('dir_mtime_ns') != Path(load_dir).stat().st_mtime_ns:
+            return None
+    except OSError:
+        return None
+    return blob.get('entries')
+
+
+def _write_index_cache(load_dir, tag, entries):
+    """Atomic write so concurrent DDP ranks cannot observe a partial file."""
+    path = _index_cache_path(load_dir, tag)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        blob = {'version': INDEX_CACHE_VERSION,
+                'dir_mtime_ns': Path(load_dir).stat().st_mtime_ns,
+                'load_dir': str(Path(load_dir).resolve()),
+                'entries': entries}
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'w') as fh:
+                json.dump(blob, fh)
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    except OSError:
+        pass          # a read-only cache dir must never be fatal
 
 
 class SorghumDataset(Dataset):
@@ -88,24 +163,34 @@ class SorghumDataset(Dataset):
             transforms.ToTensor(),
         ])
         
-        # Get all sample folders and verify they have required files
-        self.samples = []
-        for folder in sorted(self.load_dir.iterdir()):
-            if not folder.is_dir():
-                continue
-            
-            # Check for required files
-            rgb_path = folder / 'rgb.png'
-            depth_path = folder / 'depth.png'
-            
-            # Find point cloud file ending with _nc.ply
-            pc_files = list(folder.glob('*_nc_cam.ply'))
-            #print(pc_files)
-            
-            if rgb_path.exists() and depth_path.exists() and len(pc_files) > 0:
-                self.samples.append(folder)
-            else:
-                print(f"⚠️  Skipping {folder.name}: missing files (RGB={rgb_path.exists()}, Depth={depth_path.exists()}, PC={len(pc_files)>0})")
+        # Get all sample folders and verify they have required files.
+        # `entries` is [[folder_name, pc_file_name], ...] and is cached to disk —
+        # see the index-cache helpers at the top of this module.
+        entries = _read_index_cache(self.load_dir, 'base')
+        if entries is None:
+            entries = []
+            for folder in sorted(self.load_dir.iterdir()):
+                if not folder.is_dir():
+                    continue
+
+                # Check for required files
+                rgb_path = folder / 'rgb.png'
+                depth_path = folder / 'depth.png'
+
+                # Find point cloud file ending with _nc.ply
+                pc_files = list(folder.glob('*_nc_cam.ply'))
+
+                if rgb_path.exists() and depth_path.exists() and len(pc_files) > 0:
+                    entries.append([folder.name, pc_files[0].name])
+                else:
+                    print(f"⚠️  Skipping {folder.name}: missing files (RGB={rgb_path.exists()}, Depth={depth_path.exists()}, PC={len(pc_files)>0})")
+            _write_index_cache(self.load_dir, 'base', entries)
+        else:
+            print(f"⚡ index cache hit ({len(entries)} samples) — skipped the folder scan")
+
+        self.samples = [self.load_dir / name for name, _ in entries]
+        # Resolved point-cloud names, so find_pointcloud_file never globs per item.
+        self._pc_names = {name: pc for name, pc in entries}
         
         if len(self.samples) == 0:
             raise ValueError(f"No valid samples found in {self.load_dir}!\n"
@@ -117,8 +202,16 @@ class SorghumDataset(Dataset):
         return len(self.samples)
     
     def find_pointcloud_file(self, folder):
-        """Find the point cloud file ending with _nc.ply"""
-        pc_files = list(folder.glob('*_nc_cam.ply'))
+        """Resolve the *_nc_cam.ply for a sample folder.
+
+        Uses the cached name when the index supplied one (the common path, and
+        the reason __getitem__ no longer does a directory listing per sample);
+        falls back to globbing for callers holding a folder we did not index.
+        """
+        cached = getattr(self, '_pc_names', {}).get(Path(folder).name)
+        if cached is not None:
+            return Path(folder) / cached
+        pc_files = list(Path(folder).glob('*_nc_cam.ply'))
         if len(pc_files) == 0:
             raise FileNotFoundError(f"No *_nc.ply file found in {folder}")
         return pc_files[0]  # Return the first one if multiple exist
@@ -154,6 +247,52 @@ class SorghumDataset(Dataset):
         except Exception as e:
             raise RuntimeError(f"Error loading point cloud from {ply_path}: {e}")
     
+    def load_depth(self, depth_path):
+        """Load depth without collapsing packed RGBA values to luminance.
+
+        The active dataset stores one scalar depth value across four bytes in
+        big-endian RGBA order.  Grayscale 8/16-bit depth PNGs are also accepted.
+        In either case the returned tensor is float32 in [0, 1], shaped
+        (1, img_size, img_size).  Zero remains the background value.
+        """
+        with Image.open(depth_path) as image:
+            depth_array = np.asarray(image)
+
+        if depth_array.ndim == 3:
+            if depth_array.shape[2] != 4 or depth_array.dtype != np.uint8:
+                raise ValueError(
+                    f"Unsupported multi-channel depth image: shape={depth_array.shape}, "
+                    f"dtype={depth_array.dtype}"
+                )
+
+            # depth.png uses big-endian packed RGBA:
+            # scalar = R*256^3 + G*256^2 + B*256 + A.
+            rgba = depth_array.astype(np.float32)
+            depth_array = (
+                rgba[..., 0] * (256.0 ** 3)
+                + rgba[..., 1] * (256.0 ** 2)
+                + rgba[..., 2] * 256.0
+                + rgba[..., 3]
+            ) / float((256 ** 4) - 1)
+        elif depth_array.ndim == 2:
+            if np.issubdtype(depth_array.dtype, np.integer):
+                depth_array = depth_array.astype(np.float32) / np.iinfo(depth_array.dtype).max
+            else:
+                depth_array = depth_array.astype(np.float32)
+                if not np.isfinite(depth_array).all():
+                    raise ValueError(f"Depth image contains non-finite values: {depth_path}")
+        else:
+            raise ValueError(f"Unsupported depth image shape: {depth_array.shape}")
+
+        depth = torch.from_numpy(np.ascontiguousarray(depth_array)).unsqueeze(0)
+        depth = TF.resize(
+            depth,
+            [self.img_size, self.img_size],
+            interpolation=InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+        return depth
+
     def __getitem__(self, idx):
         sample_dir = self.samples[idx]
         
@@ -165,8 +304,7 @@ class SorghumDataset(Dataset):
             
             # Load Depth
             depth_path = sample_dir / 'depth.png'
-            depth = Image.open(depth_path).convert('L')
-            depth = self.depth_transform(depth)
+            depth = self.load_depth(depth_path)
             
             # Find and load Point Cloud
             pc_path = self.find_pointcloud_file(sample_dir)

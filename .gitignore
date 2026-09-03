@@ -54,3 +54,19 @@ vis_val.zip
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+
+# Archived run outputs — 560 GB on disk, never belongs in git
+archive/
+
+# Dataset folder-index cache (regenerated on first run, ~3 MB of JSON)
+.dataset_index_cache/
+
+# Eval dumps: per-sample .ply + .png galleries. Keep the scripts, not the output.
+vis_rgb2pc/
+figures_compare/
+figures_fixed/
+per_plant_chamfer_*.png
+per_plant_chamfer_*.json
+crossmodal_distill_results.png
+data_split_distribution.png
+test15k_rgb2pc_viz.png

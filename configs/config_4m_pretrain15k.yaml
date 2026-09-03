@@ -1,0 +1,48 @@
+# EmbodiedMAE-4M Pretraining — 15k-plant extreme-enriched split (105k train folders)
+# RGB + Depth + PointCloud + Spline params. From scratch, 1000 epochs.
+
+data:
+  data_root: "/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K"
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: "base"
+  mask_ratio: 0.80          # total masking fraction across all modalities
+  pc_loss_weight: 10.0
+  depth_norm_type: "minmax"
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+training:
+  batch_size: 16           # per-GPU; global = 16 x 4 GPUs = 64
+  epochs: 1000
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 10
+  val_freq: 20
+  test_freq: 50            # evaluate on held-out test set + log viz to wandb every 50 epochs
+
+checkpointing:
+  output_dir: "./outputs/4m_pretrain_15k"
+  save_freq: 20
+  resume: null            # from scratch
+
+visualization:
+  viz_freq: 20
+  num_viz_samples: 12
+
+distributed:
+  world_size: 4
+  dist_backend: "nccl"
+  dist_url: "env://"
+
+system:
+  num_workers: 32
+  device: "cuda"
+
+wandb:
+  use_wandb: true
+  wandb_project: "embodied-mae-sorghum"
+  wandb_entity: null
+  wandb_name: "pretrain_15k_scratch_1000ep"
