@@ -22,6 +22,14 @@ measured against, so quote the two together. Reconstruction plates and the befor
 generation frames are included; regenerate with `python regen_figures.py`, and the warm-start
 baseline with `python eval_warmstart.py`.
 
+Stage 4 adds the `source_mask_ratio` ablation. Masking half the RGB source's tokens on the
+cross-modal training path takes RGB→PC Chamfer from **0.00085254** to **0.00081111** and
+**0.00080934** on two independent seeds (−4.9% / −5.1% on best, −13.8% / −14.3% at matched
+epoch 100), and removes the early-peak-then-drift pattern that the four preceding specialist
+runs all shared. Both arms are validated with the source whole, so the comparison is
+like-for-like. Every number on that page is validation-split — which is also the
+checkpoint-selection split; no model trained against this teacher has been scored on test yet.
+
 📊 **[Reconstruction plates — EmbodiedMAE-4M, epoch 760](https://claude.ai/code/artifact/6f635945-241e-4ea5-85dd-a46749a30a4b)**
 
 Earlier progress report from the same 4-modality model at epoch 760 of that 1000-epoch run,
