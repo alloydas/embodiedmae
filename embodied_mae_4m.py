@@ -738,7 +738,8 @@ class EmbodiedMAE4M(nn.Module):
 
     # -- Encoder with explicit modality visibility (cross-modal) ---------------
 
-    def forward_encoder_select(self, x_rgb, x_depth, x_pc, x_param, visible):
+    def forward_encoder_select(self, x_rgb, x_depth, x_pc, x_param, visible,
+                               source_mask_ratio=0.0):
         """Encoder where each ACTIVE modality is EITHER fully visible OR fully
         masked (0 visible tokens), instead of Dirichlet token-level masking.
 
@@ -749,9 +750,24 @@ class EmbodiedMAE4M(nn.Module):
         probed with visible = {rgb, depth, pc} & arm, never text, so no arm
         reads the parameter stream at probe time.
 
+        `source_mask_ratio` : 0.0 (default) keeps the historical behaviour -- a
+        visible modality is handed over WHOLE, every token, and its own
+        reconstruction loss is identically zero because nothing of it is masked.
+        Above 0.0, the visible modalities are additionally masked at the token
+        level at that rate, so the student must infer the absent modalities from
+        a PARTIAL source. This makes the cross-modal task strictly harder and
+        matches how the model is probed at evaluation time (rgb_mask_sweep.py
+        blanks 0-95% of RGB patches). The masked source tokens also become real
+        reconstruction targets, so the source's own loss stops being 0.
+
         Returns the same 13-tuple as forward_encoder. mask_* is 1 everywhere for
-        a masked modality, 0 everywhere for a visible one, None for inactive.
+        a fully masked modality, 0 everywhere for a fully visible one, and a
+        genuine per-token 0/1 mask for a visible modality when
+        source_mask_ratio > 0. None for inactive modalities.
         """
+        if not 0.0 <= float(source_mask_ratio) < 1.0:
+            raise ValueError(
+                f"source_mask_ratio must be in [0, 1), got {source_mask_ratio}")
         visible = set(visible)
         unknown = visible - set(self.active_modalities)
         if unknown:
@@ -764,12 +780,28 @@ class EmbodiedMAE4M(nn.Module):
         B, dev = first.shape[0], first.device
 
         def _sel(name):
-            e        = embeds[name]
-            L        = e.shape[1]
-            ids_rest = torch.arange(L, device=dev).unsqueeze(0).expand(B, L)
-            if name in visible:
+            e = embeds[name]
+            L = e.shape[1]
+            if name not in visible:
+                ids_rest = torch.arange(L, device=dev).unsqueeze(0).expand(B, L)
+                return e[:, :0], torch.ones(B, L, device=dev), ids_rest
+            if source_mask_ratio <= 0.0:
+                ids_rest = torch.arange(L, device=dev).unsqueeze(0).expand(B, L)
                 return e, torch.zeros(B, L, device=dev), ids_rest
-            return e[:, :0], torch.ones(B, L, device=dev), ids_rest
+            # Token-level masking of a VISIBLE source. Same construction as
+            # random_masking_dirichlet._mask so the two regimes agree; +1e-12
+            # for the same binary-float floor reason, and at least one token
+            # survives so the encoder never sees an empty source.
+            n_keep = max(1, int(math.floor(L * (1.0 - source_mask_ratio) + 1e-12)))
+            noise    = torch.rand(B, L, device=dev)
+            ids_shuf = torch.argsort(noise, dim=1)
+            ids_rest = torch.argsort(ids_shuf, dim=1)
+            ids_keep = ids_shuf[:, :n_keep]
+            x_vis = torch.gather(e, 1, ids_keep.unsqueeze(-1).expand(-1, -1, e.shape[2]))
+            mask = torch.ones(B, L, device=dev)
+            mask[:, :n_keep] = 0
+            mask = torch.gather(mask, 1, ids_rest)
+            return x_vis, mask, ids_rest
 
         per_mod = {n: _sel(n) for n in self.active_modalities}
         latent  = self._run_encoder([per_mod[n][0] for n in self.active_modalities])
@@ -1002,7 +1034,8 @@ class EmbodiedMAE4M(nn.Module):
     # ── Full forward ──────────────────────────────────────────────────────────
 
     def forward(self, imgs_rgb, imgs_depth, pc, param_floats, text_valid,
-                mask_ratio: float = 0.75, visible=None, return_features: bool = False):
+                mask_ratio: float = 0.75, visible=None, return_features: bool = False,
+                source_mask_ratio: float = 0.0):
         """
         imgs_rgb    : (B, 3, H, W)
         imgs_depth  : (B, 1, H, W)
@@ -1029,7 +1062,8 @@ class EmbodiedMAE4M(nn.Module):
              mr, md, mp, mt,
              rr, rd, rp, rt,
              lr_, ld_, lp_, lt_) = self.forward_encoder_select(
-                imgs_rgb, imgs_depth, pc, param_floats, visible)
+                imgs_rgb, imgs_depth, pc, param_floats, visible,
+                source_mask_ratio=source_mask_ratio)
 
         dec = self.forward_decoder(
             latent, rr, rd, rp, rt, lr_, ld_, lp_, lt_,

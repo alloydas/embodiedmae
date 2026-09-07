@@ -128,6 +128,13 @@ def config_to_namespace(c):
     ns.student_init           = g('distill', 'student_init',
                                   './outputs/4m_run_v3/checkpoints/checkpoint_epoch_2400.pth')
     ns.crossmodal_prob        = g('distill', 'crossmodal_prob', 0.7)
+    # Mask the SOURCE modality during cross-modal steps. 0.0 (default) hands the
+    # source over whole, which is how every run up to 2026-09-03 behaved. Above 0,
+    # the student must infer the absent modalities from a partial source -- a
+    # strictly harder task, and the one rgb_mask_sweep.py probes at eval time.
+    # Note this makes the source's own recon loss non-zero: its masked tokens
+    # become real targets, so a logged 'rgb' of 0.0000 stops being expected.
+    ns.source_mask_ratio      = g('distill', 'source_mask_ratio', 0.0)
     ns.sources                = g('distill', 'sources', MODALITIES)
     ns.feat_distill_weight    = g('distill', 'feat_distill_weight', 1.0)
     ns.cls_distill_weight     = g('distill', 'cls_distill_weight', 0.5)
@@ -145,6 +152,12 @@ def config_to_namespace(c):
     # checkpointing / viz / dist / system / wandb
     ns.output_dir         = g('checkpointing', 'output_dir', './outputs/4m_distill')
     ns.save_freq          = g('checkpointing', 'save_freq', 50)
+    # Retention: how many periodic checkpoints to keep in checkpoints/.
+    # best_model.pth lives at output_dir level and is NEVER pruned, so
+    # keep_last=1 means 'last + best', which is all that is needed:
+    # best_model.pth carries model+optimizer+scheduler+history and is
+    # fully resumable on its own. 0 or negative disables pruning.
+    ns.keep_last          = g('checkpointing', 'keep_last', 1)
     ns.resume             = g('checkpointing', 'resume', None)
     ns.viz_freq           = g('visualization', 'viz_freq', 25)
     ns.num_viz_samples    = g('visualization', 'num_viz_samples', 6)
@@ -253,7 +266,8 @@ def crossmodal_distill_step(student, teacher, batch_t, source, args, device):
     visible = {source}
 
     total_recon, (lr, ld, lp, lt), preds_s, _, (feats_s, cls_s) = student(
-        rgb, depth, pc, params, tv, visible=visible, return_features=True)
+        rgb, depth, pc, params, tv, visible=visible, return_features=True,
+        source_mask_ratio=getattr(args, 'source_mask_ratio', 0.0))
 
     with torch.no_grad():
         _, _, preds_t, _, (feats_t, cls_t) = teacher(
@@ -721,14 +735,33 @@ def train_worker(rank, world_size, args):
             return (student.module if world_size > 1 else student).state_dict()
 
         if is_main and epoch % args.save_freq == 0:
+            # Write to .tmp then os.replace: an atomic rename on POSIX, so a
+            # preemption mid-write cannot leave a truncated checkpoint. This
+            # matters now that we prune -- without it, keep_last=1 could delete
+            # the only good checkpoint in favour of a torn one.
+            _final = checkpoint_dir / f'checkpoint_epoch_{epoch}.pth'
+            _tmp   = checkpoint_dir / f'checkpoint_epoch_{epoch}.pth.tmp'
             torch.save({'epoch': epoch, 'model_state_dict': state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'scheduler_state_dict': scheduler.state_dict(),
                         'best_val_loss': best_val, 'history': history,
                         'wandb_run_id': (wandb.run.id if args.use_wandb
                                          and WANDB_AVAILABLE and wandb.run else None)},
-                       checkpoint_dir / f'checkpoint_epoch_{epoch}.pth')
+                       _tmp)
+            os.replace(_tmp, _final)
             print(f"💾 checkpoint_epoch_{epoch}.pth")
+
+            # Prune older periodic checkpoints. best_model.pth is a separate
+            # file at output_dir level and is never touched here.
+            if args.keep_last and args.keep_last > 0:
+                cks = sorted(checkpoint_dir.glob('checkpoint_epoch_*.pth'),
+                             key=lambda p: int(p.stem.rsplit('_', 1)[1]))
+                for old_ck in cks[:-args.keep_last]:
+                    try:
+                        old_ck.unlink()
+                        print(f"🗑  pruned {old_ck.name}")
+                    except OSError as exc:
+                        print(f"⚠️  could not prune {old_ck.name}: {exc}")
 
         if is_main and mean_gen is not None and mean_gen < best_val:
             best_val = mean_gen
@@ -772,6 +805,9 @@ def main():
     ap.add_argument('--val_max_batches', type=int, default=None)
     ap.add_argument('--max_steps', type=int, default=None,
                     help='debug/smoke: stop each epoch after N steps (0 = full epoch)')
+    ap.add_argument('--source_mask_ratio', type=float, default=None,
+                    help='mask this fraction of the SOURCE modality tokens during '
+                         'cross-modal steps (0 = hand the source over whole)')
     ap.add_argument('--no_wandb', action='store_true')
     args_cli = ap.parse_args()
 
@@ -783,7 +819,7 @@ def main():
     # CLI overrides
     for k in ['world_size', 'output_dir', 'resume', 'teacher_checkpoint',
               'student_init', 'crossmodal_prob', 'batch_size', 'epochs',
-              'num_workers', 'val_max_batches', 'max_steps']:
+              'num_workers', 'val_max_batches', 'max_steps', 'source_mask_ratio']:
         v = getattr(args_cli, k)
         if v is not None:
             setattr(cfg, k, v)
