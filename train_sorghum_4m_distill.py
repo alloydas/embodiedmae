@@ -44,6 +44,7 @@ import json
 import time
 import random
 import argparse
+import contextlib
 from datetime import datetime
 from pathlib import Path
 
@@ -122,6 +123,11 @@ def config_to_namespace(c):
     # both wasteful and long enough to trip the NCCL timeout on non-zero ranks.
     ns.val_max_batches    = g('training', 'val_max_batches', 0)
     ns.max_steps          = g('training', 'max_steps', 0)
+    # Gradient accumulation. Global batch = batch_size x world_size x accum_steps,
+    # so 4 GPUs x bs16 x accum2 reproduces the 8 GPU x bs16 global batch of 128 on
+    # half the cards. 1 (the default) is exactly the pre-accumulation code path.
+    ns.accum_steps        = g('training', 'accum_steps', 1)
+    assert ns.accum_steps >= 1, f'training.accum_steps must be >= 1, got {ns.accum_steps}'
     # distillation
     ns.teacher_checkpoint     = g('distill', 'teacher_checkpoint',
                                   './outputs/4m_run_v3/checkpoints/checkpoint_epoch_2400.pth')
@@ -325,6 +331,12 @@ def train_one_epoch(student, teacher, loader, optimizer, device, epoch, args,
     src_count = {s: 0 for s in args.sources}
 
     n_done = 0
+    # Gradient accumulation. `accum` micro-batches make one optimiser step, so the
+    # effective global batch is batch_size x world_size x accum. n_opt is the number
+    # of optimiser steps in the epoch, which is what the cross-modal schedule is
+    # keyed on below.
+    accum = max(1, getattr(args, 'accum_steps', 1))
+    n_opt = max(1, n_batches // accum)
     _warm, _t0 = 10, None      # steady-state timing ignores the first _warm steps
     if args.max_steps:
         torch.cuda.reset_peak_memory_stats(device)
@@ -335,29 +347,49 @@ def train_one_epoch(student, teacher, loader, optimizer, device, epoch, args,
         batch_t = (rgb, depth, pc, params, tv)
 
         # Deterministic, rank-identical schedule so DDP stays in lock-step.
-        step_id = (epoch - 1) * n_batches + bi
+        # Keyed on the OPTIMISER step, not the micro-batch: every micro-batch in an
+        # accumulation group then shares one mode and one source, so the effective
+        # global batch stays homogeneous -- what the 8-GPU runs did with accum=1.
+        # At accum=1 this is bit-identical to the pre-accumulation schedule.
+        opt_idx = bi // accum
+        step_id = (epoch - 1) * n_opt + opt_idx
         is_xm   = random.Random(step_id).random() < args.crossmodal_prob
 
-        if is_xm:
-            source = args.sources[step_id % len(args.sources)]
-            loss, stats = crossmodal_distill_step(
-                student, teacher, batch_t, source, args, device)
-            n_xm += 1
-            src_count[source] += 1
-        else:
-            # config mask_ratio was parsed but never passed here; the model default
-            # (0.75) was silently used on every full-recon step.
-            loss, (lr, ld, lp, lt), _, _ = student(rgb, depth, pc, params, tv,
-                                                   mask_ratio=args.mask_ratio)
-            stats = {'loss': loss.item(), 'recon': loss.item(),
-                     'rgb': lr.item(), 'depth': ld.item(),
-                     'pc': lp.item(), 'text': lt.item(),
-                     'feat': 0.0, 'cls': 0.0, 'out': 0.0}
+        is_last_micro = ((bi + 1) % accum == 0)
+        if bi % accum == 0:
+            optimizer.zero_grad()
 
-        optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
-        optimizer.step()
+        # DDP all-reduces only on the last micro-batch of the group. The forward has
+        # to sit inside no_sync() too -- DDP arms its reducer during forward, so
+        # syncing the forward but not the backward silently drops gradients.
+        sync_ctx = (student.no_sync()
+                    if (not is_last_micro and hasattr(student, 'no_sync'))
+                    else contextlib.nullcontext())
+        with sync_ctx:
+            if is_xm:
+                source = args.sources[step_id % len(args.sources)]
+                loss, stats = crossmodal_distill_step(
+                    student, teacher, batch_t, source, args, device)
+                n_xm += 1
+                src_count[source] += 1
+            else:
+                # config mask_ratio was parsed but never passed here; the model default
+                # (0.75) was silently used on every full-recon step.
+                loss, (lr, ld, lp, lt), _, _ = student(rgb, depth, pc, params, tv,
+                                                       mask_ratio=args.mask_ratio)
+                stats = {'loss': loss.item(), 'recon': loss.item(),
+                         'rgb': lr.item(), 'depth': ld.item(),
+                         'pc': lp.item(), 'text': lt.item(),
+                         'feat': 0.0, 'cls': 0.0, 'out': 0.0}
+
+            # Scale so the accumulated gradient is the MEAN over the whole global
+            # batch, matching DDP's mean-reduction at accum=1. `stats` keeps the
+            # unscaled loss so logged numbers stay comparable across accum values.
+            (loss / accum).backward()
+
+        if is_last_micro:
+            torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
+            optimizer.step()
 
         for k in agg:
             agg[k] += stats[k]
@@ -373,7 +405,7 @@ def train_one_epoch(student, teacher, loader, optimizer, device, epoch, args,
         # Debug/smoke only: cut the epoch short so the val/viz/checkpoint path is
         # reachable without walking all 105k folders. All ranks break at the same
         # step, so DDP stays in sync.
-        if args.max_steps and n_done >= args.max_steps:
+        if args.max_steps and n_done >= args.max_steps and is_last_micro:
             break
 
     n = max(n_done, 1)
@@ -670,6 +702,10 @@ def train_worker(rank, world_size, args):
               f"  target={'+'.join(args.targets) if args.targets else 'all'}")
         print(f"   feat_w={args.feat_distill_weight} cls_w={args.cls_distill_weight} "
               f"out_w={args.output_distill_weight} masked_only={args.distill_masked_only}")
+        _accum = max(1, getattr(args, 'accum_steps', 1))
+        print(f"   batch/GPU={args.batch_size} x world_size={world_size} x accum={_accum}"
+              f"  -> GLOBAL BATCH {args.batch_size * world_size * _accum}"
+              f"  ({n_batches // _accum} optimiser steps/epoch)")
         print("=" * 80)
 
     for epoch in range(start_epoch, args.epochs + 1):
@@ -808,6 +844,10 @@ def main():
     ap.add_argument('--source_mask_ratio', type=float, default=None,
                     help='mask this fraction of the SOURCE modality tokens during '
                          'cross-modal steps (0 = hand the source over whole)')
+    ap.add_argument('--accum_steps', type=int, default=None,
+                    help='gradient accumulation: micro-batches per optimiser step. '
+                         'Global batch = batch_size x world_size x accum_steps, so '
+                         '4 GPUs x bs16 x 2 matches 8 GPUs x bs16 x 1.')
     ap.add_argument('--no_wandb', action='store_true')
     args_cli = ap.parse_args()
 
@@ -819,7 +859,8 @@ def main():
     # CLI overrides
     for k in ['world_size', 'output_dir', 'resume', 'teacher_checkpoint',
               'student_init', 'crossmodal_prob', 'batch_size', 'epochs',
-              'num_workers', 'val_max_batches', 'max_steps', 'source_mask_ratio']:
+              'num_workers', 'val_max_batches', 'max_steps', 'source_mask_ratio',
+              'accum_steps']:
         v = getattr(args_cli, k)
         if v is not None:
             setattr(cfg, k, v)
