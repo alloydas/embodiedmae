@@ -4,9 +4,9 @@
 #SBATCH --account=mech-ai-scavenger
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:rtx_pro_6000:1
-#SBATCH --cpus-per-task=12
-#SBATCH --mem=4G
+#SBATCH --gres=gpu:rtx_pro_6000:2
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=192G
 #SBATCH --time=2-00:00:00
 #SBATCH --requeue
 #SBATCH --output=logs/e2bw_%x_%j.out
@@ -22,25 +22,20 @@
 #
 # Every arm must run with the SAME resources: batch size per GPU and GPU count
 # both set the global batch, and a global-batch difference between arms would
-# confound the one thing E2 exists to measure.
+# confound the one thing E2 exists to measure. 2 GPUs x --batch_size 16 = global
+# batch 32, the same value the a100:4 variant reaches with 8 per GPU on 4 ranks,
+# so the two launchers stay directly comparable.
 #
-# Why 1 GPU per arm when 8 sit free: the GPUs are idle because the node's MEMORY
-# is gone, not because the node is unloaded. nova26-gpu-1 is RealMemory 1494G
-# with AllocMem 1475G -- 98.7% reserved by other jobs, leaving ~19G schedulable
-# for everything. (FreeMem reads ~1.4T; that is physical RAM other jobs reserved
-# and are not touching. SLURM schedules on AllocMem, so FreeMem is a red herring
-# and asking for 200G here pends forever on ReqNodeNotAvail.) CPUs were never
-# tight: 130 of 384 allocated.
-#
-# So host memory, not GPU count, sets the arm width. One rank per arm instead of
-# two halves the per-job CUDA host context and drops the NCCL buffers entirely,
-# which is what lets four concurrent arms fit in 19G. --batch_size 32 on a single
-# rank gives global batch 32 -- the same value the a100:4 variant reaches with 8
-# per GPU on 4 ranks, so the two launchers stay directly comparable.
-#
-# This leaves 4 of the 8 GPUs unused. That is the node's memory reservation
-# talking, not a scheduling mistake: widening to 2 GPUs per arm needs the other
-# jobs to release memory first.
+# On sizing: do NOT shrink this request to chase the idle GPUs on nova26-gpu-1.
+# Those 8 GPUs are genuinely unallocated, but nothing can land on that node --
+# `sbatch --test-only` for 1 CPU / 1G / no GPU is pushed out just as far as a
+# 200G request, so the node is held by a backfill reservation for a higher
+# priority pending job, not by anything about our request. (nova26-gpu-1 also
+# has 1475G of 1494G reserved by three CPU-only jobs, the largest being a 2-CPU
+# 1000G job ending Sep 25 -- which is exactly the date the scheduler offers.)
+# Measured start estimates on 2026-09-15: 1 or 2 GPUs both land Sep 16 17:09 on
+# nova26-gpu-2, 4 GPUs slips to Sep 17 10:25, and asking for MORE cpu/mem did
+# not delay placement at all. So take 2 GPUs and a comfortable host allocation.
 #
 # sm_120 needs det_cu128 (torch 2.11+cu128). The det env is torch 2.5+cu124 and
 # has no sm_120 kernels, so it dies at the first kernel launch. det_cu128 is the
@@ -102,6 +97,6 @@ fi
 
 srun --kill-on-bad-exit=1 \
   torchrun --standalone --nnodes=1 --nproc_per_node=${NPROC} \
-    train_sorghum_4m.py --config "${CONFIG}" --batch_size 32 --num_workers 3 ${RESUME_ARG} "$@"
+    train_sorghum_4m.py --config "${CONFIG}" --batch_size 16 --num_workers 12 ${RESUME_ARG} "$@"
 
 echo "Done at $(date)"
