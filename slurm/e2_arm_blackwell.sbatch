@@ -4,9 +4,9 @@
 #SBATCH --account=mech-ai-scavenger
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:rtx_pro_6000:2
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=200G
+#SBATCH --gres=gpu:rtx_pro_6000:1
+#SBATCH --cpus-per-task=12
+#SBATCH --mem=4G
 #SBATCH --time=2-00:00:00
 #SBATCH --requeue
 #SBATCH --output=logs/e2bw_%x_%j.out
@@ -24,11 +24,23 @@
 # both set the global batch, and a global-batch difference between arms would
 # confound the one thing E2 exists to measure.
 #
-# Why 2 GPUs per arm and not 8: nova26-gpu-1 has exactly 8 free RTX PRO 6000s and
-# E2 has four arms. 4 arms x 2 GPUs fills the node exactly and --batch_size 16
-# (below) holds the global batch at 16 x 2 = 32, identical to the a100:4 variant
-# in e2_arm.sbatch. Do NOT give one arm all 8 -- one fast arm and three queued
-# ones is not an ablation.
+# Why 1 GPU per arm when 8 sit free: the GPUs are idle because the node's MEMORY
+# is gone, not because the node is unloaded. nova26-gpu-1 is RealMemory 1494G
+# with AllocMem 1475G -- 98.7% reserved by other jobs, leaving ~19G schedulable
+# for everything. (FreeMem reads ~1.4T; that is physical RAM other jobs reserved
+# and are not touching. SLURM schedules on AllocMem, so FreeMem is a red herring
+# and asking for 200G here pends forever on ReqNodeNotAvail.) CPUs were never
+# tight: 130 of 384 allocated.
+#
+# So host memory, not GPU count, sets the arm width. One rank per arm instead of
+# two halves the per-job CUDA host context and drops the NCCL buffers entirely,
+# which is what lets four concurrent arms fit in 19G. --batch_size 32 on a single
+# rank gives global batch 32 -- the same value the a100:4 variant reaches with 8
+# per GPU on 4 ranks, so the two launchers stay directly comparable.
+#
+# This leaves 4 of the 8 GPUs unused. That is the node's memory reservation
+# talking, not a scheduling mistake: widening to 2 GPUs per arm needs the other
+# jobs to release memory first.
 #
 # sm_120 needs det_cu128 (torch 2.11+cu128). The det env is torch 2.5+cu124 and
 # has no sm_120 kernels, so it dies at the first kernel launch. det_cu128 is the
@@ -90,6 +102,6 @@ fi
 
 srun --kill-on-bad-exit=1 \
   torchrun --standalone --nnodes=1 --nproc_per_node=${NPROC} \
-    train_sorghum_4m.py --config "${CONFIG}" --batch_size 16 ${RESUME_ARG} "$@"
+    train_sorghum_4m.py --config "${CONFIG}" --batch_size 32 --num_workers 3 ${RESUME_ARG} "$@"
 
 echo "Done at $(date)"
