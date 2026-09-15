@@ -36,7 +36,9 @@ model:
   max_leaves: 24
 
 training:
-  batch_size: 8            # per-GPU; global 64 on 8 GPUs, matching the headline run
+  batch_size: 8            # per-GPU; global 32 on 4 GPUs -- IDENTICAL in every arm.
+                           # (headline E1 used 64; E2 is internally controlled, not
+                           #  matched to E1, which also differs in schedule per 6.3)
   epochs: 2000
   lr: 1.5e-4
   weight_decay: 0.05
@@ -54,7 +56,7 @@ visualization:
   num_viz_samples: 6
 
 distributed:
-  world_size: 8
+  world_size: 4            # ignored under torchrun, which infers it from nproc
   dist_backend: nccl
   dist_url: env://
 

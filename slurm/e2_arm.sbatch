@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=e2arm
-#SBATCH --partition=nova
-#SBATCH --account=mech-ai
+#SBATCH --partition=scavenger
+#SBATCH --account=mech-ai-scavenger
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:a100:4
@@ -22,7 +22,16 @@
 #
 # Every arm must run with the SAME resources: batch size per GPU and GPU count
 # both change the global batch, and a global-batch difference between arms would
-# confound the one thing E2 is trying to measure.
+# confound the one thing E2 is trying to measure. So the gres is pinned to
+# a100:4 rather than left open:
+#   * scavenger's 8-GPU nodes are nearly all draining; its a100:4 pool is ~18
+#     healthy nodes, so all four arms place at once on identical hardware.
+#   * 'a100' excludes 'a100-pcie' (different memory bandwidth) and excludes the
+#     rtx_pro_6000 nodes, which are sm_120 and need the det_cu128 env, not det.
+#
+# scavenger is preemptible by design -- that is the point, it is not subject to
+# the lab's 18-GPU AssocGrpGRES cap. --requeue plus the auto-resume below means a
+# preemption costs at most save_freq epochs.
 
 set -euo pipefail
 
