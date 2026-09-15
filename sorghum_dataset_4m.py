@@ -11,6 +11,8 @@ Each sample returns:
 """
 
 from pathlib import Path
+import random
+
 import torch
 from sorghum_dataset import (
     SorghumDataset, _read_index_cache, _write_index_cache,
@@ -21,7 +23,8 @@ from embodied_mae_4m import load_spline_params
 class SorghumDataset4M(SorghumDataset):
 
     def __init__(self, data_root, img_size=224, num_points=8196, split=None,
-                 max_leaves=24):
+                 max_leaves=24, view_sampling=False, view_seed=0,
+                 deterministic_view=False):
         super().__init__(data_root, img_size=img_size,
                          num_points=num_points, split=split)
         self.max_leaves = max_leaves
@@ -46,7 +49,65 @@ class SorghumDataset4M(SorghumDataset):
         self.samples = [self.load_dir / name for name, _ in entries]
         print(f"✅ {len(self.samples)} samples have spline data")
 
+        # ── View sampling (CVPR plan §6.1) ────────────────────────────────
+        # Folders are <plant>_<view>, ten consecutive views of each plant. Left
+        # alone, one epoch walks all ten views of every plant, so an epoch costs
+        # 10x what the plan budgets for and the ablation queue does not close.
+        # With view_sampling the dataset is indexed BY PLANT and one view is
+        # drawn per plant per epoch: the same view diversity across a run, at a
+        # tenth of the per-epoch cost.
+        #
+        # The draw is a pure function of (view_seed, epoch, plant index), so it
+        # needs no shared RNG state -- it is identical in every dataloader worker
+        # and on every DDP rank, and a run is reproducible from its seed. Call
+        # set_epoch() once per epoch or every epoch draws the same views.
+        self.view_sampling      = bool(view_sampling)
+        self.deterministic_view = bool(deterministic_view)
+        self._view_seed         = int(view_seed)
+        self._epoch             = 0
+        self.plant_views        = None
+        self.plant_ids          = None
+        if self.view_sampling:
+            groups = {}
+            for i, folder in enumerate(self.samples):
+                # Sorghum_10001_07 -> Sorghum_10001
+                plant = folder.name.rsplit('_', 1)[0]
+                groups.setdefault(plant, []).append(i)
+            self.plant_ids   = sorted(groups)
+            self.plant_views = [groups[pid] for pid in self.plant_ids]
+            n_v = {len(v) for v in self.plant_views}
+            print(f"🎥 view sampling: {len(self.plant_views)} plants, "
+                  f"{sorted(n_v)} views each -> epoch is "
+                  f"{len(self.plant_views)} items, not {len(self.samples)}"
+                  + ("  [deterministic: view 0]" if self.deterministic_view else ""))
+
+    def set_epoch(self, epoch):
+        """Advance the view draw. No-op unless view_sampling is on."""
+        self._epoch = int(epoch)
+
+    def __len__(self):
+        if self.view_sampling:
+            return len(self.plant_views)
+        return super().__len__()
+
+    def _resolve_index(self, idx):
+        """Plant index -> sample index, when view sampling is on."""
+        if not self.view_sampling:
+            return idx
+        views = self.plant_views[idx]
+        if self.deterministic_view:
+            # val/test: hold the view fixed so the metric moves only because the
+            # model moved. A rotating val view would add view variance to every
+            # comparison between epochs and between E2 arms.
+            return views[0]
+        # Explicit integer mix rather than hash() of a tuple, so the draw does
+        # not depend on any interpreter hashing detail.
+        rng = random.Random(
+            (self._view_seed * 1_000_003 + self._epoch) * 1_000_033 + idx)
+        return views[rng.randrange(len(views))]
+
     def __getitem__(self, idx):
+        idx = self._resolve_index(idx)
         rgb, depth, pc, name = super().__getitem__(idx)
 
         folder = self.samples[idx]

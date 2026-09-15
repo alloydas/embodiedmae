@@ -32,6 +32,7 @@ from embodied_mae_4m import (
     EmbodiedMAE4M,
     embodied_mae_4m_small,
     embodied_mae_4m_base,
+    embodied_mae_4m_large,
     _params_to_plant_text,
     _params_to_leaf_text,
     N_PARAMS,
@@ -42,17 +43,34 @@ from sorghum_dataset_4m import SorghumDataset4M
 
 # ── Config helpers ────────────────────────────────────────────────────────────
 
+MODALITY_ORDER = ('rgb', 'depth', 'pc', 'text')
+
+
 def load_config(path):
     with open(path) as f:
         return yaml.safe_load(f)
 
 
+def _parse_modalities(v):
+    """None | 'rgb,pc' | ['rgb','pc'] -> tuple | None. None means all four."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        v = [t for t in (x.strip() for x in v.split(',')) if t]
+    mods = tuple(str(m).strip().lower() for m in v)
+    if not mods or set(mods) == set(MODALITY_ORDER):
+        return None
+    return mods
+
+
 def merge_config_with_args(config, args):
     mapping = {
-        'data': ['data_root', 'img_size', 'num_points'],
+        'data': ['data_root', 'img_size', 'num_points',
+                 'view_sampling', 'view_seed'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
-                  'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared'],
+                  'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
+                  'active_modalities'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
                      'warmup_epochs', 'val_freq', 'test_freq'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
@@ -76,6 +94,8 @@ def config_to_namespace(config):
     ns.data_root          = config['data']['data_root']
     ns.img_size           = config['data'].get('img_size', 224)
     ns.num_points         = config['data'].get('num_points', 8196)
+    ns.view_sampling      = bool(config['data'].get('view_sampling', False))
+    ns.view_seed          = int(config['data'].get('view_seed', 0))
     ns.model_size         = config['model'].get('model_size', 'base')
     ns.mask_ratio         = config['model'].get('mask_ratio', 0.15)
     ns.pc_loss_weight     = config['model'].get('pc_loss_weight', 10.0)
@@ -88,6 +108,12 @@ def config_to_namespace(config):
     ns.qal_threshold      = config['model'].get('qal_threshold', 0.01)
     ns.qal_alpha          = config['model'].get('qal_alpha', 100.0)
     ns.qal_use_squared    = config['model'].get('qal_use_squared', False)
+    # E2 modality value-add. None -> all four streams (the headline model).
+    # A subset names which token streams exist AT ALL: an inactive modality has
+    # no embedder, no decoder head and no loss term, so it is absent from the
+    # model rather than merely masked. 'pc' is mandatory (it anchors the target).
+    # Accepts a YAML list or a comma-separated string.
+    ns.active_modalities  = _parse_modalities(config['model'].get('active_modalities'))
     ns.batch_size         = config['training'].get('batch_size', 16)
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
@@ -183,9 +209,20 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
                                   num_samples=4, mask_ratio=0.75):
     """5-row × 3-col grid per sample.
     Row 5 shows target vs predicted text for masked tokens.
+
+    The grid is hard-wired to all four streams. An E2 ablation arm has no RGB,
+    depth or param head at all (their predictions come back None), so rather
+    than render a grid of blanks the figure is skipped for reduced arms. The
+    numbers -- which are what E2 actually compares -- are unaffected.
     """
     model.eval()
     saved_paths = []
+
+    m0 = model.module if hasattr(model, 'module') else model
+    if len(getattr(m0, 'active_modalities', MODALITY_ORDER)) < 4:
+        print(f"  [viz] skipped: arm is {'+'.join(m0.active_modalities)}, "
+              f"the 4-row grid needs all four streams")
+        return saved_paths
 
     batch = next(iter(dataloader))
     rgb_b, depth_b, pc_b, param_floats_b, text_valid_b, names = batch
@@ -484,16 +521,23 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
         tot_pc    += lp.item()
         tot_txt   += lt.item()
 
+        # Inactive modalities have no decoder head, so their prediction is None.
+        # Their pixel metrics are skipped here and dropped from `metrics` below,
+        # rather than reported as 0.0 -- a zero MSE would read as a perfect
+        # reconstruction of a modality the arm cannot even see.
+        act = m.active_modalities
         B, _, H, W = rgb.shape
         p = m.patch_size; h = w = H // p
-        pred_rgb_img   = pred_rgb_p.reshape(B,h,w,p,p,3)
-        pred_rgb_img   = torch.einsum('nhwpqc->nchpwq', pred_rgb_img).reshape(B,3,H,W)
-        pred_depth_img = pred_depth_p.reshape(B,h,w,p,p,1)
-        pred_depth_img = torch.einsum('nhwpqc->nchpwq', pred_depth_img).reshape(B,1,H,W)
-
-        tot_rgb_mse   += torch.mean((pred_rgb_img   - rgb)   ** 2).item()
-        tot_depth_mse += torch.mean((pred_depth_img - depth) ** 2).item()
-        del pred_rgb_img, pred_depth_img
+        if 'rgb' in act:
+            pred_rgb_img = pred_rgb_p.reshape(B,h,w,p,p,3)
+            pred_rgb_img = torch.einsum('nhwpqc->nchpwq', pred_rgb_img).reshape(B,3,H,W)
+            tot_rgb_mse += torch.mean((pred_rgb_img - rgb) ** 2).item()
+            del pred_rgb_img
+        if 'depth' in act:
+            pred_depth_img = pred_depth_p.reshape(B,h,w,p,p,1)
+            pred_depth_img = torch.einsum('nhwpqc->nchpwq', pred_depth_img).reshape(B,1,H,W)
+            tot_depth_mse += torch.mean((pred_depth_img - depth) ** 2).item()
+            del pred_depth_img
 
         tot_chamfer += chamfer_distance(pred_pc, pc).item()
         if compute_emd:
@@ -502,17 +546,18 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
         # Param-modality metrics, all on normalised params in [0, 1].
         # Reduce over the 9 slots per token (matches the Smooth-L1 loss reduction),
         # then average over the requested set of tokens.
-        diff_abs = (pred_params - param_floats).abs().mean(-1)   # (B, L)
-        diff_sq  = ((pred_params - param_floats) ** 2).mean(-1)  # (B, L)
+        if 'text' in act:
+            diff_abs = (pred_params - param_floats).abs().mean(-1)   # (B, L)
+            diff_sq  = ((pred_params - param_floats) ** 2).mean(-1)  # (B, L)
 
-        real_n   = text_valid.sum().clamp(min=1)
-        masked_n = (text_valid * mask_text).sum().clamp(min=1)
+            real_n   = text_valid.sum().clamp(min=1)
+            masked_n = (text_valid * mask_text).sum().clamp(min=1)
 
-        tot_param_mse        += ((diff_sq  * text_valid).sum() / real_n).item()
-        tot_param_mae        += ((diff_abs * text_valid).sum() / real_n).item()
-        tot_param_mae_masked += ((diff_abs * text_valid * mask_text).sum() / masked_n).item()
-        tot_param_acc05      += (((diff_abs < 0.05).float() * text_valid * mask_text)
-                                 .sum() / masked_n).item()
+            tot_param_mse        += ((diff_sq  * text_valid).sum() / real_n).item()
+            tot_param_mae        += ((diff_abs * text_valid).sum() / real_n).item()
+            tot_param_mae_masked += ((diff_abs * text_valid * mask_text).sum() / masked_n).item()
+            tot_param_acc05      += (((diff_abs < 0.05).float() * text_valid * mask_text)
+                                     .sum() / masked_n).item()
 
         del pred_pc, pred_params, mask_text
         del rgb, depth, pc, param_floats, text_valid
@@ -534,21 +579,30 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
          tot_param_mse, tot_param_mae, tot_param_mae_masked, tot_param_acc05,
          n) = packed.tolist()
 
+    act = m.active_modalities
+
+    # `loss` sums a different number of terms per E2 arm and is NOT comparable
+    # across arms -- use `pc_chamfer`, which is computed identically in every arm
+    # because PC is always active. Keys for inactive modalities are omitted
+    # entirely so a 0.0 can never be misread as a perfect reconstruction.
     metrics = {
         'loss':              tot / n,
-        'rgb_loss':          tot_rgb / n,
-        'depth_loss':        tot_depth / n,
         'pc_loss':           tot_pc / n,
-        'text_loss':         tot_txt / n,
-        'rgb_mse':           tot_rgb_mse / n,
-        'depth_mse':         tot_depth_mse / n,
         'pc_chamfer':        tot_chamfer / n,
         'pc_emd':            tot_emd / n,
-        'param_mse':         tot_param_mse / n,
-        'param_mae':         tot_param_mae / n,
-        'param_mae_masked':  tot_param_mae_masked / n,
-        'param_acc@0.05':    tot_param_acc05 / n,
     }
+    if 'rgb' in act:
+        metrics['rgb_loss'] = tot_rgb / n
+        metrics['rgb_mse']  = tot_rgb_mse / n
+    if 'depth' in act:
+        metrics['depth_loss'] = tot_depth / n
+        metrics['depth_mse']  = tot_depth_mse / n
+    if 'text' in act:
+        metrics['text_loss']        = tot_txt / n
+        metrics['param_mse']        = tot_param_mse / n
+        metrics['param_mae']        = tot_param_mae / n
+        metrics['param_mae_masked'] = tot_param_mae_masked / n
+        metrics['param_acc@0.05']   = tot_param_acc05 / n
     return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n), metrics
 
 
@@ -576,15 +630,22 @@ def train_worker(rank, world_size, args):
 
     if is_main: print(f"\nLoading data from: {args.data_root}")
 
+    # view_sampling (plan §6.1): an epoch is one drawn view per PLANT, not all
+    # ten renders. Train rotates the view each epoch; val/test pin view 0 so the
+    # metric moves only when the model does.
+    vs = args.view_sampling
     train_ds = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='train',
-                                 max_leaves=args.max_leaves)
+                                 max_leaves=args.max_leaves,
+                                 view_sampling=vs, view_seed=args.view_seed)
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
-                                 max_leaves=args.max_leaves)
+                                 max_leaves=args.max_leaves,
+                                 view_sampling=vs, deterministic_view=True)
     test_ds  = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='test',
-                                 max_leaves=args.max_leaves)
+                                 max_leaves=args.max_leaves,
+                                 view_sampling=vs, deterministic_view=True)
 
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
@@ -607,8 +668,11 @@ def train_worker(rank, world_size, args):
 
     if is_main: print(f"\nInitializing EmbodiedMAE-4M-{args.model_size.capitalize()}...")
 
-    build_fn = embodied_mae_4m_small if args.model_size == 'small' else embodied_mae_4m_base
+    build_fn = {'small': embodied_mae_4m_small,
+                'base':  embodied_mae_4m_base,
+                'large': embodied_mae_4m_large}[args.model_size]
     model = build_fn(
+        active_modalities=args.active_modalities,
         img_size=args.img_size,
         num_pc_tokens=196,
         target_points=args.num_points,
@@ -711,6 +775,9 @@ def train_worker(rank, world_size, args):
     for epoch in range(start_epoch, args.epochs + 1):
         if world_size > 1:
             train_sampler.set_epoch(epoch)
+        # Advance the per-plant view draw. Workers are respawned each epoch
+        # (persistent_workers is off), so they pick this up.
+        train_ds.set_epoch(epoch)
 
         if is_main:
             print(f"\n{'='*80}")
@@ -775,7 +842,9 @@ def train_worker(rank, world_size, args):
                 'learning_rate': scheduler.get_last_lr()[0],
             })
 
-        if is_main and (epoch % args.viz_freq == 0 or epoch == 1):
+        # viz_freq <= 0 disables visualisation entirely (E2 reduced arms cannot
+        # fill the 4-row grid anyway). Guard the modulo: `epoch % 0` raises.
+        if is_main and args.viz_freq > 0 and (epoch % args.viz_freq == 0 or epoch == 1):
             print(f"\n📊 Generating visualizations for epoch {epoch}…")
             mv = model.module if world_size > 1 else model
             paths = visualize_reconstruction_4m(
@@ -786,7 +855,10 @@ def train_worker(rank, world_size, args):
                                                for p in paths], 'epoch': epoch})
 
         # ── Test-set evaluation + visualizations every test_freq epochs ──────────
-        do_test = (epoch % args.test_freq == 0 or epoch == args.epochs)
+        # test_freq <= 0 disables the test pass. The held-out split is scored
+        # once at the end by a separate eval, not every N epochs during ablations.
+        do_test = (args.test_freq > 0
+                   and (epoch % args.test_freq == 0 or epoch == args.epochs))
         if do_test:
             if is_main: print(f"\n🧪 Running TEST-set evaluation (epoch {epoch})…")
             compute_emd_test = (epoch == args.epochs)
@@ -891,7 +963,14 @@ def main():
     parser.add_argument('--data_root',          type=str,   default=None)
     parser.add_argument('--img_size',           type=int,   default=None)
     parser.add_argument('--num_points',         type=int,   default=None)
-    parser.add_argument('--model_size',         type=str,   default=None, choices=['small','base'])
+    parser.add_argument('--view_sampling',      action='store_true', default=None,
+                        help='Plan 6.1: one drawn view per plant per epoch '
+                             '(10x cheaper epoch, same view diversity).')
+    parser.add_argument('--view_seed',          type=int,   default=None)
+    parser.add_argument('--model_size',         type=str,   default=None, choices=['small','base','large'])
+    parser.add_argument('--active_modalities',  type=str,   default=None,
+                        help="E2 arm, e.g. 'pc' or 'pc,rgb' or 'pc,rgb,depth'. "
+                             "Default (unset) = all four. 'pc' is mandatory.")
     parser.add_argument('--mask_ratio',         type=float, default=None)
     parser.add_argument('--pc_loss_weight',     type=float, default=None)
     parser.add_argument('--depth_norm_type',    type=str,   default=None, choices=['minmax','standard'])
