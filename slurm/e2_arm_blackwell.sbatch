@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:rtx_pro_6000:2
-#SBATCH --cpus-per-task=48
+#SBATCH --cpus-per-task=80
 #SBATCH --mem=192G
 #SBATCH --time=2-00:00:00
 #SBATCH --requeue
@@ -25,6 +25,14 @@
 # confound the one thing E2 exists to measure. 2 GPUs x --batch_size 16 = global
 # batch 32, the same value the a100:4 variant reaches with 8 per GPU on 4 ranks,
 # so the two launchers stay directly comparable.
+#
+# On CPUs: this pipeline is DATALOADER-BOUND, so cpus-per-task/num_workers set
+# throughput, not the GPU. Measured 2026-09-15: ~1.6 items/s per worker process.
+#   headline v2: 44 workers x 8 ranks = 352 -> ~563 items/s (observed 565)
+#   E2 at 12 x 2 =  24 workers          -> ~ 38 items/s (observed 33), 319 s/epoch
+# 38 x 2 = 76 workers should give ~120 items/s, ~86 s/epoch. Extra CPUs are free
+# here: `sbatch --test-only` puts 48, 80 and 96 CPUs at the same placement time.
+# 4 arms x 80 leaves 64 of the node's 384 CPUs for everyone else.
 #
 # On sizing: do NOT shrink this request to chase the idle GPUs on nova26-gpu-1.
 # Those 8 GPUs are genuinely unallocated, but nothing can land on that node --
@@ -97,6 +105,6 @@ fi
 
 srun --kill-on-bad-exit=1 \
   torchrun --standalone --nnodes=1 --nproc_per_node=${NPROC} \
-    train_sorghum_4m.py --config "${CONFIG}" --batch_size 16 --num_workers 12 ${RESUME_ARG} "$@"
+    train_sorghum_4m.py --config "${CONFIG}" --batch_size 16 --num_workers 38 ${RESUME_ARG} "$@"
 
 echo "Done at $(date)"

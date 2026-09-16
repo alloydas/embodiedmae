@@ -11,9 +11,17 @@
 # `pc_chamfer`, computed identically in every arm because PC is always active.
 #
 # SCHEDULE (plan Section 6.3, reduced fixed schedule). view_sampling makes an epoch
-# one drawn view per plant: 10,500 items, not 105,000. 2000 epochs = 21M samples
-# seen, about 20% of the 105M the headline run saw. Shorter than E1 by design;
-# state it in the paper.
+# one drawn view per plant: 10,500 items, not 105,000.
+#
+# Sized in OPTIMIZER STEPS, which is the only unit comparable across runs with
+# different epoch sizes and global batches:
+#   E1 headline v2 : 105,000 / 256 =  410 steps/ep x 1000 ep = 410,000 steps
+#   E2 @ 600 ep    :  10,500 /  32 =  328 steps/ep x  600 ep = 197,000 steps
+# So E2 runs ~48% of the headline's steps -- a genuinely reduced schedule, as 6.3
+# asks. (An earlier 2000 here was wrong: 656,000 steps is 160% of the headline,
+# i.e. an "ablation" trained harder than the model it ablates.)
+#
+# Report the schedule difference in the paper; 6.3 says reviewers accept it stated.
 
 data:
   data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
@@ -41,13 +49,13 @@ training:
                            #   e2_arm.sbatch (a100:4)           8 x 4 = 32  <- this value
                            #   e2_arm_blackwell.sbatch (rtx:2) 16 x 2 = 32  <- --batch_size 16
                            # Check outputs/<run>/config.json: batch_size x world_size == 32.
-                           # (headline E1 used 64; E2 is internally controlled, not
-                           #  matched to E1, which also differs in schedule per 6.3)
-  epochs: 2000
+                           # (headline E1 used global 256: batch_size 32 on 8 GPUs.
+                           #  E2 is internally controlled, not matched to E1.)
+  epochs: 600
   lr: 1.5e-4
   weight_decay: 0.05
   warmup_epochs: 40
-  val_freq: 50
+  val_freq: 25             # 24 val points over 600 epochs
   test_freq: 0
 
 checkpointing:
