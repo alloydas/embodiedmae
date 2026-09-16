@@ -13,7 +13,7 @@ import torch
 import torch.optim as optim
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler, Subset
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 import matplotlib
@@ -42,6 +42,7 @@ from embodied_mae import (
     pointcloud_reconstruction_metrics,
 )
 from sorghum_dataset_4m import SorghumDataset4M
+from plant_occlusion import ProceduralOcclusion
 
 
 # ── Config helpers ────────────────────────────────────────────────────────────
@@ -62,7 +63,8 @@ def merge_config_with_args(config, args):
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'pc_deterministic_fps', 'pc_add_center_coordinates'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
-                     'warmup_epochs', 'val_freq'],
+                     'warmup_epochs', 'val_freq',
+                     'num_train_samples', 'num_val_samples'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
         'visualization': ['viz_freq', 'num_viz_samples'],
         'evaluation': ['pc_metric_thresholds', 'pc_metric_chunk_size',
@@ -106,12 +108,18 @@ def config_to_namespace(config):
     ns.pc_deterministic_fps = config['model'].get('pc_deterministic_fps', False)
     ns.pc_add_center_coordinates = config['model'].get(
         'pc_add_center_coordinates', False)
-    ns.batch_size         = config['training'].get('batch_size', 16)
+    # Occlusion-like token masking and input occlusion/noise (plant_occlusion.py).
+    # Both are off when the key is absent, so older configs train unchanged.
+    ns.structured_mask    = config['model'].get('structured_mask', None)
+    ns.occlusion          = config.get('occlusion', None)
+    ns.batch_size        = config['training'].get('batch_size', 16)
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
     ns.weight_decay       = config['training'].get('weight_decay', 0.05)
     ns.warmup_epochs      = config['training'].get('warmup_epochs', 10)
     ns.val_freq           = config['training'].get('val_freq', 20)
+    ns.num_train_samples  = config['training'].get('num_train_samples', None)
+    ns.num_val_samples    = config['training'].get('num_val_samples', None)
     ns.output_dir         = config['checkpointing'].get('output_dir', './outputs/4m_run')
     ns.save_freq          = config['checkpointing'].get('save_freq', 100)
     ns.resume             = config['checkpointing'].get('resume', None)
@@ -182,9 +190,16 @@ def _scatter3d(ax, pts, c, s=2, alpha=0.7, **kw):
 # ── Visualisation ─────────────────────────────────────────────────────────────
 
 def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
-                                  num_samples=4, *, mask_ratio):
+                                  num_samples=4, *, mask_ratio,
+                                  occlusion=None, occlusion_seed=42):
     """5-row × 3-col grid per sample.
     Row 5 shows target vs predicted text for masked tokens.
+
+    With `occlusion`, the encoder gets occluded + noisy inputs: column 1 keeps
+    the clean target, column 2 shows what the model actually saw (occluded
+    input with its token mask), column 3 the reconstruction from it. Files get
+    an `occ_` prefix. The leaves come from a fixed seed in a forked RNG, so
+    every epoch shows the same occlusion and training's RNG stream is untouched.
     """
     model.eval()
     saved_paths = []
@@ -198,6 +213,18 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
     text_valid_b  = text_valid_b[:num_samples].to(device)
     names         = list(names[:num_samples])
 
+    # Encoder inputs: the clean batch, or an occluded copy of it.
+    rgb_in, depth_in, pc_in = rgb_b, depth_b, pc_b
+    enc_kwargs, plant_cov = {}, None
+    if occlusion is not None:
+        dev = torch.device(device)
+        with torch.random.fork_rng(devices=[dev] if dev.type == 'cuda' else []):
+            torch.manual_seed(occlusion_seed)
+            rgb_in, depth_in, pc_in, occ_info = occlusion(rgb_b, depth_b, pc_b)
+        enc_kwargs = dict(input_rgb=rgb_in, input_depth=depth_in, input_pc=pc_in)
+        plant_cov = occ_info['plant_coverage'].cpu().numpy()
+        pc_drop = occ_info['pc_dropped'].cpu().numpy()
+
     with torch.no_grad():
         total, (lr, ld, lp, lt), \
             (pred_rgb, pred_depth, pred_pc, pred_params), \
@@ -205,9 +232,11 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
                 rgb_b, depth_b, pc_b, param_floats_b, text_valid_b,
                 mask_ratio=mask_ratio,
                 compute_sinkhorn=False,
+                **enc_kwargs,
         )
 
-        fps_indices = model.pc_embed.fps(pc_b, model.num_pc_tokens)
+        # PC tokens were built from the cloud the encoder saw.
+        fps_indices = model.pc_embed.fps(pc_in, model.num_pc_tokens)
 
         rgb_mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1,3,1,1)
         rgb_std  = torch.tensor([0.229, 0.224, 0.225], device=device).view(1,3,1,1)
@@ -215,6 +244,9 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         rgb_dn_np   = (rgb_b * rgb_std + rgb_mean).clamp(0,1).cpu().numpy()
         depth_np    = depth_b.cpu().numpy()
         pc_np_all   = pc_b.cpu().numpy()
+        rgb_in_np   = (rgb_in * rgb_std + rgb_mean).clamp(0,1).cpu().numpy()
+        depth_in_np = depth_in.cpu().numpy()
+        pc_in_np_all = pc_in.cpu().numpy()
         fps_np      = fps_indices.cpu().numpy()
         m_rgb_np    = m_rgb.cpu().numpy()
         m_depth_np  = m_depth.cpu().numpy()
@@ -239,11 +271,12 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         member_idx_all = []
         for i in range(n_actual):
             fps_t = torch.from_numpy(fps_np[i:i+1])
-            pc_t  = torch.from_numpy(pc_np_all[i:i+1])
+            pc_t  = torch.from_numpy(pc_in_np_all[i:i+1])
             member_idx_all.append(
                 _pc_token_membership(pc_t, fps_t, model.pc_embed.group_size))
 
     del rgb_b, depth_b, pc_b, param_floats_b, text_valid_b
+    del rgb_in, depth_in, pc_in, enc_kwargs
     del pred_rgb, pred_depth, pred_pc, pred_params
     del m_rgb, m_depth, m_pc, m_text, fps_indices
     del pred_rgb_img, pred_depth_img, rgb_mean, rgb_std
@@ -257,25 +290,34 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         depth_data = depth_np[idx, 0]
         bg         = depth_data < 0.01
         pc_np      = pc_np_all[idx]
+        # What the encoder saw (== the clean sample when occlusion is off).
+        rgb_in_i   = rgb_in_np[idx].transpose(1,2,0)
+        depth_in_data = depth_in_np[idx, 0]
+        pc_in_np   = pc_in_np_all[idx]
+        occ        = plant_cov is not None
+        in_label   = 'Occluded input, masked' if occ else 'Masked'
         mask_pc_s  = m_pc_np[idx]
         n_tok      = model.num_pc_tokens
         n_masked   = int(mask_pc_s.sum())
         n_visible  = n_tok - n_masked
-        centers    = pc_np[fps_np[idx]]
+        centers    = pc_in_np[fps_np[idx]]
         m_idx      = member_idx_all[idx]
 
         # ── Row 1: RGB ────────────────────────────────────────────────────────
         ax = plt.subplot(5, 3, 1)
         ax.imshow(rgb_i.clip(0,1))
-        ax.set_title(f'Original RGB\n{names[idx]}', fontsize=9, fontweight='bold')
+        ax.set_title(f'Original RGB{" (target)" if occ else ""}\n{names[idx]}',
+                     fontsize=9, fontweight='bold')
         ax.axis('off')
 
         ax = plt.subplot(5, 3, 2)
         g = int(round(m_rgb_np[idx].shape[0] ** 0.5))
         m_up = np.kron(m_rgb_np[idx].reshape(g, g),
                        np.ones((model.img_size//g, model.img_size//g)))
-        ax.imshow((rgb_i * (1 - m_up[:,:,None])).clip(0,1))
-        ax.set_title(f'Masked RGB\n({m_rgb_np[idx].mean():.1%} masked)', fontsize=9)
+        ax.imshow((rgb_in_i * (1 - m_up[:,:,None])).clip(0,1))
+        cov_txt = f', plant covered {plant_cov[idx]:.0%}' if occ else ''
+        ax.set_title(f'{in_label} RGB\n({m_rgb_np[idx].mean():.1%} masked{cov_txt})',
+                     fontsize=9)
         ax.axis('off')
 
         ax = plt.subplot(5, 3, 3)
@@ -293,10 +335,10 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         gd = int(round(m_depth_np[idx].shape[0] ** 0.5))
         md_up = np.kron(m_depth_np[idx].reshape(gd,gd),
                         np.ones((model.img_size//gd, model.img_size//gd)))
-        dm = depth_data * (1 - md_up); dm_d = dm.copy()
-        dm_d[bg] = np.nan; dm_d[dm < 0.01] = np.nan
+        dm = depth_in_data * (1 - md_up); dm_d = dm.copy()
+        dm_d[depth_in_data < 0.01] = np.nan; dm_d[dm < 0.01] = np.nan
         ax.imshow(dm_d, cmap='viridis')
-        ax.set_title(f'Masked Depth\n({m_depth_np[idx].mean():.1%} masked)', fontsize=9)
+        ax.set_title(f'{in_label} Depth\n({m_depth_np[idx].mean():.1%} masked)', fontsize=9)
         ax.axis('off')
 
         ax = plt.subplot(5, 3, 6)
@@ -317,8 +359,9 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         if len(vis_cen): _scatter3d(ax, vis_cen, c='#2ecc71', s=16, alpha=0.9, label='visible')
         if len(msk_cen): _scatter3d(ax, msk_cen, c='#e74c3c', s=16, alpha=0.9, label='masked')
         ax.legend(fontsize=6, loc='upper left')
-        ax.set_title(f'FPS centres\nvis={n_visible} msk={n_masked} ({100*n_masked/n_tok:.0f}%)',
-                     fontsize=9)
+        drop_txt = f'\ninput cloud: {pc_drop[idx]:.0%} pts hidden by leaves' if occ else ''
+        ax.set_title(f'FPS centres\nvis={n_visible} msk={n_masked} '
+                     f'({100*n_masked/n_tok:.0f}%){drop_txt}', fontsize=9)
 
         ax = plt.subplot(5, 3, 9, projection='3d')
         ppc = pred_pc_np[idx]
@@ -332,13 +375,13 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 
         ax = plt.subplot(5, 3, 10, projection='3d')
         if len(vis_pts):
-            vp = pc_np[vis_pts[np.random.choice(len(vis_pts), min(2000,len(vis_pts)), replace=False)]]
+            vp = pc_in_np[vis_pts[np.random.choice(len(vis_pts), min(2000,len(vis_pts)), replace=False)]]
             _scatter3d(ax, vp, c='#2ecc71', s=3)
         ax.set_title(f'Visible pts ({len(vis_pts)})', fontsize=9)
 
         ax = plt.subplot(5, 3, 11, projection='3d')
         if len(msk_pts):
-            mp2 = pc_np[msk_pts[np.random.choice(len(msk_pts), min(2000,len(msk_pts)), replace=False)]]
+            mp2 = pc_in_np[msk_pts[np.random.choice(len(msk_pts), min(2000,len(msk_pts)), replace=False)]]
             _scatter3d(ax, mp2, c='#e74c3c', s=3)
         ax.set_title(f'Masked pts ({len(msk_pts)})', fontsize=9)
 
@@ -399,14 +442,15 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         _text_panel(ax, diff_lines, f'Match summary\nLoss: {lt_val:.4f}', '#eaf2ff')
 
         plt.suptitle(
-            f'Epoch {epoch}  |  {names[idx]}  |  '
+            f'{"[OCCLUDED INPUT]  " if occ else ""}Epoch {epoch}  |  {names[idx]}  |  '
             f'Total: {loss_val:.4f}  RGB: {lr_val:.4f}  '
             f'Depth: {ld_val:.4f}  PC: {lp_val:.4f}  Text: {lt_val:.4f}',
             fontsize=11, fontweight='bold'
         )
         plt.tight_layout()
 
-        path = save_dir / f'epoch_{epoch:03d}_sample_{idx+1}_{names[idx]}.png'
+        prefix = 'occ_' if occ else ''
+        path = save_dir / f'epoch_{epoch:03d}_{prefix}sample_{idx+1}_{names[idx]}.png'
         plt.savefig(path, dpi=120, bbox_inches='tight')
         plt.close()
         saved_paths.append(str(path))
@@ -418,7 +462,20 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
-def train_one_epoch(model, dataloader, optimizer, device, epoch, *, mask_ratio):
+# Occluded-validation metrics kept in training_history.json (all go to wandb).
+OCC_HISTORY_METRICS = ('loss', 'rgb_mse', 'depth_mse', 'pc_chamfer', 'param_mae')
+
+
+def _encoder_inputs(occlusion, rgb, depth, pc):
+    """Corrupted encoder inputs as forward() kwargs; {} when occlusion is off."""
+    if occlusion is None:
+        return {}
+    rgb_in, depth_in, pc_in, _ = occlusion(rgb, depth, pc)
+    return {'input_rgb': rgb_in, 'input_depth': depth_in, 'input_pc': pc_in}
+
+
+def train_one_epoch(model, dataloader, optimizer, device, epoch, *, mask_ratio,
+                    occlusion=None):
     model.train()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     tot_pc_base = tot_sinkhorn = 0.0
@@ -435,6 +492,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, *, mask_ratio):
         loss, (lr, ld, lp, lt), _, _ = model(
             rgb, depth, pc, param_floats, text_valid,
             mask_ratio=mask_ratio,
+            **_encoder_inputs(occlusion, rgb, depth, pc),
         )
 
         optimizer.zero_grad()
@@ -474,7 +532,11 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, *, mask_ratio):
 def evaluate(model, dataloader, device, *, mask_ratio, val_mask_seed=42,
              compute_emd=False,
              pc_metric_thresholds=(0.01, 0.02, 0.03),
-             pc_metric_chunk_size=512):
+             pc_metric_chunk_size=512,
+             occlusion=None):
+    """`occlusion` corrupts the encoder inputs (targets stay clean). Its draws
+    come from the fixed-seed RNG below, so the occluded set is the same every
+    epoch -- a robustness metric comparable across epochs and runs."""
     model.eval()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     tot_pc_base = tot_sinkhorn = 0.0
@@ -522,6 +584,7 @@ def evaluate(model, dataloader, device, *, mask_ratio, val_mask_seed=42,
             (_, _, _, mask_text) = model(
                 rgb, depth, pc, param_floats, text_valid,
                 mask_ratio=mask_ratio,
+                **_encoder_inputs(occlusion, rgb, depth, pc),
         )
 
         tot       += loss.item()
@@ -627,6 +690,19 @@ def evaluate(model, dataloader, device, *, mask_ratio, val_mask_seed=42,
     return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n), metrics
 
 
+def fixed_subset(dataset, num_samples, seed):
+    """Deterministic fixed-size subset for quick small-scale experiments.
+
+    None/0/>=len(dataset) is a no-op (returns dataset unchanged) so this is
+    safe to call unconditionally from config-driven code.
+    """
+    if not num_samples or num_samples >= len(dataset):
+        return dataset
+    generator = torch.Generator().manual_seed(seed)
+    indices = torch.randperm(len(dataset), generator=generator)[:num_samples].tolist()
+    return Subset(dataset, indices)
+
+
 # ── Worker ────────────────────────────────────────────────────────────────────
 
 def train_worker(rank, world_size, args):
@@ -655,6 +731,14 @@ def train_worker(rank, world_size, args):
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves)
+
+    if args.num_train_samples or args.num_val_samples:
+        full_train_len, full_val_len = len(train_ds), len(val_ds)
+        train_ds = fixed_subset(train_ds, args.num_train_samples, args.val_mask_seed)
+        val_ds   = fixed_subset(val_ds,   args.num_val_samples,   args.val_mask_seed)
+        if is_main:
+            print(f"⚠️  Small-scale run: train {len(train_ds)}/{full_train_len}, "
+                  f"val {len(val_ds)}/{full_val_len} samples")
 
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
@@ -709,7 +793,18 @@ def train_worker(rank, world_size, args):
         depth_norm_type=args.depth_norm_type,
         pc_deterministic_fps=args.pc_deterministic_fps,
         pc_add_center_coordinates=args.pc_add_center_coordinates,
+        structured_mask=args.structured_mask,
     ).to(device)
+
+    # Train-time input occlusion + noise; validation stays clean, plus an
+    # optional second, occluded pass (occlusion.eval_occluded) for robustness.
+    occluder = ProceduralOcclusion.from_config(args.occlusion)
+    eval_occluded = (occluder is not None
+                     and bool((args.occlusion or {}).get('eval_occluded', False)))
+    if is_main:
+        print(f"Structured masking: {model.structured_mask or 'off'}")
+        print(f"Input occlusion:    {occluder or 'off'}"
+              + ("  (+ occluded validation pass)" if eval_occluded else ""))
 
     if world_size > 1:
         model = DDP(model, device_ids=[rank], output_device=rank,
@@ -750,6 +845,8 @@ def train_worker(rank, world_size, args):
                            'max_leaves': args.max_leaves,
                            'pc_deterministic_fps': args.pc_deterministic_fps,
                            'pc_add_center_coordinates': args.pc_add_center_coordinates,
+                           'structured_mask': args.structured_mask,
+                           'occlusion': args.occlusion,
                            'batch_size': args.batch_size, 'epochs': args.epochs,
                            'lr': args.lr, 'total_params': total_params,
                            'train_samples': len(train_ds), 'val_samples': len(val_ds),
@@ -788,6 +885,8 @@ def train_worker(rank, world_size, args):
             'val_param_acc05':[],
         }
         result.update({f'val_{name}': [] for name in pc_prf_metric_names})
+        if eval_occluded:
+            result.update({f'val_occ_{name}': [] for name in OCC_HISTORY_METRICS})
         return result
     history = empty_history()
 
@@ -831,6 +930,7 @@ def train_worker(rank, world_size, args):
             train_one_epoch(
                 model, train_loader, optimizer, device, epoch,
                 mask_ratio=args.mask_ratio,
+                occlusion=occluder,
             )
         for k, v in zip(
                 ['train_loss','train_rgb','train_depth','train_pc','train_text',
@@ -890,7 +990,31 @@ def train_worker(rank, world_size, args):
                 print(f"Param   — MSE: {vm['param_mse']:.6f}  MAE: {vm['param_mae']:.6f}  "
                       f"MAE(masked): {vm['param_mae_masked']:.6f}  "
                       f"acc@0.05: {vm['param_acc@0.05']:.4f}")
+
+            # Same val set and masking seed, occluded + noisy inputs, clean
+            # targets. Logged only; best-model selection stays on clean val.
+            vm_occ = None
+            if eval_occluded:
+                if is_main: print("\n🌿 Running occluded validation…")
+                _, vm_occ = evaluate(
+                    model, val_loader, device,
+                    pc_metric_thresholds=args.pc_metric_thresholds,
+                    pc_metric_chunk_size=args.pc_metric_chunk_size,
+                    mask_ratio=args.mask_ratio,
+                    val_mask_seed=args.val_mask_seed,
+                    occlusion=occluder)
+                for name in OCC_HISTORY_METRICS:
+                    history[f'val_occ_{name}'].append(vm_occ[name])
+                if is_main:
+                    key = pc_threshold_keys[0]
+                    print(f"Val(occ) — Loss: {vm_occ['loss']:.4f}  "
+                          f"RGB MSE: {vm_occ['rgb_mse']:.6f}  "
+                          f"Depth MSE: {vm_occ['depth_mse']:.6f}  "
+                          f"PC Chamfer: {vm_occ['pc_chamfer']:.6f}  "
+                          f"PC F1@{key}: {vm_occ[f'pc_f1@{key}']:.4f}  "
+                          f"Param MAE: {vm_occ['param_mae']:.6f}")
         else:
+            vm_occ = None
             vl = history['val_loss'][-1] if history['val_loss'] else float('inf')
             vm = {k: history[v][-1] if history[v] else 0.0 for k, v in {
                 'rgb_mse':'val_rgb_mse','depth_mse':'val_depth_mse',
@@ -933,6 +1057,9 @@ def train_worker(rank, world_size, args):
             }
             wandb_metrics.update({f'metrics/{name}': vm[name]
                                   for name in pc_prf_metric_names})
+            if vm_occ is not None:
+                wandb_metrics.update({f'metrics_occ/{name}': value
+                                      for name, value in vm_occ.items()})
             wandb.log(wandb_metrics)
 
         if is_main and (epoch % args.viz_freq == 0 or epoch == 1):
@@ -944,6 +1071,16 @@ def train_worker(rank, world_size, args):
             if args.use_wandb and WANDB_AVAILABLE:
                 wandb.log({'visualizations': [wandb.Image(p, caption=Path(p).name)
                                                for p in paths], 'epoch': epoch})
+            if occluder is not None:
+                # Same val samples, occluded input -> reconstruction.
+                occ_paths = visualize_reconstruction_4m(
+                    mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
+                    mask_ratio=args.mask_ratio,
+                    occlusion=occluder, occlusion_seed=args.val_mask_seed)
+                if args.use_wandb and WANDB_AVAILABLE:
+                    wandb.log({'visualizations_occ': [
+                        wandb.Image(p, caption=Path(p).name) for p in occ_paths],
+                        'epoch': epoch})
 
         scheduler.step()
 
@@ -1035,6 +1172,10 @@ def main():
     parser.add_argument('--weight_decay',       type=float, default=None)
     parser.add_argument('--warmup_epochs',      type=int,   default=None)
     parser.add_argument('--val_freq',           type=int,   default=None)
+    parser.add_argument('--num_train_samples',  type=int,   default=None,
+                        help='Cap training set to a fixed random subset (quick experiments)')
+    parser.add_argument('--num_val_samples',    type=int,   default=None,
+                        help='Cap validation set to a fixed random subset (quick experiments)')
     parser.add_argument('--viz_freq',           type=int,   default=None)
     parser.add_argument('--num_viz_samples',    type=int,   default=None)
     parser.add_argument('--pc_metric_thresholds', type=float, nargs='+', default=None)
@@ -1100,6 +1241,10 @@ def main():
         parser.error('pc_metric_chunk_size must be positive')
     if cfg.val_mask_seed < 0:
         parser.error('val_mask_seed must be non-negative')
+    if cfg.num_train_samples is not None and cfg.num_train_samples <= 0:
+        parser.error('num_train_samples must be positive if set')
+    if cfg.num_val_samples is not None and cfg.num_val_samples <= 0:
+        parser.error('num_val_samples must be positive if set')
     if cfg.sinkhorn_loss_weight < 0:
         parser.error('sinkhorn_loss_weight must be non-negative')
     if cfg.sinkhorn_num_points <= 0:

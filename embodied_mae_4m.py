@@ -31,6 +31,13 @@ from embodied_mae import (
     qal_loss,
     earth_movers_distance,
 )
+from plant_occlusion import (
+    StructuredMaskConfig,
+    image_grid,
+    pc_to_image,
+    sample_field,
+    structured_mask_scores,
+)
 
 
 # ── Numeric parameter layout ──────────────────────────────────────────────────
@@ -344,12 +351,23 @@ class EmbodiedMAE4M(nn.Module):
         depth_norm_type:     str   = 'minmax',
         pc_deterministic_fps: bool = False,
         pc_add_center_coordinates: bool = False,
+        structured_mask=None,
     ):
         super().__init__()
+
+        # Occlusion-like token masking (see plant_occlusion.py). None = off,
+        # which leaves masking -- and its RNG stream -- exactly as before.
+        if not isinstance(structured_mask, StructuredMaskConfig):
+            structured_mask = StructuredMaskConfig.from_dict(structured_mask)
+        self.structured_mask = structured_mask
 
         self.img_size           = img_size
         self.patch_size         = patch_size
         self.num_patches        = (img_size // patch_size) ** 2
+        # Patch-centre image coordinates for structured masking. Non-persistent,
+        # so checkpoints are unchanged either way.
+        self.register_buffer(
+            '_patch_uv', image_grid(img_size // patch_size), persistent=False)
         self.num_pc_tokens      = num_pc_tokens
         self.max_leaves         = max_leaves
         self.n_text_tokens      = 1 + max_leaves
@@ -546,12 +564,46 @@ class EmbodiedMAE4M(nn.Module):
 
     # ── Dirichlet masking ─────────────────────────────────────────────────────
 
+    def _structured_scores(self, B, device):
+        """Per-modality (B, L) masking rank scores, or None for uniform masking.
+
+        Samples picked for the structured regime (probability cfg.prob) rank
+        tokens by an occlusion-like field biased toward the frame border; the
+        rest get uniform noise, i.e. exactly the standard masking. Must run
+        after pc_embed so the FPS centres of this batch are available.
+        """
+        cfg = self.structured_mask
+        if cfg is None or not (self.training or cfg.apply_in_eval):
+            return None
+
+        coords = {'rgb': self._patch_uv.expand(B, -1, -1),
+                  'depth': self._patch_uv.expand(B, -1, -1),
+                  'pc': pc_to_image(self.pc_embed.last_centers)}
+        use = torch.rand(B, device=device) < cfg.prob
+        shared = (sample_field(B, cfg.length_scale, device)
+                  if cfg.shared_field else None)
+
+        scores = {}
+        for name in cfg.modalities:
+            uv = coords[name]
+            field = shared if shared is not None else sample_field(
+                B, cfg.length_scale, device)
+            s = structured_mask_scores(uv, cfg, field)
+            scores[name] = torch.where(
+                use[:, None], s, torch.rand(uv.shape[:2], device=device))
+        return scores
+
     def random_masking_dirichlet(self, x_rgb, x_depth, x_pc, x_text,
-                                  mask_ratio_total=0.75, min_mask_ratio=0.25):
+                                  mask_ratio_total=0.75, min_mask_ratio=0.25,
+                                  scores=None):
         """Mask random positions with an exact, bounded global token budget.
 
         A single Dirichlet draw allocates visible-token counts across modalities
         for the batch; positions are shuffled independently for every sample.
+
+        `scores` optionally maps a modality name to (B, L) ranking scores that
+        replace the uniform shuffle noise: the lowest-scoring tokens stay
+        visible. The per-modality counts are unaffected.
         """
         names = ('rgb', 'depth', 'pc', 'text')
         tensors = (x_rgb, x_depth, x_pc, x_text)
@@ -585,8 +637,15 @@ class EmbodiedMAE4M(nn.Module):
         nv = _visible_token_counts(
             lengths, proportions, mask_ratio_total, min_mask_ratio)
 
-        def _mask(x, nv_, L_):
-            noise    = torch.rand(B, L_, device=x.device)
+        scores = scores or {}
+
+        def _mask(x, nv_, L_, name):
+            noise    = scores.get(name)
+            if noise is None:
+                noise = torch.rand(B, L_, device=x.device)
+            elif noise.shape != (B, L_):
+                raise ValueError(
+                    f"scores[{name!r}] must have shape {(B, L_)}, got {tuple(noise.shape)}")
             ids_shuf = torch.argsort(noise, dim=1)
             ids_rest = torch.argsort(ids_shuf, dim=1)
             ids_keep = ids_shuf[:, :nv_]
@@ -596,10 +655,10 @@ class EmbodiedMAE4M(nn.Module):
             mask     = torch.gather(mask, 1, ids_rest)
             return x_vis, mask, ids_rest
 
-        xr_v, mr, rr = _mask(x_rgb,   nv[0], lengths[0])
-        xd_v, md, rd = _mask(x_depth, nv[1], lengths[1])
-        xp_v, mp, rp = _mask(x_pc,    nv[2], lengths[2])
-        xt_v, mt, rt = _mask(x_text,  nv[3], lengths[3])
+        xr_v, mr, rr = _mask(x_rgb,   nv[0], lengths[0], 'rgb')
+        xd_v, md, rd = _mask(x_depth, nv[1], lengths[1], 'depth')
+        xp_v, mp, rp = _mask(x_pc,    nv[2], lengths[2], 'pc')
+        xt_v, mt, rt = _mask(x_text,  nv[3], lengths[3], 'text')
 
         return (xr_v, xd_v, xp_v, xt_v,
                 mr, md, mp, mt,
@@ -613,10 +672,14 @@ class EmbodiedMAE4M(nn.Module):
         x_pc    = self.pc_embed(x_pc)       + self.pos_embed_pc    + self.modality_embed_pc
         x_text  = self.param_embed(x_param) + self.pos_embed_text  + self.modality_embed_text
 
+        # Drawn before the Dirichlet split; with structured masking off this
+        # returns None without touching the RNG, so masks are unchanged.
+        scores = self._structured_scores(x_rgb.shape[0], x_rgb.device)
+
         (xr_v, xd_v, xp_v, xt_v,
          mr, md, mp, mt,
          rr, rd, rp, rt) = self.random_masking_dirichlet(
-            x_rgb, x_depth, x_pc, x_text, mask_ratio)
+            x_rgb, x_depth, x_pc, x_text, mask_ratio, scores=scores)
 
         x   = torch.cat([xr_v, xd_v, xp_v, xt_v], dim=1)
         cls = self.cls_token.expand(x.shape[0], -1, -1)
@@ -819,7 +882,8 @@ class EmbodiedMAE4M(nn.Module):
     # ── Full forward ──────────────────────────────────────────────────────────
 
     def forward(self, imgs_rgb, imgs_depth, pc, param_floats, text_valid,
-                mask_ratio: float = 0.75, compute_sinkhorn: bool = True):
+                mask_ratio: float = 0.75, compute_sinkhorn: bool = True,
+                input_rgb=None, input_depth=None, input_pc=None):
         """
         imgs_rgb    : (B, 3, H, W)
         imgs_depth  : (B, 1, H, W)
@@ -827,12 +891,20 @@ class EmbodiedMAE4M(nn.Module):
         param_floats: (B, 1+max_leaves, N_PARAMS)  float32 — encoder input + target
         text_valid  : (B, 1+max_leaves)            float32 — 1=real token, 0=pad
         compute_sinkhorn: disable only for output-only visualization/dump passes
+        input_rgb / input_depth / input_pc : optional corrupted copies (e.g.
+                      from plant_occlusion.ProceduralOcclusion) fed to the
+                      ENCODER in place of the clean tensors. The loss always
+                      uses imgs_rgb / imgs_depth / pc, so the task becomes
+                      reconstructing the clean plant from an occluded view.
         """
         (latent,
          mr, md, mp, mt,
          rr, rd, rp, rt,
          lr_, ld_, lp_, lt_) = self.forward_encoder(
-            imgs_rgb, imgs_depth, pc, param_floats, mask_ratio)
+            imgs_rgb if input_rgb is None else input_rgb,
+            imgs_depth if input_depth is None else input_depth,
+            pc if input_pc is None else input_pc,
+            param_floats, mask_ratio)
 
         pred_rgb, pred_depth, pred_pc, pred_params = self.forward_decoder(
             latent, rr, rd, rp, rt, lr_, ld_, lp_, lt_)

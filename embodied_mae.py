@@ -358,7 +358,10 @@ class PointCloudEmbed(nn.Module):
         fps_idx = self.fps(xyz, self.num_tokens)
         batch_indices = torch.arange(B, device=xyz.device)[:, None]
         centers = xyz[batch_indices, fps_idx]
-        
+        # Token positions for callers that mask by location (4M structured
+        # masking); an attribute so the return signature stays unchanged.
+        self.last_centers = centers.detach()
+
         # Grouping
         grouped_points = self.knn_grouping(xyz, None, fps_idx)  # (B, num_tokens, group_size, 3)
         
