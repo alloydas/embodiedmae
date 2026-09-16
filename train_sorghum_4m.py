@@ -45,6 +45,27 @@ from sorghum_dataset_4m import SorghumDataset4M
 
 MODALITY_ORDER = ('rgb', 'depth', 'pc', 'text')
 
+# Metrics evaluate() may return, as (metric key, val-history key, test-history key,
+# format). A key is ABSENT -- not zero -- when its modality is inactive, so that a
+# reduced E2 arm never records 0.0 for a modality it does not model (a 0.0 there
+# reads as a perfect reconstruction). Every consumer must therefore be driven by
+# key PRESENCE, never by indexing: `vm['rgb_mse']` KeyErrors on the PC-only arm.
+METRIC_KEYS = [
+    ('rgb_mse',          'val_rgb_mse',          'test_rgb_mse',          '.6f'),
+    ('depth_mse',        'val_depth_mse',        'test_depth_mse',        '.6f'),
+    ('pc_chamfer',       'val_pc_chamfer',       'test_pc_chamfer',       '.6f'),
+    ('pc_emd',           'val_pc_emd',           None,                    '.6f'),
+    ('param_mse',        'val_param_mse',        'test_param_mse',        '.6f'),
+    ('param_mae',        'val_param_mae',        'test_param_mae',        '.6f'),
+    ('param_mae_masked', 'val_param_mae_masked', 'test_param_mae_masked', '.6f'),
+    ('param_acc@0.05',   'val_param_acc05',      'test_param_acc05',      '.4f'),
+]
+
+
+def _fmt_metrics(md):
+    """Render only the metrics actually present, in METRIC_KEYS order."""
+    return '  '.join(f"{mk}: {md[mk]:{f}}" for mk, _, _, f in METRIC_KEYS if mk in md)
+
 
 def load_config(path):
     with open(path) as f:
@@ -589,7 +610,10 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
         'loss':              tot / n,
         'pc_loss':           tot_pc / n,
         'pc_chamfer':        tot_chamfer / n,
-        'pc_emd':            tot_emd / n,
+        # pc_emd only when it was actually computed -- EMD is expensive so it runs
+        # at the final epoch only. Reporting 0.0 otherwise would read as a perfect
+        # match, the same trap as reporting 0.0 for an inactive modality.
+        **({'pc_emd': tot_emd / n} if compute_emd else {}),
     }
     if 'rgb' in act:
         metrics['rgb_loss'] = tot_rgb / n
@@ -801,31 +825,21 @@ def train_worker(rank, world_size, args):
             (vl, vr, vd, vp, vt), vm = evaluate(
                 model, val_loader, device, compute_emd=compute_emd,
                 mask_ratio=args.mask_ratio, distributed=(world_size > 1))
-            for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text',
-                              'val_rgb_mse','val_depth_mse','val_pc_chamfer','val_pc_emd',
-                              'val_param_mse','val_param_mae','val_param_mae_masked',
-                              'val_param_acc05'],
-                            [vl, vr, vd, vp, vt,
-                             vm['rgb_mse'], vm['depth_mse'], vm['pc_chamfer'], vm['pc_emd'],
-                             vm['param_mse'], vm['param_mae'], vm['param_mae_masked'],
-                             vm['param_acc@0.05']]):
+            for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text'],
+                            [vl, vr, vd, vp, vt]):
                 history[k].append(v)
+            for mk, hk, _, _ in METRIC_KEYS:
+                if mk in vm:
+                    history[hk].append(vm[mk])
             if is_main:
                 print(f"Val   — Loss: {vl:.4f}  RGB: {vr:.4f}  Depth: {vd:.4f}  "
                       f"PC: {vp:.4f}  Text: {vt:.4f}")
-                print(f"Metrics — RGB MSE: {vm['rgb_mse']:.6f}  Depth MSE: {vm['depth_mse']:.6f}  "
-                      f"PC Chamfer: {vm['pc_chamfer']:.6f}  PC EMD: {vm['pc_emd']:.6f}")
-                print(f"Param   — MSE: {vm['param_mse']:.6f}  MAE: {vm['param_mae']:.6f}  "
-                      f"MAE(masked): {vm['param_mae_masked']:.6f}  "
-                      f"acc@0.05: {vm['param_acc@0.05']:.4f}")
+                print(f"Metrics — {_fmt_metrics(vm)}")
         else:
             vl = history['val_loss'][-1] if history['val_loss'] else float('inf')
-            vm = {k: history[v][-1] if history[v] else 0.0 for k, v in {
-                'rgb_mse':'val_rgb_mse','depth_mse':'val_depth_mse',
-                'pc_chamfer':'val_pc_chamfer','pc_emd':'val_pc_emd',
-                'param_mse':'val_param_mse','param_mae':'val_param_mae',
-                'param_mae_masked':'val_param_mae_masked',
-                'param_acc@0.05':'val_param_acc05'}.items()}
+            # Carry forward only metrics that have actually been recorded; an
+            # inactive modality stays absent rather than defaulting to 0.0.
+            vm = {mk: history[hk][-1] for mk, hk, _, _ in METRIC_KEYS if history[hk]}
 
         if is_main and args.use_wandb and WANDB_AVAILABLE:
             wandb.log({
@@ -833,13 +847,8 @@ def train_worker(rank, world_size, args):
                 'train/loss': tr_loss, 'train/rgb': tr_rgb, 'train/depth': tr_depth,
                 'train/pc': tr_pc, 'train/text': tr_txt,
                 'val/loss': vl,
-                'metrics/rgb_mse': vm['rgb_mse'], 'metrics/depth_mse': vm['depth_mse'],
-                'metrics/pc_chamfer': vm['pc_chamfer'], 'metrics/pc_emd': vm['pc_emd'],
-                'metrics/param_mse': vm['param_mse'],
-                'metrics/param_mae': vm['param_mae'],
-                'metrics/param_mae_masked': vm['param_mae_masked'],
-                'metrics/param_acc@0.05': vm['param_acc@0.05'],
                 'learning_rate': scheduler.get_last_lr()[0],
+                **{f'metrics/{mk}': vm[mk] for mk, _, _, _ in METRIC_KEYS if mk in vm},
             })
 
         # viz_freq <= 0 disables visualisation entirely (E2 reduced arms cannot
@@ -870,34 +879,23 @@ def train_worker(rank, world_size, args):
             if is_main:
                 history['test_epoch'].append(epoch)
                 for k, v in zip(
-                        ['test_loss','test_rgb','test_depth','test_pc','test_text',
-                         'test_rgb_mse','test_depth_mse','test_pc_chamfer',
-                         'test_param_mse','test_param_mae','test_param_mae_masked',
-                         'test_param_acc05'],
-                        [tl, tr_, td_, tp_, tt_,
-                         tmet['rgb_mse'], tmet['depth_mse'], tmet['pc_chamfer'],
-                         tmet['param_mse'], tmet['param_mae'], tmet['param_mae_masked'],
-                         tmet['param_acc@0.05']]):
+                        ['test_loss','test_rgb','test_depth','test_pc','test_text'],
+                        [tl, tr_, td_, tp_, tt_]):
                     history[k].append(v)
+                for mk, _, hk, _ in METRIC_KEYS:
+                    if hk is not None and mk in tmet:
+                        history[hk].append(tmet[mk])
                 print(f"Test  — Loss: {tl:.4f}  RGB: {tr_:.4f}  Depth: {td_:.4f}  "
                       f"PC: {tp_:.4f}  Text: {tt_:.4f}")
-                print(f"Test Metrics — RGB MSE: {tmet['rgb_mse']:.6f}  "
-                      f"Depth MSE: {tmet['depth_mse']:.6f}  "
-                      f"PC Chamfer: {tmet['pc_chamfer']:.6f}")
-                print(f"Test Param   — MAE(masked): {tmet['param_mae_masked']:.6f}  "
-                      f"acc@0.05: {tmet['param_acc@0.05']:.4f}")
+                print(f"Test Metrics — {_fmt_metrics(tmet)}")
                 if args.use_wandb and WANDB_AVAILABLE:
                     wandb.log({
                         'epoch': epoch,
                         'test/loss': tl, 'test/rgb': tr_, 'test/depth': td_,
                         'test/pc': tp_, 'test/text': tt_,
-                        'test_metrics/rgb_mse': tmet['rgb_mse'],
-                        'test_metrics/depth_mse': tmet['depth_mse'],
-                        'test_metrics/pc_chamfer': tmet['pc_chamfer'],
-                        'test_metrics/param_mse': tmet['param_mse'],
-                        'test_metrics/param_mae': tmet['param_mae'],
-                        'test_metrics/param_mae_masked': tmet['param_mae_masked'],
-                        'test_metrics/param_acc@0.05': tmet['param_acc@0.05'],
+                        **{f'test_metrics/{mk}': tmet[mk]
+                           for mk, _, hk, _ in METRIC_KEYS
+                           if hk is not None and mk in tmet},
                     })
                 print(f"📊 Generating TEST visualizations (epoch {epoch})…")
                 mv = model.module if world_size > 1 else model
