@@ -36,7 +36,11 @@ model:
   max_leaves: 24
 
 training:
-  batch_size: 8            # per-GPU; global 32 on 4 GPUs -- IDENTICAL in every arm.
+  batch_size: 8            # per-GPU. GLOBAL BATCH MUST BE 32 IN EVERY ARM -- it is
+                           # per-GPU batch x GPU count, so each launcher sets its own:
+                           #   e2_arm.sbatch (a100:4)           8 x 4 = 32  <- this value
+                           #   e2_arm_blackwell.sbatch (rtx:2) 16 x 2 = 32  <- --batch_size 16
+                           # Check outputs/<run>/config.json: batch_size x world_size == 32.
                            # (headline E1 used 64; E2 is internally controlled, not
                            #  matched to E1, which also differs in schedule per 6.3)
   epochs: 2000
