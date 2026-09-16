@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:rtx_pro_6000:2
 #SBATCH --cpus-per-task=80
-#SBATCH --mem=192G
+#SBATCH --mem=320G
 #SBATCH --time=2-00:00:00
 #SBATCH --requeue
 #SBATCH --output=logs/e2bw_%x_%j.out
@@ -25,6 +25,13 @@
 # confound the one thing E2 exists to measure. 2 GPUs x --batch_size 16 = global
 # batch 32, the same value the a100:4 variant reaches with 8 per GPU on 4 ranks,
 # so the two launchers stay directly comparable.
+#
+# On memory: scale it WITH num_workers. Measured at 12 workers x 2 ranks the job
+# held 65.8G RSS; backing out ~10G of model+CUDA context per node gives ~2.3G per
+# worker, so 38 x 2 = 76 workers projects to ~187G -- which is why 192G was not
+# enough headroom and this is 320G. 4 arms x 320G = 1280G of the node's 1494G.
+# Memory is placement-neutral here (see the --test-only note below), so buy the
+# headroom rather than discover it as an oom-kill 200 epochs in.
 #
 # On CPUs: this pipeline is DATALOADER-BOUND, so cpus-per-task/num_workers set
 # throughput, not the GPU. Measured 2026-09-15: ~1.6 items/s per worker process.
