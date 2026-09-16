@@ -9,59 +9,69 @@ PyTorch implementation of **EmbodiedMAE** — a multi-modal Masked Autoencoder p
 - **3M (`embodied_mae.py`)** — RGB + Depth + Point Cloud
 - **4M (`embodied_mae_4m.py`)** — adds a parametric "spline/text" modality describing the plant's procedural generation parameters
 
-Both use the same Dirichlet-allocation token masking, transformer encoder, and per-modality decoder heads.
+Both use the same Dirichlet-allocation token masking, transformer encoder, and per-modality decoder heads. The 4M variant is the active line of work; 3M is kept as the baseline it was derived from.
+
+## Repo layout
+
+Configs and batch scripts were consolidated out of the repo root. **There are no `config.yaml` / `config_4m.yaml` at the root any more** — everything lives in:
+
+- `configs/` — every YAML. `config.yaml` (3M), `config_4m.yaml` (4M), `config_4m_pretrain15k*.yaml` (pretrain), `config_4m_distill_*.yaml` (cross-modal distillation), `config_e2_*.yaml` (the E2 modality ablation).
+- `slurm/` — every `.sbatch` / launcher script.
+- `data_split/` — the train/val/test split tooling (`make_split.py`, `move_split.py`, `reshuffle.py`).
+- Everything else (models, datasets, training entry points, eval and figure scripts) sits at the repo root.
+
+If a command or script still refers to a root-level `config_4m.yaml`, it is stale — the path is `configs/config_4m.yaml`.
 
 ## Environment
 
-Conda env name is `det`, located at `/work/mech-ai/alloy/.conda/envs/det` (see `environment.yml`). PyTorch 2.5 + CUDA 12.4. Activate with `conda activate det` before running anything.
+Conda env name is `det` (Python 3.12, PyTorch 2.5 + CUDA 12.4; see `environment.yml`). On Nova it lives at `/work/mech-ai/alloy/.conda/envs/det`. Activate with `conda activate det` before running anything.
+
+On Blackwell / sm_120 GPUs (RTX PRO 6000) `det` will not work — those need the CUDA 12.8 build in the separate `det_cu128` env.
 
 ## Common commands
 
-All commands assume `cwd = repo root` and `det` env active.
+All commands assume `cwd = repo root` and the env active.
 
-### Train (single-GPU, 3M)
-```bash
-python train_sorghum.py --config config.yaml
-# or override individual args, e.g.:
-python train_sorghum.py --config config.yaml --output_dir ./outputs/myrun --batch_size 32
-```
-
-### Train (multi-GPU, 3M) — via `mp.spawn`
-```bash
-# Set distributed.world_size in config.yaml, then:
-python train_sorghum_multi.py --config config.yaml
-```
-
-### Train (4M, RGB + Depth + PC + spline params)
+### Train 4M (the main entry point)
 ```bash
 # Single GPU
-python train_sorghum_4m.py --config config_4m.yaml --world_size 1
+python train_sorghum_4m.py --config configs/config_4m.yaml --world_size 1
 
 # Multi-GPU via torchrun (preferred — sets LOCAL_RANK/RANK/WORLD_SIZE)
-torchrun --standalone --nproc_per_node=4 train_sorghum_4m.py --config config_4m.yaml
+torchrun --standalone --nproc_per_node=4 train_sorghum_4m.py --config configs/config_4m.yaml
 
-# Multi-GPU via mp.spawn fallback (set distributed.world_size in YAML)
-python train_sorghum_4m.py --config config_4m.yaml
+# Multi-GPU via mp.spawn fallback (set distributed.world_size in the YAML)
+python train_sorghum_4m.py --config configs/config_4m.yaml
+```
+
+### Train 3M
+```bash
+python train_sorghum.py --config configs/config.yaml                  # single GPU
+python train_sorghum_multi.py --config configs/config.yaml            # mp.spawn
+```
+
+### Cross-modal distillation
+`train_sorghum_4m_distill.py` trains the 4M model so that **any single modality, with the other three fully masked, reconstructs all four** — a frozen full-modal teacher supplies token-aligned decoder features and a CLS latent as the privileged target, and the student is warm-started from the same checkpoint.
+```bash
+python train_sorghum_4m_distill.py --config configs/config_4m_distill_15k_rgb2pc.yaml
 ```
 
 ### Validate / dump reconstructions
 ```bash
 python validate.py --checkpoint outputs/<run>/best_model.pth \
-                   --output_dir vis_val \
-                   --config config.yaml \
-                   --num_samples 6
+                   --output_dir vis_val --config configs/config.yaml --num_samples 6
 ```
 
 ### Sanity-check a dataset folder
 ```bash
-python sorghum_dataset.py /path/to/Dataset/new_data        # 3M
-python sorghum_dataset_4m.py /path/to/Dataset/new_data     # 4M (requires *_spline.yml)
+python sorghum_dataset.py    /path/to/Sorghum_15K    # 3M
+python sorghum_dataset_4m.py /path/to/Sorghum_15K    # 4M (requires *_spline.yml)
 ```
 
 ### Smoke-test the model definitions
 ```bash
-python embodied_mae.py        # builds embodied_mae_base, runs one forward pass on dummy tensors
-python embodied_mae_4m.py     # same for 4M
+python embodied_mae.py       # builds embodied_mae_base, one forward pass on dummy tensors
+python embodied_mae_4m.py    # same for 4M
 ```
 
 There is no test suite, no linter, and no Makefile.
@@ -70,14 +80,19 @@ There is no test suite, no linter, and no Makefile.
 
 Both training entry points layer config in this order: YAML → CLI flags → defaults. The YAML is the source of truth; CLI flags only override specific keys. Notable keys:
 
-- `data.data_root` expects `<root>/train/` and `<root>/val/` siblings, each containing one folder per sample (see "Dataset layout" below).
-- `model.model_size` ∈ {`small`, `base`, `large`, `giant`} (3M) or {`small`, `base`, `large`} (4M) — picks one of the `embodied_mae_*`/`embodied_mae_4m_*` factory functions.
+- `data.data_root` expects `<root>/train/`, `<root>/val/` and `<root>/test/` siblings, each containing one folder per sample (see "Dataset layout").
+- `data.view_sampling: true` — each plant contributes **one randomly chosen view per epoch**, so an epoch over 105 000 train samples is 10 500 items, not 105 000. `view_seed` must be identical across arms of an ablation so they see the same views in the same order.
+- `model.model_size` ∈ {`small`, `base`, `large`, `giant`} (3M) or {`small`, `base`, `large`} (4M).
 - `model.mask_ratio` is the **total** masking fraction across all modalities; the per-modality split is sampled from `Dirichlet(α=dirichlet_alpha)` once per batch.
-- `model.pc_loss_weight` scales the Chamfer term. Chamfer values are tiny relative to MSE, so this is typically O(10).
+- `model.active_modalities` — comma-separated subset of `pc,rgb,depth,text`. Restricting it is what the E2 ablation varies; everything else stays fixed.
+- `model.loss_name` ∈ {`chamfer`, `qal_loss`} with `qal_threshold` / `qal_alpha` / `qal_use_squared`. Current runs use `qal_loss`.
+- `model.pc_loss_weight` scales the PC term. Chamfer values are tiny relative to MSE, so this is typically O(10) when Chamfer is selected.
 - `model.spline_loss_weight` (4M only) scales the Smooth-L1 param-regression loss.
 - `model.depth_norm_type` ∈ {`minmax`, `standard`} — applied to the **target** before depth MSE; the model learns to predict normalised values directly.
 - `checkpointing.resume`: path to a `.pth` to resume from, or `null` for scratch.
 - `distributed.world_size > 1` triggers DDP. `train_sorghum_4m.py` also accepts being launched under `torchrun`, in which case `LOCAL_RANK` is honoured and `world_size` is inferred from env.
+
+**Global batch is `batch_size × world_size`.** `batch_size` in the YAML is per-GPU, so an ablation must adjust it to the GPU count to keep the global batch constant — a global-batch difference between arms confounds the comparison. The E2 launchers use 16×2 on the 2-GPU Blackwell nodes and 8×4 on the 4-GPU A100 nodes, both reaching 32.
 
 ## Architecture (the part you'd otherwise have to read 4 files to learn)
 
@@ -97,7 +112,7 @@ Both training entry points layer config in this order: YAML → CLI flags → de
 ### Losses (`forward_loss`)
 - **RGB**: per-patch MSE, optionally with `norm_pix_loss` (per-patch normalisation), masked mean.
 - **Depth**: per-patch MSE on **normalised** target (per-image min-max or standard); the prediction is compared to the normalised target directly.
-- **PC**: bidirectional Chamfer distance on the full `(B, target_points, 3)` cloud (no masking — the whole cloud is reconstructed every step), scaled by `pc_loss_weight`.
+- **PC**: bidirectional Chamfer (or QAL) on the full `(B, target_points, 3)` cloud (no masking — the whole cloud is reconstructed every step), scaled by `pc_loss_weight`.
 - **(4M)**: Smooth-L1 on params, masked by `text_valid` (real leaf tokens only) **and** `mask_text` (model only loses on tokens it didn't see). Scaled by `spline_loss_weight`.
 
 `embodied_mae_4m.py` imports `PatchEmbed`, `PointCloudEmbed`, `TransformerBlock`, `chamfer_distance`, and `get_2d_sincos_pos_embed` from `embodied_mae.py` — when changing these, expect both models to be affected.
@@ -107,33 +122,59 @@ Plant and leaf parameters are normalised to [0, 1] via fixed `_PLANT_SCALE / _PL
 
 ## Dataset layout
 
-`SorghumDataset` expects either:
+`SorghumDataset` expects:
 ```
-data_root/{train,val}/<sample_name>/
-    rgb.png
-    depth.png
+data_root/{train,val,test}/<sample_name>/
+    rgb.png              # 224-ready RGB render
+    depth.png            # big-endian packed RGBA depth
     *_nc_cam.ply         # camera-frame, normals-cleaned point cloud
     *_spline.yml         # 4M only — procedural generation params
 ```
 
+Sample folders are named `Sorghum_<plant>_<view>`, so `Sorghum_0_00 … Sorghum_0_09` are ten views of one plant. **Only those four files are read by the loaders.** The `Sorghum_<n>.obj` and `Sorghum_<n>_nc.ply` that sit alongside them are source assets, are duplicated in full into every one of a plant's ten view folders, and are never opened during training — they are ~64 % of the bytes on disk.
+
 The PC loader uniformly samples / pads to `num_points`, then centres at the centroid and scales so the max-distance point lands on the unit sphere. RGB uses ImageNet mean/std normalisation; depth is loaded as single-channel L and only `ToTensor`'d (no normalisation at load — normalisation happens inside the loss).
 
-`Dataset/new_data/{train,val}/Sorghum_<n>_<m>/` is the active dataset on this filesystem.
+The active dataset on Nova is `/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K/`, an extreme-enriched 70/15/15 split (seed 42) of 15 000 plants: **105 000 train / 22 500 val / 22 500 test** view-samples. `assignment.csv` and `features.csv` at that root record the split; the tooling to regenerate or reshuffle it is in `data_split/`.
+
+## Porting to another machine
+
+Everything machine-specific is in three places — nothing else needs touching:
+
+1. **`data.data_root` in the YAML you run.** Every config hardcodes the Nova absolute path above.
+2. **The `#SBATCH` headers in `slurm/*.sbatch`** — `--partition`, `--account`, `--gres`, `--cpus-per-task`, `--mem`. These encode Nova's partitions (`nova`, `scavenger`) and accounts (`mech-ai`, `mech-ai-scavenger`) and mean nothing elsewhere. On a non-SLURM box, ignore `slurm/` entirely and use the `torchrun` line above.
+3. **The conda env.** `environment.yml` rebuilds `det`; it pins a CUDA 12.4 PyTorch, so a different GPU generation may need a different build (see the sm_120 note under Environment).
+
+**Moving the data is the expensive part.** At ~5.0 MB per sample folder × 150 000 folders the split is **~750 GB**, but the four files training actually reads total ~1.8 MB per sample, so a filtered copy is **~265 GB** — under 40 % of the naive transfer. Copy with an include-filter rather than syncing the tree:
+
+```bash
+rsync -a --info=progress2 \
+  --include='*/' \
+  --include='rgb.png' --include='depth.png' \
+  --include='*_nc_cam.ply' --include='*_spline.yml' \
+  --exclude='*' \
+  /path/to/Sorghum_15K/ user@host:/dest/Sorghum_15K/
+```
+
+Also copy `assignment.csv` and `features.csv` from the split root, and any warm-start checkpoint you need (`best_model.pth` is ~1.3 GB per run).
+
+Note the dataset loaders build a folder index on first use and cache it — the first run on a fresh copy pays a one-off scan (~24 min for the 105 k train split); later runs print `index cache hit`. The pipeline is **dataloader-bound, not GPU-bound**: `num_workers` (≈1.6 items/s per worker) sets throughput, so give it as many CPUs as the node allows and scale `--mem` with the worker count (~2.3 GB RSS per worker plus ~10 GB per node for model and CUDA context).
 
 ## Outputs
 
 Each run writes to `<output_dir>/`:
 - `checkpoints/checkpoint_epoch_<N>.pth` every `save_freq` epochs
 - `best_model.pth` when val loss improves
-- `visualizations/epoch_<N>_sample_<i>_<name>.png` every `viz_freq` epochs (4-row grid for 3M, 5-row grid for 4M including text predictions)
+- `visualizations/epoch_<N>_sample_<i>_<name>.png` every `viz_freq` epochs (4-row grid for 3M, 5-row grid for 4M including text predictions); skipped automatically when the run is a reduced-modality arm
 - `training_history.json` (rolling)
-- `config.json` (snapshot of effective args)
+- `config.json` — snapshot of the effective args. **Check this to confirm what a run actually used**, especially `batch_size × world_size` and `active_modalities`.
 
-Wandb logging is on by default (`use_wandb: true`). Project names differ between runs — check the YAML, not the script defaults.
+`outputs/` is gitignored apart from a small whitelist in `.gitignore`. Wandb logging is on by default (`use_wandb: true`, project `embodied-mae-sorghum`); project and run names differ between runs — check the YAML, not the script defaults.
 
 ## Things that look like dead code but aren't
 
 - `outputs_sorghum_*/` directories at the repo root are old run outputs kept for reference; the canonical output root is `./outputs/`.
 - `process_depth_bg.py`, `process_mask.py`, `validate_sorghum_data.py`, `vis.py`, `check_structure.py` are one-off data-prep / diagnostic scripts, not part of any pipeline.
-- `vis_pc_masking.py` is a standalone tool for visualising the FPS + Dirichlet masking on a single point cloud (saves `vis_pc_masking.png`).
+- `vis_pc_masking.py` is a standalone tool for visualising the FPS + Dirichlet masking on a single point cloud.
 - `visualize_sorghum_pointclouds.py` renders multi-view PC galleries from raw `.ply` files; it doesn't touch the model.
+- `analyze_e2.py` reads the E2 arm output dirs and builds the modality-value-add comparison.
