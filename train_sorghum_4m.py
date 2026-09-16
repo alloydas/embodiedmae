@@ -87,7 +87,8 @@ def _parse_modalities(v):
 def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points',
-                 'view_sampling', 'view_seed'],
+                 'view_sampling', 'view_seed', 'max_plants',
+                 'plant_subset_seed'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
@@ -117,6 +118,11 @@ def config_to_namespace(config):
     ns.num_points         = config['data'].get('num_points', 8196)
     ns.view_sampling      = bool(config['data'].get('view_sampling', False))
     ns.view_seed          = int(config['data'].get('view_seed', 0))
+    # E3 data scaling: cap the TRAIN split at this many plants (nested subsets,
+    # see SorghumDataset4M). None -> every plant. val/test are never capped.
+    _mp                   = config['data'].get('max_plants', None)
+    ns.max_plants         = None if _mp in (None, 0, 'null') else int(_mp)
+    ns.plant_subset_seed  = int(config['data'].get('plant_subset_seed', 42))
     ns.model_size         = config['model'].get('model_size', 'base')
     ns.mask_ratio         = config['model'].get('mask_ratio', 0.15)
     ns.pc_loss_weight     = config['model'].get('pc_loss_weight', 10.0)
@@ -661,7 +667,9 @@ def train_worker(rank, world_size, args):
     train_ds = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='train',
                                  max_leaves=args.max_leaves,
-                                 view_sampling=vs, view_seed=args.view_seed)
+                                 view_sampling=vs, view_seed=args.view_seed,
+                                 max_plants=args.max_plants,
+                                 plant_subset_seed=args.plant_subset_seed)
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
@@ -965,6 +973,9 @@ def main():
                         help='Plan 6.1: one drawn view per plant per epoch '
                              '(10x cheaper epoch, same view diversity).')
     parser.add_argument('--view_seed',          type=int,   default=None)
+    parser.add_argument('--max_plants',         type=int,   default=None,
+                        help='E3: cap the TRAIN split at N plants (nested subsets)')
+    parser.add_argument('--plant_subset_seed',  type=int,   default=None)
     parser.add_argument('--model_size',         type=str,   default=None, choices=['small','base','large'])
     parser.add_argument('--active_modalities',  type=str,   default=None,
                         help="E2 arm, e.g. 'pc' or 'pc,rgb' or 'pc,rgb,depth'. "

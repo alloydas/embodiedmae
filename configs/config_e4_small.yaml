@@ -1,0 +1,80 @@
+# E4 -- model scaling (CVPR plan Section 5, experiment E4). Arm: small.
+#
+# CONTROLLED ACROSS THIS EXPERIMENT -- do not edit one arm without the others.
+# The ONLY difference between the arms of this experiment is `model.model_size`.
+#
+# EQUAL OPTIMIZER STEPS, NOT EQUAL EPOCHS. An epoch under view_sampling is one
+# drawn view per plant, so its size is the plant count: the 1k arm's epoch is a
+# tenth of the 10k arm's. Running every arm for the same 600 epochs would give
+# the 10k arm 10x the gradient updates and the curve would be measuring data
+# scale and compute jointly. Every arm here runs 197,400 optimizer steps --
+# the same budget as e2_pcrgbdt (329 steps/ep x 600 ep), so that run is directly
+# comparable and serves as this experiment's full-data / base-model point.
+#
+#   arm          plants  steps/ep   epochs   = steps
+#   e4_small      10500       329      600   = 197,400
+#   e2_pcrgbdt    10500       329      600   = 197,400
+#   e4_large      10500       329      600   = 197,400
+#
+# warmup_epochs, val_freq and save_freq are scaled by the same factor, so every
+# arm warms up over the same fraction of its schedule and lands ~24 val points.
+#
+# READ THE RIGHT NUMBER: compare arms on `pc_chamfer`, not `loss`. All four
+# modalities are active in every arm here so `loss` sums the same terms -- but
+# pc_chamfer stays the yardstick shared with E2.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+  view_sampling: true      # plan 6.1 -- one view per plant per epoch
+  view_seed: 42            # identical in every arm: same views, same order
+  max_plants: null          # E4 holds data fixed at the full train split
+  plant_subset_seed: 42    # nested subsets: 1k subset of 3k subset of 10k
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: small
+  mask_ratio: 0.80
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+training:
+  batch_size: 8            # per-GPU. GLOBAL BATCH MUST BE 32 IN EVERY ARM:
+                           #   scale_arm.sbatch (a100:4)            8 x 4 = 32
+                           #   scale_arm_blackwell.sbatch (rtx:2)  16 x 2 = 32
+                           # Check outputs/<run>/config.json: batch_size x world_size == 32.
+  epochs: 600
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 40
+  val_freq: 25
+  test_freq: 0
+
+checkpointing:
+  output_dir: ./outputs/e4_small
+  save_freq: 25
+  resume: null
+
+visualization:
+  viz_freq: 0
+  num_viz_samples: 6
+
+distributed:
+  world_size: 4            # ignored under torchrun, which infers it from nproc
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: e4_small

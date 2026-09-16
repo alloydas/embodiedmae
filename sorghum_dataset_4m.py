@@ -24,7 +24,8 @@ class SorghumDataset4M(SorghumDataset):
 
     def __init__(self, data_root, img_size=224, num_points=8196, split=None,
                  max_leaves=24, view_sampling=False, view_seed=0,
-                 deterministic_view=False):
+                 deterministic_view=False, max_plants=None,
+                 plant_subset_seed=42):
         super().__init__(data_root, img_size=img_size,
                          num_points=num_points, split=split)
         self.max_leaves = max_leaves
@@ -48,6 +49,41 @@ class SorghumDataset4M(SorghumDataset):
         self._spline_names = {name: yml for name, yml in entries}
         self.samples = [self.load_dir / name for name, _ in entries]
         print(f"✅ {len(self.samples)} samples have spline data")
+
+        # ── Data scaling (CVPR plan §5, experiment E3) ────────────────────
+        # max_plants restricts the split to a NESTED random subset of plants:
+        # the full plant list is shuffled once with plant_subset_seed and the
+        # first N kept, so 1k ⊂ 3k ⊂ 10k. Three independent draws would make
+        # every step of the scaling curve part sample-composition, and no
+        # amount of averaging afterwards separates the two effects.
+        #
+        # The subset is by PLANT, never by view. Dropping views would hold the
+        # plant count fixed and shrink the augmentation pool instead, which is
+        # E5's question (view regime), not E3's.
+        #
+        # Only ever pass this for split='train'. val/test must stay identical
+        # at every scale or the arms are scored on different yardsticks; the
+        # training entry point enforces that by passing it to train_ds alone.
+        if max_plants is not None:
+            groups = {}
+            for i, folder in enumerate(self.samples):
+                groups.setdefault(folder.name.rsplit('_', 1)[0], []).append(i)
+            all_plants = sorted(groups)
+            if int(max_plants) < len(all_plants):
+                shuffled = list(all_plants)
+                random.Random(int(plant_subset_seed)).shuffle(shuffled)
+                keep = set(shuffled[:int(max_plants)])
+                self.samples = [f for f in self.samples
+                                if f.name.rsplit('_', 1)[0] in keep]
+                self._spline_names = {
+                    k: v for k, v in self._spline_names.items()
+                    if k.rsplit('_', 1)[0] in keep}
+                print(f"📉 data scaling: {len(keep)} of {len(all_plants)} "
+                      f"plants (subset seed {plant_subset_seed}) -> "
+                      f"{len(self.samples)} samples")
+            else:
+                print(f"📉 data scaling: max_plants={max_plants} >= "
+                      f"{len(all_plants)} available; using every plant")
 
         # ── View sampling (CVPR plan §6.1) ────────────────────────────────
         # Folders are <plant>_<view>, ten consecutive views of each plant. Left
