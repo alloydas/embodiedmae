@@ -22,6 +22,57 @@ Configs and batch scripts were consolidated out of the repo root. **There are no
 
 If a command or script still refers to a root-level `config_4m.yaml`, it is stale — the path is `configs/config_4m.yaml`.
 
+## Experiment programme — what is done and what is left
+
+The programme is the E1–E10 matrix in the CVPR 2027 plan (the Google Doc is the
+source of truth for scope; this section is the source of truth for *state*).
+Paper deadline **Nov 13 2026**, internal results freeze **Oct 24 2026**.
+
+**Status as of 2026-09-17.** Run state goes stale fast — the table records which
+experiments have been *built*, which is durable. For live progress use
+`squeue -u $USER`, `outputs/<run>/training_history.json`, and
+`outputs/<run>/config.json` (which records what a run actually used).
+
+| | experiment | state | runs |
+|---|---|---|---|
+| E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
+| E2 | modality value-add | **running** | `e2_pc` ✅, `e2_pcrgb` ✅ (600/600 each); `e2_pcrgbd`, `e2_pcrgbdt` in flight |
+| E3 | data scaling | **running** | `e3_10k` in flight; `e3_3k`, `e3_1k` queued |
+| E4 | model scaling | **queued** | `e4_small`, `e4_large` |
+| E5 | view regime | **not built** | — |
+| E6 | masking / noise | **not built** | — |
+| E7 | loss study | **not built** | partial precedent: `loss_name` chamfer vs qal_loss already switchable |
+| E8 | baselines | **not built** | — |
+| E9 | latent analysis | **not built** | — |
+| E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
+
+### Two gaps that block the headline claim
+
+**1. There is no downstream linear probe, and the plan says that is the metric.**
+Locked decision 6.4 makes the value-add metric a linear probe on height, leaf
+angle, leaf count and biomass — explicitly *not* reconstruction loss.
+`analyze_e2.py` compares arms on `val_pc_chamfer`, which is the correct
+arm-invariant *monitoring* signal and is not what 6.4 asks for. So E2, E3 and E4
+will all finish and produce chamfer curves with no probe number attached.
+
+Three of the four targets are already in `features.csv` at the split root
+(15 000 rows keyed by `plant`, which joins to `Sorghum_<plant>_<view>`):
+`stem_length` → height, `n_leaves` → leaf count, and leaf angle is either
+`roll_mean` (twist) or `branch_mean` (insertion) — the spline YAMLs carry
+`roll_angle` and `branching_angle` as distinct fields and the plan does not say
+which it means. **Biomass is in neither `features.csv` nor the spline params**
+and has to be derived (cheapest proxy: `n_leaves × leaf_len_mean`).
+
+Build and validate this against an existing checkpoint *before* the arms
+finish — if the probe is broken or these targets carry no linear signal, that
+is much cheaper to learn now than after the runs are unrepeatable.
+
+**2. No baselines exist (E8), and the plan ranks that the #1 reject risk.**
+Nothing in the repo addresses it, and every baseline is itself a training run
+that has to fit before the Oct 24 freeze, so the *decision* about what to
+compare against is more time-critical than the runs.
+
+
 ## Environment
 
 Conda env name is `det` (Python 3.12, PyTorch 2.5 + CUDA 12.4; see `environment.yml`). On Nova it lives at `/work/mech-ai/alloy/.conda/envs/det`. Activate with `conda activate det` before running anything.
