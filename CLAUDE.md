@@ -40,8 +40,8 @@ experiments have been *built*, which is durable. For live progress use
 | E3 | data scaling | **running** | `e3_10k` in flight; `e3_3k`, `e3_1k` queued |
 | E4 | model scaling | **queued** | `e4_small`, `e4_large` |
 | E5 | view regime | **not built** | — |
-| E6 | masking / noise | **not built** | — |
-| E7 | loss study | **not built** | partial precedent: `loss_name` chamfer vs qal_loss already switchable |
+| E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
+| E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
 | E8 | baselines | **not built** | — |
 | E9 | latent analysis | **not built** | — |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
@@ -71,6 +71,19 @@ is much cheaper to learn now than after the runs are unrepeatable.
 Nothing in the repo addresses it, and every baseline is itself a training run
 that has to fit before the Oct 24 freeze, so the *decision* about what to
 compare against is more time-critical than the runs.
+
+### On E6 and E7 being run elsewhere
+
+Masking/noise and the loss study are a collaborator's, so nothing in this repo
+should schedule them. Their results still have to land in the same table as
+everything above, which means the comparison only holds if they match this
+programme on the three things that silently break it: the **same** 70/15/15
+split of `Sorghum_15K` (seed 42), the **same** global batch of 32, and a budget
+stated in **optimizer steps** rather than epochs. Confirm those three before
+their numbers are merged, not after — `outputs/<run>/config.json` records all
+three for any run that used this codebase.
+
+That leaves **E5, E8, E9 and E10 plus the linear probe** as the work owned here.
 
 
 ## Environment
