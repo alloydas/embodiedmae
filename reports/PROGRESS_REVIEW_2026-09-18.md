@@ -159,6 +159,76 @@ python dump_param_examples.py --config configs/config_4m_distill_15k_all.yaml \
 
 ---
 
+## 1c. Ten images of one plant — the elevation experiment
+
+The ten folders of a plant are a natural experiment. Camera height descends
+**exactly linearly** with the view index (y = 3.30 − 0.50·index on
+`Sorghum_10001`) while azimuth is randomised, so the index is an elevation
+ladder from looking down to looking up. All ten views share one point cloud
+(`_nc_cam.ply` is the same geometry rotated into the view frame, and the loader
+centres and unit-scales before Chamfer) and one set of spline parameters.
+**The answer never moves; only the input image does.**
+
+Generated from **RGB alone**, every other modality masked.
+
+| view | sin(elev) | chamfer before | chamfer after | change |
+|---|---|---|---|---|
+| 00 | +0.94 | 0.001456 | 0.001016 | −30.2 % |
+| 01 | +0.84 | 0.000970 | 0.000674 | −30.5 % |
+| 02 | +0.75 | 0.000854 | 0.000653 | −23.5 % |
+| 03 | +0.58 | 0.001328 | 0.000819 | −38.3 % |
+| 04 | +0.48 | 0.000986 | 0.000608 | −38.3 % |
+| 05 | +0.31 | 0.000873 | 0.000654 | −25.1 % |
+| 06 | +0.12 | **0.000775** | **0.000553** | −28.6 % |
+| 07 | −0.10 | 0.000836 | 0.000863 | +3.2 % |
+| 08 | −0.35 | 0.001820 | 0.001150 | −36.8 % |
+| 09 | −0.74 | 0.001804 | 0.001380 | −23.5 % |
+| **mean** | | **0.001170** | **0.000837** | **−28.5 %** |
+| best/worst spread | | 2.35× | 2.49× | |
+
+**Both models trace the same U** — best near side-on (view 06), worst at both
+extremes. The target is identical from every view, so that shape is caused
+entirely by what the camera can see.
+
+**Distillation lowers the curve without flattening it.** 9 of 10 views improve,
+mean −28.5 %, but the best-to-worst ratio *widens* 2.35× → 2.49×. If view
+robustness is the goal, distillation as configured is not the lever.
+
+### Parameters from ten different images
+
+All ten views share one parameter ground truth, so the spread of the ten
+predictions is a view-invariance measure needing no extra labels. Reported as a
+fraction of how much each field varies between leaves.
+
+| leaf field | MAE before | MAE after | Δ | view spread before | after |
+|---|---|---|---|---|---|
+| starting_point          | 0.0380 | 0.0155 | −59.2 % | 0.10 | 0.08 |
+| branching_angle         | 1.217° | 0.487° | −60.0 % | 0.16 | 0.12 |
+| roll_angle              | 49.7°  | 35.6°  | −28.4 % | 0.37 | 0.36 |
+| length                  | 0.0482 | 0.0407 | −15.6 % | 0.17 | 0.16 |
+| waviness_frequency      | 0.0028 | 0.0028 | −2.2 %  | 0.11 | **0.15** |
+| waviness_period_start_0 | 22.04° | 22.48° | **+2.0 %** | 0.20 | **0.26** |
+| waviness_period_start_1 | 29.88° | 31.30° | **+4.8 %** | 0.18 | **0.26** |
+
+**The zero-skill fields got noisier, not better.** The four fields with real
+skill improved on both counts. The three waviness fields did the opposite:
+accuracy flat or slightly worse while view spread rose from 0.18–0.20 to 0.26.
+Before distillation the head emitted something near a constant for these, which
+is at least stable; after, it varies more with the input image while being no
+more correct — it has started tracking image noise. A field nothing can predict
+is not free to carry: it absorbs capacity and adds variance.
+
+Caveat: chamfer here is a single point-cloud draw and `load_pointcloud`
+resamples 8,196 points unseeded on every read, so per-view figures move ~5 %
+between runs. The U-shape and the 28.5 % gap are far larger than that; the
++3.2 % on view 07 is not, so treat that view as a tie rather than a regression.
+
+```bash
+python eval_views_one_plant.py --plant Sorghum_10001 --source rgb
+```
+
+---
+
 ## 2. E2 — modality value-add
 
 Four arms identical in every respect except which token streams exist. Compared
