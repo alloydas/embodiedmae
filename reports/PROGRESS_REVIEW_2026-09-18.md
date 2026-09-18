@@ -227,8 +227,18 @@ between runs. The U-shape and the 28.5 % gap are far larger than that; the
 
 `--export_gallery` also writes the ten input renders beside the cloud each one
 produced, plus the per-GT-point nearest-neighbour distance so the ground truth
-can be coloured green (covered) / red (missed). Coverage tracks the same U as
-chamfer:
+can be coloured green (covered) / red (missed).
+
+**Camera-frame convention.** `_nc_cam.ply` is already in the camera frame, so
+one orientation reproduces the photograph. It was measured, not assumed:
+projecting every view's cloud onto each candidate axis pair and scoring
+silhouette IoU against its own render picks **(x, −y)** on all ten views
+(0.383 mean against 0.326 for its vertical flip) — x right, y **down**, z into
+the scene, the usual camera convention. Mapping (x, y, z) → (x, −y, −z) puts
+that on screen for a Y-up viewer looking down +Z, which is what the interactive
+gallery opens with so cloud and render can be compared directly.
+
+Coverage tracks the same U as chamfer:
 
 | view | 00 | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 |
 |---|---|---|---|---|---|---|---|---|---|---|
