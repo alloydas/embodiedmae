@@ -87,20 +87,40 @@ structure rather than a blob.
 
 ## 1b. What the parameter head actually recovers
 
-PC → params and RGB → params from the same model (`4m_distill_15k_all`), same 8
-plants, every other modality masked. **Skill** = 1 − MAE ÷ (error from always
+PC → params and RGB → params from the same model (`4m_distill_15k_all`), the same 8
+plants as the point-cloud viewer, every other modality masked. **Skill** = 1 − MAE ÷ (error from always
 predicting the field's mean). 1.0 is perfect; **≤ 0 means nothing learned beyond
-the average plant.** 110 leaf tokens over 6 plants with real leaves.
+the average plant.** 142 leaf tokens over 8 plants.
 
 | leaf field | GT spread (sd) | MAE from PC | skill PC | MAE from RGB | skill RGB |
 |---|---|---|---|---|---|
-| starting_point          | 0.244  | 0.0087 | **0.96** | 0.0207 | **0.90** |
-| branching_angle         | 5.14°  | 0.32°  | **0.93** | 0.65°  | **0.85** |
-| length                  | 0.177  | 0.0403 | **0.70** | 0.0406 | **0.69** |
-| roll_angle              | 108.1° | 41.7°  | **0.55** | 59.7°  | **0.36** |
-| waviness_frequency      | 0.0041 | 0.0034 | −0.03 | 0.0034 | −0.03 |
-| waviness_period_start_0 | 26.3°  | 23.0°  | −0.02 | 23.2°  | −0.03 |
-| waviness_period_start_1 | 29.3°  | 26.0°  | −0.01 | 25.0°  | 0.03 |
+| starting_point          | 0.248  | 0.0097 | **0.95** | 0.0205 | **0.90** |
+| branching_angle         | 5.31°  | 0.32°  | **0.93** | 0.65°  | **0.85** |
+| length                  | 0.176  | 0.0432 | **0.67** | 0.0440 | **0.66** |
+| roll_angle              | 107.1° | 45.8°  | **0.50** | 61.4°  | **0.33** |
+| waviness_frequency      | 0.0039 | 0.0032 | −0.02 | 0.0032 | −0.01 |
+| waviness_period_start_0 | 27.0°  | 23.5°  | −0.01 | 24.3°  | −0.04 |
+| waviness_period_start_1 | 29.2°  | 25.9°  | −0.01 | 24.9°  | 0.02 |
+
+### Per plant
+
+Normalised leaf MAE, all 8 plants, same model, every other modality masked.
+
+| plant | leaves | from PC | from RGB | better |
+|---|---|---|---|---|
+| Sorghum_10001_00 | 24 | 0.0488 | 0.0604 | PC |
+| Sorghum_10016_00 | 24 | 0.0589 | 0.0628 | PC |
+| Sorghum_10017_00 | 18 | 0.0621 | 0.0554 | **RGB** |
+| Sorghum_1001_00  | 20 | 0.0488 | 0.0522 | PC |
+| Sorghum_10037_00 | 14 | 0.0334 | 0.0523 | PC |
+| Sorghum_10065_00 | 10 | 0.0358 | 0.0540 | PC |
+| Sorghum_10069_00 | 10 | 0.0302 | 0.0380 | PC |
+| Sorghum_1007_00  | 22 | 0.0601 | 0.0737 | PC |
+| **mean** | 142 | **0.0473** | **0.0561** | PC on 7/8 |
+
+`Sorghum_10017_00` is the one plant RGB wins, and it is also the plant with the
+worst PC score of the eight — worth a look before claiming PC dominance without
+qualification. n = 8, so this is an illustration, not a significance test.
 
 **Four of seven leaf fields carry the whole result; three are at zero skill.**
 The three waviness fields sit at zero from both sources — the head emits the
@@ -134,7 +154,7 @@ by 24–54°, most of their range.
 ```bash
 python dump_param_examples.py --config configs/config_4m_distill_15k_all.yaml \
   --checkpoint outputs/4m_distill_15k_all/best_model.pth \
-  --source pc --indices 0,10,20,30,40,50,60,70 --out vis_params
+  --source pc --n 8 --indices 0,10,20,30,40,50,60,70 --out vis_params
 ```
 
 ---
