@@ -105,6 +105,12 @@ def main():
                          'unpredicted (default: qal_threshold)')
     ap.add_argument('--direction', default='missed', choices=['missed', 'spurious'])
     ap.add_argument('--num_samples', type=int, default=4)
+    ap.add_argument('--stride', type=int, default=10,
+                    help='take every Nth dataset folder. Folders are '
+                         '<plant>_<view> with 10 views per plant, so the default '
+                         'of 10 gives one view each of N DISTINCT plants; a '
+                         'stride of 1 would give N views of the same plant and '
+                         'read as far more variety than it shows')
     ap.add_argument('--elev', type=float, default=20.0)
     ap.add_argument('--azim', type=float, default=45.0)
     ap.add_argument('--point_size', type=float, default=2.5)
@@ -127,7 +133,12 @@ def main():
     root = cfg['data']['data_root']
     ds = SorghumDataset4M(f"{root}/{a.split}", img_size=args.img_size,
                           num_points=args.num_points, max_leaves=args.max_leaves)
-    dl = DataLoader(ds, batch_size=a.num_samples, shuffle=False, num_workers=4)
+    idx = list(range(0, len(ds), max(1, a.stride)))[:a.num_samples]
+    if len(idx) < a.num_samples:
+        raise SystemExit(f"{a.split} split has {len(ds)} folders; stride "
+                         f"{a.stride} yields only {len(idx)} samples")
+    sub = torch.utils.data.Subset(ds, idx)
+    dl = DataLoader(sub, batch_size=a.num_samples, shuffle=False, num_workers=4)
     batch = next(iter(dl))
 
     # Every checkpoint sees the same plants, in the same order, so a difference

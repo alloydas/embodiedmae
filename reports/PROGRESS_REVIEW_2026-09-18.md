@@ -174,13 +174,22 @@ python vis_pc_unpredicted.py \
   --source pc --num_samples 3 --export_json vis_unpredicted/clouds.json
 ```
 
-At the default threshold (0.01, i.e. `qal_threshold`), GT points with no
-prediction within that distance:
+`--stride 10` matters: folders are `<plant>_<view>` with ten views each, so a
+stride of 1 gives ten views of ONE plant and reads as far more variety than it
+shows. Stride 10 gives one view each of N distinct plants.
 
-| | mean % missed |
-|---|---|
-| before distillation | 80.0 % |
-| after distillation  | 73.2 % |
+Over 8 distinct plants, at the default threshold (0.01, i.e. `qal_threshold`):
+
+| | mean % missed | mean NN distance |
+|---|---|---|
+| before distillation | 86.3 % | 0.0334 |
+| after distillation  | 76.3 % | 0.0215 |
+
+Mean NN improves on **every one of the eight plants**. The red fraction does
+not: `Sorghum_10017_00` goes 82.1 % → 82.2 % while its mean NN improves 38 %
+(0.0334 → 0.0208). A single threshold collapses a continuous improvement into a
+binary that can miss it entirely, so quote the distance, or sweep the threshold,
+rather than resting on one percentage.
 
 **That number is high for a real reason, not a bug.** `chamfer_distance` returns
 a mean of *squared* distances, so the reported chamfer of 0.0028 is an RMS error
