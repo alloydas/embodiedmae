@@ -3,7 +3,8 @@
 
 For every GT point we take the distance to its NEAREST predicted point. If that
 distance exceeds --threshold, nothing the model produced lands near that point:
-the model failed to cover it. Those points are drawn RED, the covered ones grey.
+the model failed to cover it. Those points are drawn RED; points the model did
+land a prediction near are GREEN.
 
 The direction matters and is the whole reason this is not just "plot the error".
 Chamfer has two halves and they mean different things:
@@ -53,8 +54,8 @@ from torch.utils.data import DataLoader
 from sorghum_dataset_4m import SorghumDataset4M
 import train_sorghum_4m_distill as DIS
 
-MISSED = '#d4342a'   # red   -- GT point with no prediction near it
-COVERED = '#9aa7ad'  # grey  -- GT point the model reproduced
+MISSED = '#d4342a'   # red    -- GT point with no prediction near it
+COVERED = '#2e8b57'  # green  -- GT point the model did reproduce
 
 
 def per_point_nn(pred, gt, direction):
@@ -155,9 +156,9 @@ def main():
             summary.append((names[si], lab, pct, float(dist.mean())))
 
             ax = fig.add_subplot(n_s, n_c, si * n_c + ci + 1, projection='3d')
-            # plot covered first so red sits on top and never hides behind grey
+            # plot the green first so red sits on top and is never occluded by it
             ax.scatter(pts[~bad, 0], pts[~bad, 2], pts[~bad, 1],
-                       c=COVERED, s=a.point_size, linewidths=0, alpha=.55)
+                       c=COVERED, s=a.point_size, linewidths=0, alpha=.7)
             ax.scatter(pts[bad, 0], pts[bad, 2], pts[bad, 1],
                        c=MISSED, s=a.point_size * 1.6, linewidths=0)
             ax.view_init(a.elev, a.azim)
