@@ -30,6 +30,26 @@ weakest. RGB and depth were already decent conditioning signals and gain ~11 %;
 the two weak sources gain two to six times that. That is what the frozen
 full-modal teacher is for.
 
+### PC → params on its own
+
+The cell the paper's claim rests on — geometry in, procedural parameters out.
+Two runs do it, both warm-started from the same checkpoint, so they share the
+0.0617 baseline.
+
+| run | distilled targets | param MAE from PC | vs warm start | lr |
+|---|---|---|---|---|
+| warm start | — | 0.0617 | baseline | — |
+| `4m_distill_15k_pc2text` | params only | 0.0389 | −36.9 % | 3e−5 |
+| `4m_distill_15k_all` | all four | **0.0347** | **−43.8 %** | 1e−4 |
+
+**The generalist beats the parameter specialist at its own job** by 11 %. The
+other three reconstruction targets act as useful auxiliary supervision for
+parameter regression rather than competing with it.
+
+Caveat before this goes in a slide: the two runs used different learning rates,
+so part of the gap could be LR rather than the target set. A matched-LR
+`pc2text` run settles it and is cheap — 100 epochs on a single source.
+
 ### Provenance — read this before re-quoting the numbers
 
 | number | comes from |
@@ -37,6 +57,8 @@ full-modal teacher is for.
 | before (epoch 0) | `logs/evalwarm_12085946.out`, produced by `eval_warmstart.py`, which loads `outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth` and evaluates without training |
 | after (epoch 100) | last `val` entry in `outputs/4m_distill_15k_all/training_history.json` |
 | figures | `outputs/4m_distill_15k_all/visualizations/epoch_{001,100}_src-pc_sample_1_Sorghum_10001_00.png` |
+| PC→params specialist | `outputs/4m_distill_15k_pc2text/training_history.json` |
+| per-point miss maps | `vis_pc_unpredicted.py` (see below) |
 
 **Two traps in the older numbers.**
 
@@ -134,3 +156,38 @@ inside the 24 Oct freeze, but the margin is shrinking.
    table as ours, so the comparison holds only if they match on the same
    70/15/15 split at seed 42, global batch 32, and a budget in optimizer steps
    rather than epochs. The last is likeliest to diverge.
+
+---
+
+## 5. Per-point coverage — `vis_pc_unpredicted.py`
+
+Chamfer averages two failures that look nothing alike: geometry the model
+**missed** and geometry it **invented**. Averaged into one scalar they cancel,
+and neither is visible. The script colours a cloud by which points fall on the
+wrong side of a nearest-neighbour threshold:
+
+```bash
+python vis_pc_unpredicted.py \
+  --checkpoint outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth \
+  --checkpoint outputs/4m_distill_15k_all/best_model.pth \
+  --label "before distillation" --label "after distillation" \
+  --source pc --num_samples 3 --export_json vis_unpredicted/clouds.json
+```
+
+At the default threshold (0.01, i.e. `qal_threshold`), GT points with no
+prediction within that distance:
+
+| | mean % missed |
+|---|---|
+| before distillation | 80.0 % |
+| after distillation  | 73.2 % |
+
+**That number is high for a real reason, not a bug.** `chamfer_distance` returns
+a mean of *squared* distances, so the reported chamfer of 0.0028 is an RMS error
+near 0.053 — five times the threshold. 0.01 is where the loss starts
+*penalising*, not where reconstruction is visually acceptable. Sweep the
+threshold to 0.03–0.05 to see where the two models actually diverge.
+
+`--export_json` dumps positions plus the per-point NN distance (not a baked-in
+boolean, so the threshold stays a free parameter) for the interactive viewer in
+the artifact linked at the top.
