@@ -170,6 +170,13 @@ def main():
                 'img': f'view_{nmv[-2:]}.jpg',
                 'pred': [round(float(x), 3) for x in ppc[v].cpu().numpy().ravel()],
                 'gt':   [round(float(x), 3) for x in pc[v].cpu().numpy().ravel()],
+                # Per GT point, the distance to the NEAREST predicted point, so
+                # the ground-truth cloud can be coloured by whether the model
+                # covered it. Shipped as a distance rather than a boolean: the
+                # threshold is the thing a reader wants to move.
+                'nn':   [round(float(x), 4) for x in
+                         torch.cdist(ppc[v:v+1], pc[v:v+1], p=2)[0]
+                              .min(dim=0).values.cpu().numpy()],
             })
         (g / 'views.json').write_text(json.dumps(gal, separators=(',', ':')))
         print(f"gallery -> {g}  ({(g/'views.json').stat().st_size/1e6:.1f} MB json, "

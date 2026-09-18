@@ -223,8 +223,25 @@ resamples 8,196 points unseeded on every read, so per-view figures move ~5 %
 between runs. The U-shape and the 28.5 % gap are far larger than that; the
 +3.2 % on view 07 is not, so treat that view as a tie rather than a regression.
 
+### Coverage per view
+
+`--export_gallery` also writes the ten input renders beside the cloud each one
+produced, plus the per-GT-point nearest-neighbour distance so the ground truth
+can be coloured green (covered) / red (missed). Coverage tracks the same U as
+chamfer:
+
+| view | 00 | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| % missed @ 0.01 | 67.6 | 66.4 | 65.9 | 65.8 | **58.7** | 67.5 | 67.2 | 72.4 | **77.2** | 76.4 |
+| mean NN | 0.0198 | 0.0160 | 0.0149 | 0.0177 | **0.0147** | 0.0170 | 0.0149 | 0.0173 | 0.0201 | **0.0215** |
+
+The steep-up end (views 08–09) is worst on both measures. Note the best view
+differs by measure — 04 on coverage, 06 on chamfer — which is the single-draw
+resampling noise, not a real disagreement.
+
 ```bash
-python eval_views_one_plant.py --plant Sorghum_10001 --source rgb
+python eval_views_one_plant.py --plant Sorghum_10001 --source rgb \
+  --export_gallery <dir>
 ```
 
 ---
