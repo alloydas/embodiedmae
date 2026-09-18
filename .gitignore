@@ -63,6 +63,9 @@ archive/
 
 # Eval dumps: per-sample .ply + .png galleries. Keep the scripts, not the output.
 vis_rgb2pc/
+vis_unpredicted/
+vis_params/
+vis_views/
 figures_compare/
 figures_fixed/
 per_plant_chamfer_*.png
