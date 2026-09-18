@@ -64,6 +64,11 @@ def main():
     ap.add_argument('--source', default='rgb',
                     choices=['rgb', 'depth', 'pc', 'text'])
     ap.add_argument('--out', default='vis_views')
+    ap.add_argument('--export_gallery', default=None,
+                    help='directory to write the input renders and the generated '
+                         'clouds into, for the interactive gallery')
+    ap.add_argument('--gallery_px', type=int, default=448,
+                    help='long edge of the exported render (source is 1024)')
     ap.add_argument('--device', default='cpu')
     a = ap.parse_args()
 
@@ -145,6 +150,30 @@ def main():
     print(f"\nchamfer over views: best {min(ch):.6f} ({rows[int(np.argmin(ch))]['view']}) "
           f"worst {max(ch):.6f} ({rows[int(np.argmax(ch))]['view']}) "
           f"-> {max(ch)/min(ch):.2f}x spread")
+
+    if a.export_gallery:
+        from PIL import Image
+        g = Path(a.export_gallery); g.mkdir(parents=True, exist_ok=True)
+        gal = {'plant': a.plant, 'source': a.source, 'label': a.label, 'views': []}
+        for v, i in enumerate(idx):
+            nmv = names[i]
+            # The render, not a de-normalised tensor: this is the actual file the
+            # loader opens, so what you see is what the model was given (bar the
+            # resize to img_size and ImageNet normalisation).
+            im = Image.open(root / nmv / 'rgb.png').convert('RGB')
+            im.thumbnail((a.gallery_px, a.gallery_px), Image.LANCZOS)
+            im.save(g / f'view_{nmv[-2:]}.jpg', quality=88, optimize=True)
+            gal['views'].append({
+                'view': nmv[-2:], 'name': nmv,
+                'sin_elev': rows[v]['sin_elev'], 'cam_height': rows[v]['cam_height'],
+                'chamfer': rows[v]['chamfer'],
+                'img': f'view_{nmv[-2:]}.jpg',
+                'pred': [round(float(x), 3) for x in ppc[v].cpu().numpy().ravel()],
+                'gt':   [round(float(x), 3) for x in pc[v].cpu().numpy().ravel()],
+            })
+        (g / 'views.json').write_text(json.dumps(gal, separators=(',', ':')))
+        print(f"gallery -> {g}  ({(g/'views.json').stat().st_size/1e6:.1f} MB json, "
+              f"{len(idx)} renders)")
 
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     p = out / f'views_{a.plant}_{a.source}_{a.label.replace(" ", "-")}.json'
