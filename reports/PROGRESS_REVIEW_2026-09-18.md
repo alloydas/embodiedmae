@@ -85,6 +85,60 @@ structure rather than a blob.
 
 ---
 
+## 1b. What the parameter head actually recovers
+
+PC → params and RGB → params from the same model (`4m_distill_15k_all`), same 8
+plants, every other modality masked. **Skill** = 1 − MAE ÷ (error from always
+predicting the field's mean). 1.0 is perfect; **≤ 0 means nothing learned beyond
+the average plant.** 110 leaf tokens over 6 plants with real leaves.
+
+| leaf field | GT spread (sd) | MAE from PC | skill PC | MAE from RGB | skill RGB |
+|---|---|---|---|---|---|
+| starting_point          | 0.244  | 0.0087 | **0.96** | 0.0207 | **0.90** |
+| branching_angle         | 5.14°  | 0.32°  | **0.93** | 0.65°  | **0.85** |
+| length                  | 0.177  | 0.0403 | **0.70** | 0.0406 | **0.69** |
+| roll_angle              | 108.1° | 41.7°  | **0.55** | 59.7°  | **0.36** |
+| waviness_frequency      | 0.0041 | 0.0034 | −0.03 | 0.0034 | −0.03 |
+| waviness_period_start_0 | 26.3°  | 23.0°  | −0.02 | 23.2°  | −0.03 |
+| waviness_period_start_1 | 29.3°  | 26.0°  | −0.01 | 25.0°  | 0.03 |
+
+**Four of seven leaf fields carry the whole result; three are at zero skill.**
+The three waviness fields sit at zero from both sources — the head emits the
+dataset average and nothing more. A single aggregate `param_mae` averages these
+in, so ~40 % of the leaf vector dilutes a real result with a constant. (This
+corroborates the earlier per-parameter finding independently.)
+
+**PC beats RGB on every field that has any skill**, widest on `roll_angle`
+(0.55 vs 0.36) — geometry in, geometry out. Caveat on `branching_angle`: both
+look strong partly because the field barely varies, 5.1° of spread against
+roll_angle's 108°.
+
+### One leaf, end to end
+
+Leaf 1 of `Sorghum_10001_00`, unseen plant, leaf token masked so it is generated.
+
+| field | ground truth | from PC | from RGB |
+|---|---|---|---|
+| starting_point          | 0.199  | 0.198  | 0.194  |
+| length                  | 0.243  | 0.266  | 0.239  |
+| roll_angle              | 65.06° | 70.71° | 74.96° |
+| branching_angle         | 20.30° | 20.24° | 20.10° |
+| waviness_frequency      | 0.054  | 0.054  | 0.055  |
+| waviness_period_start_0 | 60.14° | 36.28° | 53.61° |
+| waviness_period_start_1 | 91.16° | 37.42° | 44.69° |
+| stem_length (plant)     | 1.344  | 1.468  | 1.251  |
+
+Position, length and the two angles land close; the two waviness phases are off
+by 24–54°, most of their range.
+
+```bash
+python dump_param_examples.py --config configs/config_4m_distill_15k_all.yaml \
+  --checkpoint outputs/4m_distill_15k_all/best_model.pth \
+  --source pc --indices 0,10,20,30,40,50,60,70 --out vis_params
+```
+
+---
+
 ## 2. E2 — modality value-add
 
 Four arms identical in every respect except which token streams exist. Compared
