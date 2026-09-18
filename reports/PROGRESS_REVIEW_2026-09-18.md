@@ -161,10 +161,15 @@ python dump_param_examples.py --config configs/config_4m_distill_15k_all.yaml \
 
 ## 1c. Ten images of one plant — the elevation experiment
 
-The ten folders of a plant are a natural experiment. Camera height descends
-**exactly linearly** with the view index (y = 3.30 − 0.50·index on
-`Sorghum_10001`) while azimuth is randomised, so the index is an elevation
-ladder from looking down to looking up. All ten views share one point cloud
+The ten folders of a plant are a natural experiment. The view index is an
+**exact elevation ladder**: carrying world-up through each view's
+`worldToCamera` gives a component along the camera's forward axis of precisely
+0.9 − 0.2·index, so the viewing direction's elevation is **−0.9 + 0.2·index** —
+steeply down at view 00, side-on in the middle, steeply up at view 09 — while
+azimuth is randomised. (This reproduces the formula already recorded in
+`plot_view_elevation_effect.py`; an earlier draft of this file reported the
+camera-*position* elevation instead, a different and non-exact quantity.) The
+camera frame is OpenGL-style: x right, y **up**, forward −z. All ten views share one point cloud
 (`_nc_cam.ply` is the same geometry rotated into the view frame, and the loader
 centres and unit-scales before Chamfer) and one set of spline parameters.
 **The answer never moves; only the input image does.**
@@ -173,16 +178,16 @@ Generated from **RGB alone**, every other modality masked.
 
 | view | sin(elev) | chamfer before | chamfer after | change |
 |---|---|---|---|---|
-| 00 | +0.94 | 0.001456 | 0.001016 | −30.2 % |
-| 01 | +0.84 | 0.000970 | 0.000674 | −30.5 % |
-| 02 | +0.75 | 0.000854 | 0.000653 | −23.5 % |
-| 03 | +0.58 | 0.001328 | 0.000819 | −38.3 % |
-| 04 | +0.48 | 0.000986 | 0.000608 | −38.3 % |
-| 05 | +0.31 | 0.000873 | 0.000654 | −25.1 % |
-| 06 | +0.12 | **0.000775** | **0.000553** | −28.6 % |
-| 07 | −0.10 | 0.000836 | 0.000863 | +3.2 % |
-| 08 | −0.35 | 0.001820 | 0.001150 | −36.8 % |
-| 09 | −0.74 | 0.001804 | 0.001380 | −23.5 % |
+| 00 | −0.90 | 0.001456 | 0.001016 | −30.2 % |
+| 01 | −0.70 | 0.000970 | 0.000674 | −30.5 % |
+| 02 | −0.50 | 0.000854 | 0.000653 | −23.5 % |
+| 03 | −0.30 | 0.001328 | 0.000819 | −38.3 % |
+| 04 | −0.10 | 0.000986 | 0.000608 | −38.3 % |
+| 05 | +0.10 | 0.000873 | 0.000654 | −25.1 % |
+| 06 | +0.30 | **0.000775** | **0.000553** | −28.6 % |
+| 07 | +0.50 | 0.000836 | 0.000863 | +3.2 % |
+| 08 | +0.70 | 0.001820 | 0.001150 | −36.8 % |
+| 09 | +0.90 | 0.001804 | 0.001380 | −23.5 % |
 | **mean** | | **0.001170** | **0.000837** | **−28.5 %** |
 | best/worst spread | | 2.35× | 2.49× | |
 
@@ -230,13 +235,18 @@ produced, plus the per-GT-point nearest-neighbour distance so the ground truth
 can be coloured green (covered) / red (missed).
 
 **Camera-frame convention.** `_nc_cam.ply` is already in the camera frame, so
-one orientation reproduces the photograph. It was measured, not assumed:
-projecting every view's cloud onto each candidate axis pair and scoring
-silhouette IoU against its own render picks **(x, −y)** on all ten views
-(0.383 mean against 0.326 for its vertical flip) — x right, y **down**, z into
-the scene, the usual camera convention. Mapping (x, y, z) → (x, −y, −z) puts
-that on screen for a Y-up viewer looking down +Z, which is what the interactive
-gallery opens with so cloud and render can be compared directly.
+one orientation reproduces the photograph, and the gallery opens there. The
+frame is **x right, y up, forward −z** (OpenGL-style), established from the
+camera matrix: world-up carried through `worldToCamera` lands on camera **+y**
+in all ten views (component 0.436–0.995). A Y-up viewer sitting on +Z already
+looks down −Z with +Y up and +X right, so no remapping is needed.
+
+An earlier version inferred this by scoring point-cloud silhouettes against the
+renders instead. That picked (x, −y) and rendered every cloud **upside down**.
+Silhouette IoU cannot separate a plant from its vertical mirror on a
+near-radially-symmetric subject — 0.383 against 0.326 is not a margin — and the
+geometric check settles in one line what the pixel check could not settle at
+all. Prefer the camera matrix over pixel agreement for any frame question.
 
 Coverage tracks the same U as chamfer:
 
