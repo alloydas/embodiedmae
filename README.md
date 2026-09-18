@@ -8,6 +8,23 @@
 
 ## Results
 
+📊 **[Sorghum 4M Progress Review — 18 Sep 2026](https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw)**
+
+Current status page. Cross-modal generation before and after distillation against the **true
+epoch-0 warm start** (mean_gen 0.3439 → 0.2781, −19.1%), the E2 modality ablation, and the E3/E4
+scaling runs in flight. Carries an **interactive point-cloud viewer**: two camera-locked WebGL
+panes, before vs after, where each ground-truth point turns red when no prediction lands within
+a threshold you can drag. Written up in full at
+[`reports/PROGRESS_REVIEW_2026-09-18.md`](reports/PROGRESS_REVIEW_2026-09-18.md), which also
+records where every number comes from and the two ways they get misquoted.
+
+Two results to know about. **PC → params: the generalist beats the specialist** — distilling all
+four modalities reaches 0.0347 param MAE from a point cloud against the dedicated `pc2text`
+run's 0.0389, though the two used different learning rates so a matched-LR run would settle it.
+And **E2's four-modality arm loses to PC+RGB+depth on chamfer** (0.002478 vs 0.001706), which is
+either a token-budget artefact or the novelty claim failing — reconstruction loss cannot tell
+them apart, and the downstream linear probe that plan decision 6.4 requires does not exist yet.
+
 📊 **[Less Left to Teach — v2 pretrain + cross-modal distillation, Sorghum 15K](https://claude.ai/code/artifact/5fa61dad-5d3f-4f55-add0-7226dec0a2d2)**
 
 Completed results for the two-stage run on the extreme-enriched Sorghum_15K split. Stage 1 is
@@ -41,7 +58,7 @@ Regenerate with `python make_comparison_figs.py` followed by `python build_artif
 > Superseded by the completed run above — kept for the masking-robustness and per-parameter
 > sweeps, which the newer page does not repeat.
 
-> **Note:** both links are Claude Artifacts, which are private to the owner until shared from
+> **Note:** these links are Claude Artifacts, which are private to the owner until shared from
 > the page's share menu. Share them before expecting anyone else to open them.
 
 ## Overview
