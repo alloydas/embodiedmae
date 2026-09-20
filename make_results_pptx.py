@@ -27,7 +27,7 @@ from PIL import Image
 
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
 from pptx.dml.color import RGBColor
 
 # One palette for figures and slides, so a chart never disagrees with the text
@@ -206,6 +206,12 @@ def tb(slide, l, t, w, h, lines, *, size=16, bold=False, color=INK,
     box = slide.shapes.add_textbox(l, t, w, h)
     tf = box.text_frame
     tf.word_wrap = True
+    # A pptx text box does not clip: text longer than the box renders straight
+    # over whatever sits below it. Declaring autofit asks the renderer to shrink
+    # instead. It is a request, not a guarantee -- fonts substitute and metrics
+    # differ between PowerPoint, Keynote and Slides -- so the layout below also
+    # leaves real slack rather than relying on this alone.
+    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     if isinstance(lines, str):
         lines = [lines]
     for i, line in enumerate(lines):
@@ -227,14 +233,18 @@ _T_L, _S_L, _GUT = 1.35, 9.90, 0.30
 
 
 def head(slide, num, title, sub=None):
-    tb(slide, Inches(.55), Inches(.34), Inches(_T_L - .55 - .10), Inches(.4), num,
+    # Title gets room for two lines at 22pt WITH slack, and the rule sits below
+    # that. Earlier versions gave the title 0.86in and put the rule at 1.06in,
+    # which is fine until a substituted font wraps the title to three lines and
+    # it runs through the rule and into the figure.
+    tb(slide, Inches(.55), Inches(.30), Inches(_T_L - .55 - .10), Inches(.4), num,
        size=13, bold=True, color=ACCENT, font='Consolas')
-    tb(slide, Inches(_T_L), Inches(.22), Inches(_S_L - _T_L - _GUT), Inches(.86),
-       title, size=24, bold=True, color=INK)
+    tb(slide, Inches(_T_L), Inches(.18), Inches(_S_L - _T_L - _GUT), Inches(1.02),
+       title, size=22, bold=True, color=INK)
     if sub:
-        tb(slide, Inches(_S_L), Inches(.40), Inches(2.95), Inches(.4), sub,
+        tb(slide, Inches(_S_L), Inches(.32), Inches(2.95), Inches(.58), sub,
            size=11, color=INK3, align=PP_ALIGN.RIGHT, font='Consolas')
-    ln = slide.shapes.add_shape(1, Inches(.55), Inches(1.06), Inches(12.2), Pt(2.2))
+    ln = slide.shapes.add_shape(1, Inches(.55), Inches(1.30), Inches(12.2), Pt(2.2))
     ln.fill.solid(); ln.fill.fore_color.rgb = INK
     ln.line.fill.background(); ln.shadow.inherit = False
 
@@ -283,7 +293,7 @@ def build(figs, out):
     # 2 — the three charts
     s = blank(prs)
     head(s, '01', 'Results at equal compute', 'every arm = 197,400 steps')
-    pic(s, figs['charts'], Inches(.45), Inches(1.35), Inches(12.4), Inches(4.1))
+    pic(s, figs['charts'], Inches(.45), Inches(1.52), Inches(12.4), Inches(3.95))
     tb(s, Inches(.55), Inches(5.65), Inches(12.2), Inches(1.5), [
         ('RGB buys −49.4% and depth a further 16 points — but adding the parametric stream '
          'gives back everything depth gained.', 14, True, INK),
@@ -293,10 +303,10 @@ def build(figs, out):
 
     # 3 — coverage, green/red
     s = blank(prs)
-    head(s, '02', 'Which points the model can and cannot predict',
+    head(s, '02', 'What the model cannot predict',
          'ground truth, coloured by coverage')
-    pic(s, figs['coverage'], Inches(.45), Inches(1.30), Inches(8.5), Inches(5.6))
-    tb(s, Inches(9.25), Inches(1.45), Inches(3.6), Inches(5.2), [
+    pic(s, figs['coverage'], Inches(.45), Inches(1.50), Inches(8.5), Inches(5.45))
+    tb(s, Inches(9.25), Inches(1.55), Inches(3.6), Inches(5.35), [
         ('Green', 20, True, RGBColor(0x34, 0xA3, 0x5C)),
         ('a prediction lands within 0.03 of this ground-truth point.', 12.5, False, INK2),
         ('', 8, False, INK2),
@@ -314,10 +324,10 @@ def build(figs, out):
 
     # 4 — per view
     s = blank(prs)
-    head(s, '03', 'Ten cameras, one plant — only the input image changes',
+    head(s, '03', 'Ten cameras, one plant',
          'generated from RGB alone')
-    pic(s, figs['views'], Inches(.45), Inches(1.28), Inches(8.3), Inches(5.7))
-    tb(s, Inches(9.05), Inches(1.45), Inches(3.8), Inches(5.3), [
+    pic(s, figs['views'], Inches(.45), Inches(1.48), Inches(8.3), Inches(5.50))
+    tb(s, Inches(9.05), Inches(1.55), Inches(3.8), Inches(5.35), [
         ('The view index is an exact elevation ladder', 14, True, INK),
         ('−0.9 + 0.2·index, from the camera matrix. All ten views share one '
          'point cloud and one parameter vector, so the answer never moves.', 12, False, INK2),
@@ -329,22 +339,23 @@ def build(figs, out):
         ('…but best/worst spread widens 2.35× → 2.49×. It lowers the curve '
          'without flattening it, so it is not the lever for view robustness.', 12, False, INK2),
         ('', 8, False, INK2),
-        ('Clouds are drawn in the camera\'s own frame, so each sits in the same '
-         'pose as the photograph beside it.', 10.5, False, INK3)])
+        ('', 9, False, INK2),
+        ('Clouds are in the camera\'s own frame — same pose as the photograph.',
+         10.5, False, INK3)])
 
     # 5 — parameters + next
     s = blank(prs)
-    head(s, '04', 'What the parameter head recovers, and what is next',
+    head(s, '04', 'Parameter head, and next steps',
          '142 leaf tokens · 8 plants')
     rows = [('starting_point', 0.95, 0.90), ('branching_angle', 0.93, 0.85),
             ('length', 0.67, 0.66), ('roll_angle', 0.50, 0.33),
             ('waviness_frequency', -0.02, -0.01),
             ('waviness_period_start_0', -0.01, -0.04),
             ('waviness_period_start_1', -0.01, 0.02)]
-    tb(s, Inches(.55), Inches(1.30), Inches(6.2), Inches(.4),
-       'Skill per leaf field   (1 − MAE ÷ error of always predicting the mean)',
+    tb(s, Inches(.55), Inches(1.46), Inches(6.2), Inches(.50),
+       'Skill per leaf field   (1 = perfect, ≤ 0 = no better than the mean)',
        size=12, bold=True, color=INK)
-    tbl = s.shapes.add_table(len(rows) + 1, 3, Inches(.55), Inches(1.72),
+    tbl = s.shapes.add_table(len(rows) + 1, 3, Inches(.55), Inches(1.94),
                              Inches(6.2), Inches(2.9)).table
     # Every column set explicitly, summing to the requested 6.2in. Setting only
     # column 0 leaves the other two at their default share of the original
@@ -364,13 +375,13 @@ def build(figs, out):
             r.font.size = Pt(11)
             r.font.bold = (j > 0 and not dead)
             r.font.color.rgb = CRITICAL if dead else (ACCENT if j > 0 else INK)
-    tb(s, Inches(.55), Inches(4.78), Inches(6.2), Inches(1.9), [
+    tb(s, Inches(.55), Inches(5.00), Inches(6.2), Inches(1.9), [
         ('Four of seven fields carry the whole result. The three waviness fields '
          'emit the dataset average and nothing more, from either source — so ~40% '
          'of the leaf vector dilutes a real result with a constant.', 12, False, INK2),
         ('PC beats RGB on every field with skill, and on 7 of 8 plants.', 12.5, True, INK)])
 
-    tb(s, Inches(7.1), Inches(1.30), Inches(5.7), Inches(5.4), [
+    tb(s, Inches(7.1), Inches(1.52), Inches(5.7), Inches(5.25), [
         ('Two decisions needed', 17, True, INK),
         ('', 6, False, INK2),
         ('1 · Build the downstream linear probe', 14, True, ACCENT),
