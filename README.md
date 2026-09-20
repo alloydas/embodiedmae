@@ -8,6 +8,19 @@
 
 ## Results
 
+📊 **[Sorghum 4M Results Deck — 20 Sep 2026](https://claude.ai/artifact/MvfBLvgGWpr2UR1Z9SoAy3)**
+
+Four slides covering everything complete to date: cross-modal distillation (−19.1%), the E2
+modality ablation (all four arms final), E3/E4 scaling at equal compute, and the parameter-head
+anatomy. Text version at
+[`reports/RESULTS_DECK_2026-09-20.md`](reports/RESULTS_DECK_2026-09-20.md).
+
+The result to carry out of it: **10,000 and 10,500 plants differ by 5% in data but the 10,500 arm
+scores 3.0% worse**, so those two runs are effectively a duplicate and ≈3% is this pipeline's
+run-to-run noise floor — the only such measurement in the E1–E10 matrix. That makes 3k→10k
+(−6.9%) only ~2.3x noise, while 25M→114M parameters buys −17.1%. At this compute budget capacity
+is paying better than data.
+
 📊 **[Sorghum 4M Progress Review — 18 Sep 2026](https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw)**
 
 Current status page. Cross-modal generation before and after distillation against the **true

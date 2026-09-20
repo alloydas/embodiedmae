@@ -28,7 +28,7 @@ The programme is the E1–E10 matrix in the CVPR 2027 plan (the Google Doc is th
 source of truth for scope; this section is the source of truth for *state*).
 Paper deadline **Nov 13 2026**, internal results freeze **Oct 24 2026**.
 
-**Status as of 2026-09-17.** Run state goes stale fast — the table records which
+**Status as of 2026-09-20.** Run state goes stale fast — the table records which
 experiments have been *built*, which is durable. For live progress use
 `squeue -u $USER`, `outputs/<run>/training_history.json`, and
 `outputs/<run>/config.json` (which records what a run actually used).
@@ -36,15 +36,27 @@ experiments have been *built*, which is durable. For live progress use
 | | experiment | state | runs |
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
-| E2 | modality value-add | **running** | `e2_pc` ✅, `e2_pcrgb` ✅ (600/600 each); `e2_pcrgbd`, `e2_pcrgbdt` in flight |
-| E3 | data scaling | **running** | `e3_10k` in flight; `e3_3k`, `e3_1k` queued |
-| E4 | model scaling | **queued** | `e4_small`, `e4_large` |
+| E2 | modality value-add | **done** | all four arms 600/600; results in `reports/RESULTS_DECK_2026-09-20.md` |
+| E3 | data scaling | **2 of 3** | `e3_3k` ✅ `e3_10k` ✅; `e3_1k` resuming from epoch 5654/6169 |
+| E4 | model scaling | **1 of 2** | `e4_small` ✅; `e4_large` resuming from epoch 250/600 |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
 | E8 | baselines | **not built** | — |
 | E9 | latent analysis | **not built** | — |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
+
+**On the two resuming arms.** `e3_1k` and `e4_large` both died at exactly
+`2026-09-19T15:51:27` on `nova26-gpu-2` — same second, same node, no traceback, host RSS far
+under request. That is a node-level event on the preemptible `scavenger` partition, not a fault
+in either run, and the launcher's auto-resume bounds the loss at `save_freq` epochs. `e3_1k`'s
+`training_history.json` was left truncated mid-write; its val series is recoverable from the run
+log in `logs/`.
+
+**On waiting for GPUs.** When these jobs sit `PENDING` for days, check whether it is your request
+before shrinking it: a 1-GPU / 1-CPU / 1 GB / 10-minute test job placed at the *same* time as the
+full 2-GPU / 320 GB request, which means the nodes are held by a reservation and no amount of
+trimming helps.
 
 ### Two gaps that block the headline claim
 
