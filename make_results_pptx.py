@@ -355,7 +355,7 @@ def build(figs, out):
     tb(s, Inches(.55), Inches(1.46), Inches(6.2), Inches(.50),
        'Skill per leaf field   (1 = perfect, ≤ 0 = no better than the mean)',
        size=12, bold=True, color=INK)
-    tbl = s.shapes.add_table(len(rows) + 1, 3, Inches(.55), Inches(1.94),
+    tbl = s.shapes.add_table(len(rows) + 1, 3, Inches(.55), Inches(2.04),
                              Inches(6.2), Inches(2.9)).table
     # Every column set explicitly, summing to the requested 6.2in. Setting only
     # column 0 leaves the other two at their default share of the original
