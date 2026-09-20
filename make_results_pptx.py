@@ -91,7 +91,7 @@ def fig_coverage(clouds_json, out, thr=0.03, plants=4):
     return out
 
 
-def fig_views(views_json, gallery_dir, out, picks=(0, 6, 9), thr=0.03):
+def fig_views(views_json, gallery_dir, out, picks=(0, 3, 6, 9), thr=0.03):
     """Input render, the cloud generated from it, and GT coloured by coverage.
 
     Clouds are drawn in the CAMERA's own frame -- the frame is x right, y up,
@@ -102,33 +102,34 @@ def fig_views(views_json, gallery_dir, out, picks=(0, 6, 9), thr=0.03):
     d = json.loads(Path(views_json).read_text())
     g = Path(gallery_dir)
     V = [d['views'][i] for i in picks]
-    fig, ax = plt.subplots(len(V), 3, figsize=(10.5, 3.5 * len(V)))
-    if len(V) == 1:
-        ax = ax[None, :]
-    for r, v in enumerate(V):
-        ax[r, 0].imshow(Image.open(g / v['img']))
-        ax[r, 0].set_ylabel(f"view {v['view']}\nsin(elev) {-0.9 + 0.2*picks[r]:+.1f}",
-                            fontsize=10, fontweight='bold')
+    # Views across, panel types down. A 3x3 of square panels is square and
+    # letterboxes badly into a slide; this is landscape and fits a fourth view
+    # into the same width.
+    fig, ax = plt.subplots(3, len(V), figsize=(2.9 * len(V), 9.1))
+    for c, v in enumerate(V):
+        ax[0, c].imshow(Image.open(g / v['img']))
+        ax[0, c].set_title(f"view {v['view']}   sin(elev) {-0.9 + 0.2*picks[c]:+.1f}",
+                           fontsize=10.5, fontweight='bold', pad=5)
         pred = np.asarray(v['pred'], dtype=np.float32).reshape(-1, 3)
         gt   = np.asarray(v['gt'],   dtype=np.float32).reshape(-1, 3)
         nn   = np.asarray(v['nn'],   dtype=np.float32)
-        ax[r, 1].scatter(pred[:, 0], pred[:, 1], s=1.0, c=pred[:, 2],
+        ax[1, c].scatter(pred[:, 0], pred[:, 1], s=1.0, c=pred[:, 2],
                          cmap='viridis', linewidths=0)
+        ax[1, c].set_title(f"chamfer {v['chamfer']:.5f}", fontsize=9, pad=3)
         bad = nn > thr
-        ax[r, 2].scatter(gt[~bad, 0], gt[~bad, 1], s=1.0, c=M_GREEN, linewidths=0, alpha=.8)
-        ax[r, 2].scatter(gt[bad, 0], gt[bad, 1], s=1.6, c=M_RED, linewidths=0)
-        ax[r, 2].set_title(f"{100*bad.mean():.0f}% missed", fontsize=9,
+        ax[2, c].scatter(gt[~bad, 0], gt[~bad, 1], s=1.0, c=M_GREEN, linewidths=0, alpha=.8)
+        ax[2, c].scatter(gt[bad, 0], gt[bad, 1], s=1.6, c=M_RED, linewidths=0)
+        ax[2, c].set_title(f"{100*bad.mean():.0f}% missed", fontsize=9.5,
                            color=M_CRIT, fontweight='bold', pad=3)
-        ax[r, 1].set_title(f"chamfer {v['chamfer']:.5f}", fontsize=9, pad=3)
-        for c in (1, 2):
+        for r in (1, 2):
             ax[r, c].set_aspect('equal')
-        for c in range(3):
+        for r in range(3):
             ax[r, c].set_xticks([]); ax[r, c].set_yticks([])
-    for c, t in enumerate(['input render (RGB)', 'generated from RGB',
-                           'ground truth — green covered / red missed']):
-        ax[0, c].set_title(t + '\n' + ax[0, c].get_title(), fontsize=10,
-                           fontweight='bold', pad=4)
-    fig.subplots_adjust(left=.06, right=.99, top=.90, bottom=.02, wspace=.03, hspace=.08)
+    for r, t in enumerate(['input render (RGB)', 'generated from RGB',
+                           'ground truth\ngreen covered / red missed']):
+        ax[r, 0].set_ylabel(t, fontsize=10, fontweight='bold')
+    fig.subplots_adjust(left=.075, right=.995, top=.955, bottom=.005,
+                        wspace=.03, hspace=.10)
     fig.savefig(out, dpi=150, facecolor='white')
     plt.close(fig)
     return out
@@ -218,13 +219,20 @@ def tb(slide, l, t, w, h, lines, *, size=16, bold=False, color=INK,
     return box
 
 
+# Title box right edge and subtitle left edge, with a gutter between them.
+# These must not be chosen independently: the title was 9.60 wide from L1.35,
+# reaching R10.95, while the subtitle started at L9.90 -- so every title long
+# enough to fill its box ran straight through the subtitle.
+_T_L, _S_L, _GUT = 1.35, 9.90, 0.30
+
+
 def head(slide, num, title, sub=None):
-    tb(slide, Inches(.55), Inches(.34), Inches(1.0), Inches(.4), num,
+    tb(slide, Inches(.55), Inches(.34), Inches(_T_L - .55 - .10), Inches(.4), num,
        size=13, bold=True, color=ACCENT, font='Consolas')
-    tb(slide, Inches(1.35), Inches(.26), Inches(9.6), Inches(.8), title,
-       size=27, bold=True, color=INK)
+    tb(slide, Inches(_T_L), Inches(.22), Inches(_S_L - _T_L - _GUT), Inches(.86),
+       title, size=24, bold=True, color=INK)
     if sub:
-        tb(slide, Inches(9.9), Inches(.40), Inches(3.0), Inches(.4), sub,
+        tb(slide, Inches(_S_L), Inches(.40), Inches(2.95), Inches(.4), sub,
            size=11, color=INK3, align=PP_ALIGN.RIGHT, font='Consolas')
     ln = slide.shapes.add_shape(1, Inches(.55), Inches(1.06), Inches(12.2), Pt(2.2))
     ln.fill.solid(); ln.fill.fore_color.rgb = INK
@@ -338,7 +346,12 @@ def build(figs, out):
        size=12, bold=True, color=INK)
     tbl = s.shapes.add_table(len(rows) + 1, 3, Inches(.55), Inches(1.72),
                              Inches(6.2), Inches(2.9)).table
-    tbl.columns[0].width = Inches(3.2)
+    # Every column set explicitly, summing to the requested 6.2in. Setting only
+    # column 0 leaves the other two at their default share of the original
+    # width, so the table silently grows to 7.3in and runs into the right-hand
+    # column of the slide.
+    for i_c, w_c in enumerate([3.2, 1.5, 1.5]):
+        tbl.columns[i_c].width = Inches(w_c)
     for j, t in enumerate(['leaf field', 'from PC', 'from RGB']):
         c = tbl.cell(0, j); c.text = t
         c.text_frame.paragraphs[0].runs[0].font.size = Pt(11)
