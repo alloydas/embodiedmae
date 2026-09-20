@@ -10,7 +10,11 @@
 
 📊 **[Sorghum 4M Results Deck — 20 Sep 2026](https://claude.ai/artifact/MvfBLvgGWpr2UR1Z9SoAy3)**
 
-Four slides covering everything complete to date: cross-modal distillation (−19.1%), the E2
+PowerPoint version, ready to present:
+[`sorghum_results_2026-09-20.pptx`](sorghum_results_2026-09-20.pptx) (5 slides, 16:9) — rebuild with
+`conda activate det && python make_results_pptx.py --gallery <dir>`.
+
+Covers everything complete to date: cross-modal distillation (−19.1%), the E2
 modality ablation (all four arms final), E3/E4 scaling at equal compute, and the parameter-head
 anatomy. Text version at
 [`reports/RESULTS_DECK_2026-09-20.md`](reports/RESULTS_DECK_2026-09-20.md).
