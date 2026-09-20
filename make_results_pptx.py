@@ -267,32 +267,241 @@ def blank(prs):
 
 # ── deck ─────────────────────────────────────────────────────────────────
 
+def bullets(slide, l, t, w, h, items, *, size=13.5, gap=7):
+    """Body copy as labelled bullets. `items` is a list of (lead, rest) or str."""
+    lines = []
+    for it in items:
+        if isinstance(it, tuple):
+            lead, rest = it
+            lines.append((f'{lead}  {rest}', size, False, INK2))
+        else:
+            lines.append((it, size, False, INK2))
+    return tb(slide, l, t, w, h, lines, size=size, space=gap)
+
+
+def kv(slide, l, t, w, items, *, size=13, lead_w=None):
+    """Two-column key/value rows; keys bold, values regular."""
+    rows = []
+    for k, v in items:
+        rows.append((f'{k}   {v}', size, False, INK2))
+    return tb(slide, l, t, w, Inches(.4 * len(items) + .3), rows, size=size, space=5)
+
+
 def build(figs, out):
     prs = Presentation()
     prs.slide_width, prs.slide_height = W, H
 
-    # 1 — title + headline
+    # 1 — title
     s = blank(prs)
-    tb(s, Inches(.8), Inches(1.5), Inches(11.5), Inches(1.0),
+    tb(s, Inches(.8), Inches(1.45), Inches(11.5), Inches(1.0),
        'EmbodiedMAE for Sorghum', size=40, bold=True, color=INK)
-    tb(s, Inches(.8), Inches(2.5), Inches(11.5), Inches(.7),
-       'Cross-modal generation, modality value-add, and scaling',
-       size=19, color=INK2)
-    tb(s, Inches(.8), Inches(3.5), Inches(11.5), Inches(.5),
-       'Sorghum_15K validation split · held-out plants · 20 September 2026',
+    tb(s, Inches(.8), Inches(2.45), Inches(11.5), Inches(.8),
+       'A multi-modal masked autoencoder over RGB, depth, point cloud '
+       'and procedural growth parameters', size=18, color=INK2)
+    tb(s, Inches(.8), Inches(3.45), Inches(11.5), Inches(.5),
+       'Sorghum_15K · 15,000 plants · 20 September 2026',
        size=13, color=INK3, font='Consolas')
     for i, (v, lab, col) in enumerate([
+            ('98.4%', 'skill vs the average-plant floor, held-out test split', ACCENT),
             ('0.3439 → 0.2781', 'cross-modal generation after distillation', ACCENT),
-            ('−65.5%', 'PC chamfer from adding RGB + depth', ACCENT),
             ('≈3%', 'run-to-run noise floor, measured', BEFORE)]):
         x = Inches(.8 + i * 4.05)
-        tb(s, x, Inches(4.6), Inches(3.8), Inches(.6), v, size=26, bold=True,
+        tb(s, x, Inches(4.55), Inches(3.8), Inches(.6), v, size=25, bold=True,
            color=col, font='Consolas')
-        tb(s, x, Inches(5.3), Inches(3.8), Inches(.8), lab, size=12, color=INK2)
+        tb(s, x, Inches(5.25), Inches(3.8), Inches(1.0), lab, size=12, color=INK2)
+
+    # 2 — problem
+    s = blank(prs)
+    head(s, '01', 'The problem', 'why a multi-modal MAE')
+    bullets(s, Inches(.55), Inches(1.55), Inches(6.0), Inches(5.2), [
+        ('Phenotyping needs 3D structure.', 'Breeders want leaf count, leaf angle, '
+         'height and biomass. Those live in geometry, but geometry is expensive to '
+         'capture and cheap to photograph.'),
+        ('One encoder, four views of the same plant.', 'RGB, depth, a point cloud '
+         'and the procedural parameters the plant was grown from are four '
+         'descriptions of one object. A masked autoencoder over all four has to '
+         'reconcile them in a single latent.'),
+        ('The novelty we defend.', 'The procedural growth parameters are not just a '
+         'prediction target — they are a co-trained token stream, an input '
+         'modality like the others. To our knowledge that is unoccupied ground for '
+         'plants.'),
+    ], size=13.5)
+    tb(s, Inches(7.0), Inches(1.55), Inches(5.8), Inches(.4),
+       'Three questions this work has to answer', size=14, bold=True, color=INK)
+    bullets(s, Inches(7.0), Inches(2.05), Inches(5.8), Inches(4.6), [
+        ('1', 'Does each modality actually pay for itself, or is the fourth '
+              'stream dead weight?   → E2'),
+        ('2', 'Given one modality, can the model generate the others — and does '
+              'distillation improve that?   → distillation'),
+        ('3', 'Does performance come from more data, or more capacity?   → E3 / E4'),
+    ], size=13.5, gap=14)
+
+    # 3 — data
+    s = blank(prs)
+    head(s, '02', 'The data', 'Sorghum_15K')
+    bullets(s, Inches(.55), Inches(1.55), Inches(6.1), Inches(5.2), [
+        ('15,000 procedurally generated plants,', 'each rendered from 10 camera '
+         'views — 150,000 samples, 774 GB on disk.'),
+        ('Four aligned modalities per view:', 'an RGB render, a depth map, a '
+         'camera-frame point cloud, and the generator parameters (stem, and up to '
+         '24 leaves × 7 fields each).'),
+        ('Split 70/15/15 BY PLANT, not by view.', 'An earlier 10k split was made '
+         'per camera view, so every validation sample was a training plant from a '
+         'new angle. It scored 0.0003 and meant nothing. Splitting by plant is the '
+         'difference between 0.0003 and an honest 0.05.'),
+        ('The ten views are an elevation ladder,', 'not ten random cameras: '
+         'sin(elev) = −0.9 + 0.2 × view index exactly, azimuth randomised. That '
+         'makes camera angle a free controlled variable.'),
+    ], size=13)
+    tb(s, Inches(7.1), Inches(1.55), Inches(5.7), Inches(.4),
+       'Split, by plant', size=14, bold=True, color=INK)
+    tbl = s.shapes.add_table(4, 3, Inches(7.1), Inches(2.0), Inches(5.6), Inches(1.8)).table
+    for i_c, w_c in enumerate([2.2, 1.7, 1.7]):
+        tbl.columns[i_c].width = Inches(w_c)
+    data = [('split', 'plants', 'view-samples'), ('train', '10,500', '105,000'),
+            ('val', '2,250', '22,500'), ('test', '2,250', '22,500')]
+    for r, row in enumerate(data):
+        for c, t in enumerate(row):
+            cell = tbl.cell(r, c); cell.text = t
+            run = cell.text_frame.paragraphs[0].runs[0]
+            run.font.size = Pt(12); run.font.bold = (r == 0)
+            run.font.color.rgb = INK if r == 0 else INK2
+    tb(s, Inches(7.1), Inches(4.05), Inches(5.7), Inches(2.4), [
+        ('Only four files per sample are ever read', 13.5, True, INK),
+        ('rgb.png, depth.png, *_nc_cam.ply, *_spline.yml — about 1.8 MB of the '
+         '5 MB per sample. The source .obj and the world-frame .ply are '
+         'duplicated into all ten view folders and never opened in training, '
+         'which is 64% of the bytes on disk.', 12.5, False, INK2)])
+
+    # 4 — architecture
+    s = blank(prs)
+    head(s, '03', 'Method — one encoder, four token streams', 'ViT-base, depth 12, dim 768')
+    pic(s, 'arch_diagram.png', Inches(.35), Inches(1.50), Inches(12.6), Inches(4.3))
+    tb(s, Inches(.55), Inches(5.95), Inches(12.2), Inches(1.2), [
+        ('Each modality gets its own embedder and its own decoder head; the encoder '
+         'sees the union of visible tokens plus a shared CLS. RGB and depth '
+         'patchify to 196 tokens, the point cloud is grouped into 196 FPS centres '
+         'with kNN neighbourhoods, and the parameters become 25 tokens '
+         '(1 plant + 24 leaves).', 12.5, False, INK2)])
+
+    # 5 — training protocol
+    s = blank(prs)
+    head(s, '04', 'Method — masking and the training protocol', 'what is held fixed')
+    bullets(s, Inches(.55), Inches(1.55), Inches(6.1), Inches(5.3), [
+        ('Masking is allocated, not uniform.', '80% of tokens are masked overall, '
+         'but the split across the four modalities is drawn from a Dirichlet once '
+         'per batch, with a floor of 25% masking per modality. The per-modality '
+         'count is identical batch-wide, which avoids batch elements with zero '
+         'visible tokens corrupting the encoder norms.'),
+        ('One view per plant per epoch.', 'Views act as augmentation rather than as '
+         'extra data, so an epoch is 10,500 items and not 105,000. The draw is a '
+         'pure function of (seed, epoch, plant), so it is identical on every rank '
+         'and reproducible from the seed alone.'),
+    ], size=13)
+    tb(s, Inches(7.1), Inches(1.55), Inches(5.7), Inches(.4),
+       'Ablations are sized in optimizer steps', size=14, bold=True, color=INK)
+    tb(s, Inches(7.1), Inches(2.02), Inches(5.7), Inches(4.5), [
+        ('An epoch under view sampling is one view per plant, so its size IS the '
+         'plant count. Equal epochs would hand the 10k-plant arm ten times the '
+         'gradient updates of the 1k-plant arm, and the scaling curve would be '
+         'measuring data and compute together.', 12.5, False, INK2),
+        ('', 8, False, INK2),
+        ('Every ablation arm runs 197,400 optimizer steps at global batch 32.',
+         13, True, ACCENT),
+        ('', 8, False, INK2),
+        ('So the E3 configs carry very different epoch counts — 6,169 / 2,100 / 631 '
+         '— on purpose. Normalising them would unfix the one thing the experiment '
+         'controls.', 12.5, False, INK2),
+        ('', 8, False, INK2),
+        ('Global batch is per-GPU batch × GPU count, so each launcher sets its own '
+         'per-GPU value: 16×2 on the 2-GPU nodes, 8×4 on the 4-GPU nodes.',
+         12.5, False, INK3)])
+
+    # 6 — evaluation methodology
+    s = blank(prs)
+    head(s, '05', 'Method — how a reconstruction is scored', 'and what it is scored against')
+    tb(s, Inches(.55), Inches(1.55), Inches(6.1), Inches(.4),
+       'Both Chamfer directions, reported separately', size=14, bold=True, color=INK)
+    tb(s, Inches(.55), Inches(2.02), Inches(6.1), Inches(2.0), [
+        ('They fail differently, and the symmetric sum hides it.', 12.5, True, INK),
+        ('pred → gt  is accuracy: it rises when the model puts points where no '
+         'plant is.', 12.5, False, INK2),
+        ('gt → pred  is completeness: it rises when the model misses parts of the '
+         'plant.', 12.5, False, INK2),
+        ('A cloud that collapses to a dense blob scores well on accuracy and badly '
+         'on completeness.', 12.5, False, INK3)])
+    tb(s, Inches(.55), Inches(4.25), Inches(6.1), Inches(2.3), [
+        ('On the test split our model is 0.000293 accuracy against 0.000498 '
+         'completeness —', 12.5, True, INK),
+        ('it misses real geometry roughly twice as often as it invents geometry. '
+         'That is the same failure the red points in the next figures show, '
+         'arrived at independently.', 12.5, False, INK2)])
+    tb(s, Inches(7.1), Inches(1.55), Inches(5.7), Inches(.4),
+       'Two baselines bracket the number', size=14, bold=True, color=INK)
+    tbl = s.shapes.add_table(4, 2, Inches(7.1), Inches(2.02), Inches(5.6), Inches(2.0)).table
+    for i_c, w_c in enumerate([3.6, 2.0]):
+        tbl.columns[i_c].width = Inches(w_c)
+    for r, (a, b, bold, col) in enumerate([
+            ('what is compared', 'mean chamfer', True, INK),
+            ('our prediction vs its own plant', '0.000791', True, ACCENT),
+            ('our prediction vs a DIFFERENT plant', '0.039932', False, INK2),
+            ('another plant\'s GT used as the prediction', '0.049264', False, INK2)]):
+        for c, t in enumerate([a, b]):
+            cell = tbl.cell(r, c); cell.text = t
+            run = cell.text_frame.paragraphs[0].runs[0]
+            run.font.size = Pt(11.5); run.font.bold = bold
+            run.font.color.rgb = col
+    tb(s, Inches(7.1), Inches(4.25), Inches(5.7), Inches(2.3), [
+        ('Why the floor is not zero.', 13, True, INK),
+        ('Clouds are centred and unit-sphere normalised, so every sorghum already '
+         'overlaps every other one. A model that learned nothing plant-specific '
+         'lands at 0.049 — the average-sorghum floor — not at zero.', 12.5, False, INK2),
+        ('', 7, False, INK2),
+        ('skill = 1 − model ÷ floor = 98.4%', 14, True, ACCENT)])
+
+    # 7 — cross-modal generation on TEST
+    s = blank(prs)
+    head(s, '06', 'Generating a point cloud from one image', 'held-out TEST split · 2,250 plants')
+    tb(s, Inches(.55), Inches(1.55), Inches(7.4), Inches(.4),
+       'RGB → point cloud, and depth → point cloud', size=14, bold=True, color=INK)
+    tbl = s.shapes.add_table(6, 4, Inches(.55), Inches(2.02), Inches(7.4), Inches(2.6)).table
+    for i_c, w_c in enumerate([3.2, 1.0, 1.6, 1.6]):
+        tbl.columns[i_c].width = Inches(w_c)
+    rows = [('model', 'source', 'mean chamfer', 'skill'),
+            ('warm start, no distillation', 'RGB', '0.000998', '98.0%'),
+            ('+ cross-modal distillation', 'RGB', '0.000840', '98.3%'),
+            ('+ 50% source masking, seed 1', 'RGB', '0.000791', '98.4%'),
+            ('+ 50% source masking, seed 2', 'RGB', '0.000792', '98.4%'),
+            ('distilled generalist', 'depth', '0.000620', '98.7%')]
+    for r, row in enumerate(rows):
+        for c, t in enumerate(row):
+            cell = tbl.cell(r, c); cell.text = t
+            run = cell.text_frame.paragraphs[0].runs[0]
+            run.font.size = Pt(11.5)
+            run.font.bold = (r == 0 or r == 5)
+            run.font.color.rgb = INK if r == 0 else (ACCENT if r == 5 else INK2)
+    tb(s, Inches(.55), Inches(4.85), Inches(7.4), Inches(1.9), [
+        ('Every row is 2,250 unseen plants, and the two seeds agree to the fourth '
+         'decimal — source masking reproduces rather than being one lucky run.',
+         12.5, False, INK2)])
+    tb(s, Inches(8.25), Inches(1.55), Inches(4.55), Inches(5.2), [
+        ('Three things to take from this', 14, True, INK),
+        ('', 7, False, INK2),
+        ('Distillation pays on test, not just val.', 13, True, ACCENT),
+        ('0.000998 → 0.000840, a 15.8% improvement on plants the model has never '
+         'seen.', 12.5, False, INK2),
+        ('', 7, False, INK2),
+        ('Masking the source helps.', 13, True, ACCENT),
+        ('Hiding half the RGB tokens on the cross-modal training path buys a '
+         'further 5.8%, replicated across two seeds.', 12.5, False, INK2),
+        ('', 7, False, INK2),
+        ('Depth is the better single sensor.', 13, True, ACCENT),
+        ('0.000620 against 0.000791 from RGB — 22% better, which matters if a '
+         'depth camera is an option in the field.', 12.5, False, INK2)])
 
     # 2 — the three charts
     s = blank(prs)
-    head(s, '01', 'Results at equal compute', 'every arm = 197,400 steps')
+    head(s, '07', 'Results at equal compute', 'every arm = 197,400 steps')
     pic(s, figs['charts'], Inches(.45), Inches(1.52), Inches(12.4), Inches(3.95))
     tb(s, Inches(.55), Inches(5.65), Inches(12.2), Inches(1.5), [
         ('RGB buys −49.4% and depth a further 16 points — but adding the parametric stream '
@@ -303,7 +512,7 @@ def build(figs, out):
 
     # 3 — coverage, green/red
     s = blank(prs)
-    head(s, '02', 'What the model cannot predict',
+    head(s, '08', 'What the model cannot predict',
          'ground truth, coloured by coverage')
     pic(s, figs['coverage'], Inches(.45), Inches(1.50), Inches(8.5), Inches(5.45))
     tb(s, Inches(9.25), Inches(1.55), Inches(3.6), Inches(5.35), [
@@ -324,7 +533,7 @@ def build(figs, out):
 
     # 4 — per view
     s = blank(prs)
-    head(s, '03', 'Ten cameras, one plant',
+    head(s, '09', 'Ten cameras, one plant',
          'generated from RGB alone')
     pic(s, figs['views'], Inches(.45), Inches(1.48), Inches(8.3), Inches(5.50))
     tb(s, Inches(9.05), Inches(1.55), Inches(3.8), Inches(5.35), [
@@ -345,7 +554,7 @@ def build(figs, out):
 
     # 5 — parameters + next
     s = blank(prs)
-    head(s, '04', 'Parameter head, and next steps',
+    head(s, '10', 'Parameter head, and next steps',
          '142 leaf tokens · 8 plants')
     rows = [('starting_point', 0.95, 0.90), ('branching_angle', 0.93, 0.85),
             ('length', 0.67, 0.66), ('roll_angle', 0.50, 0.33),
@@ -424,7 +633,9 @@ def main():
     for k, v in figs.items():
         print(f"  figure {k:<9} -> {v}")
     out = build(figs, a.out)
-    print(f"\nwrote {out}  ({Path(out).stat().st_size/1e6:.1f} MB, 5 slides)")
+    from pptx import Presentation as _P
+    n = len(_P(out).slides)
+    print(f"\nwrote {out}  ({Path(out).stat().st_size/1e6:.1f} MB, {n} slides)")
 
 
 if __name__ == '__main__':
