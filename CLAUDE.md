@@ -18,7 +18,14 @@ Configs and batch scripts were consolidated out of the repo root. **There are no
 - `configs/` — every YAML. `config.yaml` (3M), `config_4m.yaml` (4M), `config_4m_pretrain15k*.yaml` (pretrain), `config_4m_distill_*.yaml` (cross-modal distillation), `config_e2_*.yaml` (the E2 modality ablation), `config_e3_*.yaml` (data scaling) and `config_e4_*.yaml` (model scaling).
 - `slurm/` — every `.sbatch` / launcher script. `e2_arm*.sbatch` launch E2 arms; `scale_arm_blackwell.sbatch` launches any E3 or E4 arm by slug (`sbatch --job-name=e3_1k slurm/scale_arm_blackwell.sbatch e3_1k`), deriving `configs/config_<slug>.yaml` and `outputs/<slug>/`.
 - `data_split/` — the train/val/test split tooling (`make_split.py`, `move_split.py`, `reshuffle.py`).
-- Everything else (models, datasets, training entry points, eval and figure scripts) sits at the repo root.
+- `eval/` — evaluation and analysis (`eval/analyze_e2.py`, `eval/eval_views_one_plant.py`, `eval/vis_pc_unpredicted.py`, `eval/eval_warmstart.py`, …).
+- `figures/` — anything that renders a figure, report or deck (`figures/make_results_pptx.py`, `plot_*.py`, `gen_*.py`, `regen_*.py`).
+- `export/` — dumps and artefact builders (`export/dump_param_examples.py`, `export_pc_*.py`, `build_*.py`).
+- `sweeps/` — masking and visualisation sweeps.
+- `tools/` — one-off data-prep and diagnostic scripts.
+- **The repo root holds only what other code imports**: the two models, the two datasets, the training entry points, `validate*.py` and `utils.py`. That is the rule — if a file at the root is imported by nothing, it belongs in one of the folders above.
+
+Scripts in those folders put the repo root on `sys.path` themselves (a four-line shim at the top), so `python eval/analyze_e2.py` works from the repo root without `PYTHONPATH` set. Keep the shim when adding a script there.
 
 If a command or script still refers to a root-level `config_4m.yaml`, it is stale — the path is `configs/config_4m.yaml`.
 
@@ -63,7 +70,7 @@ trimming helps.
 **1. There is no downstream linear probe, and the plan says that is the metric.**
 Locked decision 6.4 makes the value-add metric a linear probe on height, leaf
 angle, leaf count and biomass — explicitly *not* reconstruction loss.
-`analyze_e2.py` compares arms on `val_pc_chamfer`, which is the correct
+`eval/analyze_e2.py` compares arms on `val_pc_chamfer`, which is the correct
 arm-invariant *monitoring* signal and is not what 6.4 asks for. So E2, E3 and E4
 will all finish and produce chamfer curves with no probe number attached.
 
@@ -267,7 +274,7 @@ Each run writes to `<output_dir>/`:
 ## Things that look like dead code but aren't
 
 - `outputs_sorghum_*/` directories at the repo root are old run outputs kept for reference; the canonical output root is `./outputs/`.
-- `process_depth_bg.py`, `process_mask.py`, `validate_sorghum_data.py`, `vis.py`, `check_structure.py` are one-off data-prep / diagnostic scripts, not part of any pipeline.
-- `vis_pc_masking.py` is a standalone tool for visualising the FPS + Dirichlet masking on a single point cloud.
-- `visualize_sorghum_pointclouds.py` renders multi-view PC galleries from raw `.ply` files; it doesn't touch the model.
-- `analyze_e2.py` reads the E2 arm output dirs and builds the modality-value-add comparison.
+- `tools/process_depth_bg.py`, `tools/process_mask.py`, `tools/validate_sorghum_data.py`, `sweeps/vis.py`, `tools/check_structure.py` are one-off data-prep / diagnostic scripts, not part of any pipeline.
+- `sweeps/vis_pc_masking.py` is a standalone tool for visualising the FPS + Dirichlet masking on a single point cloud.
+- `tools/visualize_sorghum_pointclouds.py` renders multi-view PC galleries from raw `.ply` files; it doesn't touch the model.
+- `eval/analyze_e2.py` reads the E2 arm output dirs and builds the modality-value-add comparison.

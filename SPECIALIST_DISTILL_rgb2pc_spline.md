@@ -6,7 +6,7 @@ about 10 epochs, and every epoch after that makes the point cloud worse.**
 All three runs' best checkpoints sit at epoch 1 or epoch 10.
 
 Figure: `figures_fixed/specialist_degradation.png` (regenerate with
-`python plot_specialist_runs.py` — it parses the SLURM logs, because the two
+`python figures/plot_specialist_runs.py` — it parses the SLURM logs, because the two
 cancelled 8-GPU runs never finalised their `training_history.json`).
 
 ## What this was
@@ -25,7 +25,7 @@ token weighting, and the best-model metric to those two modalities
 
 `mean_gen` is the pc+text validation loss on 100 val batches (1,600 samples).
 The epoch-0 row is the teacher with **no distillation at all**, measured separately
-by `eval_warmstart.py` (job 12086899) on the same subset — the runs' own first
+by `eval/eval_warmstart.py` (job 12086899) on the same subset — the runs' own first
 validation is already one epoch in, so without this row the gain is invisible.
 
 | | `mean_gen` | `pc_chamfer` | `param_mae` |
@@ -124,8 +124,8 @@ rather than learning. Only `mean_gen` is a usable progress signal in a mixed run
   `save_freq: 2`, all superseded by `best_model.pth` (epoch 1). Safe to prune.
 - `outputs/4m_distill_15k_rgb2pc_spline{,_lr3e5}/` — runs A and B, plus the
   `init_ep10_best.pth` / `init_ep1_best.pth` snapshots the chain warm-started from.
-- `figures_fixed/specialist_degradation.png`, `plot_specialist_runs.py`
-- `eval_warmstart.py` + `logs/warmr2ps_12086899.out` — the epoch-0 baseline
+- `figures_fixed/specialist_degradation.png`, `figures/plot_specialist_runs.py`
+- `eval/eval_warmstart.py` + `logs/warmr2ps_12086899.out` — the epoch-0 baseline
 - Logs: `logs/r2ps500_12086208.out`, `logs/r2ps3e5_12087915.out`, `logs/r2psmix4g_12099830.out`
 
 ## If this is picked up again

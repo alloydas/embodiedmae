@@ -54,7 +54,7 @@ for CFG in configs/config_4m_distill_15k_rgb2text.yaml \
   echo "================================================================"
   echo "WARM-START BASELINE :: ${CFG}"
   echo "================================================================"
-  python eval_warmstart.py "${CFG}"
+  python eval/eval_warmstart.py "${CFG}"
 done
 
 echo "Done at $(date)"

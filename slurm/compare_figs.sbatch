@@ -32,7 +32,7 @@ if [ ! -f "${PIN}" ]; then
   echo "Pinned checkpoint → ${PIN}"
 fi
 
-python -u make_comparison_figs.py \
+python -u figures/make_comparison_figs.py \
   --checkpoint "${PIN}" \
   --out_dir ./figures_compare \
   --num_recon 6 \

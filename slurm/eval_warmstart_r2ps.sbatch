@@ -19,4 +19,4 @@ case "$GPU" in *"PRO 6000"*) conda activate /work/mech-ai-scratch/alloy/.conda/e
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 echo "node $(hostname) | GPU ${GPU}"
-python eval_warmstart.py configs/config_4m_distill_15k_rgb2pc_spline.yaml
+python eval/eval_warmstart.py configs/config_4m_distill_15k_rgb2pc_spline.yaml

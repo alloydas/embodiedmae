@@ -52,7 +52,7 @@ of the 9 slots differ by token type:
 All 9 slots are normalised to **[0, 1]** before they ever touch the model.
 The fixed `_PLANT_SCALE / _PLANT_SHIFT / _LEAF_SCALE / _LEAF_SHIFT` arrays at
 the top of `embodied_mae_4m.py` define the normalisation. Use
-`check_param_ranges_fast.py` (or the slower full-scan `check_param_ranges.py`)
+`tools/check_param_ranges_fast.py` (or the slower full-scan `tools/check_param_ranges.py`)
 to verify the scales don't clip the dataset before launching a run.
 
 ```
@@ -332,7 +332,7 @@ masked-and-real tokens.
   3. `_params_to_plant_text` *or* `_params_to_leaf_text` (or both),
   4. `N_PARAMS` if the per-token dimension grows,
   5. The decoder param head's output dim (it uses `N_PARAMS`).
-  Then re-run `check_param_ranges_fast.py` to confirm nothing clips.
+  Then re-run `tools/check_param_ranges_fast.py` to confirm nothing clips.
 - The `min_mask_ratio=0.25` floor in `random_masking_dirichlet` is hard-coded;
   it exists to stop the Dirichlet draw from starving any one modality.
 - The param loss is masked by `text_valid` *and* `mask_text`. Don't drop

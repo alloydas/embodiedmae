@@ -72,7 +72,7 @@ def main():
     out = {'checkpoint': CKPT, 'epoch': int(ck.get('epoch', -1)),
            'n_points': args.n_points, 'split': 'test'}
 
-    # ── percentile rows: identical plants and seeds to gen_rgb2pc_gallery_pct.py ──
+    # ── percentile rows: identical plants and seeds to figures/gen_rgb2pc_gallery_pct.py ──
     pcts, rows, seen = [0, 10, 25, 50, 75, 90, 97, 100], [], set()
     for k, p in enumerate(pcts):
         r_ = int(round(p / 100 * (len(order) - 1)))

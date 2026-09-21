@@ -1,6 +1,6 @@
 """Quantitative RGB -> point-cloud generation eval over many DISTINCT val plants.
 
-gen_rgb2pc_gallery.py makes the picture; this makes the numbers behind it. The
+figures/gen_rgb2pc_gallery.py makes the picture; this makes the numbers behind it. The
 two differences that matter:
 
   * plants, not folders.  The split is Sorghum_<plant>_<view> and sorts so that

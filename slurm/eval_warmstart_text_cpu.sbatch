@@ -48,7 +48,7 @@ echo "Node  : $(hostname)"
 echo "CPUs  : ${SLURM_CPUS_PER_TASK}"
 echo "Date  : $(date)"
 
-python eval_warmstart_cpu.py \
+python eval/eval_warmstart_cpu.py \
   --config configs/config_4m_distill_15k_rgb2text.yaml \
   --sources rgb,pc \
   --shards 10 \

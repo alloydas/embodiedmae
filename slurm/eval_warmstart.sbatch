@@ -18,4 +18,4 @@ case "$GPU" in *"PRO 6000"*) conda activate /work/mech-ai-scratch/alloy/.conda/e
                 *) conda activate det ;; esac
 export PYTHONUNBUFFERED=1
 echo "node $(hostname) | GPU ${GPU}"
-python eval_warmstart.py
+python eval/eval_warmstart.py

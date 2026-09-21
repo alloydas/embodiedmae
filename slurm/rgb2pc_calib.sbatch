@@ -18,4 +18,4 @@ case "$GPU" in *"PRO 6000"*) conda activate /work/mech-ai-scratch/alloy/.conda/e
                 *) conda activate det ;; esac
 export PYTHONUNBUFFERED=1
 echo "node $(hostname) | GPU ${GPU}"
-python eval_rgb2pc_calib.py
+python eval/eval_rgb2pc_calib.py

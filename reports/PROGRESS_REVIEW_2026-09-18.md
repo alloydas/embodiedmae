@@ -54,11 +54,11 @@ so part of the gap could be LR rather than the target set. A matched-LR
 
 | number | comes from |
 |---|---|
-| before (epoch 0) | `logs/evalwarm_12085946.out`, produced by `eval_warmstart.py`, which loads `outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth` and evaluates without training |
+| before (epoch 0) | `logs/evalwarm_12085946.out`, produced by `eval/eval_warmstart.py`, which loads `outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth` and evaluates without training |
 | after (epoch 100) | last `val` entry in `outputs/4m_distill_15k_all/training_history.json` |
 | figures | `outputs/4m_distill_15k_all/visualizations/epoch_{001,100}_src-pc_sample_1_Sorghum_10001_00.png` |
 | PC→params specialist | `outputs/4m_distill_15k_pc2text/training_history.json` |
-| per-point miss maps | `vis_pc_unpredicted.py` (see below) |
+| per-point miss maps | `eval/vis_pc_unpredicted.py` (see below) |
 
 **Two traps in the older numbers.**
 
@@ -70,7 +70,7 @@ so part of the gap could be LR rather than the target set. A matched-LR
 2. **The previously published −5.9 % is not wrong, it is a different baseline.**
    It measures epoch 1 → epoch 100 and so excludes everything the first
    distillation epoch bought. Against the true epoch-0 warm start the same run
-   gives −19.1 %. `eval_warmstart.py` exists precisely to close that gap — its
+   gives −19.1 %. `eval/eval_warmstart.py` exists precisely to close that gap — its
    docstring says so.
 
 ### The figures
@@ -152,7 +152,7 @@ Position, length and the two angles land close; the two waviness phases are off
 by 24–54°, most of their range.
 
 ```bash
-python dump_param_examples.py --config configs/config_4m_distill_15k_all.yaml \
+python export/dump_param_examples.py --config configs/config_4m_distill_15k_all.yaml \
   --checkpoint outputs/4m_distill_15k_all/best_model.pth \
   --source pc --n 8 --indices 0,10,20,30,40,50,60,70 --out vis_params
 ```
@@ -167,7 +167,7 @@ The ten folders of a plant are a natural experiment. The view index is an
 0.9 − 0.2·index, so the viewing direction's elevation is **−0.9 + 0.2·index** —
 steeply down at view 00, side-on in the middle, steeply up at view 09 — while
 azimuth is randomised. (This reproduces the formula already recorded in
-`plot_view_elevation_effect.py`; an earlier draft of this file reported the
+`figures/plot_view_elevation_effect.py`; an earlier draft of this file reported the
 camera-*position* elevation instead, a different and non-exact quantity.) The
 camera frame is OpenGL-style: x right, y **up**, forward −z. All ten views share one point cloud
 (`_nc_cam.ply` is the same geometry rotated into the view frame, and the loader
@@ -260,7 +260,7 @@ differs by measure — 04 on coverage, 06 on chamfer — which is the single-dra
 resampling noise, not a real disagreement.
 
 ```bash
-python eval_views_one_plant.py --plant Sorghum_10001 --source rgb \
+python eval/eval_views_one_plant.py --plant Sorghum_10001 --source rgb \
   --export_gallery <dir>
 ```
 
@@ -340,7 +340,7 @@ inside the 24 Oct freeze, but the margin is shrinking.
 
 ---
 
-## 5. Per-point coverage — `vis_pc_unpredicted.py`
+## 5. Per-point coverage — `eval/vis_pc_unpredicted.py`
 
 Chamfer averages two failures that look nothing alike: geometry the model
 **missed** and geometry it **invented**. Averaged into one scalar they cancel,
@@ -348,7 +348,7 @@ and neither is visible. The script colours a cloud by which points fall on the
 wrong side of a nearest-neighbour threshold:
 
 ```bash
-python vis_pc_unpredicted.py \
+python eval/vis_pc_unpredicted.py \
   --checkpoint outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth \
   --checkpoint outputs/4m_distill_15k_all/best_model.pth \
   --label "before distillation" --label "after distillation" \

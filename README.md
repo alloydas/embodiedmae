@@ -12,7 +12,7 @@
 
 PowerPoint version, ready to present:
 [`sorghum_results_2026-09-20.pptx`](sorghum_results_2026-09-20.pptx) (5 slides, 16:9) — rebuild with
-`conda activate det && python make_results_pptx.py --gallery <dir>`.
+`conda activate det && python figures/make_results_pptx.py --gallery <dir>`.
 
 Covers everything complete to date: cross-modal distillation (−19.1%), the E2
 modality ablation (all four arms final), E3/E4 scaling at equal compute, and the parameter-head
@@ -53,8 +53,8 @@ from a measured warm start of **0.3440** to **0.2779**.
 The headline is the ratio, not the number: the same procedure gained −54% from the weaker 10k
 teacher and −19.2% from this one. A distillation gain is a property of the teacher it was
 measured against, so quote the two together. Reconstruction plates and the before/after
-generation frames are included; regenerate with `python regen_figures.py`, and the warm-start
-baseline with `python eval_warmstart.py`.
+generation frames are included; regenerate with `python figures/regen_figures.py`, and the warm-start
+baseline with `python eval/eval_warmstart.py`.
 
 Stage 4 adds the `source_mask_ratio` ablation. Masking half the RGB source's tokens on the
 cross-modal training path takes RGB→PC Chamfer from **0.00085254** to **0.00081111** and
@@ -70,7 +70,7 @@ Earlier progress report from the same 4-modality model at epoch 760 of that 1000
 evaluated on the held-out Sorghum_15K test split. Covers per-plant reconstruction across all
 four modalities, robustness from 50% to 95% masking, cross-modal generation from a single
 modality, checkpoint progression, and per-parameter recovery of the growth parameters.
-Regenerate with `python make_comparison_figs.py` followed by `python build_artifact.py`.
+Regenerate with `python figures/make_comparison_figs.py` followed by `python export/build_artifact.py`.
 
 > Superseded by the completed run above — kept for the masking-robustness and per-parameter
 > sweeps, which the newer page does not repeat.

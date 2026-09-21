@@ -756,7 +756,7 @@ class EmbodiedMAE4M(nn.Module):
         Above 0.0, the visible modalities are additionally masked at the token
         level at that rate, so the student must infer the absent modalities from
         a PARTIAL source. This makes the cross-modal task strictly harder and
-        matches how the model is probed at evaluation time (rgb_mask_sweep.py
+        matches how the model is probed at evaluation time (sweeps/rgb_mask_sweep.py
         blanks 0-95% of RGB patches). The masked source tokens also become real
         reconstruction targets, so the source's own loss stops being 0.
 

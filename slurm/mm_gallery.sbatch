@@ -14,7 +14,7 @@ mkdir -p logs
 source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh
 conda activate det
 nvidia-smi -L || true
-python mask_sweep_multimodal_gallery.py \
+python sweeps/mask_sweep_multimodal_gallery.py \
     --checkpoint outputs/4m_run_v3/checkpoints/checkpoint_epoch_2400.pth \
     --config configs/config_4m.yaml --output_dir vis_mask_sweep --num_samples 8 --samples 0,1,2,3,4 --seed 1234
 echo "Done at $(date)"

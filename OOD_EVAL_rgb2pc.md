@@ -47,7 +47,7 @@ The honest number is the 0.047–0.050 on unseen plants.
 
 ## Control: the two datasets are the same render domain
 
-`compare_datasets.py` over 250 samples per split — old10k and Sorghum_15K agree on every
+`tools/compare_datasets.py` over 250 samples per split — old10k and Sorghum_15K agree on every
 low-level statistic, so a render/normalisation shift cannot explain the collapse:
 
 | | depth bits | mean fg depth | frame fill | raw PC diagonal | points/cloud | mean RGB |
@@ -83,7 +83,7 @@ in-flight 15k pretrain (job 11493779) as teacher, selecting on the 15K val split
 
 ```bash
 # full OOD sweep
-python plot_per_plant_chamfer.py \
+python figures/plot_per_plant_chamfer.py \
     --checkpoint outputs/4m_distill_rgb2pc/best_model.pth \
     --config configs/config_4m_distill_rgb2pc.yaml \
     --data_root /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K \
@@ -91,7 +91,7 @@ python plot_per_plant_chamfer.py \
     --output per_plant_chamfer_15Ktest_ep500.png
 
 # per-dataset reconstructions + distributions, then the PDF
-python eval_viz_rgb2pc.py --n 150
-python compare_datasets.py --n_stats 250
-python build_eval_pdf.py --out rgb2pc_eval_report.pdf
+python eval/eval_viz_rgb2pc.py --n 150
+python tools/compare_datasets.py --n_stats 250
+python export/build_eval_pdf.py --out rgb2pc_eval_report.pdf
 ```

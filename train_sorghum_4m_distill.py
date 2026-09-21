@@ -137,7 +137,7 @@ def config_to_namespace(c):
     # Mask the SOURCE modality during cross-modal steps. 0.0 (default) hands the
     # source over whole, which is how every run up to 2026-09-03 behaved. Above 0,
     # the student must infer the absent modalities from a partial source -- a
-    # strictly harder task, and the one rgb_mask_sweep.py probes at eval time.
+    # strictly harder task, and the one sweeps/rgb_mask_sweep.py probes at eval time.
     # Note this makes the source's own recon loss non-zero: its masked tokens
     # become real targets, so a logged 'rgb' of 0.0000 stops being expected.
     ns.source_mask_ratio      = g('distill', 'source_mask_ratio', 0.0)
