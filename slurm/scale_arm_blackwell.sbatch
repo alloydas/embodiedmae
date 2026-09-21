@@ -90,14 +90,30 @@ fi
 [ "${NPROC}" -gt 0 ] 2>/dev/null || NPROC=4
 echo "torchrun with ${NPROC} processes"
 
-# Auto-resume: pick the highest-epoch checkpoint by its NUMBER, not by sorting
-# the path (the output dir name also contains '_', which shifts the field).
+# Auto-resume: highest-epoch checkpoint by its NUMBER, not by sorting the path
+# (the output dir name also contains '_', which shifts the field) -- and it must
+# actually OPEN.
+#
+# A preempted job can be killed mid-write, leaving a truncated .pth that is the
+# highest-numbered one and therefore exactly the file this picks. Resuming from
+# it fails at torch.load with "failed finding central directory", after the
+# queue wait and with no checkpoint written, so the run makes no progress and
+# fails the same way every retry. Walk down until one loads.
 RESUME_ARG=""
 if [ -d "${CKPT_DIR}" ]; then
-  LATEST=$(for f in "${CKPT_DIR}"/checkpoint_epoch_*.pth; do
-             [ -e "$f" ] || continue
-             b=$(basename "$f" .pth); echo "${b##*_} $f"
-           done | sort -n | tail -1 | cut -d' ' -f2-)
+  LATEST=$(python - "${CKPT_DIR}" <<'PYEOF'
+import glob, os, sys, torch
+fs = sorted(glob.glob(os.path.join(sys.argv[1], 'checkpoint_epoch_*.pth')),
+            key=lambda f: int(f.rsplit('_', 1)[1].split('.')[0]), reverse=True)
+for f in fs:
+    try:
+        torch.load(f, map_location='cpu', weights_only=False)
+        print(f); break
+    except Exception as e:
+        print(f"skipping unreadable {os.path.basename(f)}: "
+              f"{type(e).__name__}", file=sys.stderr)
+PYEOF
+)
   if [ -n "${LATEST:-}" ]; then
     echo "Resuming from ${LATEST}"
     RESUME_ARG="--resume ${LATEST}"
