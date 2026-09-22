@@ -388,6 +388,29 @@ fields reproduce `plant_scores.csv` at r = 1.000000.
 `slurm/train_maize.sbatch` **refuses to start on a partially transferred split**
 (`exit 3`). Under `view_sampling` an epoch is one view per plant, so a half-copied
 train split trains on a silent subset and no longer matches E2's step budget.
+`train_maize_4m.py` refuses for the same reason when `--config` does not exist:
+it deliberately has **no built-in default config**, because sorghum's entry point
+does, and a copied one means a typo'd path silently builds a sorghum-width model
+(24 leaves, 8196 points) at `mask_ratio` 0.15 — a two-day run comparable to
+nothing.
+
+**The Globus transfer completed 2026-09-22 18:07 and all three splits verify.**
+105,000 / 22,500 / 22,500 view folders resolving to 10,500 / 2,250 / 2,250 plants,
+zero folders missing any of the four files, and exact file counts (5 per folder:
+the four the loader reads plus `camera_pose.json`). Each split root also holds a
+`_params.json` that the `plant_*` glob ignores — it is why a raw `find | wc -l`
+reads one over the expected count per split. Index caches: val 53 s, train ~20 min
+(Lustre metadata-bound, and concurrent `find` sweeps over the same tree make it
+much worse). First maize run is job **16447748** (`outputs/maize_4m`).
+
+**Two constructor names differ from the YAML keys**, and both silently do the
+wrong thing if guessed: the model takes **`target_points`** (the trainer passes
+`target_points=args.num_points`), not `num_points`, and **`pc_loss_name`**, which
+the trainer reads from the YAML key `loss_name`. `active_modalities` reaches the
+model as a **list**, parsed by `_parse_modalities`; handing the raw
+`"pc,rgb,depth,text"` string straight to the constructor iterates it character by
+character. A smoke test that builds the model by hand must mirror
+`train_maize_4m.py:710-723` exactly rather than improvise the kwargs.
 
 Both import the shared blocks (`PatchEmbed`, `PointCloudEmbed`, `TransformerBlock`,
 `chamfer_distance`, `get_2d_sincos_pos_embed`) from `embodied_mae.py`.
@@ -399,9 +422,17 @@ Both import the shared blocks (`PatchEmbed`, `PointCloudEmbed`, `TransformerBloc
 - Folders are `plant_<4-digit>_<view>` (e.g. `plant_0004_00`), so the
   `int(name.split('_')[1])` plant-id parse does **not** transfer.
 - No `.obj` / `_nc.ply` duplicates, so a folder is ~450 KB against sorghum's ~5 MB.
-  `rgb.png`, `depth.png`, `camera_pose.json` are the same filenames — **verify the
-  depth encoding before assuming the same decoder**, sorghum's is a big-endian
-  packed RGBA and running that unpacker on a plain PNG yields plausible garbage.
+  `rgb.png`, `depth.png`, `camera_pose.json` are the same filenames. The depth
+  encoding **was verified, not assumed** (it is the one case where the wrong
+  decoder yields plausible garbage rather than an error): maize is the *same*
+  big-endian packed RGBA uint32, confirmed by a byte-order discriminator —
+  foreground mean |horizontal gradient| 4.4e-04 big-endian against 1.6e-01 for
+  every other ordering, a 350x separation. Two caveats the shared decoder
+  absorbs but you should know: maize's alpha channel is a sparse 1-bit mask
+  (values 0/128 on 1.4 % of pixels, never on background) contributing ~3e-08 to
+  the decoded value, and decoded maize foreground spans ~0.287-0.706 against
+  sorghum's ~0.03-0.064, because each renderer normalises by its own near/far.
+  `depth_norm_type: minmax` is per image, so that scale gap never reaches the loss.
 
 **Split provenance differs — do not assume it matches sorghum's.** `summary.json`
 records seed **0** and scoring by Mahalanobis distance in robustly standardised

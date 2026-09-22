@@ -1019,22 +1019,17 @@ def main():
         print(f"📋 Loading config: {args.config}")
         cfg = config_to_namespace(merge_config_with_args(load_config(args.config), args))
     else:
-        print(f"⚠️  Config not found: {args.config} — using defaults + CLI args")
-        default_cfg = {
-            'data':          {'data_root': './Dataset/new_data', 'img_size': 224, 'num_points': 8196},
-            'model':         {'model_size': 'base', 'mask_ratio': 0.15, 'pc_loss_weight': 10.0,
-                              'depth_norm_type': 'minmax', 'spline_loss_weight': 1.0, 'max_leaves': 24},
-            'training':      {'batch_size': 16, 'epochs': 2400, 'lr': 1.5e-4,
-                              'weight_decay': 0.05, 'warmup_epochs': 10, 'val_freq': 20,
-                              'test_freq': 50},
-            'checkpointing': {'output_dir': './outputs/4m_run', 'save_freq': 100, 'resume': None},
-            'visualization': {'viz_freq': 50, 'num_viz_samples': 6},
-            'distributed':   {'world_size': 4, 'dist_backend': 'nccl', 'dist_url': 'env://'},
-            'system':        {'num_workers': 8, 'device': 'cuda'},
-            'wandb':         {'use_wandb': True, 'wandb_project': 'embodied-mae-4m',
-                              'wandb_entity': None, 'wandb_name': None},
-        }
-        cfg = config_to_namespace(merge_config_with_args(default_cfg, args))
+        # No silent fallback. Sorghum's entry point has a built-in default config
+        # here; copying it to maize would mean a typo'd --config path quietly
+        # builds a SORGHUM-width model (max_leaves 24, num_points 8196) at a
+        # different mask ratio, producing a 2-day run that matches neither E2 nor
+        # maize. Refuse, exactly as slurm/train_maize.sbatch refuses a partial
+        # split, rather than emit a run that looks fine and compares to nothing.
+        raise SystemExit(
+            f"Config not found: {args.config}\n"
+            "train_maize_4m.py has no default config on purpose — maize width "
+            "(14 params / 28 leaves / 8192 points) and the E2-matched schedule "
+            "live in the YAML. Pass --config configs/config_maize.yaml.")
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))
     if local_rank >= 0:
