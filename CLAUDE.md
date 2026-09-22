@@ -337,12 +337,39 @@ The active dataset on Nova is `/work/mech-ai-scratch/alloy/shorgum_data/new_data
 different on-disk contract, and **the decision is to keep maize and sorghum code
 separate** — parallel files, not a species flag on the sorghum ones:
 
-| sorghum | maize |
-|---|---|
-| `sorghum_dataset_4m.py` | `maize_dataset_4m.py` |
-| `embodied_mae_4m.py` | `embodied_mae_4m_maize.py` |
-| `train_sorghum_4m.py` | `train_maize_4m.py` |
-| `configs/config_4m.yaml` | `configs/config_maize.yaml` |
+| sorghum | maize | built |
+|---|---|---|
+| `sorghum_dataset_4m.py` | `maize_dataset_4m.py` | ✅ |
+| `embodied_mae_4m.py` | `embodied_mae_4m_maize.py` | ✅ |
+| `train_sorghum_4m.py` | `train_maize_4m.py` | ✅ |
+| `configs/config_4m.yaml` | `configs/config_maize.yaml` | ✅ |
+| `slurm/scale_arm_blackwell.sbatch` | `slurm/train_maize.sbatch` | ✅ |
+
+**Maize model width: `N_PARAMS = 14`, `MAX_LEAVES = 28`** (sorghum: 9 and 24), and
+**`num_points = 8192`** — a `pointcloud_cam.ply` holds exactly 8192 points and
+asking for 8196 silently pads with duplicates. `EmbodiedMAE4MMaize` subclasses
+`EmbodiedMAE4M` and rebuilds only the two modules whose shape depends on
+`N_PARAMS` (`param_embed`, and the tail `nn.Linear` of `decoder_pred_params`);
+everything else reads widths off the tensors. `MaizeDataset4M` is standalone —
+NOT a subclass — so a change to sorghum's loader cannot silently change maize.
+Its two decoders are verified copies, and its index cache has its own `maize_`
+namespace so the two species can never collide.
+
+**31 of the XML's 48 attributes are dropped**: 26 are constant across all 2,250
+plants, 3 are deterministic restatements a constancy check cannot see
+(`waveRAmp` is bit-identical to `waveLAmp`, `waveRFreq` to `waveLFreq`,
+`waveRPhase == waveLPhase + 1.57`), `<Tassel>@seed` is the plant id (an identity
+*and* split leak), and `<leaf>@id` is the token index. `leafAzimuthDeg` is stored
+as `azJitterDeg = wrap180(az − 180·leaf_index)` because the raw value is
+`(180·index + U(−15,15)) mod 360` — raw linear puts identical leaves a full range
+apart at the 0/360 seam, and sin/cos hands a decoder R² = 0.9999 for free off
+leaf parity, which is the sorghum `roll_angle` bug's twin. Validated: zero values
+clipped across 27,278 leaves, round-trip error 6e-08, and all five plant-token
+fields reproduce `plant_scores.csv` at r = 1.000000.
+
+`slurm/train_maize.sbatch` **refuses to start on a partially transferred split**
+(`exit 3`). Under `view_sampling` an epoch is one view per plant, so a half-copied
+train split trains on a silent subset and no longer matches E2's step budget.
 
 Both import the shared blocks (`PatchEmbed`, `PointCloudEmbed`, `TransformerBlock`,
 `chamfer_distance`, `get_2d_sincos_pos_embed`) from `embodied_mae.py`.

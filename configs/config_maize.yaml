@@ -1,0 +1,84 @@
+# MAIZE 4M pretraining — the maize twin of config_4m.yaml.
+#
+# Run with train_maize_4m.py, never train_sorghum_4m.py: the two pipelines are
+# separate, and the maize model is 14 params/token over 28 leaf slots against
+# sorghum's 9 over 24.
+#
+# MATCHED TO E2 ON PURPOSE. Same 600 epochs, same mask ratio, same loss, same
+# LR schedule, same global batch of 32 as configs/config_e2_pcrgbdt.yaml. Maize
+# and sorghum have identical split sizes (10,500 / 2,250 / 2,250 plants), so
+# under view_sampling an epoch is 10,500 items in both and 600 epochs is
+# ~197,000 optimizer steps in both. That is what makes a cross-species
+# comparison a comparison rather than two unrelated runs. Do not retune one
+# without the other.
+#
+# WHAT IS GENUINELY DIFFERENT FROM A SORGHUM CONFIG, and why:
+#   num_points 8192  — a maize pointcloud_cam.ply holds EXACTLY 8192 points.
+#                      Asking for 8196 pads with duplicated points, silently.
+#   max_leaves  28   — maize plants carry 4..22 leaves (mean 12.1); 28 is
+#                      headroom. Sorghum's 24 would truncate nothing today but
+#                      leaves no margin.
+#   data_root        — /work/mech-ai-scratch/alloy/Maize
+#
+# SPLIT PROVENANCE IS NOT SORGHUM'S. summary.json records seed 0 and scoring by
+# Mahalanobis distance in robustly standardised parameter space; sorghum used
+# seed 42 and its own "extremeness" enrichment. Both group by plant, so no view
+# leaks across splits, but the two test sets are NOT drawn the same way.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/Maize
+  img_size: 224
+  num_points: 8192         # exact point count in pointcloud_cam.ply
+  view_sampling: true      # plan 6.1 — one view per plant per epoch
+  view_seed: 42
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28           # 1 plant token + 28 leaf slots = 29 text tokens
+
+training:
+  batch_size: 8            # per-GPU. GLOBAL BATCH MUST BE 32 — per-GPU x GPUs.
+                           #   4-GPU A100 node : 8 x 4 = 32  <- this value
+                           #   2-GPU Blackwell : the launcher passes --batch_size 16
+                           # Verify with: jq '.batch_size, .world_size' outputs/<run>/config.json
+  epochs: 600
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 40
+  val_freq: 25             # 24 val points over 600 epochs
+  test_freq: 0
+
+checkpointing:
+  output_dir: ./outputs/maize_4m
+  save_freq: 25
+  resume: null
+
+visualization:
+  viz_freq: 25
+  num_viz_samples: 6
+
+distributed:
+  world_size: 4            # ignored under torchrun, which infers it from nproc
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14          # maize XML parses in ~0.26 ms against sorghum YAML's
+                           # ~85 ms, so this loader is ~300x cheaper on the param
+                           # stream and far less dataloader-bound than sorghum.
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_4m
