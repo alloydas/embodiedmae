@@ -18,7 +18,7 @@ Configs and batch scripts were consolidated out of the repo root. **There are no
 - `configs/` — every YAML. `config.yaml` (3M), `config_4m.yaml` (4M), `config_4m_pretrain15k*.yaml` (pretrain), `config_4m_distill_*.yaml` (cross-modal distillation), `config_e2_*.yaml` (the E2 modality ablation), `config_e3_*.yaml` (data scaling) and `config_e4_*.yaml` (model scaling).
 - `slurm/` — every `.sbatch` / launcher script. `e2_arm*.sbatch` launch E2 arms; `scale_arm_blackwell.sbatch` launches any E3 or E4 arm by slug (`sbatch --job-name=e3_1k slurm/scale_arm_blackwell.sbatch e3_1k`), deriving `configs/config_<slug>.yaml` and `outputs/<slug>/`.
 - `data_split/` — the train/val/test split tooling (`make_split.py`, `move_split.py`, `reshuffle.py`).
-- `eval/` — evaluation and analysis (`eval/analyze_e2.py`, `eval/eval_views_one_plant.py`, `eval/vis_pc_unpredicted.py`, `eval/eval_warmstart.py`, …).
+- `eval/` — evaluation and analysis (`eval/linear_probe.py` = decision 6.4, `eval/latent_analysis.py` = E9, `eval/analyze_e2.py`, `eval/eval_views_one_plant.py`, `eval/vis_pc_unpredicted.py`, `eval/eval_warmstart.py`, …).
 - `figures/` — anything that renders a figure, report or deck (`figures/make_results_pptx.py`, `plot_*.py`, `gen_*.py`, `regen_*.py`).
 - `export/` — dumps and artefact builders (`export/dump_param_examples.py`, `export_pc_*.py`, `build_*.py`).
 - `sweeps/` — masking and visualisation sweeps.
@@ -44,13 +44,13 @@ experiments have been *built*, which is durable. For live progress use
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
 | E2 | modality value-add | **done** | all four arms 600/600; results in `reports/RESULTS_DECK_2026-09-20.md` |
-| E3 | data scaling | **2 of 3** | `e3_3k` ✅ `e3_10k` ✅; `e3_1k` resuming from epoch 5654/6169 |
-| E4 | model scaling | **1 of 2** | `e4_small` ✅; `e4_large` resuming from epoch 250/600 |
+| E3 | data scaling | **done** | all three arms; `e3_1k` finished 2026-09-21 11:22 at 6169/6169 |
+| E4 | model scaling | **done** | `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41) |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
 | E8 | baselines | **not built** | — |
-| E9 | latent analysis | **not built** | — |
+| E9 | latent analysis | **built, E2 arms done** | `eval/latent_analysis.py`; all four E2 arms on val. E3/E4 arms and train/test splits not run |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
 
 **On the two resuming arms.** `e3_1k` and `e4_large` both died at exactly
@@ -63,28 +63,103 @@ log in `logs/`.
 **On waiting for GPUs.** When these jobs sit `PENDING` for days, check whether it is your request
 before shrinking it: a 1-GPU / 1-CPU / 1 GB / 10-minute test job placed at the *same* time as the
 full 2-GPU / 320 GB request, which means the nodes are held by a reservation and no amount of
-trimming helps.
+trimming helps. Read the *reason* in `squeue` before acting, because three different walls look
+identical from the outside:
 
-### Two gaps that block the headline claim
+- `AssocGrpGRES` — the **whole `mech-ai` account** is capped at `gres/gpu=17` and it is full.
+  Nothing about your request matters. `scavenger` runs under `mech-ai-scavenger` and bypasses it,
+  and a job that asks for **no GPU at all** (`--gres=NONE`) sidesteps the cap entirely — feature
+  extraction and probing need no GPU, so that is the cheap way around.
+- `Priority` / `Resources` on `scavenger` — nodes carry `PLANNED`, i.e. idle GPUs held for a
+  higher-priority job. `sinfo` showing free GPUs does not mean you can have one.
+- Preemption — `scavenger` jobs die without warning. Pass `--requeue` and make any cache the job
+  writes atomic (write to a temp file, `os.replace`), so a requeued job resumes instead of restarting.
 
-**1. There is no downstream linear probe, and the plan says that is the metric.**
-Locked decision 6.4 makes the value-add metric a linear probe on height, leaf
-angle, leaf count and biomass — explicitly *not* reconstruction loss.
-`eval/analyze_e2.py` compares arms on `val_pc_chamfer`, which is the correct
-arm-invariant *monitoring* signal and is not what 6.4 asks for. So E2, E3 and E4
-will all finish and produce chamfer curves with no probe number attached.
+**A job landing on the wrong GPU generation fails at the first kernel launch, not at import.**
+A bare `--gres=gpu:1` can place you on an RTX PRO 6000 (sm_120), where the CUDA 12.4 `det` env dies
+with `no kernel image is available for execution on the device` — deep inside the PC embedder's FPS,
+with the model already built and the dataset already indexed. `slurm/linear_probe.sbatch` picks the
+env from `nvidia-smi --query-gpu=name` at runtime rather than pinning the GPU type; copy that
+pattern instead of constraining the gres.
 
-Three of the four targets are already in `features.csv` at the split root
-(15 000 rows keyed by `plant`, which joins to `Sorghum_<plant>_<view>`):
-`stem_length` → height, `n_leaves` → leaf count, and leaf angle is either
-`roll_mean` (twist) or `branch_mean` (insertion) — the spline YAMLs carry
-`roll_angle` and `branching_angle` as distinct fields and the plan does not say
-which it means. **Biomass is in neither `features.csv` nor the spline params**
-and has to be derived (cheapest proxy: `n_leaves × leaf_len_mean`).
+### The linear probe (decision 6.4) — built, and what it found
 
-Build and validate this against an existing checkpoint *before* the arms
-finish — if the probe is broken or these targets carry no linear signal, that
-is much cheaper to learn now than after the runs are unrepeatable.
+`eval/linear_probe.py` is the probe 6.4 asks for: ridge on the frozen CLS token,
+one deterministic view per plant, standardiser fit on **train only**, scored on
+the same held-out val plants for every arm. `slurm/linear_probe.sbatch` runs it
+(1 GPU is plenty — one forward pass per plant, no backward). Features cache per
+`(run, ckpt, split)` under `outputs/_probe_cache/`, so re-fitting costs nothing
+and `eval/latent_analysis.py` (E9) reads the same cache and needs no GPU at all.
+
+Five rules the script enforces; each silently produces a plausible wrong number
+if dropped, and they are documented at the top of the file:
+
+1. **The text stream is never visible, and the params are zeroed.**
+   `param_floats[0][0]` is `stem_length` — the height target, verbatim. An arm
+   allowed to see the spline stream at probe time is handed the answer. Verified
+   `max|diff| = 0.0` between real params and zeros, so the leak is structurally
+   impossible. Side effect worth knowing: `e2_pcrgbd` and `e2_pcrgbdt` are then
+   probed on an identical 589-token input, so the only difference between them
+   is what pretraining taught the encoder.
+2. Features come from `forward_encoder_select(..., visible=active-minus-text,
+   source_mask_ratio=0.0)`, **not** `forward_encoder`. Note `forward_encoder(mask_ratio=0.0)`
+   does *not* raise and does keep every token, but it still permutes them per sample.
+3. One deterministic view per plant (`view_sampling=True` **and**
+   `deterministic_view=True` — the second alone is a silent no-op). All ten views
+   share one label, so view rows inflate n tenfold and narrow every error bar ~3.2×.
+4. Scaler on train only — val/test carry ~1.83× the target variance (extreme-enriched).
+5. Extraction is stochastic in two places even under `eval()`/`no_grad`: FPS picks
+   its first centroid with `torch.randint`, and `load_pointcloud` subsamples with an
+   unseeded `np.random.choice`. Seed both or the R² will not reproduce.
+
+**Result (val R², all four E2 arms).** Adding the parametric stream is worse than
+PC+RGB+depth on **every** target — height 0.981→0.966, leaf count 0.984→0.967,
+biomass 0.986→0.969, leaf length 0.362→0.278. Chamfer said the same
+(0.001706→0.002478), and E9 agrees independently (shape alignment |r| 0.64 for the
+params arm against 0.76 and 0.94). **Depth, meanwhile, is the big chamfer win and a
+rounding error on phenotype**: PC+RGB→PC+RGB+D moves height 0.978→0.981. RGB is
+where the phenotype information arrives.
+
+**This does NOT resolve mechanical-vs-real, and do not claim it does.** The probe
+removes the probe-time confound completely, but the token-budget handicap lives in
+*pretraining*: at `mask_ratio` 0.80 a fourth stream splits the visible budget four
+ways for 600 epochs. **One control arm separates them and is the highest-value run
+left**: re-run the four-modality arm at a mask ratio giving RGB/depth/PC the same
+visible-token count as the three-modality arm.
+
+**The four targets 6.4 names have rank 2, not 4.** The generator sets
+`stem_length = 0.05 × n_leaves − 0.001` (R² 0.988), so height and leaf count are
+one variable (r = 0.994), and the biomass proxy `n_leaves × leaf_len_mean` is
+r = 0.996 with leaf count — the same variable a third time. Neither leaf-angle
+column works as specified either: `branch_mean` spans 0.27° end to end and is ~80 %
+leaf count, while `roll_mean` is the mean of *n* near-uniform **circular** draws
+(oracle linear R² 0.0009 from the other columns). But `roll_mean` is *not* dead —
+the latent sees the leaves, and the probe recovers it at **R² 0.806**, the widest
+arm spread in the table and the only target uncorrelated with size. The probe
+reports all four 6.4 targets plus `leaf_len_mean`/`leaf_len_max`/`wav_mean` as the
+genuinely independent axes, and prints each target's correlation with leaf count so
+the redundancy is visible rather than implied.
+
+**`best_model.pth` is not comparable across arms.** It is selected on total val
+loss, which lands at 42 % of schedule for `e3_1k` and 100 % for `e3_10k`. Probing
+E3 on `best_model.pth` would bill training length to data scale. Pass an explicit
+`--ckpt checkpoints/checkpoint_epoch_N.pth` (last: 6168 / 2024 / 624 / 600 / 600).
+
+### E9 — latent analysis, and the genotype problem
+
+`eval/latent_analysis.py`. **There is no genotype variable in Sorghum_15K**: every
+plant is `SorghumGenerator/Random.sg` with `Seed = plant id` — one generator, one
+continuous distribution, 15 000 draws. The seed is an identifier, not a cultivar, so
+the plan's "cluster by genotype" has nothing to condition on and k-means would cut a
+continuum into arbitrary pieces. The answerable question is *does the latent recover
+the generative factors, and is it continuous?* — under which a **near-zero silhouette
+is a positive result**. Say that before quoting the number.
+
+Findings: silhouette 0.165–0.236 with ARI ≈ 0 against shape deciles (a continuum,
+not clusters); effective rank 4–7 out of 768; and **the dominant latent direction is
+not the phenotype** — the size factor lives on PC3 while PC1 carries ~30 % of
+variance on something unidentified (camera view is ruled out, every plant is scored
+on its fixed view 00). That last one is an open question, not a loose end.
 
 **2. No baselines exist (E8), and the plan ranks that the #1 reject risk.**
 Nothing in the repo addresses it, and every baseline is itself a training run
@@ -102,7 +177,8 @@ stated in **optimizer steps** rather than epochs. Confirm those three before
 their numbers are merged, not after — `outputs/<run>/config.json` records all
 three for any run that used this codebase.
 
-That leaves **E5, E8, E9 and E10 plus the linear probe** as the work owned here.
+That leaves **E5, E8, E10**, the E9 sweep over the E3/E4 arms, and the
+mask-ratio control arm above as the work owned here.
 
 
 ## Environment
@@ -144,6 +220,22 @@ python train_sorghum_4m_distill.py --config configs/config_4m_distill_15k_rgb2pc
 python validate.py --checkpoint outputs/<run>/best_model.pth \
                    --output_dir vis_val --config configs/config.yaml --num_samples 6
 ```
+
+### Downstream linear probe (decision 6.4) and E9 latent analysis
+```bash
+# probe — 1 GPU, ~15 min for four arms cold, seconds when the cache is warm
+sbatch slurm/linear_probe.sbatch e2_pc e2_pcrgb e2_pcrgbd e2_pcrgbdt
+# blocked by AssocGrpGRES? scavenger bypasses the account GPU cap:
+sbatch --partition=scavenger --account=mech-ai-scavenger --requeue \
+       slurm/linear_probe.sbatch e2_pc e2_pcrgb e2_pcrgbd e2_pcrgbdt
+
+# E9 — no GPU needed once the probe cache exists
+python eval/latent_analysis.py --runs e2_pc e2_pcrgb e2_pcrgbd e2_pcrgbdt \
+                               --split val --device cpu
+```
+Both read/write `outputs/_probe_cache/<run>__<ckpt>__<split>__cls__seed<n>__rep<n>.npz`,
+written atomically (temp file + `os.replace`) so two jobs racing the cache cannot
+corrupt it. Delete the cache to force re-extraction, or pass `--refresh`.
 
 ### Sanity-check a dataset folder
 ```bash
@@ -236,6 +328,51 @@ Sample folders are named `Sorghum_<plant>_<view>`, so `Sorghum_0_00 … Sorghum_
 The PC loader uniformly samples / pads to `num_points`, then centres at the centroid and scales so the max-distance point lands on the unit sphere. RGB uses ImageNet mean/std normalisation; depth is loaded as single-channel L and only `ToTensor`'d (no normalisation at load — normalisation happens inside the loss).
 
 The active dataset on Nova is `/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K/`, an extreme-enriched 70/15/15 split (seed 42) of 15 000 plants: **105 000 train / 22 500 val / 22 500 test** view-samples. `assignment.csv` and `features.csv` at that root record the split; the tooling to regenerate or reshuffle it is in `data_split/`.
+
+## Second dataset: Maize (separate pipeline, do not merge)
+
+`/work/mech-ai-scratch/alloy/Maize/` holds a **maize** counterpart added
+2026-09-22: 15 000 plants × 10 views, split 70/15/15 **by plant**
+(train 10 500 / val 2 250 / test 2 250). It is a different generator with a
+different on-disk contract, and **the decision is to keep maize and sorghum code
+separate** — parallel files, not a species flag on the sorghum ones:
+
+| sorghum | maize |
+|---|---|
+| `sorghum_dataset_4m.py` | `maize_dataset_4m.py` |
+| `embodied_mae_4m.py` | `embodied_mae_4m_maize.py` |
+| `train_sorghum_4m.py` | `train_maize_4m.py` |
+| `configs/config_4m.yaml` | `configs/config_maize.yaml` |
+
+Both import the shared blocks (`PatchEmbed`, `PointCloudEmbed`, `TransformerBlock`,
+`chamfer_distance`, `get_2d_sincos_pos_embed`) from `embodied_mae.py`.
+
+**Four differences that break the sorghum loader outright:**
+- Params are **XML**, not YAML: `maize_<id>_spline.xml`, every value an XML
+  *attribute*, `<plant><Tassel/><Tiller><leaves><leaf .../></leaves></Tiller></plant>`.
+- Point cloud is `pointcloud_cam.ply` — a fixed name, not `<plant>_nc_cam.ply`.
+- Folders are `plant_<4-digit>_<view>` (e.g. `plant_0004_00`), so the
+  `int(name.split('_')[1])` plant-id parse does **not** transfer.
+- No `.obj` / `_nc.ply` duplicates, so a folder is ~450 KB against sorghum's ~5 MB.
+  `rgb.png`, `depth.png`, `camera_pose.json` are the same filenames — **verify the
+  depth encoding before assuming the same decoder**, sorghum's is a big-endian
+  packed RGBA and running that unpacker on a plain PNG yields plausible garbage.
+
+**Split provenance differs — do not assume it matches sorghum's.** `summary.json`
+records seed **0** and scoring by Mahalanobis distance in robustly standardised
+parameter space, where sorghum used seed 42 and its own "extremeness" enrichment.
+Both group by plant, so no view leaks across splits.
+
+**Target table for the probe is `plant_scores.csv`**, not `features.csv` +
+`assignment.csv`: 15 000 rows keyed `plant_NNNN`, carrying `split`, `outlierScore`
+and 19 features. Critically it has **real per-plant leaf angle, droop, twist and
+curl** (`leaf_angleMean/Std`, `leaf_droopMean/Std`, `leaf_twistAbsMean`,
+`leaf_curlMean`) — exactly what sorghum lacks, where the 6.4 leaf-angle target is
+degenerate. Maize is therefore the dataset where that target is worth probing.
+`plant_params.jsonl` (134 MB) carries the full generator record per plant.
+
+`leafAzimuthDeg` is **circular** (0–360°). Encoding it linearly repeats the
+`roll_angle` mistake that made sorghum's leaf angle useless; use a sin/cos pair.
 
 ## Porting to another machine
 
