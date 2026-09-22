@@ -344,6 +344,24 @@ separate** — parallel files, not a species flag on the sorghum ones:
 | `train_sorghum_4m.py` | `train_maize_4m.py` | ✅ |
 | `configs/config_4m.yaml` | `configs/config_maize.yaml` | ✅ |
 | `slurm/scale_arm_blackwell.sbatch` | `slurm/train_maize.sbatch` | ✅ |
+| `eval/linear_probe.py` | `eval/linear_probe_maize.py` | ✅ |
+| `eval/latent_analysis.py` | `eval/latent_analysis_maize.py` | ✅ |
+
+**Maize fixes decision 6.4.** Sorghum's four named targets have rank 2 — height
+and leaf count are one variable (r = 0.994) and the biomass proxy is that
+variable again (r = 0.996) — and neither leaf-angle column is learnable. In maize
+all four are real and largely independent: height vs leaf count **r = 0.199**,
+biomass (`leaf_areaProxy`, a native column not a derived proxy) vs leaf count
+0.763, and `leaf_angleMean` is uncorrelated with everything (|r| < 0.034).
+Condition number 197 against sorghum's 1207; effective rank 7.5 of 11. Maize is
+the dataset where 6.4's metric can be reported as four independent phenotypes.
+The same caveat still applies though: maize val/test are outlier-enriched
+(1.5-2.6x train variance), so R² is comparable between runs on a split but is not
+a portable absolute number — report MAE in native units alongside.
+
+The maize probe zeroes the param tensor for the same reason sorghum's does, and
+it matters more here: the maize plant token carries `leafCount` and
+`stemInternodeSum`, i.e. **two** of the four 6.4 targets, verbatim.
 
 **Maize model width: `N_PARAMS = 14`, `MAX_LEAVES = 28`** (sorghum: 9 and 24), and
 **`num_points = 8192`** — a `pointcloud_cam.ply` holds exactly 8192 points and
