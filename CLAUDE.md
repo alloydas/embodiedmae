@@ -403,6 +403,18 @@ leaf parity, which is the sorghum `roll_angle` bug's twin. Validated: zero value
 clipped across 27,278 leaves, round-trip error 6e-08, and all five plant-token
 fields reproduce `plant_scores.csv` at r = 1.000000.
 
+**The "Reconstructed Depth" panel borrows its silhouette from the target, in both
+species.** `visualize_reconstruction_4m` computes `bg = depth_data < 0.01` from the
+*ground-truth* depth and then applies it to the prediction (`pd_d[bg] = np.nan`,
+`train_maize_4m.py:369`, `train_sorghum_4m.py:364`). The plant-shaped outline in that
+panel is therefore free: the model supplies only the values *inside* a silhouette it
+was handed, which is why a randomly-initialised model still renders a crisp plant.
+**No reported number is affected** — `depth_mse` and the val/test metrics are computed
+on patches, not on this render — but the figure overstates depth reconstruction, and
+every depth visualisation from E1 and E2 has the same property. Do not put this panel
+in the paper as evidence of depth quality without either dropping the `bg` mask on the
+prediction or captioning that the silhouette is ground truth.
+
 **The epoch-1 visualisation is a separate code path, and it crashes *after* a
 successful epoch.** `train_worker` calls `visualize_reconstruction_4m` when
 `epoch % viz_freq == 0 or epoch == 1`, so a fault there survives model
