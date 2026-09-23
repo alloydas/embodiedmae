@@ -419,7 +419,7 @@ the four the loader reads plus `camera_pose.json`). Each split root also holds a
 `_params.json` that the `plant_*` glob ignores — it is why a raw `find | wc -l`
 reads one over the expected count per split. Index caches: val 53 s, train ~20 min
 (Lustre metadata-bound, and concurrent `find` sweeps over the same tree make it
-much worse). First maize run is job **16447748** (`outputs/maize_4m`), started **2026-09-23 06:49** on `nova26-gpu-2` (2x RTX PRO 6000, `det_cu128`), both split guards passing 105000/105000 and 22500/22500.
+much worse). First maize run is job **16447748** (`outputs/maize_4m`), started **2026-09-23 06:49** on `nova26-gpu-2` (2x RTX PRO 6000, `det_cu128`), both split guards passing 105000/105000 and 22500/22500. It runs at **4.18 it/s = ~79 s/epoch**, so 600 epochs is ~13 h (~15 h with the 24 val passes) — well inside the 2-day wall, and against sorghum's ~3.1 min/epoch on *eight* GPUs. Maize really is far less dataloader-bound: 10x smaller folders and XML params that parse ~300x faster than sorghum's YAML. **329 steps/epoch x 600 = 197,400**, matching E2/E3/E4 exactly.
 
 **Two constructor names differ from the YAML keys**, and both silently do the
 wrong thing if guessed: the model takes **`target_points`** (the trainer passes
@@ -498,7 +498,7 @@ Each run writes to `<output_dir>/`:
 - `best_model.pth` when val loss improves
 - `visualizations/epoch_<N>_sample_<i>_<name>.png` every `viz_freq` epochs (4-row grid for 3M, 5-row grid for 4M including text predictions); skipped automatically when the run is a reduced-modality arm
 - `training_history.json` (rolling)
-- `config.json` — snapshot of the effective args. **Check this to confirm what a run actually used**, especially `batch_size × world_size`, `active_modalities`, `max_plants` and `model_size`.
+- `config.json` — snapshot of the effective args. **Check this to confirm what a run actually used**, especially `batch_size × world_size`, `max_plants` and `model_size`. Two fields are **not** trustworthy there: `active_modalities` and `loss_name` both serialise as `null` (the snapshot writes the raw YAML keys, while the parsed values live in `args.active_modalities` and `pc_loss_name`). This is long-standing and identical in `e2_pcrgbdt`, so it is not a maize regression — but read the arm's YAML, or infer the modality set from `Total parameters` in the log, rather than believing the `null`.
 
 `outputs/` is gitignored apart from a small whitelist in `.gitignore`. Wandb logging is on by default (`use_wandb: true`, project `embodied-mae-sorghum`); project and run names differ between runs — check the YAML, not the script defaults.
 
