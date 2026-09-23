@@ -403,6 +403,21 @@ leaf parity, which is the sorghum `roll_angle` bug's twin. Validated: zero value
 clipped across 27,278 leaves, round-trip error 6e-08, and all five plant-token
 fields reproduce `plant_scores.csv` at r = 1.000000.
 
+**The epoch-1 visualisation is a separate code path, and it crashes *after* a
+successful epoch.** `train_worker` calls `visualize_reconstruction_4m` when
+`epoch % viz_freq == 0 or epoch == 1`, so a fault there survives model
+construction, a full training epoch and validation, then kills the run — and
+recurs at every `viz_freq`. Job 16447748 died exactly this way: the maize
+override of `decode_params_to_text` took `(n_tokens, N_PARAMS)` while the caller
+(`train_maize_4m.py:290`) passes the whole batch `(B, n_tokens, N_PARAMS)` and
+unpacks `list[list[str]]`. The wrong rank propagates silently all the way to the
+f-string, which fails with `unsupported format string passed to
+numpy.ndarray.__format__`. **A smoke test that only calls `forward()` does not
+cover this** — exercise `visualize_reconstruction_4m` itself, on CPU with
+`matplotlib.use('Agg')`, `num_samples=2` and a `Path` (not `str`) save_dir.
+Any maize override of a sorghum method must keep the parent's exact contract;
+this one now raises on a non-3D input rather than accepting either shape.
+
 `slurm/train_maize.sbatch` **refuses to start on a partially transferred split**
 (`exit 3`). Under `view_sampling` an epoch is one view per plant, so a half-copied
 train split trains on a silent subset and no longer matches E2's step budget.
