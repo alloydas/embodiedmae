@@ -59,6 +59,18 @@ set -euo pipefail
 SLUG="${1:?usage: scale_arm_blackwell.sbatch <e3_1k|e3_3k|e3_10k|e4_small|e4_large> [extra train args...]}"
 shift || true
 
+# Reciprocal of the guard in slurm/scale_arm_maize.sbatch. Without this,
+# `sbatch slurm/scale_arm_blackwell.sbatch maize_e3_1k` finds the real file
+# configs/config_maize_e3_1k.yaml, passes the -f check below, and runs
+# train_sorghum_4m.py on maize data -- a 9-param/24-leaf ParamEmbed globbing
+# '*_nc_cam.ply' against a tree that has none, which dies with "No valid samples
+# found" only AFTER the scavenger queue wait and a scan of 105,000 folders.
+case "${SLUG}" in
+  maize_*) echo "REFUSING: '${SLUG}' is a maize arm. This launcher runs"
+           echo "train_sorghum_4m.py; use slurm/scale_arm_maize.sbatch instead."
+           exit 2 ;;
+esac
+
 cd /work/mech-ai-scratch/alloy/embodiedmae
 mkdir -p logs
 

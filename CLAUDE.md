@@ -44,8 +44,8 @@ experiments have been *built*, which is durable. For live progress use
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
 | E2 | modality value-add | **done** | all four arms 600/600; results in `reports/RESULTS_DECK_2026-09-20.md` |
-| E3 | data scaling | **done** | all three arms; `e3_1k` finished 2026-09-21 11:22 at 6169/6169 |
-| E4 | model scaling | **done** | `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41) |
+| E3 | data scaling | **sorghum done; maize built** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize: `maize_e3_1k`/`3k`/`10k` built — `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k` |
+| E4 | model scaling | **sorghum done; maize built** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize: `maize_e4_small`/`maize_e4_large` built, same launcher |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
@@ -74,6 +74,10 @@ identical from the outside:
   higher-priority job. `sinfo` showing free GPUs does not mean you can have one.
 - Preemption — `scavenger` jobs die without warning. Pass `--requeue` and make any cache the job
   writes atomic (write to a temp file, `os.replace`), so a requeued job resumes instead of restarting.
+  **`--requeue` does NOT cover a walltime `TIMEOUT`**: Slurm requeues on preemption, node failure or
+  an admin requeue only. A job that hits its `--time` ends `TIMEOUT`, nothing resubmits it, and from
+  outside it looks exactly like one that is still running. Re-run the same `sbatch` line by hand —
+  the launchers' auto-resume then caps the loss at `save_freq` epochs.
 - **A non-GPU job can block every GPU on a node from `scavenger`.** `scavenger` is
   `PriorityTier=0` with `OverSubscribe=FORCE:1`; `nova` is `PriorityTier=100`. A scavenger job
   therefore cannot co-locate with a `nova` job on the same node, so a 2-CPU job that asks for
@@ -361,7 +365,9 @@ separate** — parallel files, not a species flag on the sorghum ones:
 | `embodied_mae_4m.py` | `embodied_mae_4m_maize.py` | ✅ |
 | `train_sorghum_4m.py` | `train_maize_4m.py` | ✅ |
 | `configs/config_4m.yaml` | `configs/config_maize.yaml` | ✅ |
-| `slurm/scale_arm_blackwell.sbatch` | `slurm/train_maize.sbatch` | ✅ |
+| `slurm/e2_arm_blackwell.sbatch` | `slurm/train_maize.sbatch` | ✅ |
+| `slurm/scale_arm_blackwell.sbatch` | `slurm/scale_arm_maize.sbatch` | ✅ |
+| `configs/config_e3_*` / `config_e4_*` | `configs/config_maize_e3_*` / `config_maize_e4_*` | ✅ |
 | `eval/linear_probe.py` | `eval/linear_probe_maize.py` | ✅ |
 | `eval/latent_analysis.py` | `eval/latent_analysis_maize.py` | ✅ |
 
@@ -403,29 +409,36 @@ leaf parity, which is the sorghum `roll_angle` bug's twin. Validated: zero value
 clipped across 27,278 leaves, round-trip error 6e-08, and all five plant-token
 fields reproduce `plant_scores.csv` at r = 1.000000.
 
-**Maize runs to 1000 epochs, but epoch 600 stays the comparable point.**
-`slurm/train_maize_1000.sbatch` continues `outputs/maize_4m` from 600 to 1000
-(submitted `--dependency=afterok:<600 job>`). Understand what that is before
-quoting it: `lr_lambda` is a cosine over `args.epochs` and
+**Maize runs to 1000 epochs, into a SEPARATE directory.**
+`slurm/train_maize_1000.sbatch` **reads** `outputs/maize_4m` and **writes**
+`outputs/maize_4m_1000ep` (submitted `--dependency=afterok:<600 job>`), so:
+
+- `outputs/maize_4m` is **frozen at epoch 600 = 197,400 steps** — E3's full-data
+  point, E4's base-model point, and the only maize artefact comparable to
+  sorghum's `e2_pcrgbdt` / `e3_*` / `e4_*`. Use
+  `checkpoints/checkpoint_epoch_600.pth`, not `best_model.pth`.
+- `outputs/maize_4m_1000ep` is 329,000 steps **with a cosine restart in it**, and
+  is comparable to none of the above.
+
+An earlier version resumed in place and merely copied the 600-epoch artefacts to
+`*_600ep.*`. That left `outputs/maize_4m/best_model.pth` and `config.json`
+describing a 1000-epoch run, so plotting E4 off the directory the configs name
+would have put a 329,000-step point in the middle of a curve of 197,400-step
+points and inverted the model-scaling result with no error anywhere. Writing
+elsewhere removes the trap rather than documenting it. **Slurm spools the batch
+script at submit time**, so editing an `.sbatch` does not change an
+already-queued job — cancel and resubmit (this is why job 16571996 was replaced
+by 16576022).
+
+**Why it is a warm restart.** `lr_lambda` is a cosine over `args.epochs` and
 `LambdaLR.state_dict()` stores `None` for a plain-function lambda, so resuming
 with `--epochs 1000` rebuilds the schedule over 1000 and restores only
-`last_epoch=600`. The LR therefore **jumps 47,101x**, from 1.18e-09 at epoch 599
-to 5.56e-05 at epoch 600, then decays to 0 by 1000. That is a second cosine cycle
-(SGDR-style) and was chosen deliberately over a clean 1000-epoch run (~24 h) —
-report it as "600 epochs + 400 with a cosine restart", never as a 1000-epoch
-cosine.
-
-**329 x 600 = 197,400 steps is E2/E3/E4's budget, so `checkpoint_epoch_600.pth`
-is THE point for every maize-vs-sorghum claim**; epoch 1000 (329,000 steps) is a
-longer-training result and the two must not be swapped. The launcher copies the
-600-run's `best_model.pth`, `training_history.json` and `config.json` to
-`*_600ep.*` before the continuation overwrites them — `best_val_loss` is restored
-from the checkpoint, so `best_model.pth` *is* rewritten once val improves. Those
-copies are guarded by `-f`, because a preempted job re-runs the block on requeue
-and an unguarded `cp` would overwrite the 600 backup with 1000-run state.
-`training_history.json` is extended rather than replaced (the trainer restores
-`history` from the checkpoint), so the full series stays continuous across both
-phases.
+`last_epoch=600`. The LR **jumps 47,101x**, 1.18e-09 at epoch 599 to 5.56e-05 at
+600, then decays to 0 by 1000 — a second cosine cycle (SGDR-style), chosen
+deliberately over a clean 1000-epoch run (~24 h vs ~9.6 h). Report it as
+"600 epochs + 400 with a cosine restart", never as a 1000-epoch cosine.
+`checkpoint_epoch_600.pth` carries `wandb_run_id` (verified: `yer9kdrv`), so the
+continuation logs into the SAME W&B run — one continuous curve.
 
 **The "Reconstructed Depth" panel borrows its silhouette from the target, in both
 species.** `visualize_reconstruction_4m` computes `bg = depth_data < 0.01` from the
