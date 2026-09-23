@@ -74,6 +74,24 @@ identical from the outside:
   higher-priority job. `sinfo` showing free GPUs does not mean you can have one.
 - Preemption — `scavenger` jobs die without warning. Pass `--requeue` and make any cache the job
   writes atomic (write to a temp file, `os.replace`), so a requeued job resumes instead of restarting.
+- **A non-GPU job can block every GPU on a node from `scavenger`.** `scavenger` is
+  `PriorityTier=0` with `OverSubscribe=FORCE:1`; `nova` is `PriorityTier=100`. A scavenger job
+  therefore cannot co-locate with a `nova` job on the same node, so a 2-CPU job that asks for
+  a large `--mem` (or `--mem=0`, which means *all* of it) and **no GPU at all** makes all eight
+  GPUs on that node unreachable from scavenger. This is why `sinfo` can show
+  `gpu:rtx_pro_6000:0(IDX:N/A)` — i.e. 16 idle GPUs — while your job sits `PENDING`. The only
+  two Blackwell nodes are `nova26-gpu-[1-2]` (partitions `nova,scavenger,allnodes`), so a single
+  such squatter on each blocks the whole generation. Diagnose with the probe below; the fix is
+  patience or the `nova` partition, never a smaller request.
+
+**The probe that separates "my request is too big" from "the nodes are held"**: submit a
+deliberately tiny job — 2 GPUs, 8 CPUs, 32 GB, 5 minutes — alongside the real one and compare
+`scontrol show job <id> | grep StartTime`. On 2026-09-22 the 80-CPU/320 GB/2-day maize job and
+that probe returned the *same second* (`2026-09-25T16:34:09`), which proves the wall is a node
+hold and that trimming CPUs or memory buys nothing. **Slurm's `StartTime` is a worst case**: it
+assumes every blocking job runs to its full walltime. That estimate said Sep 25 16:34; the job
+actually started **Sep 23 06:49**, more than two days early, because the squatter ended sooner.
+Do not reshape a run around a pessimistic `StartTime`.
 
 **A job landing on the wrong GPU generation fails at the first kernel launch, not at import.**
 A bare `--gres=gpu:1` can place you on an RTX PRO 6000 (sm_120), where the CUDA 12.4 `det` env dies
@@ -401,7 +419,7 @@ the four the loader reads plus `camera_pose.json`). Each split root also holds a
 `_params.json` that the `plant_*` glob ignores — it is why a raw `find | wc -l`
 reads one over the expected count per split. Index caches: val 53 s, train ~20 min
 (Lustre metadata-bound, and concurrent `find` sweeps over the same tree make it
-much worse). First maize run is job **16447748** (`outputs/maize_4m`).
+much worse). First maize run is job **16447748** (`outputs/maize_4m`), started **2026-09-23 06:49** on `nova26-gpu-2` (2x RTX PRO 6000, `det_cu128`), both split guards passing 105000/105000 and 22500/22500.
 
 **Two constructor names differ from the YAML keys**, and both silently do the
 wrong thing if guessed: the model takes **`target_points`** (the trainer passes
