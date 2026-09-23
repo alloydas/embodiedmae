@@ -403,6 +403,30 @@ leaf parity, which is the sorghum `roll_angle` bug's twin. Validated: zero value
 clipped across 27,278 leaves, round-trip error 6e-08, and all five plant-token
 fields reproduce `plant_scores.csv` at r = 1.000000.
 
+**Maize runs to 1000 epochs, but epoch 600 stays the comparable point.**
+`slurm/train_maize_1000.sbatch` continues `outputs/maize_4m` from 600 to 1000
+(submitted `--dependency=afterok:<600 job>`). Understand what that is before
+quoting it: `lr_lambda` is a cosine over `args.epochs` and
+`LambdaLR.state_dict()` stores `None` for a plain-function lambda, so resuming
+with `--epochs 1000` rebuilds the schedule over 1000 and restores only
+`last_epoch=600`. The LR therefore **jumps 47,101x**, from 1.18e-09 at epoch 599
+to 5.56e-05 at epoch 600, then decays to 0 by 1000. That is a second cosine cycle
+(SGDR-style) and was chosen deliberately over a clean 1000-epoch run (~24 h) —
+report it as "600 epochs + 400 with a cosine restart", never as a 1000-epoch
+cosine.
+
+**329 x 600 = 197,400 steps is E2/E3/E4's budget, so `checkpoint_epoch_600.pth`
+is THE point for every maize-vs-sorghum claim**; epoch 1000 (329,000 steps) is a
+longer-training result and the two must not be swapped. The launcher copies the
+600-run's `best_model.pth`, `training_history.json` and `config.json` to
+`*_600ep.*` before the continuation overwrites them — `best_val_loss` is restored
+from the checkpoint, so `best_model.pth` *is* rewritten once val improves. Those
+copies are guarded by `-f`, because a preempted job re-runs the block on requeue
+and an unguarded `cp` would overwrite the 600 backup with 1000-run state.
+`training_history.json` is extended rather than replaced (the trainer restores
+`history` from the checkpoint), so the full series stays continuous across both
+phases.
+
 **The "Reconstructed Depth" panel borrows its silhouette from the target, in both
 species.** `visualize_reconstruction_4m` computes `bg = depth_data < 0.01` from the
 *ground-truth* depth and then applies it to the prediction (`pd_d[bg] = np.nan`,
