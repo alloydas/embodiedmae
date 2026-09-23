@@ -217,12 +217,39 @@ class EmbodiedMAE4MMaize(EmbodiedMAE4M):
 
         self.n_params = N_PARAMS
 
-    def decode_params_to_text(self, params):
-        """(n_tokens, N_PARAMS) → list[str], for the visualisation grid."""
-        arr = params.detach().cpu().numpy() if torch.is_tensor(params) else np.asarray(params)
-        out = [_params_to_plant_text(arr[0])]
-        out.extend(_params_to_leaf_text(row) for row in arr[1:])
-        return out
+    def decode_params_to_text(self, pred_params) -> list[list[str]]:
+        """Decode predicted float params back to human-readable text.
+
+        pred_params : (B, n_text_tokens, N_PARAMS)
+        returns     : list[list[str]]  (B, n_text_tokens)
+                      [] when the text modality is inactive (no param head).
+
+        This mirrors EmbodiedMAE4M.decode_params_to_text's contract exactly and
+        is overridden ONLY to reach maize's 14-field formatters (with the
+        circular phase decode) instead of sorghum's nine-field ones.
+
+        The batch dimension is not optional. `train_maize_4m.py:290` hands this
+        the whole visualisation batch and unpacks `list[list[str]]`; an earlier
+        version of this method took a single (n_tokens, N_PARAMS) sample, which
+        type-checks all the way down to the f-string and only then dies with
+        "unsupported format string passed to numpy.ndarray.__format__" — during
+        the epoch-1 visualisation, i.e. after a successful epoch of training.
+        Hence the explicit rank check rather than quietly accepting either shape.
+        """
+        if 'text' not in self.active_modalities or pred_params is None:
+            return []
+        if torch.is_tensor(pred_params):
+            p = pred_params.clamp(0, 1).detach().cpu().numpy()
+        else:
+            p = np.clip(np.asarray(pred_params, dtype=np.float32), 0.0, 1.0)
+        if p.ndim != 3:
+            raise ValueError(
+                f'decode_params_to_text expects (B, n_text_tokens, N_PARAMS); '
+                f'got shape {p.shape}. Pass the batch, not a single sample.')
+        return [[_params_to_plant_text(p[b, t]) if t == 0
+                 else _params_to_leaf_text(p[b, t])
+                 for t in range(p.shape[1])]
+                for b in range(p.shape[0])]
 
 
 def embodied_mae_4m_maize_small(**kw):
