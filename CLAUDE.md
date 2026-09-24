@@ -35,7 +35,7 @@ The programme is the E1–E10 matrix in the CVPR 2027 plan (the Google Doc is th
 source of truth for scope; this section is the source of truth for *state*).
 Paper deadline **Nov 13 2026**, internal results freeze **Oct 24 2026**.
 
-**Status as of 2026-09-20.** Run state goes stale fast — the table records which
+**Status as of 2026-09-24.** Run state goes stale fast — the table records which
 experiments have been *built*, which is durable. For live progress use
 `squeue -u $USER`, `outputs/<run>/training_history.json`, and
 `outputs/<run>/config.json` (which records what a run actually used).
@@ -44,8 +44,8 @@ experiments have been *built*, which is durable. For live progress use
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
 | E2 | modality value-add | **done** | all four arms 600/600; results in `reports/RESULTS_DECK_2026-09-20.md` |
-| E3 | data scaling | **sorghum done; maize built** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize: `maize_e3_1k`/`3k`/`10k` built — `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k` |
-| E4 | model scaling | **sorghum done; maize built** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize: `maize_e4_small`/`maize_e4_large` built, same launcher |
+| E3 | data scaling | **sorghum done; maize running** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize: `maize_e3_1k`/`3k`/`10k` running on Nova (jobs 16576132-4, launched with `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`); the full-data point is `maize_4m` epoch 600 |
+| E4 | model scaling | **sorghum done; maize running** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize: `maize_e4_small`/`maize_e4_large` running on Nova (jobs 16576135-6, same launcher); the base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00) |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
@@ -483,7 +483,7 @@ the four the loader reads plus `camera_pose.json`). Each split root also holds a
 `_params.json` that the `plant_*` glob ignores — it is why a raw `find | wc -l`
 reads one over the expected count per split. Index caches: val 53 s, train ~20 min
 (Lustre metadata-bound, and concurrent `find` sweeps over the same tree make it
-much worse). First maize run is job **16447748** (`outputs/maize_4m`), started **2026-09-23 06:49** on `nova26-gpu-2` (2x RTX PRO 6000, `det_cu128`), both split guards passing 105000/105000 and 22500/22500. It runs at **4.18 it/s = ~79 s/epoch**, so 600 epochs is ~13 h (~15 h with the 24 val passes) — well inside the 2-day wall, and against sorghum's ~3.1 min/epoch on *eight* GPUs. Maize really is far less dataloader-bound: 10x smaller folders and XML params that parse ~300x faster than sorghum's YAML. **329 steps/epoch x 600 = 197,400**, matching E2/E3/E4 exactly.
+much worse). The first maize launch, job **16447748**, started **2026-09-23 06:49** on `nova26-gpu-2` (2x RTX PRO 6000, `det_cu128`) with both split guards passing 105000/105000 and 22500/22500, then died after 4 min in the epoch-1 viz crash described above. Its resubmission, job **16551951** (`outputs/maize_4m`), ran 08:49 to **23:00 on 2026-09-23** and finished 600/600 cleanly (14 h 11 m). It runs at **4.18 it/s = ~79 s/epoch**, so 600 epochs is ~13 h (~15 h with the 24 val passes) — well inside the 2-day wall, and against sorghum's ~3.1 min/epoch on *eight* GPUs. Maize really is far less dataloader-bound: 10x smaller folders and XML params that parse ~300x faster than sorghum's YAML. **329 steps/epoch x 600 = 197,400**, matching E2/E3/E4 exactly.
 
 **Two constructor names differ from the YAML keys**, and both silently do the
 wrong thing if guessed: the model takes **`target_points`** (the trainer passes
@@ -536,8 +536,8 @@ degenerate. Maize is therefore the dataset where that target is worth probing.
 
 Everything machine-specific is in three places — nothing else needs touching:
 
-1. **`data.data_root` in the YAML you run.** Every config hardcodes the Nova absolute path above.
-2. **The `#SBATCH` headers in `slurm/*.sbatch`** — `--partition`, `--account`, `--gres`, `--cpus-per-task`, `--mem`. These encode Nova's partitions (`nova`, `scavenger`) and accounts (`mech-ai`, `mech-ai-scavenger`) and mean nothing elsewhere. On a non-SLURM box, ignore `slurm/` entirely and use the `torchrun` line above.
+1. **`data.data_root` in the YAML you run.** Every config hardcodes the Nova absolute path above (maize: `/work/mech-ai-scratch/alloy/Maize`). The probes and E9 scripts (`eval/linear_probe*.py`, `eval/latent_analysis*.py`) default to the same Nova paths. Pass `--data-root` rather than editing them.
+2. **`slurm/*.sbatch`: the `#SBATCH` headers *and* the body.** The headers (`--partition`, `--account`, `--gres`, `--cpus-per-task`, `--mem`) encode Nova's partitions (`nova`, `scavenger`) and accounts (`mech-ai`, `mech-ai-scavenger`) and mean nothing elsewhere. The bodies also hardcode Nova paths: `cd /work/mech-ai-scratch/alloy/embodiedmae`, `source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh`, the two conda env paths in the `nvidia-smi` switch, and, in `scale_arm_maize.sbatch` / `train_maize.sbatch`, the split-guard `ls /work/mech-ai-scratch/alloy/Maize/<split>`. If that last path is wrong, the guard counts 0 plants and the job exits 3 before training. On a non-SLURM box, ignore `slurm/` entirely and use the `torchrun` line above.
 3. **The conda env.** `environment.yml` rebuilds `det`; it pins a CUDA 12.4 PyTorch, so a different GPU generation may need a different build (see the sm_120 note under Environment).
 
 **Moving the data is the expensive part.** At ~5.0 MB per sample folder × 150 000 folders the split is **~750 GB**, but the four files training actually reads total ~1.8 MB per sample, so a filtered copy is **~265 GB** — under 40 % of the naive transfer. Copy with an include-filter rather than syncing the tree:
