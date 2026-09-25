@@ -74,3 +74,4 @@ per_plant_chamfer_*.json
 crossmodal_distill_results.png
 data_split_distribution.png
 test15k_rgb2pc_viz.png
+slurm/delta/delta_env.sh

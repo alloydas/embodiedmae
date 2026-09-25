@@ -1,0 +1,109 @@
+# E2 CONTROL -- e2_pcrgbdt with text taken out of the Dirichlet budget ("text gate").
+#
+# WHAT IT ISOLATES. The +params arm lost to PC+RGB+D on every probe target (height
+# R^2 0.981 -> 0.966) and on chamfer (0.001706 -> 0.002478). Two readings fit that:
+#   (1) a pretraining token-budget handicap -- one length-agnostic Dirichlet budget
+#       over 196+196+196+25 tokens hands the 25-token text stream a big share, so
+#       e2_pcrgbdt pretrained 600 epochs on FEWER vision tokens than e2_pcrgbd;
+#   (2) a genuine param-stream effect -- the extra input and loss term themselves.
+# The linear probe removes the probe-time confound but cannot separate these. This
+# arm gives pc/rgb/depth EXACTLY e2_pcrgbd's visible budget and masks text on its
+# own at 0.80, so what is left of the gap is (2) AT 20% TEXT VISIBILITY -- not (2)
+# as e2_pcrgbdt trained it. One key, but two variables move against e2_pcrgbdt:
+# the vision budget (107.4 -> 117 tokens) AND text visibility (~58% -> 20%, so the
+# text-reconstruction target grows from ~42% to 80% of tokens). tg ~= pcrgbd cannot
+# say which of the two mattered; tg ~= pcrgbdt still says the handicap was not it.
+#
+# ONE YAML KEY vs config_e2_pcrgbdt.yaml: model.text_mask_ratio 0.80 (plus
+# output_dir and wandb_name). Everything else is byte-identical, so it is the same
+# 197,400-step arm: 329 steps/ep x 600 ep at global batch 32, view_seed 42,
+# qal_loss, mask 0.80.
+#
+# MEASURED, not derived -- 5,000 seed-matched draws of random_masking_dirichlet at
+# mask_ratio 0.80, built through train_sorghum_4m.build_model_from_args, real token
+# lengths (196/196/196/25), mean visible tokens per sample:
+#                     rgb     depth   pc      text          vision (of 588)
+#   e2_pcrgbd         38.72   38.87   39.40    -            117.00  19.9%
+#   e2_pcrgbdt        35.51   35.69   36.17   14.62 (58%)   107.38  18.3%  <- handicap
+#   e2_pcrgbdt_tg     38.72   38.87   39.40    5    (20%)   117.00  19.9%
+# The tg vision draws are not just equal in mean: every one of the 5,000 masks was
+# identical to e2_pcrgbd's under the same seed. Encoder length is 122 in both
+# four-stream arms, so this arm costs what e2_pcrgbdt cost.
+#
+# WHAT TO COMPARE, all at checkpoints/checkpoint_epoch_600.pth (never best_model.pth):
+#   - eval/linear_probe.py against e2_pcrgbd and e2_pcrgbdt -- the clean comparison
+#     (text never visible, params zeroed, every vision token visible). tg ~= pcrgbd
+#     -> the gap was the handicap; tg ~= pcrgbdt -> it is the param stream.
+#   - val pc_chamfer: tg vs pcrgbd is now a same-vision-budget comparison, but it is
+#     scored under each arm's own masking and tg still sees 5 REAL text tokens at val
+#     (evaluate() goes through the gate too), so it is not leak-free the way the
+#     probe is.
+#   - NOT param_* or `loss`: tg reconstructs ~80% of text tokens, e2_pcrgbdt ~42%,
+#     so those metrics average over different token sets.
+#
+# The gate adds no parameters: e2_pcrgbdt's epoch-600 checkpoint loads strict into
+# this model, so resume and eval/linear_probe.py (forward_encoder_select never reads
+# text_mask_ratio) work unchanged.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+  view_sampling: true      # plan 6.1 -- one view per plant per epoch
+  view_seed: 42            # identical in every arm: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  text_mask_ratio: 0.80    # THE one change vs config_e2_pcrgbdt.yaml
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+training:
+  batch_size: 8            # per-GPU. GLOBAL BATCH MUST BE 32 IN EVERY ARM -- it is
+                           # per-GPU batch x GPU count, so each launcher sets its own
+                           # and this value is always overridden. Every reference arm
+                           # (all E2/E3/E4 config.json) actually ran 16 x 2 on Nova's
+                           # Blackwell launcher; slurm/delta/train_arm.sbatch runs this
+                           # arm 16 x 2 as well, since PointCloudEmbed's BatchNorm is
+                           # per-rank (no SyncBN), so 8 x 4 would change its batch stats.
+                           # Check outputs/<run>/config.json: batch_size x world_size == 32.
+                           # (headline E1 used global 256: batch_size 32 on 8 GPUs.
+                           #  E2 is internally controlled, not matched to E1.)
+  epochs: 600
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 40
+  val_freq: 25             # 24 val points over 600 epochs
+  test_freq: 0
+
+checkpointing:
+  output_dir: ./outputs/e2_pcrgbdt_tg
+  save_freq: 25
+  resume: null
+
+visualization:
+  viz_freq: 0              # the 4-row grid needs all four streams; skipped for reduced arms
+  num_viz_samples: 6
+
+distributed:
+  world_size: 4            # ignored under torchrun, which infers it from nproc
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: e2_pcrgbdt_tg

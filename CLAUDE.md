@@ -44,8 +44,8 @@ experiments have been *built*, which is durable. For live progress use
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
 | E2 | modality value-add | **done** | all four arms 600/600; results in `reports/RESULTS_DECK_2026-09-20.md` |
-| E3 | data scaling | **sorghum done; maize running** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize: `maize_e3_1k`/`3k`/`10k` running on Nova (jobs 16576132-4, launched with `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`); the full-data point is `maize_4m` epoch 600 |
-| E4 | model scaling | **sorghum done; maize running** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize: `maize_e4_small`/`maize_e4_large` running on Nova (jobs 16576135-6, same launcher); the base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00) |
+| E3 | data scaling | **sorghum done; maize running** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize (Nova, jobs 16576132-4, `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`): `maize_e3_1k` ✅ 6169/6169 (2026-09-24); `maize_e3_10k` running; `maize_e3_3k` preempted at 1017/2100 and requeued (auto-resumes). Full-data point is `maize_4m` epoch 600 |
+| E4 | model scaling | **sorghum done; maize running** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize (Nova, jobs 16576135-6, same launcher): `maize_e4_small` ✅ 600/600 (2026-09-24); `maize_e4_large` running. The base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00) |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
@@ -148,6 +148,24 @@ removes the probe-time confound completely, but the token-budget handicap lives 
 ways for 600 epochs. **One control arm separates them and is the highest-value run
 left**: re-run the four-modality arm at a mask ratio giving RGB/depth/PC the same
 visible-token count as the three-modality arm.
+
+**That arm is built: `e2_pcrgbdt_tg`** (`configs/config_e2_pcrgbdt_tg.yaml`, to run on
+Delta via `slurm/delta/`). The handicap was bigger than "four ways" suggests, because
+`EmbodiedMAE4M` already had a `text_mask_ratio` gate that `train_sorghum_4m.py` never
+passed, so **every four-modality run so far trained with text inside the shared
+Dirichlet budget**. Measured over 5,000 draws at mask 0.80: `e2_pcrgbd` sees 117.0
+vision tokens; `e2_pcrgbdt` as trained sees 107.4 (-8.2 %) while text is 58 %
+visible; the gated arm sees exactly 117.0 (seed-matched vision masks identical to
+`e2_pcrgbd` in 5000/5000) with text at 5/25. The trainer now reads
+`model.text_mask_ratio` / `--text_mask_ratio` (default `None` = every earlier run,
+verified bit-identical), records it in `config.json` and in every checkpoint, and
+refuses a resume whose checkpoint was trained under a different value. **Two
+variables move against `e2_pcrgbdt`, not one**: vision budget 107→117 *and* text
+visibility 58 %→20 %. If tg ≈ pcrgbd the arm cannot say which mattered; if tg ≈
+pcrgbdt the handicap was not the cause. Compare by probe at `checkpoint_epoch_600.pth`,
+not by `param_*` or total loss. `eval/linear_probe.py` still builds every model
+ungated and asserts `text_mask_ratio is None` — correct for tg too, since
+`forward_encoder_select` never reads it; do not "fix" the probe to forward it.
 
 **The four targets 6.4 names have rank 2, not 4.** The generator sets
 `stem_length = 0.05 × n_leaves − 0.001` (R² 0.988), so height and leaf count are
@@ -290,7 +308,7 @@ Both training entry points layer config in this order: YAML → CLI flags → de
 - `checkpointing.resume`: path to a `.pth` to resume from, or `null` for scratch.
 - `distributed.world_size > 1` triggers DDP. `train_sorghum_4m.py` also accepts being launched under `torchrun`, in which case `LOCAL_RANK` is honoured and `world_size` is inferred from env.
 
-**Global batch is `batch_size × world_size`.** `batch_size` in the YAML is per-GPU, so an ablation must adjust it to the GPU count to keep the global batch constant — a global-batch difference between arms confounds the comparison. The E2 launchers use 16×2 on the 2-GPU Blackwell nodes and 8×4 on the 4-GPU A100 nodes, both reaching 32.
+**Global batch is `batch_size × world_size`.** `batch_size` in the YAML is per-GPU, so an ablation must adjust it to the GPU count to keep the global batch constant — a global-batch difference between arms confounds the comparison. The E2 launchers use 16×2 on the 2-GPU Blackwell nodes and 8×4 on the 4-GPU A100 nodes, both reaching 32 — but **every reference run actually trained 16×2** (all E2/E3/E4 arms and `maize_4m`, per their `config.json`). Keep new arms at 16×2 too: `PointCloudEmbed`'s BatchNorm1d is not synced across ranks, so the per-GPU batch sets its statistics even when the global batch matches.
 
 **Size an ablation in optimizer steps, not epochs — and do not "fix" epoch counts that disagree.** Under `view_sampling` an epoch is one view per plant, so *epoch size is the plant count*: at global batch 32 the full train split gives 329 steps/epoch, but a 1 000-plant subset gives 32. Arms that differ in data scale therefore need very different epoch counts to receive the same number of gradient updates, and the E3 configs look wrong at a glance because of it:
 
@@ -540,7 +558,7 @@ Everything machine-specific is in three places — nothing else needs touching:
 2. **`slurm/*.sbatch`: the `#SBATCH` headers *and* the body.** The headers (`--partition`, `--account`, `--gres`, `--cpus-per-task`, `--mem`) encode Nova's partitions (`nova`, `scavenger`) and accounts (`mech-ai`, `mech-ai-scavenger`) and mean nothing elsewhere. The bodies also hardcode Nova paths: `cd /work/mech-ai-scratch/alloy/embodiedmae`, `source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh`, the two conda env paths in the `nvidia-smi` switch, and, in `scale_arm_maize.sbatch` / `train_maize.sbatch`, the split-guard `ls /work/mech-ai-scratch/alloy/Maize/<split>`. If that last path is wrong, the guard counts 0 plants and the job exits 3 before training. On a non-SLURM box, ignore `slurm/` entirely and use the `torchrun` line above.
 3. **The conda env.** `environment.yml` rebuilds `det`; it pins a CUDA 12.4 PyTorch, so a different GPU generation may need a different build (see the sm_120 note under Environment).
 
-**Moving the data is the expensive part.** At ~5.0 MB per sample folder × 150 000 folders the split is **~750 GB**, but the four files training actually reads total ~1.8 MB per sample, so a filtered copy is **~265 GB** — under 40 % of the naive transfer. Copy with an include-filter rather than syncing the tree:
+**Moving the data is the expensive part.** At ~14.3 MB per sample folder × 150 000 folders the split is **~2.1 TB**, but the four files training actually reads total ~2.6 MB per sample, so a filtered copy is **~395 GB** — under a fifth of the naive transfer (measured 2026-09-24 on sampled folders; an earlier 5.0 MB / 1.8 MB / 265 GB here was wrong). `slurm/delta/transfer_from_nova.sh` and `slurm/delta/MANIFEST.md` do this for Delta, checkpoints included. Copy with an include-filter rather than syncing the tree:
 
 ```bash
 rsync -a --info=progress2 \
@@ -562,7 +580,7 @@ Each run writes to `<output_dir>/`:
 - `best_model.pth` when val loss improves
 - `visualizations/epoch_<N>_sample_<i>_<name>.png` every `viz_freq` epochs (4-row grid for 3M, 5-row grid for 4M including text predictions); skipped automatically when the run is a reduced-modality arm
 - `training_history.json` (rolling)
-- `config.json` — snapshot of the effective args. **Check this to confirm what a run actually used**, especially `batch_size × world_size`, `max_plants` and `model_size`. Two fields are **not** trustworthy there: `active_modalities` and `loss_name` both serialise as `null` (the snapshot writes the raw YAML keys, while the parsed values live in `args.active_modalities` and `pc_loss_name`). This is long-standing and identical in `e2_pcrgbdt`, so it is not a maize regression — but read the arm's YAML, or infer the modality set from `Total parameters` in the log, rather than believing the `null`.
+- `config.json` — snapshot of the effective args. **Check this to confirm what a run actually used**, especially `batch_size × world_size`, `max_plants` and `model_size`. `active_modalities: null` means **all four** streams (a reduced arm records its list, e.g. `['pc', 'rgb']`), and the PC loss is recorded as `pc_loss_name` — there is no `loss_name` key. (An earlier note here said both fields were untrustworthy nulls; checked against every E2/E3/E4 `config.json` on 2026-09-24, that was wrong.) Runs from 2026-09-24 on also record `text_mask_ratio` (`null` = text in the shared budget).
 
 `outputs/` is gitignored apart from a small whitelist in `.gitignore`. Wandb logging is on by default (`use_wandb: true`, project `embodied-mae-sorghum`); project and run names differ between runs — check the YAML, not the script defaults.
 

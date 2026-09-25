@@ -87,8 +87,11 @@ def _read_index_cache(load_dir, tag):
         blob = json.loads(p.read_text())
     except Exception:
         return None
-    # Invalidate when the split directory itself changed — this is what makes
-    # the cache safe to keep while a Globus transfer is still adding folders.
+    # Invalidate when the split directory itself changed. This catches folders
+    # ADDED mid-transfer, but NOT files arriving inside a folder that already
+    # exists (that never touches the split dir's mtime) -- so an index built
+    # during a transfer can stay short for good. Build it only after the transfer
+    # completes; slurm/delta/check_split_index.py enforces that on Delta.
     if blob.get('mtime_ns') != Path(load_dir).stat().st_mtime_ns:
         return None
     return blob.get('entries')
