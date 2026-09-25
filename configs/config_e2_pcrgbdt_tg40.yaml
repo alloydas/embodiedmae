@@ -1,0 +1,90 @@
+# E2 CONTROL #2 -- e2_pcrgbdt with text outside the Dirichlet budget, masked at 0.40.
+#
+# WHY A SECOND CONTROL. e2_pcrgbdt_tg (text at 0.80) moves TWO variables against
+# e2_pcrgbdt: the vision budget (107.4 -> 117 tokens) and text visibility (~58% ->
+# 20%). This arm moves only the first. At 0.40 text keeps 15/25 visible -- the
+# as-trained arm averaged 14.6/25 (58%) -- while pc/rgb/depth get exactly
+# e2_pcrgbd's budget. So the three four-stream arms decompose the gap:
+#   tg40 vs e2_pcrgbdt  -> vision budget alone (text visibility ~held)
+#   tg80 vs tg40        -> text visibility alone (vision budget held)
+#   tg40/tg80 vs e2_pcrgbd -> the param stream at matched vision budget
+# 0.40 rather than 0.42: the model floors 25*(1-r), so 0.42 gives 14 visible and
+# 0.40 gives 15, the nearer integer to 14.6.
+#
+# MEASURED (3,000 draws of random_masking_dirichlet via build_model_from_args at
+# mask_ratio 0.80; mean visible tokens per sample):
+#                     rgb     depth   pc      text          vision (of 588)
+#   e2_pcrgbd         38.83   39.56   38.61    -            117.00 (fixed)
+#   e2_pcrgbdt        36.00   36.07   35.25   14.69 (59%)   107.31 (104-121)
+#   e2_pcrgbdt_tg     38.59   39.66   38.75    5    (20%)   117.00 (fixed)
+#   e2_pcrgbdt_tg40   38.59   39.66   38.75   15    (60%)   117.00 (fixed)
+# Encoder length 132 (vs 122 for e2_pcrgbdt/tg): ~8% more encoder tokens per step.
+#
+# Everything else is byte-identical to config_e2_pcrgbdt.yaml -- the same 197,400-step
+# arm (329 steps/ep x 600 ep at global 32, view_seed 42, qal_loss, mask 0.80). Compare
+# by eval/linear_probe.py at checkpoints/checkpoint_epoch_600.pth against e2_pcrgbd,
+# e2_pcrgbdt and e2_pcrgbdt_tg; never by param_* or total loss (different text target
+# sets). See config_e2_pcrgbdt_tg.yaml for the full reasoning and caveats.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+  view_sampling: true      # plan 6.1 -- one view per plant per epoch
+  view_seed: 42            # identical in every arm: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  text_mask_ratio: 0.40    # THE one change vs config_e2_pcrgbdt.yaml (tg uses 0.80)
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+training:
+  batch_size: 8            # per-GPU. GLOBAL BATCH MUST BE 32 IN EVERY ARM -- it is
+                           # per-GPU batch x GPU count, so each launcher sets its own
+                           # and this value is always overridden. Every reference arm
+                           # (all E2/E3/E4 config.json) actually ran 16 x 2 on Nova's
+                           # Blackwell launcher; slurm/delta/train_arm.sbatch runs this
+                           # arm 16 x 2 as well, since PointCloudEmbed's BatchNorm is
+                           # per-rank (no SyncBN), so 8 x 4 would change its batch stats.
+                           # Check outputs/<run>/config.json: batch_size x world_size == 32.
+                           # (headline E1 used global 256: batch_size 32 on 8 GPUs.
+                           #  E2 is internally controlled, not matched to E1.)
+  epochs: 600
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 40
+  val_freq: 25             # 24 val points over 600 epochs
+  test_freq: 0
+
+checkpointing:
+  output_dir: ./outputs/e2_pcrgbdt_tg40
+  save_freq: 25
+  resume: null
+
+visualization:
+  viz_freq: 0              # the 4-row grid needs all four streams; skipped for reduced arms
+  num_viz_samples: 6
+
+distributed:
+  world_size: 4            # ignored under torchrun, which infers it from nproc
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: e2_pcrgbdt_tg40

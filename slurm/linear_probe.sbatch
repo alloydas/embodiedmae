@@ -84,10 +84,31 @@ nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader || true
 
 OUT="reports/probe_${SLURM_JOB_NAME:-probe}_${SLURM_JOB_ID:-manual}.csv"
 
-python eval/linear_probe.py \
+# CKPT: checkpoint inside each run dir. Default best_model.pth is NOT a matched cut
+# across arms (it lands at 42-100% of schedule) -- pass the arm's last saved epoch,
+# e.g. CKPT=checkpoints/checkpoint_epoch_600.pth. SPECIES=maize switches to the maize
+# probe/E9 scripts. E9_SPLITS runs eval/latent_analysis*.py afterwards on CPU from the
+# same feature cache (same --ckpt -> same cache key), so it costs no extra extraction.
+CKPT="${CKPT:-best_model.pth}"
+case "${SPECIES:-sorghum}" in
+  sorghum) PROBE=eval/linear_probe.py;       E9=eval/latent_analysis.py ;;
+  maize)   PROBE=eval/linear_probe_maize.py; E9=eval/latent_analysis_maize.py ;;
+  *) echo "SPECIES must be sorghum or maize" >&2; exit 2 ;;
+esac
+echo "Ckpt  : ${CKPT}   Species: ${SPECIES:-sorghum}"
+
+python "${PROBE}" \
   --runs "$@" \
+  --ckpt "${CKPT}" \
   --num-workers "${SLURM_CPUS_PER_TASK:-16}" \
   --batch-size 32 \
   --out "${OUT}"
 
-echo "Done at $(date)  ->  ${OUT}"
+E9_OUT="reports/e9_${SLURM_JOB_NAME:-probe}_${SLURM_JOB_ID:-manual}"
+for split in ${E9_SPLITS:-}; do
+  python "${E9}" --runs "$@" --ckpt "${CKPT}" --split "${split}" --device cpu \
+    --out-dir "${E9_OUT}" --fig-dir "${E9_OUT}/figures" \
+    || echo "E9 ${split} FAILED (probe results above are unaffected)"
+done
+
+echo "Done at $(date)  ->  ${OUT}${E9_SPLITS:+  and ${E9_OUT}/}"

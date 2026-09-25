@@ -33,6 +33,7 @@ examples:
   bash slurm/delta/submit.sh train e2_pcrgbdt_tg --epochs 1 --no_wandb \
        --output_dir outputs/_smoke_tg                                      # smoke test
   bash slurm/delta/submit.sh train e2_pcrgbdt_tg
+  bash slurm/delta/submit.sh train e2_pcrgbdt_tg40
   bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_600.pth \
        e2_pc e2_pcrgb e2_pcrgbd e2_pcrgbdt e2_pcrgbdt_tg e4_small e4_large
   bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_6168.pth e3_1k
@@ -106,7 +107,7 @@ fi
 # it and is comparable to nothing, hence "none".
 matched_epoch() {
   case "$1" in
-    e2_pc|e2_pcrgb|e2_pcrgbd|e2_pcrgbdt|e2_pcrgbdt_tg|e4_small|e4_large) echo 600 ;;
+    e2_pc|e2_pcrgb|e2_pcrgbd|e2_pcrgbdt|e2_pcrgbdt_tg|e2_pcrgbdt_tg40|e4_small|e4_large) echo 600 ;;
     e3_1k|maize_e3_1k)   echo 6168 ;;
     e3_3k|maize_e3_3k)   echo 2024 ;;
     e3_10k|maize_e3_10k) echo 624 ;;

@@ -1,7 +1,7 @@
 # Running the remaining jobs on NCSA Delta
 
-What moves to Delta: the **E2 control arm `e2_pcrgbdt_tg`** (the one training run
-left), and the **linear probe + E9 latent analysis for every sorghum and maize run
+What moves to Delta: the **E2 control arms `e2_pcrgbdt_tg` and `e2_pcrgbdt_tg40`**
+(the training runs left), and the **linear probe + E9 latent analysis for every sorghum and maize run
 at its matched cut**. Nova keeps its live maize runs and job 16576022; nothing here
 cancels or replaces them.
 
@@ -22,7 +22,7 @@ sinfo -p gpuA40x4  -o "%P %c %m %G %l"
 ```
 
 Space you need: ~390 GB for sorghum (filtered), ~70 GB for maize, ~24 GB of Nova
-checkpoints, and ~35 GB for the control arm's own checkpoints. See `MANIFEST.md`.
+checkpoints, and ~35 GB per control arm for its own checkpoints (~70 GB for both). See `MANIFEST.md`.
 
 The repo: `git clone git@github.com:alloydas/embodiedmae.git` (the trainer's
 `text_mask_ratio` wiring is committed). `transfer_from_nova.sh code` (section 2)
@@ -91,19 +91,27 @@ It does not leave a short index cached for later jobs to reuse.
 # 1. Smoke test of the control arm: 1 epoch, its own dir, no W&B (~10-40 min + a cold index scan)
 bash slurm/delta/submit.sh train e2_pcrgbdt_tg --epochs 1 --no_wandb --output_dir outputs/_smoke_tg
 
-# 2. The control arm (after the smoke test has FINISHED -- submit.sh refuses a second tr_e2_pcrgbdt_tg)
+# 2. The two control arms (after the smoke test has FINISHED -- submit.sh refuses a second tr_<slug>).
+#    tg (text at 0.80) and tg40 (text at 0.40, ~as-trained visibility) both give vision
+#    exactly e2_pcrgbd's budget; together they split the gap into vision budget vs text
+#    visibility (see the header of configs/config_e2_pcrgbdt_tg40.yaml). Independent runs.
 bash slurm/delta/submit.sh train e2_pcrgbdt_tg
+bash slurm/delta/submit.sh train e2_pcrgbdt_tg40
 
-# 3. Sorghum probe + E9, one job per matched-cut epoch. Alongside 2 is fine: the smoke
+# 3. Sorghum probe + E9, one job per matched-cut epoch.
+#    NOTE: Nova is already running steps 3 and 5 at the same matched cuts (submitted
+#    2026-09-24, jobs 16592054-62, results in Nova's reports/probe_pr_*/pm_* and
+#    reports/e9_*). Run them here only to reproduce on the Delta stack; step 4 is
+#    the one Delta must run, since the control arms train here. Alongside 2 is fine: the smoke
 #    test already warmed the index cache, so nothing scans the tree twice.
 bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_600.pth  e2_pc e2_pcrgb e2_pcrgbd e2_pcrgbdt e4_small e4_large
 bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_6168.pth e3_1k
 bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_2024.pth e3_3k
 bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_624.pth  e3_10k
 
-# 4. The control arm's probe, once outputs/e2_pcrgbdt_tg/checkpoints/checkpoint_epoch_600.pth exists
-#    (e2_pcrgbd/e2_pcrgbdt are cache hits from step 3; they are here so all three land in one table)
-bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_600.pth  e2_pcrgbd e2_pcrgbdt e2_pcrgbdt_tg
+# 4. The control arms' probe, once both have checkpoints/checkpoint_epoch_600.pth
+#    (e2_pcrgbd/e2_pcrgbdt are cache hits from step 3; they are here so all four land in one table)
+bash slurm/delta/submit.sh probe checkpoints/checkpoint_epoch_600.pth  e2_pcrgbd e2_pcrgbdt e2_pcrgbdt_tg e2_pcrgbdt_tg40
 
 # 5. Maize probe + E9. Ready now (transferred by ckpts-maize):
 bash slurm/delta/submit.sh probe_maize checkpoints/checkpoint_epoch_600.pth  maize_4m maize_e4_small
@@ -207,10 +215,13 @@ read the probe traceback above it.
   probe is the clean comparison: the text stream is never visible and the
   params are zeroed. Val `pc_chamfer` is secondary, because the tg arm still sees
   5 real text tokens at val. Never compare `param_*` or total loss.
-- **Two variables move against `e2_pcrgbdt`, not one.** The vision budget goes
-  from 107.4 to 117 tokens (exactly `e2_pcrgbd`'s), and text visibility goes from
-  ~58 % to 20 %. If tg ≈ pcrgbd, you cannot tell which change mattered. If tg ≈
-  pcrgbdt, the token handicap was not the cause.
+- **tg moves two variables against `e2_pcrgbdt`; tg40 moves one.** tg: vision
+  budget 107.4 → 117 tokens *and* text visibility ~58 % → 20 %. tg40: vision
+  107.4 → 117 with text held at 60 % (15/25). So tg40 − pcrgbdt is the vision
+  budget alone, tg − tg40 is text visibility alone, and tg40/tg − pcrgbd is the
+  param stream at a matched vision budget. Bring both back with
+  `PULL_RUN=e2_pcrgbdt_tg40 bash slurm/delta/transfer_from_nova.sh pull-results`
+  as well as the default.
 - **tg is the only sorghum arm trained off Nova.** The per-GPU shape is matched
   (16 × 2, so per-rank BatchNorm and Dirichlet draws match the references). The
   stack is not: A100 + torch 2.5/cu124 here, against RTX PRO 6000 + torch
