@@ -693,6 +693,15 @@ class EmbodiedMAE4M(nn.Module):
             # rather than 5 — an off-by-one that is 20% of this short stream.
             nv['text'] = max(1, int(math.floor(
                 L_text * (1.0 - self.text_mask_ratio) + 1e-12)))
+            # text_mask_ratio >= 1.0 is the one deliberate exception: parameters
+            # as a reconstruction TARGET only, never an encoder input. max(1, ...)
+            # would otherwise leave one random token visible, and 1 time in 25
+            # that is the plant token carrying stem_length (the height target)
+            # verbatim. param_embed still receives a (zero) gradient through the
+            # empty gather, so DDP with find_unused_parameters=False is unaffected
+            # (checked: no parameter has grad None at 1.0).
+            if self.text_mask_ratio >= 1.0:
+                nv['text'] = 0
 
         def _mask(x, nv_, L_):
             noise    = torch.rand(B, L_, device=x.device)

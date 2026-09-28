@@ -1,0 +1,105 @@
+{
+ "species": "sorghum",
+ "run": "e2_pcrgbdt",
+ "ckpt": "checkpoints/checkpoint_epoch_600.pth",
+ "ckpt_epoch": 600,
+ "split": "val",
+ "n_plants": 2250,
+ "view": "00 (view_sampling + deterministic_view)",
+ "sources": [
+  "rgb",
+  "depth"
+ ],
+ "model_size": "base",
+ "active_modalities": [
+  "rgb",
+  "depth",
+  "pc",
+  "text"
+ ],
+ "target_points": 8196,
+ "mask_ratio_ref": 0.8,
+ "data_root": "/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K",
+ "regime": {
+  "rgb": "rgb fully visible (source_mask_ratio 0.0); every other modality incl. text 0 encoder tokens; params zeroed",
+  "depth": "depth fully visible (source_mask_ratio 0.0); every other modality incl. text 0 encoder tokens; params zeroed"
+ },
+ "ref_regime": "forward_encoder(mask_ratio) over all active modalities, one Dirichlet draw per plant, REAL params (the trainer val path)",
+ "metric": "chamfer = embodied_mae.chamfer_distance (squared NN, mean both ways); miss_0p01 = frac of GT points whose nearest pred point is > 0.01 (Euclidean, unit-sphere-normalised cloud)",
+ "seed_scheme": "0 + plant id; numpy before the read, torch before each forward",
+ "stats": {
+  "rgb": {
+   "n": 2250,
+   "chamfer_mean": 0.0025095980744291512,
+   "chamfer_median": 0.0023523324634879827,
+   "chamfer_p10": 0.0018407115014269948,
+   "chamfer_p90": 0.0034102799836546183,
+   "chamfer_std": 0.0006774952109479697,
+   "chamfer_sem": 1.4282853136345521e-05,
+   "miss_0p01_mean": 0.8633658660517799,
+   "miss_0p01_median": 0.8632259368896484,
+   "miss_0p02_mean": 0.6030505895614624,
+   "acc_pred_to_gt_mean": 0.0011498867934828416,
+   "comp_gt_to_pred_mean": 0.0013597112830159152
+  },
+  "depth": {
+   "n": 2250,
+   "chamfer_mean": 0.0020634728197732734,
+   "chamfer_median": 0.0019092506845481694,
+   "chamfer_p10": 0.001460612053051591,
+   "chamfer_p90": 0.0028505704831331977,
+   "chamfer_std": 0.0006354294549093369,
+   "chamfer_sem": 1.3396029132485112e-05,
+   "miss_0p01_mean": 0.8607805937925974,
+   "miss_0p01_median": 0.8610297441482544,
+   "miss_0p02_mean": 0.5665753436221017,
+   "acc_pred_to_gt_mean": 0.0008076497088962545,
+   "comp_gt_to_pred_mean": 0.0012558231108252787
+  },
+  "ref": {
+   "n": 2250,
+   "chamfer_mean": 0.0024706773379714123,
+   "chamfer_median": 0.002326947287656367,
+   "chamfer_p10": 0.001726127089932561,
+   "chamfer_p90": 0.00338774910196662,
+   "chamfer_std": 0.0007382107480818781,
+   "chamfer_sem": 1.5562849047703405e-05,
+   "miss_0p01_mean": 0.8326961592038472,
+   "miss_0p01_median": 0.8350414633750916,
+   "miss_0p02_mean": 0.5950057436095344,
+   "acc_pred_to_gt_mean": 0.0010313380588389313,
+   "comp_gt_to_pred_mean": 0.0014393392772827712
+  }
+ },
+ "recorded_val_pc_chamfer": {
+  "epoch": 600,
+  "val_pc_chamfer": 0.002504222485249941
+ },
+ "leak_check_max_abs_diff": {
+  "rgb": {
+   "pred_pc": 0.0,
+   "pred_params": 0.0,
+   "plants": 8
+  },
+  "depth": {
+   "pred_pc": 0.0,
+   "pred_params": 0.0,
+   "plants": 8
+  }
+ },
+ "ref_mean_visible_tokens": {
+  "rgb": 35.6,
+  "depth": 35.675111111111114,
+  "pc": 36.18977777777778,
+  "text": 14.535111111111112
+ },
+ "runtime_s": 3638.5536069869995,
+ "loop_s_per_plant": 1.5702194570965238,
+ "slurm_job_id": "16614835",
+ "slurm_restart_count": null,
+ "host": "nova21-4",
+ "threads": 24,
+ "workers": 6,
+ "torch": "2.5.0",
+ "python": "3.12.3"
+}
