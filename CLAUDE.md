@@ -47,8 +47,8 @@ experiments have been *built*, which is durable. For live progress use
 | E3 | data scaling | **2 of 3** | `e3_3k` ✅ `e3_10k` ✅; `e3_1k` resuming from epoch 5654/6169 |
 | E4 | model scaling | **1 of 2** | `e4_small` ✅; `e4_large` resuming from epoch 250/600 |
 | E5 | view regime | **not built** | — |
-| E6 | masking / noise | **short-schedule sweep done** (`yongyun` branch) | 4 recipes + a seed pair; no recipe separable from seed noise — see [E6 / E7 on the `yongyun` branch](#e6--e7-on-the-yongyun-branch) |
-| E7 | loss study | **running** (`yongyun` branch) | 11 arms, QAL / Chamfer / Sinkhorn at several settings; `model.loss_name` now also takes `sinkhorn` — see below |
+| E6 | masking / noise | **done** (`yongyun` branch) | structured masking **hurts** PC reconstruction at 600 epochs, 2 seeds per arm — see [E6 / E7 on the `yongyun` branch](#e6--e7-on-the-yongyun-branch) |
+| E7 | loss study | **first pass done** (`yongyun` branch) | QAL > Chamfer > Sinkhorn-only on F1; Sinkhorn trades precision for recall; `model.loss_name` now also takes `sinkhorn` — see below |
 | E8 | baselines | **not built** | — |
 | E9 | latent analysis | **not built** | — |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
@@ -108,14 +108,108 @@ That leaves **E5, E8, E9 and E10 plus the linear probe** as the work owned here.
 
 Results from the collaborator side, 2026-09-21. Every run below is **4M base,
 recipe-B occlusion + structured masking, 3 000 plants, one view per plant per
-epoch, 30 000 optimizer steps**, evaluated on a fixed 225-view clean val set
+epoch, 30 000 optimizer steps** (94 steps/epoch → 320 epochs; best checkpoints
+at epochs 300–320, i.e. still improving when the cosine schedule ends), evaluated
+on a fixed 225-view clean val set
 and, for the occluded columns, under one reference corruption shared by all
 runs (`occlusion.eval_occlusion`, 1× noise).
 
+### The 600-epoch runs (2026-09-26) — these are the results
+
+Twelve runs, `train_4m_paper.sbatch` + `config_4m_paper_*.yaml`: **56 400
+optimizer steps = 600 epochs** at 94 steps/epoch (3 000 plants, one view per
+plant per epoch), one cosine from scratch with 19 warm-up epochs, global batch
+32 (8 per GPU × 4 L40S), fixed 225-view clean val. Arms that carry a claim run
+at **seeds 1 and 2**, so every gap can be read against the run-to-run spread.
+
+600 epochs is enough here: PC F1@0.03 climbs from 0.60 to 0.73 between epochs
+200 and 250 and is flat over the last four validation points (e.g. 0.733,
+0.733, 0.735, 0.734), so arms are compared after the transition, not before it.
+It is, however, **a short schedule next to the programme's 197 400 steps** and
+has to be labelled that way wherever these rows are reported. An earlier
+attempt at the full 197 400-step budget was stopped at ~580 epochs and is kept
+in `outputs/_aborted_2100budget/`; its numbers are not comparable because its
+cosine was still at 85 % of peak LR there.
+
+#### E6 — does structured masking help? No: it costs PC reconstruction
+
+| arm | token masking | F1@0.03 s1 / s2 | recall@0.03 s1 / s2 | F1@0.01 s1 / s2 | PC Chamfer s1 / s2 | Depth MSE s1 / s2 |
+|---|---|---|---|---|---|---|
+| `paper_maskoff` | **off** (uniform) | **0.734 / 0.842** | **0.650 / 0.773** | **0.230 / 0.352** | **0.00259 / 0.00181** | 0.0426 / 0.0470 |
+| `paper_maskedge` | edge weighting only (`length_scale` 0.02) | 0.611 / 0.655 | 0.485 / 0.541 | 0.184 / 0.206 | 0.00422 / 0.00358 | **0.0380 / 0.0383** |
+| `paper_maskblob` | blobs only (`center_bias` 0) | 0.613 / 0.673 | 0.487 / 0.571 | 0.180 / 0.197 | 0.00421 / 0.00332 | 0.0405 / 0.0394 |
+| `paper_maskboth` | blobs + edge (the old default) | 0.608 / 0.602 | 0.480 / 0.475 | 0.176 / 0.175 | 0.00435 / 0.00436 | 0.0390 / 0.0385 |
+
+Both `maskoff` seeds beat all six structured seeds on every PC metric, and the
+gap (0.15–0.23 F1@0.03) is far larger than the seed spread of any structured
+arm (0.005–0.06). Turning structured masking off raises recall@0.03 from ~0.48
+to ~0.71, which is the same quantity the radial analysis below blamed on
+missing leaf tips — edge-biased masking spends the mask budget on the frame
+border and starves exactly the outer plant. Blobs alone, edge bias alone and
+both together are indistinguishable from each other.
+
+**Caveat before this is quoted:** `maskoff`'s two seeds are 0.734 vs 0.842,
+a much wider spread than any other arm, so the direction is solid but the
+magnitude is not. A third `maskoff` seed is the cheapest way to pin it
+(~10 h). Note also that depth goes the other way: structured arms reach
+0.038–0.040 Depth MSE against 0.043–0.047 for `maskoff`.
+
+#### Spline params: v2 + pose/scale helps once its loss weight is fixed
+
+Same masking (`maskboth`), same seeds; v1 is the `paper_maskboth` pair.
+`spline_loss_weight` is 5 for v1 and **0.6** for v2, which compensates for v2's
+z-scored targets being ~6× larger — the confound that made the earlier 30k
+comparison read backwards.
+
+| run | F1@0.03 s1 / s2 | F1@0.01 s1 / s2 | recall@0.03 s1 / s2 | PC Chamfer s1 / s2 |
+|---|---|---|---|---|
+| v1 (`paper_maskboth`) | 0.608 / 0.602 | 0.176 / 0.175 | 0.480 / 0.475 | 0.00435 / 0.00436 |
+| **v2 + pose/scale** (`paper_paramsv2`) | **0.619 / 0.615** | **0.224 / 0.215** | 0.483 / 0.483 | **0.00420 / 0.00435** |
+
+F1@0.01 improves by ~25 % (0.175 → 0.219) against a seed spread of 0.001–0.009,
+so this one is real. The gain is concentrated at the tight threshold, i.e. in
+placing points precisely, which is what camera pose plus the normalisation
+radius should buy.
+
+#### E7 — point-cloud loss: QAL leads, Sinkhorn trades precision for recall
+
+One seed each, masking fixed at `maskboth`; the QAL row is `paper_maskboth_s1`.
+
+| loss | F1@0.03 | recall@0.03 | precision@0.03 | F1@0.01 | PC Chamfer | Depth MSE |
+|---|---|---|---|---|---|---|
+| QAL (t=0.01, α=100) | **0.608** | 0.480 | 0.850 | **0.176** | **0.00435** | 0.0390 |
+| Chamfer (`pc_loss_weight` 10) | 0.578 | 0.450 | 0.846 | 0.144 | 0.00435 | **0.0363** |
+| Sinkhorn only (blur 0.02, 2 048 pts) | 0.474 | **0.710** | 0.359 | 0.136 | 0.01032 | 0.0407 |
+
+Sinkhorn is the interesting one: it is the only loss that spreads predictions
+over the whole plant (recall 0.71 vs 0.45–0.48) but it places them badly
+(precision 0.36 vs 0.85). QAL and Chamfer do the opposite. The combination
+(QAL with a Sinkhorn auxiliary term, which `sinkhorn_loss_weight` already
+supports) is the obvious next arm and has not been run.
+
+### The 30 000-step sweep (screening only)
+
+Everything below this line is the earlier 30 000-step pass. It sits *before*
+the F1 transition and its gaps were inside the seed gap, so it is kept as
+screening evidence — which settings to drop — and not as a result.
+
+**Held fixed in every run — including the edge weighting.** Token masking:
+`model.structured_mask` with `prob: 0.5` (half the batches; the rest use the
+uniform shuffle), `center_bias: 1.5` (a smooth random field biased toward the
+frame border, so masked blobs gather at the edges and the centre plant stays
+visible) and one field shared across RGB, depth and the PC; train-only, so
+validation always uses the uniform mask. Input occlusion: procedural leaves
+entering from outside the frame (`reach: [0.6, 1.2]`, 9–16 leaves, on every
+training sample), interleaved in depth (`depth_quantile: [0.0, 0.8]`), plus
+sensor noise. **No run in this screening pass varies `center_bias`, `prob` or
+`reach`** — that question is answered by the 600-epoch `paper_mask*` arms
+above, and the answer is that structured masking costs PC reconstruction.
+
 **Against the three merge conditions above.** Split: same `Sorghum_15K` root ✅.
 Global batch: 8 × 4 GPUs = 32 ✅. Budget in steps: 30 000 ✅ — but that is a
-*selection* schedule, ~15 % of the programme's 197 400, so only the ranking
-transfers, not the absolute numbers. The 3 000 plants are drawn by
+*selection* schedule, ~15 % of the programme's 197 400 (`e3_3k`, same 94
+steps/epoch, runs 2 100 epochs), so only the ranking transfers, not the
+absolute numbers. The 3 000 plants are drawn by
 `training.num_train_plants` with seed 42; that is **not** the same draw as
 main's `data.max_plants` / `plant_subset_seed`, so it is not `e3_3k`'s 3k.
 
@@ -124,25 +218,65 @@ main's `data.max_plants` / `plant_subset_seed`, so it is not `e3_3k`'s 3k.
 (seed 1) are the *same config* run twice. Their gap is the only run-to-run
 error bar in this section:
 
-| | val loss | val(occ) loss | PC Chamfer | F1@0.01 | EMD | Depth MSE |
-|---|---|---|---|---|---|---|
-| seed-to-seed gap | 0.027 | 0.014 | 0.6 % | 1.7 % | 1.4 % | 11 % |
+| | val loss | val(occ) loss | PC Chamfer | F1@0.01 | F1@0.03 | EMD | Depth MSE |
+|---|---|---|---|---|---|---|---|
+| seed-to-seed gap | 0.027 | 0.014 | 0.6 % | 1.7 % | 0.3 % | 1.4 % | 11 % |
+
+**Which F1 threshold.** F1@0.03 is the headline column: its ceiling is ~1, so
+the value reads directly as a fraction of a perfect reconstruction. F1@0.01 is
+kept beside it. Its ceiling is only 0.871 — two independent 8 196-point draws
+of the *same* ground-truth cloud score that against each other (0.995 at 0.02,
+0.999 at 0.03) — so 0.154 is ~18 % of reachable, not 15 %. It is also slightly
+the more discriminating of the two here (recipe spread / seed gap 3.1× vs 2.7×),
+and it is the column that exposes the leaf-tip failure below. Do not move to a
+threshold where F1 ≈ 0.9: every arm saturates there and the gaps compress.
 
 #### E6 — structured-mask blob size × sensor noise
 
-| run | `length_scale` | train noise (rgb/depth/pc) | val loss | val(occ) loss | PC Chamfer | F1@0.01 | RGB MSE | Depth MSE |
-|---|---|---|---|---|---|---|---|---|
-| `recipe_a_ls035_noise1x` | 0.35 | 1× (0.03 / 0.015 / 0.008) | 0.5829 | 0.5964 | 0.004703 | **0.1582** | 0.6738 | 0.03350 |
-| `recipe_b_ls020_noise1x` | 0.20 | 1× | **0.5623** | **0.5853** | **0.004644** | 0.1567 | 0.6649 | 0.03355 |
-| `recipe_c_ls020_noise0p5x` | 0.20 | 0.5× | 0.5908 | 0.5993 | 0.004716 | 0.1536 | 0.6715 | 0.03219 |
-| `recipe_d_ls020_noise2x` | 0.20 | 2× | 0.5891 | 0.6010 | 0.004680 | 0.1503 | **0.6610** | 0.03221 |
-| `params_v1_seed1` (= B, seed 1) | 0.20 | 1× | 0.5891 | 0.5996 | 0.004670 | 0.1541 | 0.6773 | **0.02997** |
+| run | blob size (`length_scale`) | train noise (rgb/depth/pc) | val loss | val(occ) loss | PC Chamfer | F1@0.03 | F1@0.01 | RGB MSE | Depth MSE |
+|---|---|---|---|---|---|---|---|---|---|
+| `recipe_a_ls035_noise1x` | 0.35 | 1× (0.03 / 0.015 / 0.008) | 0.5829 | 0.5964 | 0.004703 | 0.5832 | 0.1582 | 0.6738 | 0.03350 |
+| `recipe_b_ls020_noise1x` | 0.20 | 1× | 0.5623 | 0.5853 | 0.004644 | 0.5856 | 0.1567 | 0.6649 | 0.03355 |
+| `recipe_c_ls020_noise0p5x` | 0.20 | 0.5× | 0.5908 | 0.5993 | 0.004716 | 0.5816 | 0.1536 | 0.6715 | 0.03219 |
+| `recipe_d_ls020_noise2x` | 0.20 | 2× | 0.5891 | 0.6010 | 0.004680 | 0.5817 | 0.1503 | 0.6610 | 0.03221 |
+| `params_v1_seed1` (= B, seed 1) | 0.20 | 1× | 0.5891 | 0.5996 | 0.004670 | 0.5841 | 0.1541 | 0.6773 | 0.02997 |
+
+Nothing is bold: no gap in this table exceeds the seed-to-seed gap.
 
 B has the best clean and occluded val loss, but **B run a second time lands
 behind A and level with C and D**: every recipe gap (A−B 0.021, C−B 0.029,
 D−B 0.027 val loss) is the size of the seed gap. The sweep does not rank these
-recipes. The default stays B (`length_scale 0.20`, 1× noise) — best observed,
-not shown better. Separating them needs ≥ 3 seeds per arm.
+recipes — and the order of A and B flips with the F1 threshold (A > B at
+0.01, B > A at 0.02 and 0.03). The default stays B (`length_scale 0.20`, 1×
+noise) — best observed, not shown better. Separating them needs ≥ 3 seeds per
+arm.
+
+**Where the model fails: leaf tips, not the frame edge.** Trained recipe-B
+model, 12 val plants, 4 mask draws; radius 0 = image centre, 1 = corner (for
+the PC, the xy radius of the unit-normalised cloud). Errors on *masked*
+patches:
+
+| radius | 0–0.2 | 0.2–0.4 | 0.4–0.6 | 0.6–0.8 | 0.8–1 |
+|---|---|---|---|---|---|
+| plant share of patches | 71 % | 40 % | 16 % | 3 % | 0.2 % |
+| P(masked), uniform mask | 0.64 | 0.61 | 0.60 | 0.60 | 0.62 |
+| P(masked), structured (`center_bias` 1.5) | 0.64 | 0.70 | 0.81 | 0.86 | 0.89 |
+| RGB MSE, all masked patches | 0.18 | 0.17 | 0.09 | 0.02 | 0.002 |
+| RGB MSE, plant patches only | 0.20 | 0.25 | 0.29 | 0.27 | 0.60 |
+| PC: target point → nearest prediction | 0.025 | 0.042 | 0.072 | 0.119 | 0.233 |
+
+The edge bias does what it says — masking rises from 0.64 to 0.89 toward the
+corner — but the corner is background, which is why the error there is near
+zero. On the plant itself error *grows* outward, and PC error on the outermost
+points is ~10× the centre's: the model misses leaf tips. That is the low
+F1@0.01 (precision 0.40, recall 0.11 at the end of training — predicted points
+sit on the dense core and do not reach the tips). So much of the edge-biased
+mask budget is spent on background; masking the plant's *outer parts* would
+target the actual failure. The 600-epoch arms above confirm the mechanism from
+the other side: switching structured masking off raises recall@0.03 from ~0.48
+to ~0.71. Preview of the masks: `reports/mask_preview_recipe_b.png`,
+`reports/mask_blob_size.png` (uniform vs blob sizes at a fixed mask count) and
+`reports/noise_levels.png` (the 0.5× / 1× / 2× sensor noise).
 
 #### Spline params: do they help, and does fixing their encoding help more?
 
@@ -158,8 +292,10 @@ always-visible token) address those. Same seed, only the params path differs:
 
 | run | PC Chamfer | F1@0.01 | F1@0.02 | F1@0.03 | EMD | RGB MSE | Depth MSE |
 |---|---|---|---|---|---|---|---|
-| `params_v1_seed1` | **0.004670** | 0.1541 | **0.4097** | **0.5841** | 0.2966 | 0.6773 | **0.02997** |
-| `params_v2cond_seed1` | 0.004967 | **0.1587** | 0.4057 | 0.5748 | **0.2948** | **0.6758** | 0.03256 |
+| `params_v1_seed1` | **0.004670** | 0.1541 | 0.4097 | **0.5841** | 0.2966 | 0.6773 | 0.02997 |
+| `params_v2cond_seed1` | 0.004967 | **0.1587** | 0.4057 | 0.5748 | 0.2948 | 0.6758 | 0.03256 |
+
+Bold = better by more than the seed-to-seed gap; every other gap is within noise.
 
 `eval_param_oracle.py` then asks each model directly: all param tokens
 visible, the sample's own params vs the val-set mean; identical RGB/depth/PC
@@ -171,13 +307,12 @@ masks in both passes. Positive = worse without the sample's own params:
 | v2 + pose/scale | +4.6 % | +5.3 % | +2.5 % | +0.4 % | −0.2 % | +4.5 % |
 
 **The params already help in v1** (7 % Chamfer, well above the 0.6 % noise
-floor). v2 + pose/scale did not increase that reliance, and its absolute PC
-Chamfer is 6 % worse. Most likely cause, not yet isolated: v2's Smooth-L1
-targets are z-scores, so the param loss is ~6× v1's at the same
-`spline_loss_weight: 5`, which takes gradient share from the PC term. The next
-run is v2 with `spline_loss_weight` rescaled to ~0.6 to remove that confound.
-If that is still flat, the next step is asymmetric masking (steps where PC is
-fully masked and params fully visible).
+floor). v2 + pose/scale looked 6 % *worse* here, and the suspected cause — v2's
+z-scored Smooth-L1 targets being ~6× larger at the same
+`spline_loss_weight: 5`, so the param term steals gradient from the PC term —
+turned out to be right: **at `spline_loss_weight: 0.6` and 600 epochs v2 wins**
+(F1@0.01 0.219 vs 0.175), see the paper-run section above. The oracle numbers
+below still stand; they are measured within a single checkpoint.
 
 #### E7 — point-cloud loss study (running)
 
@@ -193,10 +328,21 @@ sampled points.
 | Chamfer | `pc_loss_weight` 3 / 10 / 30 | `loss_c_w03`, `loss_c_w10`, `loss_c_w30` |
 | Sinkhorn only | blur 0.01 / 0.02 / 0.05 at weight 1; blur 0.02 at weight 3 | `loss_s_b010_w1`, `loss_s_b020_w1`, `loss_s_b050_w1`, `loss_s_b020_w3` |
 
-Job array 15884575 (`train_4m_loss.sbatch`, two at a time) waits on the
-Sinkhorn smoke test 15884574. Read it with `python compare_recipes.py
---loss-study`, which shows only metrics computed identically for every arm —
-val loss is a different quantity in each.
+Job array 15884575 (`train_4m_loss.sbatch`); the Sinkhorn-only path passed
+its smoke test first. The array allows two arms at a time, but with the
+mech-ai account at its 17-GPU cap it has run one at a time (~5 h per arm).
+Read it with `python compare_recipes.py --loss-study`, which shows only
+metrics computed identically for every arm — val loss is a different quantity
+in each.
+
+Finished so far (2026-09-22): 1 of 11 new arms.
+
+| run | loss | setting | PC Chamfer | F1@0.01 | F1@0.02 | F1@0.03 | EMD | RGB MSE | Depth MSE |
+|---|---|---|---|---|---|---|---|---|---|
+| `params_v1_seed1` | QAL | t=0.01, α=100 | 0.004670 | 0.1541 | 0.4097 | 0.5841 | 0.2966 | 0.6773 | 0.02997 |
+| `loss_q_t005` | QAL | t=0.005, α=100 | 0.004700 | 0.1540 | 0.4060 | 0.5822 | 0.2970 | 0.6910 | 0.02898 |
+
+Halving the QAL threshold moves nothing past the noise floor.
 
 #### What this branch adds, and what will conflict with main
 
@@ -214,7 +360,22 @@ val loss is a different quantity in each.
   `train_4m_{recipe,params,loss}.sbatch`. On merge they belong in `configs/`,
   `slurm/` and `eval/`.
 - Slurm: submitted under `--account=mech-ai`, whose GPU cap (17) is shared
-  across the lab; the arrays run two at a time for that reason.
+  across the lab. Arrays run **two at a time = 8 GPUs**, the ceiling this
+  project keeps.
+- Launchers: `train_4m_paper.sbatch` (the twelve 600-epoch runs),
+  `train_4m_recipe.sbatch` / `train_4m_loss.sbatch` (the 30k screening),
+  `train_4m_continue.sbatch` (resume an existing run at a larger
+  `--max_steps`; unused now that the runs are single-cosine).
+
+#### What to run next, in order
+
+1. **A third `maskoff` seed** — its two seeds are 0.734 and 0.842 on F1@0.03,
+   the widest spread of any arm, and it carries the headline claim (~10 h).
+2. **QAL + Sinkhorn auxiliary** (`sinkhorn_loss_weight` > 0 on top of
+   `loss_name: qal_loss`): Sinkhorn alone reaches recall 0.71 at precision
+   0.36, QAL alone 0.48 at 0.85, so the combination is the obvious arm.
+3. **v2 params + `maskoff`** — both wins are measured separately, never
+   together.
 
 
 ## Environment
