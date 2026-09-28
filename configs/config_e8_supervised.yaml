@@ -1,0 +1,126 @@
+# E8 -- supervised-from-scratch baseline (CVPR plan Section 5, experiment E8).
+#
+# WHAT IT IS. EmbodiedMAE-4M base with PC + RGB + depth active, the same module
+# as e2_pcrgbd. It is trained END TO END from random init to regress the
+# decision-6.4 probe targets: no masking, every token visible, no
+# reconstruction. A linear head sits on the post-norm CLS token, and the loss is
+# MSE averaged over the eight eval/linear_probe.py TARGETS. Those targets are
+# standardised with TRAIN-split statistics only, and the mean/std are stored in
+# every checkpoint. Text is not an active modality, so the param stream (whose
+# plant token carries stem_length, the height target, verbatim) cannot reach
+# the encoder by any path. Init is torch.manual_seed(0) immediately before
+# construction, so step 0 is the E8 random_init row bit for bit. Rationale for
+# each choice is in the docstring of train_supervised_4m.py.
+#
+# WHAT IT ANSWERS. The E2/E3/E4 arms are read through a frozen linear probe.
+# This row is what the same encoder reaches when it is simply trained on the
+# labels, with the same data and the same compute. Pretraining earns its keep
+# only by the gap to this row at equal steps.
+#
+# STEP BUDGET AND SHAPE: identical to e2_pcrgbdt, which is also E3's full-data
+# point and E4's base point.
+#   10,500 plants / global batch 32 = 329 steps/ep x 600 ep = 197,400 steps
+# 16 PER GPU x 2 GPUs, NOT 8 x 4. Both reach 32 and 197,400, but
+# PointCloudEmbed's BatchNorm1d is per-rank (no SyncBN), so the per-GPU batch
+# sets its statistics, and every reference arm (all E2/E3/E4 config.json,
+# maize_4m) trained 16 x 2. E8 is the one baseline that trains that BN end to
+# end. The trainer REFUSES any other shape or step count unless
+# --allow_unmatched (or --smoke_plants), records global_batch,
+# steps_per_epoch, total_steps and e2_matched in config.json, and refuses a
+# resume that changes epochs / batch shape / LR schedule. warmup 40 / val 25 /
+# save 25 is the E2 schedule. Size in steps, not epochs (CLAUDE.md).
+#   torchrun --standalone --nproc_per_node=2 train_supervised_4m.py \
+#            --config configs/config_e8_supervised.yaml
+#
+# SCORE IT TWICE, BOTH AT checkpoints/checkpoint_epoch_600.pth, IN THIS ORDER:
+#   1. its own head, on the exact CLS features linear_probe.py extracts
+#      (defaults batch 32 / 32 workers / seed 0 = the Nova arm caches' shape):
+#        python train_supervised_4m.py --config configs/config_e8_supervised.yaml --score_head
+#   2. the probe, unchanged (cache hit on the features step 1 wrote). Give the
+#      loader shape explicitly: linear_probe.py defaults to 16 workers, and run
+#      first it would write the shared cache with other point subsets.
+#        python eval/linear_probe.py --runs e8_supervised \
+#               --ckpt checkpoints/checkpoint_epoch_600.pth --batch-size 32 --num-workers 32
+#      Via Slurm (the sbatch appends its own --ckpt after the run names, and
+#      argparse's last flag wins, so pass it by env var):
+#        CKPT=checkpoints/checkpoint_epoch_600.pth sbatch slurm/linear_probe.sbatch e8_supervised
+# There is deliberately NO best_model.pth. It would be selected on val R2 and
+# then reported on val. linear_probe.py's default --ckpt best_model.pth
+# therefore fails loudly on this run rather than reading a val-selected
+# checkpoint.
+#
+# LAUNCH WITH train_supervised_4m.py ONLY. slurm/scale_arm_blackwell.sbatch
+# (Nova) and slurm/delta/train_arm.sbatch (Delta) both derive
+# configs/config_<slug>.yaml, so `... e8_supervised` WOULD find this file, and
+# both run train_sorghum_4m.py. That trainer would train an MAE into
+# outputs/e8_supervised (or, on a started run, strict-load its encoder and
+# rewrite its config.json before dying), and the probe would then report an
+# MAE as the supervised row. Two keys below stop it:
+#   model.text_mask_ratio  a string: train_sorghum_4m.py's config parse does
+#                          float() on it and dies BEFORE creating any output
+#                          dir, config.json or W&B run (checked 2026-09-25);
+#   model.mask_ratio: null the backstop: the MAE forward refuses a
+#                          non-numeric mask ratio (TypeError at step 1).
+# train_supervised_4m.py reads neither.
+
+# train_supervised_4m.py refuses any config without this key, so pointing it at
+# an E2 YAML cannot write supervised checkpoints over that arm's output_dir.
+entry_point: train_supervised_4m.py
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+  view_sampling: true      # plan 6.1: one view per plant per epoch (required)
+  view_seed: 42            # the E2 arms' value: same views, same order
+  max_plants: null         # every train plant; val/test are never capped
+
+model:
+  model_size: base
+  active_modalities: "pc,rgb,depth"   # text is refused: the params are never an input
+  # Construction-only. No reconstruction loss is computed here, but
+  # linear_probe.build_model rebuilds the module from config.json with these,
+  # so they stay equal to e2_pcrgbd's (and to random_init's build kwargs).
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+  # NOT READ by train_supervised_4m.py. Both exist to stop train_sorghum_4m.py
+  # (see header); the string is the error message it prints.
+  text_mask_ratio: "E8 supervised config: launch train_supervised_4m.py, never train_sorghum_4m.py"
+  mask_ratio: null
+
+training:
+  batch_size: 16           # per GPU, x 2 GPUs = 32. The E2 shape; others are refused.
+                           # Check: jq '.batch_size, .world_size, .total_steps, .e2_matched' \
+                           #          outputs/e8_supervised/config.json
+  epochs: 600
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 40
+  val_freq: 25             # 24 val points over 600 epochs (head R2 on val, view 00)
+  test_freq: 0             # test is scored once, at the end, by --score_head
+
+checkpointing:
+  output_dir: ./outputs/e8_supervised
+  save_freq: 25
+  resume: null
+
+distributed:
+  world_size: 2            # mp.spawn only; torchrun infers it from --nproc_per_node
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14          # the launchers override (E2: --num_workers 38)
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: e8_supervised

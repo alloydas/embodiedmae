@@ -97,9 +97,13 @@ case "${SPECIES:-sorghum}" in
 esac
 echo "Ckpt  : ${CKPT}   Species: ${SPECIES:-sorghum}"
 
+# FEATURE (cls | mean | cls+mean, default the probe's cls): mean rows are what E8's
+# mean-pooled baselines are compared against. E9 reads the cls cache only, so leave
+# E9_SPLITS unset when FEATURE is not cls.
 python "${PROBE}" \
   --runs "$@" \
   --ckpt "${CKPT}" \
+  ${FEATURE:+--feature "${FEATURE}"} \
   --num-workers "${SLURM_CPUS_PER_TASK:-16}" \
   --batch-size 32 \
   --out "${OUT}"
