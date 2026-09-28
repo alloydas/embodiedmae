@@ -96,6 +96,11 @@ case "${GPU_NAME}" in
   *"RTX PRO 6000"*|*Blackwell*) CONDA_ENV=/work/mech-ai-scratch/alloy/.conda/envs/det_cu128 ;;
   *)                            CONDA_ENV=/work/mech-ai/alloy/.conda/envs/det ;;
 esac
+# MAIZE_CONDA_ENV forces an env regardless of GPU. The maize reference arms all ran
+# det_cu128 (torch 2.11); det_cu128 also carries sm_80/sm_90 kernels, so on A100/H200
+# `MAIZE_CONDA_ENV=/work/mech-ai-scratch/alloy/.conda/envs/det_cu128 sbatch ...` keeps a
+# new arm on the reference software stack. (It has no sm_70: never force it onto V100.)
+CONDA_ENV="${MAIZE_CONDA_ENV:-${CONDA_ENV}}"
 conda activate "${CONDA_ENV}"
 
 echo "JobID   : ${SLURM_JOB_ID:-none}"

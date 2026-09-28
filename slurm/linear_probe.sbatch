@@ -67,7 +67,10 @@ source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh
 # kernel launch, which is deep inside the PC embedder's FPS. Constraining the
 # gres to a100 instead would work but would queue behind the A100 demand to
 # avoid a problem one line of bash solves.
-GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
+# `|| true`: on a CPU-only node nvidia-smi is absent, and under set -e -o pipefail a
+# failing command substitution would end the job here. No GPU -> det, and the probe
+# scripts fall back to --device cpu themselves.
+GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || true)"
 case "${GPU_NAME}" in
   *"RTX PRO 6000"*|*Blackwell*) CONDA_ENV=/work/mech-ai-scratch/alloy/.conda/envs/det_cu128 ;;
   *)                            CONDA_ENV=/work/mech-ai/alloy/.conda/envs/det ;;
