@@ -97,6 +97,20 @@ identical from the outside:
   on that day put even a 2-GPU/16-CPU/32 GB/6 h job only ~6 h ahead of the full
   48-CPU/160 GB/2-day one, so the wall was the queue (other scavenger users with higher
   fairshare), not the request.
+- **`nova` is reachable by backfill even at the bottom of its queue — test with real jobs, not
+  `--test-only`** (checked 2026-09-29). `mech-ai` had used 98 % of the cluster against a 51 % share,
+  so our `nova` priority was the lowest of 153 pending jobs, and `--test-only` put even a
+  1-CPU/10-minute job at Oct 3. A real one started in 25 s. `--test-only` does not model backfill;
+  submit a probe that runs `hostname` (add `--deadline=now+3minutes` so a probe that cannot start
+  expires on its own instead of lingering). What actually blocked a 2-GPU training job was **CPUs
+  per node**: on `nova26-gpu-2` (RTX PRO 6000) 16, 24 and 32 CPUs started at once, 48 did not,
+  whether at 2 days or 20 h, and 160 GB was fine. `nova` GPU jobs count against `mech-ai`'s
+  shared `gres/gpu=17` cap (labmates' jobs wait on it), but unlike scavenger they are not
+  preemptible. To move a *pending* scavenger job in place instead of cancelling and resubmitting:
+  `scontrol update jobid=J QOS=normal Account=mech-ai Partition=nova` (all three in one call; the
+  scavenger QOS is invalid on `nova`), `TresPerNode=gres/gpu:<type>:2`, and for CPUs set
+  `CpusPerTask`, `MinCPUsNode` and `NumCPUs` separately — `NumCPUs` alone leaves the per-node
+  minimum at the old value. A field scontrol rejects aborts that whole call, so change one per call.
 
 **The probe that separates "my request is too big" from "the nodes are held"**: submit a
 deliberately tiny job — 2 GPUs, 8 CPUs, 32 GB, 5 minutes — alongside the real one and compare
