@@ -117,7 +117,15 @@ nvidia-smi -L || true
 # trains on a silent subset and the step budget stops matching E2's -- which is
 # the single thing these arms exist to hold fixed.
 for split in train val; do
-  n=$(ls "/work/mech-ai-scratch/alloy/Maize/${split}" 2>/dev/null | grep -c '^plant_' || true)
+  # Count folders from the directory's link count (subdirectories + 2), not by
+  # listing it. /work is NFS: on 2026-09-29 an `ls` of the 105,000-entry train
+  # split sat in uninterruptible NFS wait for 45+ min in three jobs at once (15
+  # syscalls, 9.7 KB read in total) while `stat` on the same directory returned
+  # in 0.2 s. The split roots hold only plant_* folders plus _params.json, a
+  # file, which adds no link -- so links - 2 is the view-folder count exactly
+  # (train 105002 -> 105000, val 22502 -> 22500).
+  links=$(stat -c %h "/work/mech-ai-scratch/alloy/Maize/${split}" 2>/dev/null || echo 2)
+  n=$(( links - 2 ))
   case "${split}" in
     train) want=105000 ;;
     val)   want=22500  ;;
