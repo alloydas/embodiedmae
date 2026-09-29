@@ -386,6 +386,13 @@ Halving the QAL threshold moves nothing past the noise floor.
   `model.param_encoding`, `model.geometry_cond`, and `loss_name: sinkhorn`.
   All default off; with none set, a model is bit-identical to before (same
   parameters, init and loss).
+- **Validation is always clean (since 2026-09-29):** no occlusion, no noise.
+  The occluded second validation pass was removed from `train_sorghum_4m.py`,
+  and `occlusion.eval_occluded` is now ignored. `occlusion.eval_occlusion`
+  stays, but only as the reference corruption for the separate test-time
+  evaluations (`eval_robustness.py`, `eval_param_oracle.py`). Runs trained
+  before then carry `val_occ_*` in their history, which is where the
+  "occluded" columns in the tables above come from.
 - Main implements plant subsetting and view sampling separately
   (`data.max_plants`, `data.view_sampling`). Keep one when merging; they will
   conflict in `train_sorghum_4m.py` and the datasets.
@@ -410,8 +417,10 @@ answer is no. Three tests could show a real advantage; each is worth running,
 and if none shows one, the honest write-up is the trade-off above.
 
 1. **Stronger corruption and test-time blob masks, on TEST** —
-   `eval_robustness.py --split test` scores `best_model.pth` (chosen on val
-   loss, so val numbers carry selection bias; report test) on one view per test
+   `eval_robustness.py --split test --checkpoint last` scores each run's
+   final checkpoint — not `best_model.pth`, which was picked on *clean* val
+   loss and so favours clean accuracy, tilting a robustness comparison against
+   the structured arms — on one view per test
    plant (2 250 plants, view fixed by seed — 10× the 225-view val subset, no
    plant counted twice). Levels: `clean`, `1x`, `noise2x`, `noise4x`,
    `leaves2x`, `leaves2x_noise2x`, and two **blob-mask** levels, `blobmask`

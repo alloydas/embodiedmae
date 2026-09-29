@@ -2,11 +2,10 @@
 # EmbodiedMAE-4M with structured masking + procedural occlusion (plant_occlusion.py).
 #
 # 4 GPUs x batch 8 = the same global batch as the v5 lr5e-5 baseline, so the
-# two runs compare like-for-like. Pick the account at submit time:
-#   sbatch --account=nok-lab train_4m_occlusion.sbatch
+# two runs compare like-for-like. Account defaults to mech-ai:
 #   sbatch --account=mech-ai train_4m_occlusion.sbatch
 # Another config (e.g. an ablation) without editing this file:
-#   sbatch --account=nok-lab --export=ALL,CONFIG=my_config.yaml train_4m_occlusion.sbatch
+#SBATCH --account=mech-ai
 #SBATCH --job-name=embmae4m_occ
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

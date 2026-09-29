@@ -251,14 +251,20 @@ def _params_to_leaf_text(params: np.ndarray) -> str:
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def load_spline_params(yml_path, max_leaves: int = 24):
+def load_spline_params(yml_path, max_leaves: int = 24, encoding: str = 'v1'):
     """Parse a spline YAML into:
-      valid        : (1+max_leaves,)            float32 — 1=real token, 0=pad
-      param_floats : (1+max_leaves, N_PARAMS)   float32 — encoder input + target
+      valid        : (1+max_leaves,)              float32 — 1=real token, 0=pad
+      param_floats : (1+max_leaves, param_dim())  float32 — encoder input + target
+
+    `encoding` picks the per-token layout: 'v1' (N_PARAMS, fixed-scale [0, 1])
+    or 'v2' (N_PARAMS_V2, z-scored + sin/cos angles; see _plant_to_params_v2).
     """
     import yaml
+    # libyaml parses these ~125 KB files ~9x faster than the pure-Python
+    # loader with identical output; it runs once per sample per epoch.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     with open(yml_path) as f:
-        data = yaml.safe_load(f)
+        data = yaml.load(f, Loader=loader)
 
     plant = data['Sorghums'][0]
     # Some leaves are geometry-only (Center/Left/Right Points but no procedural
@@ -273,18 +279,128 @@ def load_spline_params(yml_path, max_leaves: int = 24):
         if all(key in leaf for key in required_leaf)
     ]
 
+    if encoding == 'v1':
+        plant_fn, leaf_fn = _plant_to_params, _leaf_to_params
+    elif encoding == 'v2':
+        plant_fn = lambda pl: _plant_to_params_v2(pl, n_leaves=len(leaves))
+        leaf_fn  = _leaf_to_params_v2
+    else:
+        raise ValueError(f"unknown param encoding {encoding!r}; expected 'v1' or 'v2'")
+
     n_tokens     = 1 + max_leaves
-    valid        = np.zeros(n_tokens,            dtype=np.float32)
-    param_floats = np.zeros((n_tokens, N_PARAMS), dtype=np.float32)
+    valid        = np.zeros(n_tokens,                       dtype=np.float32)
+    param_floats = np.zeros((n_tokens, param_dim(encoding)), dtype=np.float32)
 
     valid[0]        = 1.0
-    param_floats[0] = _plant_to_params(plant)
+    param_floats[0] = plant_fn(plant)
 
     for i, leaf in enumerate(leaves[:max_leaves]):
         valid[1 + i]        = 1.0
-        param_floats[1 + i] = _leaf_to_params(leaf)
+        param_floats[1 + i] = leaf_fn(leaf)
 
     return torch.from_numpy(valid), torch.from_numpy(param_floats)
+
+
+# ── v2 param encoding ────────────────────────────────────────────────────────
+#
+# What v1 gets wrong, measured on 120-800 training plants:
+#   * 5 of the 9 plant dims (panicle_*) are constant -- zero information.
+#   * Fixed scales squeeze the rest: branching_angle (4-21 deg / 180) uses
+#     2-12 % of [0, 1]; stem_length (~0.98 m / 3.0) about 6 %.
+#   * roll_angle and waviness_period_start are angles normalised linearly
+#     (x / 360), so 359 deg and 1 deg sit at opposite ends of the range.
+# v2 z-scores the linear params with dataset statistics
+# (compute_param_stats.py), encodes every angle as (sin, cos), and drops the
+# constant dims. It also adds the leaf count to the plant token: with most
+# leaf tokens masked, the encoder cannot otherwise tell how many there are.
+#
+# Plant token : [stem_length, stem_dir_x, stem_dir_z, n_leaves, 0 x 6]   (z)
+# Leaf  token : [starting_point, length, branching_angle, waviness_freq] (z)
+#               + sin/cos(roll_angle) + sin/cos(waviness_period_start[0,1])
+# Values are unbounded (z-scores), so the head has no squashing and the
+# Smooth-L1 loss / param metrics are in z units -- not comparable to v1's.
+
+N_PARAMS_V2 = 10
+
+_PLANT_MEAN_V2 = np.array([0.976673, 0.000385177, 0.000976276, 19.58], np.float32)
+_PLANT_STD_V2  = np.array([0.176161, 0.0295573, 0.0272461, 3.52152], np.float32)
+_LEAF_MEAN_V2  = np.array([0.599557, 0.749027, 15.8625, 0.0550075], np.float32)
+_LEAF_STD_V2   = np.array([0.256798, 0.173533, 5.75165, 0.00361029], np.float32)
+
+
+def param_dim(encoding: str = 'v1') -> int:
+    return {'v1': N_PARAMS, 'v2': N_PARAMS_V2}[encoding]
+
+
+def _sincos_deg(deg) -> list:
+    rad = math.radians(float(deg))
+    return [math.sin(rad), math.cos(rad)]
+
+
+def _plant_to_params_v2(plant: dict, n_leaves: int) -> np.ndarray:
+    p  = plant['Parameters']
+    sd = p['stem_direction']
+    raw = np.array([float(p['stem_length']), float(sd[0]), float(sd[2]),
+                    float(n_leaves)], np.float32)
+    out = np.zeros(N_PARAMS_V2, np.float32)
+    out[:4] = (raw - _PLANT_MEAN_V2) / _PLANT_STD_V2
+    return out
+
+
+def _leaf_to_params_v2(leaf: dict) -> np.ndarray:
+    wps = leaf['waviness_period_start']
+    raw = np.array([float(leaf['starting_point']), float(leaf['length']),
+                    float(leaf['branching_angle']),
+                    float(leaf['waviness_frequency'])], np.float32)
+    z = (raw - _LEAF_MEAN_V2) / _LEAF_STD_V2
+    return np.array([*z, *_sincos_deg(leaf['roll_angle']),
+                     *_sincos_deg(wps[0]), *_sincos_deg(wps[1])], np.float32)
+
+
+def _params_to_plant_text_v2(params: np.ndarray) -> str:
+    sl, sdx, sdz, nl = params[:4] * _PLANT_STD_V2 + _PLANT_MEAN_V2
+    return f"sl={sl:.4f} sd={sdx:+.3f},{sdz:+.3f} leaves={nl:.1f}"
+
+
+def _params_to_leaf_text_v2(params: np.ndarray) -> str:
+    sp, ln, ba, wf = params[:4] * _LEAF_STD_V2 + _LEAF_MEAN_V2
+    ang = lambda s_, c_: math.degrees(math.atan2(s_, c_)) % 360.0
+    ra, wp0, wp1 = (ang(params[4], params[5]), ang(params[6], params[7]),
+                    ang(params[8], params[9]))
+    return (f"sp={sp:.4f} ln={ln:.4f} ra={ra:06.2f} ba={ba:06.2f} "
+            f"wf={wf:.6f} wp={wp0:06.2f},{wp1:06.2f}")
+
+
+# ── Geometry conditioning ────────────────────────────────────────────────────
+#
+# The spline params live in the plant's world frame and in metres. The PC
+# target is the same cloud rotated into the camera frame (exactly
+# worldToCamera @ world; verified to 0.0 error) and divided by its own radius.
+# Without these two facts the params cannot be matched to the target: which
+# way a 20 deg leaf points depends on the camera, and a 1.2 m stem has no
+# meaning in a unit-radius cloud (corr(stem_length, normalised height) = 0.08
+# vs 0.68 before normalisation). The conditioning vector returns both:
+#   [0:6] rotation, first two columns of worldToCamera's R (continuous 6D rep)
+#   [6]   normalisation radius, z-scored
+#   [7]   1 if camera_pose.json was found, else 0 (and the rest zeros)
+
+N_COND = 8
+_PC_RADIUS_MEAN, _PC_RADIUS_STD = 1.0388, 0.102899
+
+
+def geometry_condition(camera_pose_path, pc_radius: float) -> np.ndarray:
+    import json
+    from pathlib import Path
+    cond = np.zeros(N_COND, np.float32)
+    path = Path(camera_pose_path)
+    if not path.exists():
+        return cond
+    with open(path) as f:
+        w2c = np.asarray(json.load(f)['worldToCamera'], np.float32).reshape(4, 4)
+    cond[0:6] = w2c[:3, :2].T.reshape(-1)
+    cond[6]   = (float(pc_radius) - _PC_RADIUS_MEAN) / _PC_RADIUS_STD
+    cond[7]   = 1.0
+    return cond
 
 
 # ── Param embedder (encoder input) ───────────────────────────────────────────
@@ -352,8 +468,22 @@ class EmbodiedMAE4M(nn.Module):
         pc_deterministic_fps: bool = False,
         pc_add_center_coordinates: bool = False,
         structured_mask=None,
+        param_encoding:      str   = 'v1',
+        geometry_cond:       bool  = False,
     ):
         super().__init__()
+
+        # Param token layout ('v1' | 'v2') and the camera-pose + scale token.
+        # Defaults reproduce the original model exactly (same parameters, same
+        # init draws), so older configs and checkpoints are unaffected.
+        self.param_encoding = param_encoding
+        self.n_params       = param_dim(param_encoding)
+        self.geometry_cond  = bool(geometry_cond)
+        self.n_prefix       = 1 + int(self.geometry_cond)   # CLS (+ cond)
+        # Evaluation-only knob: {'text': 25} pins that modality's visible-token
+        # count after the Dirichlet draw (other modalities keep theirs). Used by
+        # eval_param_oracle.py; None -- the default -- changes nothing.
+        self.force_visible  = None
 
         # Occlusion-like token masking (see plant_occlusion.py). None = off,
         # which leaves masking -- and its RNG stream -- exactly as before.
@@ -381,11 +511,15 @@ class EmbodiedMAE4M(nn.Module):
             raise ValueError("dirichlet_alpha must be positive and finite")
         self.dirichlet_alpha    = dirichlet_alpha
         self.pc_loss_weight     = pc_loss_weight
-        if pc_loss_name not in {'chamfer', 'qal_loss'}:
+        if pc_loss_name not in {'chamfer', 'qal_loss', 'sinkhorn'}:
             raise ValueError(
                 f"Unsupported point-cloud loss {pc_loss_name!r}; "
-                "expected 'chamfer' or 'qal_loss'"
+                "expected 'chamfer', 'qal_loss' or 'sinkhorn'"
             )
+        # 'sinkhorn' = Sinkhorn alone as the PC loss (no Chamfer/QAL base); its
+        # weight is sinkhorn_loss_weight, so that must be switched on.
+        if pc_loss_name == 'sinkhorn' and sinkhorn_loss_weight <= 0:
+            raise ValueError("pc_loss_name='sinkhorn' needs sinkhorn_loss_weight > 0")
         if qal_threshold < 0:
             raise ValueError("qal_threshold must be non-negative")
         if qal_alpha <= 0:
@@ -469,7 +603,7 @@ class EmbodiedMAE4M(nn.Module):
             deterministic_fps=pc_deterministic_fps,
             add_center_coordinates=pc_add_center_coordinates,
         )
-        self.param_embed = ParamEmbed(N_PARAMS, embed_dim)
+        self.param_embed = ParamEmbed(self.n_params, embed_dim)
 
         # ── Modality embeddings ───────────────────────────────────────────
         self.modality_embed_rgb   = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -520,8 +654,16 @@ class EmbodiedMAE4M(nn.Module):
             nn.Linear(decoder_embed_dim, decoder_embed_dim),
             nn.GELU(),
             nn.LayerNorm(decoder_embed_dim),
-            nn.Linear(decoder_embed_dim, N_PARAMS),
+            nn.Linear(decoder_embed_dim, self.n_params),
         )
+
+        # Geometry conditioning: an always-visible encoder token next to CLS,
+        # plus a broadcast add on every decoder token, so masked PC tokens --
+        # which must be generated in the camera frame -- see the pose directly.
+        if self.geometry_cond:
+            self.cond_embed = ParamEmbed(N_COND, embed_dim)
+            self.modality_embed_cond = nn.Parameter(torch.zeros(1, 1, embed_dim))
+            self.decoder_cond_embed = nn.Linear(N_COND, decoder_embed_dim)
 
         # PC folding decoder
         self.decoder_pc_proj = nn.Linear(decoder_embed_dim, 512)
@@ -551,6 +693,8 @@ class EmbodiedMAE4M(nn.Module):
             nn.init.normal_(e, std=.02)
         nn.init.normal_(self.cls_token,  std=.02)
         nn.init.normal_(self.mask_token, std=.02)
+        if self.geometry_cond:
+            nn.init.normal_(self.modality_embed_cond, std=.02)
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -636,6 +780,11 @@ class EmbodiedMAE4M(nn.Module):
         proportions = torch.distributions.Dirichlet(alpha).sample().tolist()
         nv = _visible_token_counts(
             lengths, proportions, mask_ratio_total, min_mask_ratio)
+        if self.force_visible:
+            nv = list(nv)
+            for name, count in self.force_visible.items():
+                i = names.index(name)
+                nv[i] = max(1, min(int(count), lengths[i]))
 
         scores = scores or {}
 
@@ -666,7 +815,8 @@ class EmbodiedMAE4M(nn.Module):
 
     # ── Encoder ───────────────────────────────────────────────────────────────
 
-    def forward_encoder(self, x_rgb, x_depth, x_pc, x_param, mask_ratio=0.75):
+    def forward_encoder(self, x_rgb, x_depth, x_pc, x_param, mask_ratio=0.75,
+                        cond=None):
         x_rgb   = self.rgb_embed(x_rgb)     + self.pos_embed_2d    + self.modality_embed_rgb
         x_depth = self.depth_embed(x_depth) + self.pos_embed_2d    + self.modality_embed_depth
         x_pc    = self.pc_embed(x_pc)       + self.pos_embed_pc    + self.modality_embed_pc
@@ -683,7 +833,13 @@ class EmbodiedMAE4M(nn.Module):
 
         x   = torch.cat([xr_v, xd_v, xp_v, xt_v], dim=1)
         cls = self.cls_token.expand(x.shape[0], -1, -1)
-        x   = torch.cat([cls, x], dim=1)
+        prefix = [cls]
+        if self.geometry_cond:
+            if cond is None:
+                raise ValueError("geometry_cond=True needs the `cond` vector "
+                                 "(SorghumDataset4M(geometry_cond=True))")
+            prefix.append(self.cond_embed(cond).unsqueeze(1) + self.modality_embed_cond)
+        x   = torch.cat(prefix + [x], dim=1)
         for blk in self.encoder_blocks:
             x = blk(x)
         x = self.encoder_norm(x)
@@ -695,9 +851,9 @@ class EmbodiedMAE4M(nn.Module):
 
     # ── Decoder ───────────────────────────────────────────────────────────────
 
-    def forward_decoder(self, x, rr, rd, rp, rt, lr_, ld_, lp_, lt_):
+    def forward_decoder(self, x, rr, rd, rp, rt, lr_, ld_, lp_, lt_, cond=None):
         x    = self.decoder_embed(x)
-        x_nc = x[:, 1:, :]
+        x_nc = x[:, self.n_prefix:, :]
 
         xr_v = x_nc[:, :lr_]
         xd_v = x_nc[:, lr_: lr_ + ld_]
@@ -718,6 +874,8 @@ class EmbodiedMAE4M(nn.Module):
         xt = _restore(xt_v, rt, self.n_text_tokens) + self.decoder_pos_embed_text
 
         x = torch.cat([xr, xd, xp, xt], dim=1)
+        if self.geometry_cond:
+            x = x + self.decoder_cond_embed(cond).unsqueeze(1)
         for blk in self.decoder_blocks:
             x = blk(x)
         x = self.decoder_norm(x)
@@ -815,6 +973,8 @@ class EmbodiedMAE4M(nn.Module):
                 alpha=self.qal_alpha,
                 use_squared=self.qal_use_squared,
             )
+        elif self.pc_loss_name == 'sinkhorn':
+            loss_pc_base = pred_pc.new_zeros(())
         else:
             loss_pc_base = chamfer_distance(pred_pc, pc)
 
@@ -867,15 +1027,17 @@ class EmbodiedMAE4M(nn.Module):
         pred_params : (B, n_text_tokens, N_PARAMS)
         returns     : list[list[str]]  (B, n_text_tokens)
         """
-        p = pred_params.clamp(0, 1).detach().cpu().numpy()
+        if self.param_encoding == 'v2':
+            p = pred_params.detach().float().cpu().numpy()
+            plant_txt, leaf_txt = _params_to_plant_text_v2, _params_to_leaf_text_v2
+        else:
+            p = pred_params.clamp(0, 1).detach().cpu().numpy()
+            plant_txt, leaf_txt = _params_to_plant_text, _params_to_leaf_text
         result = []
         for b in range(p.shape[0]):
             row = []
             for ti in range(p.shape[1]):
-                if ti == 0:
-                    row.append(_params_to_plant_text(p[b, ti]))
-                else:
-                    row.append(_params_to_leaf_text(p[b, ti]))
+                row.append(plant_txt(p[b, ti]) if ti == 0 else leaf_txt(p[b, ti]))
             result.append(row)
         return result
 
@@ -883,7 +1045,7 @@ class EmbodiedMAE4M(nn.Module):
 
     def forward(self, imgs_rgb, imgs_depth, pc, param_floats, text_valid,
                 mask_ratio: float = 0.75, compute_sinkhorn: bool = True,
-                input_rgb=None, input_depth=None, input_pc=None):
+                input_rgb=None, input_depth=None, input_pc=None, cond=None):
         """
         imgs_rgb    : (B, 3, H, W)
         imgs_depth  : (B, 1, H, W)
@@ -896,6 +1058,8 @@ class EmbodiedMAE4M(nn.Module):
                       ENCODER in place of the clean tensors. The loss always
                       uses imgs_rgb / imgs_depth / pc, so the task becomes
                       reconstructing the clean plant from an occluded view.
+        cond        : (B, N_COND) geometry conditioning; required iff the model
+                      was built with geometry_cond=True, ignored otherwise.
         """
         (latent,
          mr, md, mp, mt,
@@ -904,10 +1068,10 @@ class EmbodiedMAE4M(nn.Module):
             imgs_rgb if input_rgb is None else input_rgb,
             imgs_depth if input_depth is None else input_depth,
             pc if input_pc is None else input_pc,
-            param_floats, mask_ratio)
+            param_floats, mask_ratio, cond=cond)
 
         pred_rgb, pred_depth, pred_pc, pred_params = self.forward_decoder(
-            latent, rr, rd, rp, rt, lr_, ld_, lp_, lt_)
+            latent, rr, rd, rp, rt, lr_, ld_, lp_, lt_, cond=cond)
 
         total, loss_rgb, loss_depth, loss_pc, loss_text = self.forward_loss(
             imgs_rgb, imgs_depth, pc, param_floats, text_valid,

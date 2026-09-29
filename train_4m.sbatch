@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH --account=mech-ai
 #SBATCH --job-name=embodiedmae4m
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

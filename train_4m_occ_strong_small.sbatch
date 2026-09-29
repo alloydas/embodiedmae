@@ -3,11 +3,11 @@
 #
 # Same 4 GPUs x batch 8 as the full-data occlusion run, but 1050 train / 225 val
 # samples, so an epoch is ~33 steps instead of ~3,300. Walltime is 2 days rather
-# than 8 for that reason. Pick the account at submit time:
+# than 8 for that reason. Account defaults to mech-ai:
 #   sbatch --account=mech-ai train_4m_occ_strong_small.sbatch
-#   sbatch --account=nok-lab train_4m_occ_strong_small.sbatch
 # Another config without editing this file:
 #   sbatch --account=mech-ai --export=ALL,CONFIG=my_config.yaml train_4m_occ_strong_small.sbatch
+#SBATCH --account=mech-ai
 #SBATCH --job-name=embmae4m_occ_strong
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

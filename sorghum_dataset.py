@@ -4,6 +4,8 @@ Loads data from separate train and val folders
 """
 
 import hashlib
+import json
+import os
 
 import torch
 from torch.utils.data import Dataset
@@ -88,7 +90,7 @@ class SorghumDataset(Dataset):
             'val', 'validation', 'test', 'testing'
         }
         
-        print(f"Loading data from: {self.load_dir}")
+        print(f"Loading data from: {self.load_dir}", flush=True)
         
         # Image transformations
         self.rgb_transform = transforms.Compose([
@@ -98,7 +100,48 @@ class SorghumDataset(Dataset):
         ])
         
         # Get all sample folders and verify they have required files
-        self.samples = []
+        self.samples = self.cached_index('3m', self._scan_samples)
+
+        if len(self.samples) == 0:
+            raise ValueError(f"No valid samples found in {self.load_dir}!\n"
+                           f"Expected structure: folder/*_nc.ply, folder/rgb.png, folder/depth.png")
+
+        print(f"✅ Loaded {len(self.samples)} samples from {self.load_dir.name}", flush=True)
+
+    def cached_index(self, tag, build):
+        """Folder list for this split, cached on disk.
+
+        The scan globs three patterns in every sample directory; over 105 000
+        directories on a busy shared filesystem that has taken hours, and it is
+        repeated by every run and every evaluation. The dataset is static, so
+        the resulting names are cached next to the code. Set
+        SORGHUM_INDEX_REFRESH=1 to force a rescan.
+        """
+        key = hashlib.sha256(f'{tag}|{self.load_dir}'.encode()).hexdigest()[:16]
+        cache = Path(__file__).resolve().parent / '.index_cache' / f'{key}.json'
+        if os.environ.get('SORGHUM_INDEX_REFRESH') != '1' and cache.exists():
+            try:
+                names = json.loads(cache.read_text())['names']
+                print(f"📇 index cache hit: {len(names)} samples ({cache.name})", flush=True)
+                return [self.load_dir / name for name in names]
+            except Exception as exc:
+                print(f"⚠️  index cache unreadable ({exc}); rescanning", flush=True)
+        folders = build()
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            # Write-then-rename: two array tasks may build the same index at
+            # once, and neither must ever read the other's half-written file.
+            tmp = cache.with_suffix(f'.{os.getpid()}.tmp')
+            tmp.write_text(json.dumps({'root': str(self.load_dir),
+                                       'names': [f.name for f in folders]}))
+            os.replace(tmp, cache)
+            print(f"📇 index cached: {len(folders)} samples -> {cache.name}", flush=True)
+        except OSError as exc:
+            print(f"⚠️  could not write index cache: {exc}", flush=True)
+        return folders
+
+    def _scan_samples(self):
+        found = []
         for folder in sorted(self.load_dir.iterdir()):
             if not folder.is_dir():
                 continue
@@ -112,15 +155,11 @@ class SorghumDataset(Dataset):
             #print(pc_files)
             
             if rgb_path.exists() and depth_path.exists() and len(pc_files) > 0:
-                self.samples.append(folder)
+                found.append(folder)
             else:
                 print(f"⚠️  Skipping {folder.name}: missing files (RGB={rgb_path.exists()}, Depth={depth_path.exists()}, PC={len(pc_files)>0})")
-        
-        if len(self.samples) == 0:
-            raise ValueError(f"No valid samples found in {self.load_dir}!\n"
-                           f"Expected structure: folder/*_nc.ply, folder/rgb.png, folder/depth.png")
-        
-        print(f"✅ Loaded {len(self.samples)} samples from {self.load_dir.name}")
+        return found
+
     
     def __len__(self):
         return len(self.samples)
@@ -152,6 +191,15 @@ class SorghumDataset(Dataset):
     
     def load_pointcloud(self, ply_path):
         """Load point cloud from PLY file"""
+        return self.load_pointcloud_with_radius(ply_path)[0]
+
+    def load_pointcloud_with_radius(self, ply_path):
+        """Like load_pointcloud, plus the radius it divided by.
+
+        The normalisation removes absolute size from the target; the 4M
+        geometry-conditioning token hands this radius back to the model so
+        size-type params (stem_length, leaf length) stay interpretable.
+        """
         try:
             pcd = o3d.io.read_point_cloud(str(ply_path))
             points = np.asarray(pcd.points)
@@ -164,7 +212,7 @@ class SorghumDataset(Dataset):
             # translation and scale change on every fetch.
             centroid = np.mean(points, axis=0)
             points = points - centroid
-            max_dist = np.max(np.linalg.norm(points, axis=1))
+            max_dist = float(np.max(np.linalg.norm(points, axis=1)))
             if max_dist > 0:
                 points = points / max_dist
 
@@ -182,7 +230,7 @@ class SorghumDataset(Dataset):
                 padding = points[indices]
                 points = np.vstack([points, padding])
 
-            return points.astype(np.float32)
+            return points.astype(np.float32), max_dist
         except Exception as e:
             raise RuntimeError(f"Error loading point cloud from {ply_path}: {e}")
 
@@ -233,6 +281,11 @@ class SorghumDataset(Dataset):
         return depth
     
     def __getitem__(self, idx):
+        item = self.load_item(idx)
+        return item['rgb'], item['depth'], item['pc'], item['name']
+
+    def load_item(self, idx):
+        """All per-sample data as a dict; subclasses add fields to it."""
         sample_dir = self.samples[idx]
         
         try:
@@ -247,10 +300,12 @@ class SorghumDataset(Dataset):
             
             # Find and load Point Cloud
             pc_path = self.find_pointcloud_file(sample_dir)
-            pc = self.load_pointcloud(pc_path)
+            pc, pc_radius = self.load_pointcloud_with_radius(pc_path)
             pc = torch.from_numpy(pc)
             
-            return rgb, depth, pc, str(sample_dir.name)
+            return {'rgb': rgb, 'depth': depth, 'pc': pc,
+                    'name': str(sample_dir.name), 'pc_radius': pc_radius,
+                    'dir': sample_dir}
         
         except Exception as e:
             print(f"❌ Error loading sample {sample_dir.name}: {e}")

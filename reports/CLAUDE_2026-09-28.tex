@@ -1,0 +1,1710 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\documentclass[
+  10pt,
+]{article}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\newenvironment{Shaded}{}{}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\BuiltInTok}[1]{\textcolor[rgb]{0.00,0.50,0.00}{#1}}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.73,0.13,0.13}{\textit{#1}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
+\newcommand{\ImportTok}[1]{\textcolor[rgb]{0.00,0.50,0.00}{\textbf{#1}}}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\usepackage{longtable,booktabs,array}
+\usepackage{caption}
+\captionsetup[table]{skip=6pt}
+\newcounter{none} % for unnumbered tables
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage[letterpaper,margin=0.75in]{geometry}
+\usepackage{booktabs,longtable,array,multirow,colortbl}
+\usepackage{fancyhdr}
+\usepackage{seqsplit}
+\usepackage{etoolbox}
+\definecolor{muted}{HTML}{57606A}
+% Wide tables: shrink the font rather than run off the page.
+\let\oldlongtable\longtable
+\def\longtable{\scriptsize\oldlongtable}
+% Long monospace names (run slugs, script paths, config keys) may break
+% anywhere, in tables and paragraphs alike. Robust, so section titles that
+% carry code are written to the .toc/.aux unexpanded instead of crashing.
+\AtBeginDocument{\DeclareRobustCommand{\texttt}[1]{{\ttfamily\seqsplit{#1}}}}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.12}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\emergencystretch}{3em}
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[L]{\footnotesize\color{muted}CLAUDE.md -- EmbodiedMAE-4M, yongyun branch}
+\fancyfoot[R]{\footnotesize\color{muted}\thepage}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+% fallback for those not using the hyperref driver hyperxmp:
+\makeatletter
+\@ifundefined{xmpquote}{\newcommand{\xmpquote}[1]{#1}}{}
+\makeatother
+\hypersetup{
+  colorlinks=true,
+  linkcolor={RoyalBlue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={RoyalBlue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{CLAUDE.md — EmbodiedMAE-4M repository guide and experiment log}
+\author{}
+\date{2026-09-28, \texttt{yongyun} branch}
+
+\begin{document}
+\maketitle
+
+{
+\setcounter{tocdepth}{3}
+\tableofcontents
+}
+\section{CLAUDE.md}\label{claude.md}
+
+This file provides guidance to Claude Code (claude.ai/code) when working
+with code in this repository.
+
+\subsection{What this is}\label{what-this-is}
+
+PyTorch implementation of \textbf{EmbodiedMAE} --- a multi-modal Masked
+Autoencoder pre-trained on synthetic Sorghum plant data. Two model
+variants share the same encoder/decoder skeleton:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{3M (\texttt{embodied\_mae.py})} --- RGB + Depth + Point Cloud
+\item
+  \textbf{4M (\texttt{embodied\_mae\_4m.py})} --- adds a parametric
+  ``spline/text'' modality describing the plant's procedural generation
+  parameters
+\end{itemize}
+
+Both use the same Dirichlet-allocation token masking, transformer
+encoder, and per-modality decoder heads. The 4M variant is the active
+line of work; 3M is kept as the baseline it was derived from.
+
+\subsection{Repo layout}\label{repo-layout}
+
+Configs and batch scripts were consolidated out of the repo root.
+\textbf{There are no \texttt{config.yaml} / \texttt{config\_4m.yaml} at
+the root any more} --- everything lives in:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{configs/} --- every YAML. \texttt{config.yaml} (3M),
+  \texttt{config\_4m.yaml} (4M), \texttt{config\_4m\_pretrain15k*.yaml}
+  (pretrain), \texttt{config\_4m\_distill\_*.yaml} (cross-modal
+  distillation), \texttt{config\_e2\_*.yaml} (the E2 modality ablation),
+  \texttt{config\_e3\_*.yaml} (data scaling) and
+  \texttt{config\_e4\_*.yaml} (model scaling).
+\item
+  \texttt{slurm/} --- every \texttt{.sbatch} / launcher script.
+  \texttt{e2\_arm*.sbatch} launch E2 arms;
+  \texttt{scale\_arm\_blackwell.sbatch} launches any E3 or E4 arm by
+  slug
+  (\texttt{sbatch\ -\/-job-name=e3\_1k\ slurm/scale\_arm\_blackwell.sbatch\ e3\_1k}),
+  deriving \texttt{configs/config\_\textless{}slug\textgreater{}.yaml}
+  and \texttt{outputs/\textless{}slug\textgreater{}/}.
+\item
+  \texttt{data\_split/} --- the train/val/test split tooling
+  (\texttt{make\_split.py}, \texttt{move\_split.py},
+  \texttt{reshuffle.py}).
+\item
+  \texttt{eval/} --- evaluation and analysis
+  (\texttt{eval/analyze\_e2.py},
+  \texttt{eval/eval\_views\_one\_plant.py},
+  \texttt{eval/vis\_pc\_unpredicted.py},
+  \texttt{eval/eval\_warmstart.py}, \ldots).
+\item
+  \texttt{figures/} --- anything that renders a figure, report or deck
+  (\texttt{figures/make\_results\_pptx.py}, \texttt{plot\_*.py},
+  \texttt{gen\_*.py}, \texttt{regen\_*.py}).
+\item
+  \texttt{export/} --- dumps and artefact builders
+  (\texttt{export/dump\_param\_examples.py}, \texttt{export\_pc\_*.py},
+  \texttt{build\_*.py}).
+\item
+  \texttt{sweeps/} --- masking and visualisation sweeps.
+\item
+  \texttt{tools/} --- one-off data-prep and diagnostic scripts.
+\item
+  \textbf{The repo root holds only what other code imports}: the two
+  models, the two datasets, the training entry points,
+  \texttt{validate*.py} and \texttt{utils.py}. That is the rule --- if a
+  file at the root is imported by nothing, it belongs in one of the
+  folders above.
+\end{itemize}
+
+Scripts in those folders put the repo root on \texttt{sys.path}
+themselves (a four-line shim at the top), so
+\texttt{python\ eval/analyze\_e2.py} works from the repo root without
+\texttt{PYTHONPATH} set. Keep the shim when adding a script there.
+
+If a command or script still refers to a root-level
+\texttt{config\_4m.yaml}, it is stale --- the path is
+\texttt{configs/config\_4m.yaml}.
+
+\subsection{Experiment programme --- what is done and what is
+left}\label{experiment-programme-what-is-done-and-what-is-left}
+
+The programme is the E1--E10 matrix in the CVPR 2027 plan (the Google
+Doc is the source of truth for scope; this section is the source of
+truth for \emph{state}). Paper deadline \textbf{Nov 13 2026}, internal
+results freeze \textbf{Oct 24 2026}.
+
+\textbf{Status as of 2026-09-20.} Run state goes stale fast --- the
+table records which experiments have been \emph{built}, which is
+durable. For live progress use \texttt{squeue\ -u\ \$USER},
+\texttt{outputs/\textless{}run\textgreater{}/training\_history.json},
+and \texttt{outputs/\textless{}run\textgreater{}/config.json} (which
+records what a run actually used).
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+experiment
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+state
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+runs
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+E1 & headline pretrain & \textbf{done} &
+\texttt{4m\_pretrain\_15k\_v2\_depthfix\_qal}, 1000/1000 ep, global
+batch 256 \\
+E2 & modality value-add & \textbf{done} & all four arms 600/600; results
+in \texttt{reports/RESULTS\_DECK\_2026-09-20.md} \\
+E3 & data scaling & \textbf{2 of 3} & \texttt{e3\_3k} yes
+\texttt{e3\_10k} yes; \texttt{e3\_1k} resuming from epoch 5654/6169 \\
+E4 & model scaling & \textbf{1 of 2} & \texttt{e4\_small} yes;
+\texttt{e4\_large} resuming from epoch 250/600 \\
+E5 & view regime & \textbf{not built} & --- \\
+E6 & masking / noise & \textbf{600-epoch pass done; 1 000-epoch
+continuation pending} (\texttt{yongyun} branch) & structured masking
+trades clean PC accuracy for robustness: worse clean F1, near-zero
+degradation under corruption --- see
+\hyperref[e6--e7-on-the-yongyun-branch]{E6 / E7 on the \texttt{yongyun}
+branch} \\
+E7 & loss study & \textbf{first pass done} (\texttt{yongyun} branch) &
+QAL \textgreater{} Chamfer \textgreater{} Sinkhorn-only on F1; Sinkhorn
+trades precision for recall; \texttt{model.loss\_name} now also takes
+\texttt{sinkhorn} --- see below \\
+E8 & baselines & \textbf{not built} & --- \\
+E9 & latent analysis & \textbf{not built} & --- \\
+E10 & real-data OOD & \textbf{partial} & \texttt{OOD\_EVAL\_rgb2pc.md}
+and the \texttt{eval\_rgb2pc\_*.py} scripts \\
+\end{longtable}
+}
+
+\textbf{On the two resuming arms.} \texttt{e3\_1k} and
+\texttt{e4\_large} both died at exactly \texttt{2026-09-19T15:51:27} on
+\texttt{nova26-gpu-2} --- same second, same node, no traceback, host RSS
+far under request. That is a node-level event on the preemptible
+\texttt{scavenger} partition, not a fault in either run, and the
+launcher's auto-resume bounds the loss at \texttt{save\_freq} epochs.
+\texttt{e3\_1k}'s \texttt{training\_history.json} was left truncated
+mid-write; its val series is recoverable from the run log in
+\texttt{logs/}.
+
+\textbf{On waiting for GPUs.} When these jobs sit \texttt{PENDING} for
+days, check whether it is your request before shrinking it: a 1-GPU /
+1-CPU / 1 GB / 10-minute test job placed at the \emph{same} time as the
+full 2-GPU / 320 GB request, which means the nodes are held by a
+reservation and no amount of trimming helps.
+
+\subsubsection{Two gaps that block the headline
+claim}\label{two-gaps-that-block-the-headline-claim}
+
+\textbf{1. There is no downstream linear probe, and the plan says that
+is the metric.} Locked decision 6.4 makes the value-add metric a linear
+probe on height, leaf angle, leaf count and biomass --- explicitly
+\emph{not} reconstruction loss. \texttt{eval/analyze\_e2.py} compares
+arms on \texttt{val\_pc\_chamfer}, which is the correct arm-invariant
+\emph{monitoring} signal and is not what 6.4 asks for. So E2, E3 and E4
+will all finish and produce chamfer curves with no probe number
+attached.
+
+Three of the four targets are already in \texttt{features.csv} at the
+split root (15 000 rows keyed by \texttt{plant}, which joins to
+\texttt{Sorghum\_\textless{}plant\textgreater{}\_\textless{}view\textgreater{}}):
+\texttt{stem\_length} \(\to\) height, \texttt{n\_leaves} \(\to\) leaf
+count, and leaf angle is either \texttt{roll\_mean} (twist) or
+\texttt{branch\_mean} (insertion) --- the spline YAMLs carry
+\texttt{roll\_angle} and \texttt{branching\_angle} as distinct fields
+and the plan does not say which it means. \textbf{Biomass is in neither
+\texttt{features.csv} nor the spline params} and has to be derived
+(cheapest proxy: \texttt{n\_leaves\ ×\ leaf\_len\_mean}).
+
+Build and validate this against an existing checkpoint \emph{before} the
+arms finish --- if the probe is broken or these targets carry no linear
+signal, that is much cheaper to learn now than after the runs are
+unrepeatable.
+
+\textbf{2. No baselines exist (E8), and the plan ranks that the \#1
+reject risk.} Nothing in the repo addresses it, and every baseline is
+itself a training run that has to fit before the Oct 24 freeze, so the
+\emph{decision} about what to compare against is more time-critical than
+the runs.
+
+\subsubsection{On E6 and E7 being run
+elsewhere}\label{on-e6-and-e7-being-run-elsewhere}
+
+Masking/noise and the loss study are a collaborator's, so nothing in
+this repo should schedule them. Their results still have to land in the
+same table as everything above, which means the comparison only holds if
+they match this programme on the three things that silently break it:
+the \textbf{same} 70/15/15 split of \texttt{Sorghum\_15K} (seed 42), the
+\textbf{same} global batch of 32, and a budget stated in
+\textbf{optimizer steps} rather than epochs. Confirm those three before
+their numbers are merged, not after ---
+\texttt{outputs/\textless{}run\textgreater{}/config.json} records all
+three for any run that used this codebase.
+
+That leaves \textbf{E5, E8, E9 and E10 plus the linear probe} as the
+work owned here.
+
+\subsubsection{\texorpdfstring{E6 / E7 on the \texttt{yongyun}
+branch}{E6 / E7 on the yongyun branch}}\label{e6-e7-on-the-yongyun-branch}
+
+Results from the collaborator side, 2026-09-21. Every run below is
+\textbf{4M base, recipe-B occlusion + structured masking, 3 000 plants,
+one view per plant per epoch, 30 000 optimizer steps} (94 steps/epoch
+\(\to\) 320 epochs; best checkpoints at epochs 300--320, i.e.~still
+improving when the cosine schedule ends), evaluated on a fixed 225-view
+clean val set and, for the occluded columns, under one reference
+corruption shared by all runs (\texttt{occlusion.eval\_occlusion}, 1×
+noise).
+
+\subsubsection{The 600-epoch runs (2026-09-26) --- these are the
+results}\label{the-600-epoch-runs-2026-09-26-these-are-the-results}
+
+Twelve runs, \texttt{train\_4m\_paper.sbatch} +
+\texttt{config\_4m\_paper\_*.yaml}: \textbf{56 400 optimizer steps = 600
+epochs} at 94 steps/epoch (3 000 plants, one view per plant per epoch),
+one cosine from scratch with 19 warm-up epochs, global batch 32 (8 per
+GPU × 4 L40S), fixed 225-view clean val. Arms that carry a claim run at
+\textbf{seeds 1 and 2}, so every gap can be read against the run-to-run
+spread.
+
+600 epochs is enough here: PC F1@0.03 climbs from 0.60 to 0.73 between
+epochs 200 and 250 and is flat over the last four validation points
+(e.g.~0.733, 0.733, 0.735, 0.734), so arms are compared after the
+transition, not before it. It is, however, \textbf{a short schedule next
+to the programme's 197 400 steps} and has to be labelled that way
+wherever these rows are reported. An earlier attempt at the full 197
+400-step budget was stopped at \textasciitilde580 epochs and is kept in
+\texttt{outputs/\_aborted\_2100budget/}; its numbers are not comparable
+because its cosine was still at 85 \% of peak LR there.
+
+\paragraph{E6 --- structured masking: worse clean reconstruction, better
+robustness}\label{e6-structured-masking-worse-clean-reconstruction-better-robustness}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+arm
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+token masking
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.03 s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+recall@0.03 s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01 s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Depth MSE s1 / s2
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{paper\_maskoff} & \textbf{off} (uniform) & \textbf{0.734 /
+0.842} & \textbf{0.650 / 0.773} & \textbf{0.230 / 0.352} &
+\textbf{0.00259 / 0.00181} & 0.0426 / 0.0470 \\
+\texttt{paper\_maskedge} & edge weighting only (\texttt{length\_scale}
+0.02) & 0.611 / 0.655 & 0.485 / 0.541 & 0.184 / 0.206 & 0.00422 /
+0.00358 & \textbf{0.0380 / 0.0383} \\
+\texttt{paper\_maskblob} & blobs only (\texttt{center\_bias} 0) & 0.613
+/ 0.673 & 0.487 / 0.571 & 0.180 / 0.197 & 0.00421 / 0.00332 & 0.0405 /
+0.0394 \\
+\texttt{paper\_maskboth} & blobs + edge (the old default) & 0.608 /
+0.602 & 0.480 / 0.475 & 0.176 / 0.175 & 0.00435 / 0.00436 & 0.0390 /
+0.0385 \\
+\end{longtable}
+}
+
+Both \texttt{maskoff} seeds beat all six structured seeds on every PC
+metric, and the gap (0.15--0.23 F1@0.03) is far larger than the seed
+spread of any structured arm (0.005--0.06). Turning structured masking
+off raises recall@0.03 from \textasciitilde0.48 to \textasciitilde0.71,
+which is the same quantity the radial analysis below blamed on missing
+leaf tips --- edge-biased masking spends the mask budget on the frame
+border and starves exactly the outer plant. Blobs alone, edge bias alone
+and both together are indistinguishable from each other.
+
+\textbf{Robustness is the other half.} The same runs, scored under the
+occluded validation pass --- one fixed reference corruption (procedural
+leaves at 9--16 per image plus 1× sensor noise, eval seed 42), identical
+for every run:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+arm
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer clean s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer occluded s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+degradation (occ / clean) s1 / s2
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{paper\_maskoff} & \textbf{0.00259 / 0.00181} & \textbf{0.00285 /
+0.00199} & 1.10 / 1.10 \\
+\texttt{paper\_maskedge} & 0.00422 / 0.00358 & 0.00432 / 0.00373 & 1.02
+/ 1.04 \\
+\texttt{paper\_maskblob} & 0.00421 / 0.00332 & 0.00433 / 0.00348 & 1.03
+/ 1.05 \\
+\texttt{paper\_maskboth} & 0.00435 / 0.00436 & 0.00444 / 0.00438 &
+\textbf{1.02 / 1.00} \\
+\texttt{paper\_paramsv2} & 0.00420 / 0.00435 & 0.00426 / 0.00435 &
+\textbf{1.01 / 1.00} \\
+\end{longtable}
+}
+
+Structured masking does what it was built for: corruption barely moves
+its error (0--5 \%), while uniform masking loses 10 \%. At this
+corruption strength, though, the robustness does not pay for itself ---
+\texttt{maskoff} under corruption is still better than every structured
+arm on \emph{clean} input. So the finding is a trade-off, not a win
+either way, and it depends on how hard the test corruption is. Whether
+the curves cross at stronger corruption is the open question
+(\texttt{eval\_robustness.py}, below). The occluded pass logs Chamfer,
+RGB and depth only --- F1/recall under corruption are not recorded yet.
+
+\textbf{What structured masking already wins on, measured:}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+property
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+structured (10 runs: mask arms, loss arms, params v2)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+\texttt{maskoff} (2 runs)
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+PC Chamfer degradation under the reference corruption & 1.00--1.05× &
+1.10× \\
+Depth MSE (clean) & \textbf{0.0363--0.0407 --- every one of the 10 runs}
+& 0.0426 / 0.0470 \\
+F1@0.03 seed-to-seed spread & 0.006 (\texttt{maskboth}) & 0.108 \\
+\end{longtable}
+}
+
+The depth result has no exceptions: all ten structured runs beat both
+\texttt{maskoff} seeds. The stability gap is large but ambiguous --- a
+model can be reproducible because it settles on a lower plateau. These
+are supporting evidence; the headline claim needs one of the tests in
+``Showing where structured masking helps'' below.
+
+\textbf{Caveat before this is quoted:} \texttt{maskoff}'s two seeds are
+0.734 vs 0.842, a much wider spread than any other arm, so the direction
+is solid but the magnitude is not. A third \texttt{maskoff} seed is the
+cheapest way to pin it (\textasciitilde10 h). Note also that depth goes
+the other way: structured arms reach 0.038--0.040 Depth MSE against
+0.043--0.047 for \texttt{maskoff}.
+
+\paragraph{Spline params: v2 + pose/scale helps once its loss weight is
+fixed}\label{spline-params-v2-posescale-helps-once-its-loss-weight-is-fixed}
+
+Same masking (\texttt{maskboth}), same seeds; v1 is the
+\texttt{paper\_maskboth} pair. \texttt{spline\_loss\_weight} is 5 for v1
+and \textbf{0.6} for v2, which compensates for v2's z-scored targets
+being \textasciitilde6× larger --- the confound that made the earlier
+30k comparison read backwards.
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+run
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.03 s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01 s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+recall@0.03 s1 / s2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer s1 / s2
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+v1 (\texttt{paper\_maskboth}) & 0.608 / 0.602 & 0.176 / 0.175 & 0.480 /
+0.475 & 0.00435 / 0.00436 \\
+\textbf{v2 + pose/scale} (\texttt{paper\_paramsv2}) & \textbf{0.619 /
+0.615} & \textbf{0.224 / 0.215} & 0.483 / 0.483 & \textbf{0.00420 /
+0.00435} \\
+\end{longtable}
+}
+
+F1@0.01 improves by \textasciitilde25 \% (0.175 \(\to\) 0.219) against a
+seed spread of 0.001--0.009, so this one is real. The gain is
+concentrated at the tight threshold, i.e.~in placing points precisely,
+which is what camera pose plus the normalisation radius should buy.
+
+\paragraph{E7 --- point-cloud loss: QAL leads, Sinkhorn trades precision
+for
+recall}\label{e7-point-cloud-loss-qal-leads-sinkhorn-trades-precision-for-recall}
+
+One seed each, masking fixed at \texttt{maskboth}; the QAL row is
+\texttt{paper\_maskboth\_s1}.
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+loss
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.03
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+recall@0.03
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+precision@0.03
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Depth MSE
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+QAL (t=0.01, \(\alpha\)=100) & \textbf{0.608} & 0.480 & 0.850 &
+\textbf{0.176} & \textbf{0.00435} & 0.0390 \\
+Chamfer (\texttt{pc\_loss\_weight} 10) & 0.578 & 0.450 & 0.846 & 0.144 &
+0.00435 & \textbf{0.0363} \\
+Sinkhorn only (blur 0.02, 2 048 pts) & 0.474 & \textbf{0.710} & 0.359 &
+0.136 & 0.01032 & 0.0407 \\
+\end{longtable}
+}
+
+Sinkhorn is the interesting one: it is the only loss that spreads
+predictions over the whole plant (recall 0.71 vs 0.45--0.48) but it
+places them badly (precision 0.36 vs 0.85). QAL and Chamfer do the
+opposite. The combination (QAL with a Sinkhorn auxiliary term, which
+\texttt{sinkhorn\_loss\_weight} already supports) is the obvious next
+arm and has not been run.
+
+\subsubsection{The 30 000-step sweep (screening
+only)}\label{the-30-000-step-sweep-screening-only}
+
+Everything below this line is the earlier 30 000-step pass. It sits
+\emph{before} the F1 transition and its gaps were inside the seed gap,
+so it is kept as screening evidence --- which settings to drop --- and
+not as a result.
+
+\textbf{Held fixed in every run --- including the edge weighting.} Token
+masking: \texttt{model.structured\_mask} with \texttt{prob:\ 0.5} (half
+the batches; the rest use the uniform shuffle),
+\texttt{center\_bias:\ 1.5} (a smooth random field biased toward the
+frame border, so masked blobs gather at the edges and the centre plant
+stays visible) and one field shared across RGB, depth and the PC;
+train-only, so validation always uses the uniform mask. Input occlusion:
+procedural leaves entering from outside the frame
+(\texttt{reach:\ {[}0.6,\ 1.2{]}}, 9--16 leaves, on every training
+sample), interleaved in depth
+(\texttt{depth\_quantile:\ {[}0.0,\ 0.8{]}}), plus sensor noise.
+\textbf{No run in this screening pass varies \texttt{center\_bias},
+\texttt{prob} or \texttt{reach}} --- that question is answered by the
+600-epoch \texttt{paper\_mask*} arms above, and the answer is that
+structured masking costs PC reconstruction.
+
+\textbf{Against the three merge conditions above.} Split: same
+\texttt{Sorghum\_15K} root yes. Global batch: 8 × 4 GPUs = 32 yes.
+Budget in steps: 30 000 yes --- but that is a \emph{selection} schedule,
+\textasciitilde15 \% of the programme's 197 400 (\texttt{e3\_3k}, same
+94 steps/epoch, runs 2 100 epochs), so only the ranking transfers, not
+the absolute numbers. The 3 000 plants are drawn by
+\texttt{training.num\_train\_plants} with seed 42; that is \textbf{not}
+the same draw as main's \texttt{data.max\_plants} /
+\texttt{plant\_subset\_seed}, so it is not \texttt{e3\_3k}'s 3k.
+
+\textbf{Noise floor --- read every table against this.} Training had no
+seed until \texttt{training.seed} was added here, so \texttt{recipe\_b}
+(unseeded) and \texttt{params\_v1\_seed1} (seed 1) are the \emph{same
+config} run twice. Their gap is the only run-to-run error bar in this
+section:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+val loss
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+val(occ) loss
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.03
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+EMD
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Depth MSE
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+seed-to-seed gap & 0.027 & 0.014 & 0.6 \% & 1.7 \% & 0.3 \% & 1.4 \% &
+11 \% \\
+\end{longtable}
+}
+
+\textbf{Which F1 threshold.} F1@0.03 is the headline column: its ceiling
+is \textasciitilde1, so the value reads directly as a fraction of a
+perfect reconstruction. F1@0.01 is kept beside it. Its ceiling is only
+0.871 --- two independent 8 196-point draws of the \emph{same}
+ground-truth cloud score that against each other (0.995 at 0.02, 0.999
+at 0.03) --- so 0.154 is \textasciitilde18 \% of reachable, not 15 \%.
+It is also slightly the more discriminating of the two here (recipe
+spread / seed gap 3.1× vs 2.7×), and it is the column that exposes the
+leaf-tip failure below. Do not move to a threshold where F1 \(\approx\)
+0.9: every arm saturates there and the gaps compress.
+
+\paragraph{E6 --- structured-mask blob size × sensor
+noise}\label{e6-structured-mask-blob-size-sensor-noise}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+run
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+blob size (\texttt{length\_scale})
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+train noise (rgb/depth/pc)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+val loss
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+val(occ) loss
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.03
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+RGB MSE
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Depth MSE
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{recipe\_a\_ls035\_noise1x} & 0.35 & 1× (0.03 / 0.015 / 0.008) &
+0.5829 & 0.5964 & 0.004703 & 0.5832 & 0.1582 & 0.6738 & 0.03350 \\
+\texttt{recipe\_b\_ls020\_noise1x} & 0.20 & 1× & 0.5623 & 0.5853 &
+0.004644 & 0.5856 & 0.1567 & 0.6649 & 0.03355 \\
+\texttt{recipe\_c\_ls020\_noise0p5x} & 0.20 & 0.5× & 0.5908 & 0.5993 &
+0.004716 & 0.5816 & 0.1536 & 0.6715 & 0.03219 \\
+\texttt{recipe\_d\_ls020\_noise2x} & 0.20 & 2× & 0.5891 & 0.6010 &
+0.004680 & 0.5817 & 0.1503 & 0.6610 & 0.03221 \\
+\texttt{params\_v1\_seed1} (= B, seed 1) & 0.20 & 1× & 0.5891 & 0.5996 &
+0.004670 & 0.5841 & 0.1541 & 0.6773 & 0.02997 \\
+\end{longtable}
+}
+
+Nothing is bold: no gap in this table exceeds the seed-to-seed gap.
+
+B has the best clean and occluded val loss, but \textbf{B run a second
+time lands behind A and level with C and D}: every recipe gap (A-B
+0.021, C-B 0.029, D-B 0.027 val loss) is the size of the seed gap. The
+sweep does not rank these recipes --- and the order of A and B flips
+with the F1 threshold (A \textgreater{} B at 0.01, B \textgreater{} A at
+0.02 and 0.03). The default stays B (\texttt{length\_scale\ 0.20}, 1×
+noise) --- best observed, not shown better. Separating them needs
+\(\ge\) 3 seeds per arm.
+
+\textbf{Where the model fails: leaf tips, not the frame edge.} Trained
+recipe-B model, 12 val plants, 4 mask draws; radius 0 = image centre, 1
+= corner (for the PC, the xy radius of the unit-normalised cloud).
+Errors on \emph{masked} patches:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+radius
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+0--0.2
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+0.2--0.4
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+0.4--0.6
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+0.6--0.8
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+0.8--1
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+plant share of patches & 71 \% & 40 \% & 16 \% & 3 \% & 0.2 \% \\
+P(masked), uniform mask & 0.64 & 0.61 & 0.60 & 0.60 & 0.62 \\
+P(masked), structured (\texttt{center\_bias} 1.5) & 0.64 & 0.70 & 0.81 &
+0.86 & 0.89 \\
+RGB MSE, all masked patches & 0.18 & 0.17 & 0.09 & 0.02 & 0.002 \\
+RGB MSE, plant patches only & 0.20 & 0.25 & 0.29 & 0.27 & 0.60 \\
+PC: target point \(\to\) nearest prediction & 0.025 & 0.042 & 0.072 &
+0.119 & 0.233 \\
+\end{longtable}
+}
+
+The edge bias does what it says --- masking rises from 0.64 to 0.89
+toward the corner --- but the corner is background, which is why the
+error there is near zero. On the plant itself error \emph{grows}
+outward, and PC error on the outermost points is \textasciitilde10× the
+centre's: the model misses leaf tips. That is the low F1@0.01 (precision
+0.40, recall 0.11 at the end of training --- predicted points sit on the
+dense core and do not reach the tips). So much of the edge-biased mask
+budget is spent on background; masking the plant's \emph{outer parts}
+would target the actual failure. The 600-epoch arms above confirm the
+mechanism from the other side: switching structured masking off raises
+recall@0.03 from \textasciitilde0.48 to \textasciitilde0.71. Preview of
+the masks: \texttt{reports/mask\_preview\_recipe\_b.png},
+\texttt{reports/mask\_blob\_size.png} (uniform vs blob sizes at a fixed
+mask count) and \texttt{reports/noise\_levels.png} (the 0.5× / 1× / 2×
+sensor noise).
+
+\paragraph{Spline params: do they help, and does fixing their encoding
+help
+more?}\label{spline-params-do-they-help-and-does-fixing-their-encoding-help-more}
+
+Measured on the data before changing anything: 5 of the 9 plant dims
+(\texttt{panicle\_*}) are constant; the per-sample PC normalisation
+removes absolute size (corr(\texttt{stem\_length}, cloud height) is 0.68
+raw, 0.08 after normalisation); and the params are in the plant's world
+frame while the target is in the camera frame (\texttt{*\_nc\_cam.ply}
+is exactly \texttt{worldToCamera\ @\ world}), with the
+\texttt{camera\_pose.json} that links them never read.
+\texttt{model.param\_encoding:\ v2} (z-scored, sin/cos angles, constants
+dropped, leaf count added) and \texttt{model.geometry\_cond:\ true}
+(camera rotation + normalisation radius as an always-visible token)
+address those. Same seed, only the params path differs:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1250}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+run
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.02
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.03
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+EMD
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+RGB MSE
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Depth MSE
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{params\_v1\_seed1} & \textbf{0.004670} & 0.1541 & 0.4097 &
+\textbf{0.5841} & 0.2966 & 0.6773 & 0.02997 \\
+\texttt{params\_v2cond\_seed1} & 0.004967 & \textbf{0.1587} & 0.4057 &
+0.5748 & 0.2948 & 0.6758 & 0.03256 \\
+\end{longtable}
+}
+
+Bold = better by more than the seed-to-seed gap; every other gap is
+within noise.
+
+\texttt{eval\_param\_oracle.py} then asks each model directly: all param
+tokens visible, the sample's own params vs the val-set mean; identical
+RGB/depth/PC masks in both passes. Positive = worse without the sample's
+own params:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1429}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+checkpoint
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.02
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+RGB MSE
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Depth MSE
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+occluded PC Chamfer
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+v1 & +7.0 \% & +1.4 \% & +2.1 \% & -1.7 \% & +7.1 \% & +7.9 \% \\
+v2 + pose/scale & +4.6 \% & +5.3 \% & +2.5 \% & +0.4 \% & -0.2 \% & +4.5
+\% \\
+\end{longtable}
+}
+
+\textbf{The params already help in v1} (7 \% Chamfer, well above the 0.6
+\% noise floor). v2 + pose/scale looked 6 \% \emph{worse} here, and the
+suspected cause --- v2's z-scored Smooth-L1 targets being
+\textasciitilde6× larger at the same \texttt{spline\_loss\_weight:\ 5},
+so the param term steals gradient from the PC term --- turned out to be
+right: \textbf{at \texttt{spline\_loss\_weight:\ 0.6} and 600 epochs v2
+wins} (F1@0.01 0.219 vs 0.175), see the paper-run section above. The
+oracle numbers below still stand; they are measured within a single
+checkpoint.
+
+\paragraph{E7 --- point-cloud loss study
+(running)}\label{e7-point-cloud-loss-study-running}
+
+Loss magnitudes measured on the trained recipe-B model set the weights:
+QAL 0.060, Chamfer 0.0053 (11× smaller), Sinkhorn \textasciitilde0.055.
+Chamfer therefore needs \texttt{pc\_loss\_weight} \(\approx\) 10 to pull
+as hard as QAL at 1. \texttt{loss\_name:\ sinkhorn} means Sinkhorn
+\emph{alone} (Sinkhorn was only an auxiliary term before), on 2 048
+sampled points.
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+loss
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+arms
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+runs
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+QAL & t = 0.005 / \textbf{0.01} / 0.02 at \(\alpha\) = 100; \(\alpha\) =
+30 / 300 at t = 0.01 & \texttt{loss\_q\_t005},
+\texttt{params\_v1\_seed1} (t=0.01, \(\alpha\)=100),
+\texttt{loss\_q\_t020}, \texttt{loss\_q\_a030},
+\texttt{loss\_q\_a300} \\
+Chamfer & \texttt{pc\_loss\_weight} 3 / 10 / 30 & \texttt{loss\_c\_w03},
+\texttt{loss\_c\_w10}, \texttt{loss\_c\_w30} \\
+Sinkhorn only & blur 0.01 / 0.02 / 0.05 at weight 1; blur 0.02 at weight
+3 & \texttt{loss\_s\_b010\_w1}, \texttt{loss\_s\_b020\_w1},
+\texttt{loss\_s\_b050\_w1}, \texttt{loss\_s\_b020\_w3} \\
+\end{longtable}
+}
+
+Job array 15884575 (\texttt{train\_4m\_loss.sbatch}); the Sinkhorn-only
+path passed its smoke test first. The array allows two arms at a time,
+but with the mech-ai account at its 17-GPU cap it has run one at a time
+(\textasciitilde5 h per arm). Read it with
+\texttt{python\ compare\_recipes.py\ -\/-loss-study}, which shows only
+metrics computed identically for every arm --- val loss is a different
+quantity in each.
+
+Finished so far (2026-09-22): 1 of 11 new arms.
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 18\tabcolsep) * \real{0.1000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+run
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+loss
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+setting
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+PC Chamfer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.01
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.02
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+F1@0.03
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+EMD
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+RGB MSE
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Depth MSE
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{params\_v1\_seed1} & QAL & t=0.01, \(\alpha\)=100 & 0.004670 &
+0.1541 & 0.4097 & 0.5841 & 0.2966 & 0.6773 & 0.02997 \\
+\texttt{loss\_q\_t005} & QAL & t=0.005, \(\alpha\)=100 & 0.004700 &
+0.1540 & 0.4060 & 0.5822 & 0.2970 & 0.6910 & 0.02898 \\
+\end{longtable}
+}
+
+Halving the QAL threshold moves nothing past the noise floor.
+
+\paragraph{What this branch adds, and what will conflict with
+main}\label{what-this-branch-adds-and-what-will-conflict-with-main}
+
+\begin{itemize}
+\tightlist
+\item
+  Config keys: \texttt{training.num\_train\_plants},
+  \texttt{training.views\_per\_epoch}, \texttt{training.max\_steps},
+  \texttt{training.seed}, \texttt{occlusion.eval\_occlusion},
+  \texttt{model.param\_encoding}, \texttt{model.geometry\_cond}, and
+  \texttt{loss\_name:\ sinkhorn}. All default off; with none set, a
+  model is bit-identical to before (same parameters, init and loss).
+\item
+  Main implements plant subsetting and view sampling separately
+  (\texttt{data.max\_plants}, \texttt{data.view\_sampling}). Keep one
+  when merging; they will conflict in \texttt{train\_sorghum\_4m.py} and
+  the datasets.
+\item
+  New files, at the root because this branch predates main's
+  reorganisation: \texttt{view\_sampler.py},
+  \texttt{compare\_recipes.py}, \texttt{eval\_param\_oracle.py},
+  \texttt{compute\_param\_stats.py},
+  \texttt{config\_4m\_\{recipe,params,loss\}\_*.yaml},
+  \texttt{train\_4m\_\{recipe,params,loss\}.sbatch}. On merge they
+  belong in \texttt{configs/}, \texttt{slurm/} and \texttt{eval/}.
+\item
+  Slurm: submitted under \texttt{-\/-account=mech-ai}, whose GPU cap
+  (17) is shared across the lab. Arrays run \textbf{two at a time = 8
+  GPUs}, the ceiling this project keeps.
+\item
+  Launchers: \texttt{train\_4m\_paper.sbatch} (the twelve 600-epoch
+  runs), \texttt{train\_4m\_recipe.sbatch} /
+  \texttt{train\_4m\_loss.sbatch} (the 30k screening),
+  \texttt{train\_4m\_continue.sbatch} (resume an existing run at a
+  larger \texttt{-\/-max\_steps}; unused now that the runs are
+  single-cosine).
+\end{itemize}
+
+\paragraph{Showing where structured masking helps --- the three
+legitimate
+tests}\label{showing-where-structured-masking-helps-the-three-legitimate-tests}
+
+The claim the method needs is ``structured masking makes the model
+better at the thing it is for''. Clean reconstruction is not that thing,
+and on it the answer is no. Three tests could show a real advantage;
+each is worth running, and if none shows one, the honest write-up is the
+trade-off above.
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Stronger corruption and test-time blob masks, on TEST} ---
+  \texttt{eval\_robustness.py\ -\/-split\ test} scores
+  \texttt{best\_model.pth} (chosen on val loss, so val numbers carry
+  selection bias; report test) on one view per test plant (2 250 plants,
+  view fixed by seed --- 10× the 225-view val subset, no plant counted
+  twice). Levels: \texttt{clean}, \texttt{1x}, \texttt{noise2x},
+  \texttt{noise4x}, \texttt{leaves2x}, \texttt{leaves2x\_noise2x}, and
+  two \textbf{blob-mask} levels, \texttt{blobmask} (clean input) and
+  \texttt{blobmask\_1x} (1× corruption), which impose the
+  \texttt{maskboth} blob geometry on \emph{every} model's token mask at
+  test time. Every other evaluation masks tokens uniformly --- the
+  regime \texttt{maskoff} trained on --- so the blob levels are the
+  first test on structured masking's own terms: filling large contiguous
+  holes, the shape real occlusion takes. Queued as two 1-GPU jobs
+  (\texttt{.smoke/eval\_robustness.sbatch}, \texttt{EVAL\_RUNS} /
+  \texttt{EVAL\_OUT}, results in
+  \texttt{reports/robustness\_test\_\{A,B\}.json}), after the 1
+  000-epoch continuation.
+\item
+  \textbf{The programme's actual metric} --- decision 6.4 scores
+  value-add with a linear probe on height, leaf angle, leaf count and
+  biomass, \emph{not} reconstruction. Structured masking could help the
+  representation even while it hurts reconstruction; the probe is the
+  test (see ``Two gaps'').
+\item
+  \textbf{Real data (E10)} --- real occlusion is what the synthetic
+  corruption imitates; an advantage there is the strongest possible
+  evidence.
+\end{enumerate}
+
+\paragraph{Operational notes
+(2026-09-28)}\label{operational-notes-2026-09-28}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The \texttt{/work/mech-ai-scratch} filesystem is degraded,
+  cluster-wide.} It is an NFS mount
+  (\texttt{novastor010:/stor010/}\allowbreak\texttt{mech-ai-scratch}) at
+  \textbf{99 \% full --- 150 of 152 TB}. On a compute node
+  (\texttt{nova18-wide-10}), \texttt{import\ numpy} took 175 s and
+  \texttt{import\ torch}, \texttt{import\ open3d} and listing 500
+  dataset folders each ran past 300 s; \texttt{ls} takes 4.6 s in
+  \texttt{/work/mech-ai-scratch/yongyun} and 12 s in the dataset root,
+  against 4 ms in \texttt{/home} and 0.7 s in \texttt{/work/mech-ai}.
+  This repo's own checkpoints are \textasciitilde0.6 TB
+  (\textasciitilde0.4 \% of the used space), so freeing them is
+  housekeeping, not a fix; the fix is HPC support and the lab freeing
+  space. Symptoms so far: continuation task 16613000\_0 held 4 GPUs for
+  7 h without leaving the dataset scan; the first robustness eval hit
+  its 4 h limit the same way. \textbf{Do not submit GPU jobs until
+  \texttt{time\ python\ -c\ "import\ torch"} is back under a minute} ---
+  a stalled job holds 4 GPUs doing nothing.
+\item
+  \textbf{Auto-submit watcher:} \texttt{.smoke/watch\_and\_submit.sh}
+  (log in \texttt{.smoke/watch.log}) probes \texttt{import\ torch} every
+  10 min; after two healthy probes it pre-builds the index cache with
+  \texttt{.smoke/build\_index\_cache.py} (torch-free, same keys as the
+  loaders, val/test/train), then submits the twelve-run continuation to
+  1 000 epochs (8 GPUs) and the two test-split robustness evals after
+  it.
+\item
+  \textbf{Dataset folder index is now cached} in \texttt{.index\_cache/}
+  (per split, per 3M/4M). The first run pays one scan; every later run
+  and evaluation reads the cache. \texttt{SORGHUM\_INDEX\_REFRESH=1}
+  forces a rescan.
+\item
+  \textbf{\texttt{train\_4m\_continue.sbatch} takes \texttt{RUNS}
+  colon-separated.} \texttt{sbatch\ -\/-export} splits its argument on
+  commas, so a comma list silently delivered only the first run and
+  array job 16613000 lost eleven of twelve tasks.
+\item
+  \textbf{Continuation checkpoints every 100 epochs}
+  (\texttt{SAVE\_FREQ}, default 100 in
+  \texttt{train\_4m\_continue.sbatch}): at 1.3 GB each, the configs'
+  30-epoch cadence would add \textasciitilde200 GB to a 99 \%-full disk;
+  100 adds \textasciitilde60 GB.
+\item
+  \textbf{Pending:} all twelve \texttt{paper\_*} runs resumed from epoch
+  600 to 1 000 (\texttt{TARGET\_STEPS=94000}), then
+  \texttt{eval\_robustness.py\ -\/-split\ test} on the results.
+\end{itemize}
+
+\paragraph{Checkpoint retention --- what the paper
+needs}\label{checkpoint-retention-what-the-paper-needs}
+
+Keep, per run: \textbf{\texttt{best\_model.pth}} (the reported numbers
+come from it --- it is not necessarily the last epoch), \textbf{the
+latest checkpoint} until the run is finished (it is the resume point),
+and \textbf{\texttt{training\_history.json} + \texttt{config.json}}
+always (kilobytes; they back every curve and every ``what did this run
+use'' question). Intermediate checkpoints are not needed --- the val
+curves in the history replace them. By group:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+runs
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+keep
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+delete when space is needed
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{paper\_*} (the results) & best + latest (epoch 600 now, 1 000
+after the continuation) + history & intermediates (19 per run,
+\textasciitilde297 GB) \\
+\texttt{params\_v1\_seed1}, \texttt{params\_v2cond\_seed1} & best, if
+the oracle table is used & intermediates \\
+30k screening (\texttt{recipe\_*}, \texttt{loss\_*}) & history & all
+weights (\textasciitilde157 GB) \\
+\texttt{\_aborted\_*} & history (supports ``600 epochs is enough'') &
+all weights (\textasciitilde14 GB) \\
+\end{longtable}
+}
+
+Two cautions: other project folders under
+\texttt{/work/mech-ai-scratch/yongyun} (e.g.~\texttt{embodiedmae4m},
+linked to the epoch-760 results) may hold models the paper cites ---
+check before deleting there. And scratch is not backed up, so copy the
+handful of \texttt{best\_model.pth} files the paper reports off scratch
+(\texttt{/work/mech-ai} or external storage). Nothing has been deleted
+yet.
+
+\paragraph{What to run next, in order}\label{what-to-run-next-in-order}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{A third \texttt{maskoff} seed} --- its two seeds are 0.734 and
+  0.842 on F1@0.03, the widest spread of any arm, and it carries the
+  headline claim (\textasciitilde10 h).
+\item
+  \textbf{QAL + Sinkhorn auxiliary} (\texttt{sinkhorn\_loss\_weight}
+  \textgreater{} 0 on top of \texttt{loss\_name:\ qal\_loss}): Sinkhorn
+  alone reaches recall 0.71 at precision 0.36, QAL alone 0.48 at 0.85,
+  so the combination is the obvious arm.
+\item
+  \textbf{v2 params + \texttt{maskoff}} --- both wins are measured
+  separately, never together.
+\end{enumerate}
+
+\subsection{Environment}\label{environment}
+
+Conda env name is \texttt{det} (Python 3.12, PyTorch 2.5 + CUDA 12.4;
+see \texttt{environment.yml}). On Nova it lives at
+\texttt{/work/mech-ai/alloy/.conda/envs/det}. Activate with
+\texttt{conda\ activate\ det} before running anything.
+
+On Blackwell / sm\_120 GPUs (RTX PRO 6000) \texttt{det} will not work
+--- those need the CUDA 12.8 build in the separate \texttt{det\_cu128}
+env.
+
+\subsection{Common commands}\label{common-commands}
+
+All commands assume \texttt{cwd\ =\ repo\ root} and the env active.
+
+\subsubsection{Train 4M (the main entry
+point)}\label{train-4m-the-main-entry-point}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# Single GPU}
+\ExtensionTok{python}\NormalTok{ train\_sorghum\_4m.py }\AttributeTok{{-}{-}config}\NormalTok{ configs/config\_4m.yaml }\AttributeTok{{-}{-}world\_size}\NormalTok{ 1}
+
+\CommentTok{\# Multi{-}GPU via torchrun (preferred — sets LOCAL\_RANK/RANK/WORLD\_SIZE)}
+\ExtensionTok{torchrun} \AttributeTok{{-}{-}standalone} \AttributeTok{{-}{-}nproc\_per\_node}\OperatorTok{=}\NormalTok{4 train\_sorghum\_4m.py }\AttributeTok{{-}{-}config}\NormalTok{ configs/config\_4m.yaml}
+
+\CommentTok{\# Multi{-}GPU via mp.spawn fallback (set distributed.world\_size in the YAML)}
+\ExtensionTok{python}\NormalTok{ train\_sorghum\_4m.py }\AttributeTok{{-}{-}config}\NormalTok{ configs/config\_4m.yaml}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Train 3M}\label{train-3m}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{python}\NormalTok{ train\_sorghum.py }\AttributeTok{{-}{-}config}\NormalTok{ configs/config.yaml                  }\CommentTok{\# single GPU}
+\ExtensionTok{python}\NormalTok{ train\_sorghum\_multi.py }\AttributeTok{{-}{-}config}\NormalTok{ configs/config.yaml            }\CommentTok{\# mp.spawn}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Cross-modal distillation}\label{cross-modal-distillation}
+
+\texttt{train\_sorghum\_4m\_distill.py} trains the 4M model so that
+\textbf{any single modality, with the other three fully masked,
+reconstructs all four} --- a frozen full-modal teacher supplies
+token-aligned decoder features and a CLS latent as the privileged
+target, and the student is warm-started from the same checkpoint.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{python}\NormalTok{ train\_sorghum\_4m\_distill.py }\AttributeTok{{-}{-}config}\NormalTok{ configs/config\_4m\_distill\_15k\_rgb2pc.yaml}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Validate / dump
+reconstructions}\label{validate-dump-reconstructions}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{python}\NormalTok{ validate.py }\AttributeTok{{-}{-}checkpoint}\NormalTok{ outputs/}\OperatorTok{\textless{}}\NormalTok{run}\OperatorTok{\textgreater{}}\NormalTok{/best\_model.pth }\DataTypeTok{\textbackslash{}}
+                   \AttributeTok{{-}{-}output\_dir}\NormalTok{ vis\_val }\AttributeTok{{-}{-}config}\NormalTok{ configs/config.yaml }\AttributeTok{{-}{-}num\_samples}\NormalTok{ 6}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Sanity-check a dataset
+folder}\label{sanity-check-a-dataset-folder}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{python}\NormalTok{ sorghum\_dataset.py    /path/to/Sorghum\_15K    }\CommentTok{\# 3M}
+\ExtensionTok{python}\NormalTok{ sorghum\_dataset\_4m.py /path/to/Sorghum\_15K    }\CommentTok{\# 4M (requires *\_spline.yml)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Smoke-test the model
+definitions}\label{smoke-test-the-model-definitions}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{python}\NormalTok{ embodied\_mae.py       }\CommentTok{\# builds embodied\_mae\_base, one forward pass on dummy tensors}
+\ExtensionTok{python}\NormalTok{ embodied\_mae\_4m.py    }\CommentTok{\# same for 4M}
+\end{Highlighting}
+\end{Shaded}
+
+There is no test suite, no linter, and no Makefile.
+
+\subsection{Configuration model}\label{configuration-model}
+
+Both training entry points layer config in this order: YAML \(\to\) CLI
+flags \(\to\) defaults. The YAML is the source of truth; CLI flags only
+override specific keys. Notable keys:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{data.data\_root} expects
+  \texttt{\textless{}root\textgreater{}/train/},
+  \texttt{\textless{}root\textgreater{}/val/} and
+  \texttt{\textless{}root\textgreater{}/test/} siblings, each containing
+  one folder per sample (see ``Dataset layout'').
+\item
+  \texttt{data.view\_sampling:\ true} --- each plant contributes
+  \textbf{one randomly chosen view per epoch}, so an epoch over 105 000
+  train samples is 10 500 items, not 105 000. \texttt{view\_seed} must
+  be identical across arms of an ablation so they see the same views in
+  the same order.
+\item
+  \texttt{data.max\_plants} --- caps the \textbf{train} split at a
+  nested random subset of N plants (\texttt{plant\_subset\_seed} fixes
+  the draw); \texttt{null} uses all of them. This is what E3 varies. The
+  subsets nest, so 1k \(\subset\) 3k \(\subset\) 10k and a step of the
+  curve is never partly a change of sample composition. It selects
+  \textbf{plants, keeping all ten views} --- dropping views would change
+  the augmentation regime that decision 6.1 fixes, which is E5's
+  question, not E3's. \texttt{train\_sorghum\_4m.py} passes it to the
+  train dataset only; a capped val/test would score the arms on
+  different yardsticks.
+\item
+  \texttt{model.model\_size} \(\in\) \{\texttt{small}, \texttt{base},
+  \texttt{large}, \texttt{giant}\} (3M) or \{\texttt{small},
+  \texttt{base}, \texttt{large}\} (4M). This is what E4 varies: 4M
+  builds at 25.1 M / 114.3 M / 332.2 M params.
+\item
+  \texttt{model.mask\_ratio} is the \textbf{total} masking fraction
+  across all modalities; the per-modality split is sampled from
+  \texttt{Dirichlet(\$\textbackslash{}alpha\$=dirichlet\_alpha)} once
+  per batch.
+\item
+  \texttt{model.active\_modalities} --- comma-separated subset of
+  \texttt{pc,rgb,depth,text}. Restricting it is what the E2 ablation
+  varies; everything else stays fixed.
+\item
+  \texttt{model.loss\_name} \(\in\) \{\texttt{chamfer},
+  \texttt{qal\_loss}\} with \texttt{qal\_threshold} /
+  \texttt{qal\_alpha} / \texttt{qal\_use\_squared}. Current runs use
+  \texttt{qal\_loss}.
+\item
+  \texttt{model.pc\_loss\_weight} scales the PC term. Chamfer values are
+  tiny relative to MSE, so this is typically O(10) when Chamfer is
+  selected.
+\item
+  \texttt{model.spline\_loss\_weight} (4M only) scales the Smooth-L1
+  param-regression loss.
+\item
+  \texttt{model.depth\_norm\_type} \(\in\) \{\texttt{minmax},
+  \texttt{standard}\} --- applied to the \textbf{target} before depth
+  MSE; the model learns to predict normalised values directly.
+\item
+  \texttt{checkpointing.resume}: path to a \texttt{.pth} to resume from,
+  or \texttt{null} for scratch.
+\item
+  \texttt{distributed.world\_size\ \textgreater{}\ 1} triggers DDP.
+  \texttt{train\_sorghum\_4m.py} also accepts being launched under
+  \texttt{torchrun}, in which case \texttt{LOCAL\_RANK} is honoured and
+  \texttt{world\_size} is inferred from env.
+\end{itemize}
+
+\textbf{Global batch is \texttt{batch\_size\ ×\ world\_size}.}
+\texttt{batch\_size} in the YAML is per-GPU, so an ablation must adjust
+it to the GPU count to keep the global batch constant --- a global-batch
+difference between arms confounds the comparison. The E2 launchers use
+16×2 on the 2-GPU Blackwell nodes and 8×4 on the 4-GPU A100 nodes, both
+reaching 32.
+
+\textbf{Size an ablation in optimizer steps, not epochs --- and do not
+``fix'' epoch counts that disagree.} Under \texttt{view\_sampling} an
+epoch is one view per plant, so \emph{epoch size is the plant count}: at
+global batch 32 the full train split gives 329 steps/epoch, but a 1
+000-plant subset gives 32. Arms that differ in data scale therefore need
+very different epoch counts to receive the same number of gradient
+updates, and the E3 configs look wrong at a glance because of it:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}lllll@{}}
+\toprule\noalign{}
+arm & plants / model & steps/ep & epochs & total steps \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{e3\_1k} & 1 000 & 32 & 6 169 & 197 408 \\
+\texttt{e3\_3k} & 3 000 & 94 & 2 100 & 197 400 \\
+\texttt{e3\_10k} & 10 000 & 313 & 631 & 197 503 \\
+\texttt{e4\_small} / \texttt{e4\_large} & 25.1 M / 332.2 M & 329 & 600 &
+197 400 \\
+\texttt{e2\_pcrgbdt} & 10 500, base & 329 & 600 & 197 400 \\
+\end{longtable}
+}
+
+Equalising those epoch counts would hand the 10k arm ten times the
+updates of the 1k arm, and the resulting curve would measure data scale
+and compute jointly with no way to separate them afterwards.
+\texttt{warmup\_epochs}, \texttt{val\_freq} and \texttt{save\_freq} are
+scaled by the same per-arm factor, so every arm warms over the same
+fraction of its schedule and lands \textasciitilde24 val points.
+
+That shared 197 400-step budget is \texttt{e2\_pcrgbdt}'s, which is why
+\textbf{\texttt{e2\_pcrgbdt} is also E3's full-data point and E4's
+base-model point} rather than a separate run --- and why the E3/E4
+launcher's resources are deliberately byte-identical to the E2 one.
+\texttt{e3\_10k} (10 000 plants) and \texttt{e2\_pcrgbdt} (10 500) are
+within 5 \% of each other, so that pair doubles as the only run-to-run
+error bar in the experiment matrix.
+
+\texttt{persistent\_workers} is deliberately \textbf{off} in the
+dataloaders and must stay off: persistent workers hold a copy of the
+dataset made at first iteration, so \texttt{train\_ds.set\_epoch(epoch)}
+would never reach them and view sampling would silently freeze at epoch
+0. The cost is that workers respawn every epoch, which matters most for
+\texttt{e3\_1k}, whose epoch is only \textasciitilde1 000 items.
+
+\subsection{Architecture (the part you'd otherwise have to read 4 files
+to
+learn)}\label{architecture-the-part-youd-otherwise-have-to-read-4-files-to-learn}
+
+\subsubsection{Forward pass shape}\label{forward-pass-shape}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Embed each modality} to \texttt{(B,\ L\_m,\ D)}:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    RGB / Depth \(\to\) \texttt{PatchEmbed} (Conv2d patchification
+    \(\to\) 196 tokens for 224×224, patch=16).
+  \item
+    Point cloud \(\to\) \texttt{PointCloudEmbed}: FPS samples
+    \texttt{num\_pc\_tokens=196} centres, kNN groups
+    \texttt{group\_size=32} neighbours per centre, two PointNet-style
+    Conv1d blocks produce per-token features.
+  \item
+    (4M only) Spline params \(\to\) \texttt{TextLeafEmbed}: char
+    embeddings + learned positional \(\to\) mean-pool \(\to\) linear
+    \(\to\) D. \texttt{n\_text\_tokens\ =\ 1\ +\ max\_leaves} (1 plant
+    token + up to 24 leaf tokens).
+  \end{itemize}
+\item
+  \textbf{Add positional + modality embeddings} (each modality has its
+  own learned modality bias).
+\item
+  \textbf{Dirichlet masking} in \texttt{random\_masking\_dirichlet}: a
+  single Dirichlet draw decides the visible-token split across
+  modalities for the whole batch step. Each sample's visible indices are
+  independently random, but the per-modality count is identical
+  batch-wide --- this avoids zero-token batch elements that would
+  corrupt encoder norms. The 4M variant also enforces
+  \texttt{min\_mask\_ratio=0.25} per modality.
+\item
+  \textbf{Encoder}: visible tokens from all modalities are concatenated
+  with a CLS token and fed through \texttt{depth} shared transformer
+  blocks (\texttt{embed\_dim=768} for base).
+\item
+  \textbf{Decoder}: project to \texttt{decoder\_embed\_dim=512}, restore
+  mask tokens at original positions per modality, add decoder positional
+  embeddings, run \texttt{decoder\_depth=8} transformer blocks, then
+  split back into modality-specific heads:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    RGB / Depth \(\to\) linear \(\to\) \texttt{patch\_size²\ ×\ C} per
+    token (unpatchified for visualisation).
+  \item
+    PC \(\to\) FoldingNet-style upsampling: each of 196 PC tokens
+    generates
+    \texttt{points\_per\_token\ =\ target\_points\ //\ num\_pc\_tokens}
+    3D points by concatenating its 512-D feature with a 2D grid
+    coordinate and passing through an MLP. \texttt{target\_points}
+    defaults to 10000, trimmed/padded to exactly that on output.
+  \item
+    (4M only) Spline \(\to\) 2-layer MLP \(\to\) \texttt{N\_PARAMS=9}
+    floats per token, range {[}0, 1{]}.
+  \end{itemize}
+\end{enumerate}
+
+\subsubsection{\texorpdfstring{Losses
+(\texttt{forward\_loss})}{Losses (forward\_loss)}}\label{losses-forward_loss}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{RGB}: per-patch MSE, optionally with \texttt{norm\_pix\_loss}
+  (per-patch normalisation), masked mean.
+\item
+  \textbf{Depth}: per-patch MSE on \textbf{normalised} target (per-image
+  min-max or standard); the prediction is compared to the normalised
+  target directly.
+\item
+  \textbf{PC}: bidirectional Chamfer (or QAL) on the full
+  \texttt{(B,\ target\_points,\ 3)} cloud (no masking --- the whole
+  cloud is reconstructed every step), scaled by
+  \texttt{pc\_loss\_weight}.
+\item
+  \textbf{(4M)}: Smooth-L1 on params, masked by \texttt{text\_valid}
+  (real leaf tokens only) \textbf{and} \texttt{mask\_text} (model only
+  loses on tokens it didn't see). Scaled by
+  \texttt{spline\_loss\_weight}.
+\end{itemize}
+
+\texttt{embodied\_mae\_4m.py} imports \texttt{PatchEmbed},
+\texttt{PointCloudEmbed}, \texttt{TransformerBlock},
+\texttt{chamfer\_distance}, and \texttt{get\_2d\_sincos\_pos\_embed}
+from \texttt{embodied\_mae.py} --- when changing these, expect both
+models to be affected.
+
+\subsubsection{Param normalisation (4M
+only)}\label{param-normalisation-4m-only}
+
+Plant and leaf parameters are normalised to {[}0, 1{]} via fixed
+\texttt{\_PLANT\_SCALE\ /\ \_PLANT\_SHIFT} and
+\texttt{\_LEAF\_SCALE\ /\ \_LEAF\_SHIFT} arrays at the top of
+\texttt{embodied\_mae\_4m.py}. \texttt{decode\_params\_to\_text}
+un-normalises them back into the human-readable strings shown in
+visualisations. If new fields are added to the spline YAMLs, both arrays
+and the \texttt{\_plant\_to\_params} / \texttt{\_leaf\_to\_params}
+builders must be updated.
+
+\subsection{Dataset layout}\label{dataset-layout}
+
+\texttt{SorghumDataset} expects:
+
+\begin{verbatim}
+data_root/{train,val,test}/<sample_name>/
+    rgb.png              # 224-ready RGB render
+    depth.png            # big-endian packed RGBA depth
+    *_nc_cam.ply         # camera-frame, normals-cleaned point cloud
+    *_spline.yml         # 4M only — procedural generation params
+\end{verbatim}
+
+Sample folders are named
+\texttt{Sorghum\_\textless{}plant\textgreater{}\_\textless{}view\textgreater{}},
+so \texttt{Sorghum\_0\_00\ …\ Sorghum\_0\_09} are ten views of one
+plant. \textbf{Only those four files are read by the loaders.} The
+\texttt{Sorghum\_\textless{}n\textgreater{}.obj} and
+\texttt{Sorghum\_\textless{}n\textgreater{}\_nc.ply} that sit alongside
+them are source assets, are duplicated in full into every one of a
+plant's ten view folders, and are never opened during training --- they
+are \textasciitilde64 \% of the bytes on disk.
+
+The PC loader uniformly samples / pads to \texttt{num\_points}, then
+centres at the centroid and scales so the max-distance point lands on
+the unit sphere. RGB uses ImageNet mean/std normalisation; depth is
+loaded as single-channel L and only \texttt{ToTensor}'d (no
+normalisation at load --- normalisation happens inside the loss).
+
+The active dataset on Nova is
+\texttt{/work/mech-ai-scratch/alloy/shorgum\_data/new\_data\_50K/Sorghum\_15K/},
+an extreme-enriched 70/15/15 split (seed 42) of 15 000 plants:
+\textbf{105 000 train / 22 500 val / 22 500 test} view-samples.
+\texttt{assignment.csv} and \texttt{features.csv} at that root record
+the split; the tooling to regenerate or reshuffle it is in
+\texttt{data\_split/}.
+
+\subsection{Porting to another
+machine}\label{porting-to-another-machine}
+
+Everything machine-specific is in three places --- nothing else needs
+touching:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{\texttt{data.data\_root} in the YAML you run.} Every config
+  hardcodes the Nova absolute path above.
+\item
+  \textbf{The \texttt{\#SBATCH} headers in \texttt{slurm/*.sbatch}} ---
+  \texttt{-\/-partition}, \texttt{-\/-account}, \texttt{-\/-gres},
+  \texttt{-\/-cpus-per-task}, \texttt{-\/-mem}. These encode Nova's
+  partitions (\texttt{nova}, \texttt{scavenger}) and accounts
+  (\texttt{mech-ai}, \texttt{mech-ai-scavenger}) and mean nothing
+  elsewhere. On a non-SLURM box, ignore \texttt{slurm/} entirely and use
+  the \texttt{torchrun} line above.
+\item
+  \textbf{The conda env.} \texttt{environment.yml} rebuilds
+  \texttt{det}; it pins a CUDA 12.4 PyTorch, so a different GPU
+  generation may need a different build (see the sm\_120 note under
+  Environment).
+\end{enumerate}
+
+\textbf{Moving the data is the expensive part.} At \textasciitilde5.0 MB
+per sample folder × 150 000 folders the split is
+\textbf{\textasciitilde750 GB}, but the four files training actually
+reads total \textasciitilde1.8 MB per sample, so a filtered copy is
+\textbf{\textasciitilde265 GB} --- under 40 \% of the naive transfer.
+Copy with an include-filter rather than syncing the tree:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{rsync} \AttributeTok{{-}a} \AttributeTok{{-}{-}info}\OperatorTok{=}\NormalTok{progress2 }\DataTypeTok{\textbackslash{}}
+  \AttributeTok{{-}{-}include}\OperatorTok{=}\StringTok{\textquotesingle{}*/\textquotesingle{}} \DataTypeTok{\textbackslash{}}
+  \AttributeTok{{-}{-}include}\OperatorTok{=}\StringTok{\textquotesingle{}rgb.png\textquotesingle{}} \AttributeTok{{-}{-}include}\OperatorTok{=}\StringTok{\textquotesingle{}depth.png\textquotesingle{}} \DataTypeTok{\textbackslash{}}
+  \AttributeTok{{-}{-}include}\OperatorTok{=}\StringTok{\textquotesingle{}*\_nc\_cam.ply\textquotesingle{}} \AttributeTok{{-}{-}include}\OperatorTok{=}\StringTok{\textquotesingle{}*\_spline.yml\textquotesingle{}} \DataTypeTok{\textbackslash{}}
+  \AttributeTok{{-}{-}exclude}\OperatorTok{=}\StringTok{\textquotesingle{}*\textquotesingle{}} \DataTypeTok{\textbackslash{}}
+\NormalTok{  /path/to/Sorghum\_15K/ user@host:/dest/Sorghum\_15K/}
+\end{Highlighting}
+\end{Shaded}
+
+Also copy \texttt{assignment.csv} and \texttt{features.csv} from the
+split root, and any warm-start checkpoint you need
+(\texttt{best\_model.pth} is \textasciitilde1.3 GB per run).
+
+Note the dataset loaders build a folder index on first use and cache it
+--- the first run on a fresh copy pays a one-off scan (\textasciitilde24
+min for the 105 k train split); later runs print
+\texttt{index\ cache\ hit}. The pipeline is \textbf{dataloader-bound,
+not GPU-bound}: \texttt{num\_workers} (\$\approx\$1.6 items/s per
+worker) sets throughput, so give it as many CPUs as the node allows and
+scale \texttt{-\/-mem} with the worker count (\textasciitilde2.3 GB RSS
+per worker plus \textasciitilde10 GB per node for model and CUDA
+context).
+
+\subsection{Outputs}\label{outputs}
+
+Each run writes to \texttt{\textless{}output\_dir\textgreater{}/}: -
+\texttt{checkpoints/checkpoint\_epoch\_\textless{}N\textgreater{}.pth}
+every \texttt{save\_freq} epochs - \texttt{best\_model.pth} when val
+loss improves -
+\texttt{visualizations/epoch\_\textless{}N\textgreater{}\_sample\_\textless{}i\textgreater{}\_\textless{}name\textgreater{}.png}
+every \texttt{viz\_freq} epochs (4-row grid for 3M, 5-row grid for 4M
+including text predictions); skipped automatically when the run is a
+reduced-modality arm - \texttt{training\_history.json} (rolling) -
+\texttt{config.json} --- snapshot of the effective args. \textbf{Check
+this to confirm what a run actually used}, especially
+\texttt{batch\_size\ ×\ world\_size}, \texttt{active\_modalities},
+\texttt{max\_plants} and \texttt{model\_size}.
+
+\texttt{outputs/} is gitignored apart from a small whitelist in
+\texttt{.gitignore}. Wandb logging is on by default
+(\texttt{use\_wandb:\ true}, project \texttt{embodied-mae-sorghum});
+project and run names differ between runs --- check the YAML, not the
+script defaults.
+
+\subsection{Things that look like dead code but
+aren't}\label{things-that-look-like-dead-code-but-arent}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{outputs\_sorghum\_*/} directories at the repo root are old run
+  outputs kept for reference; the canonical output root is
+  \texttt{./outputs/}.
+\item
+  \texttt{tools/process\_depth\_bg.py}, \texttt{tools/process\_mask.py},
+  \texttt{tools/validate\_sorghum\_data.py}, \texttt{sweeps/vis.py},
+  \texttt{tools/check\_structure.py} are one-off data-prep / diagnostic
+  scripts, not part of any pipeline.
+\item
+  \texttt{sweeps/vis\_pc\_masking.py} is a standalone tool for
+  visualising the FPS + Dirichlet masking on a single point cloud.
+\item
+  \texttt{tools/visualize\_sorghum\_pointclouds.py} renders multi-view
+  PC galleries from raw \texttt{.ply} files; it doesn't touch the model.
+\item
+  \texttt{eval/analyze\_e2.py} reads the E2 arm output dirs and builds
+  the modality-value-add comparison.
+\end{itemize}
+
+\end{document}

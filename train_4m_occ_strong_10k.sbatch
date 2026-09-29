@@ -5,6 +5,7 @@
 #   sbatch --account=mech-ai train_4m_occ_strong_10k.sbatch
 # Another config without editing this file:
 #   sbatch --account=mech-ai --export=ALL,CONFIG=my_config.yaml train_4m_occ_strong_10k.sbatch
+#SBATCH --account=mech-ai
 #SBATCH --job-name=embmae4m_occ10k
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

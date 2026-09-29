@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH --account=mech-ai
 #SBATCH --job-name=val4m_cpu
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

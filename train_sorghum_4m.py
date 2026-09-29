@@ -4,7 +4,9 @@ Training script for EmbodiedMAE-4M (RGB + Depth + PointCloud + Text parameters).
 
 import os
 import json
+import math
 import argparse
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -32,6 +34,7 @@ from embodied_mae_4m import (
     EmbodiedMAE4M,
     embodied_mae_4m_small,
     embodied_mae_4m_base,
+    embodied_mae_4m_large,
     _params_to_plant_text,
     _params_to_leaf_text,
     N_PARAMS,
@@ -43,6 +46,7 @@ from embodied_mae import (
 )
 from sorghum_dataset_4m import SorghumDataset4M
 from plant_occlusion import ProceduralOcclusion
+from view_sampler import ViewSampler, fixed_plant_subset, plant_groups
 
 
 # ── Config helpers ────────────────────────────────────────────────────────────
@@ -61,10 +65,13 @@ def merge_config_with_args(config, args):
                   'sinkhorn_blur', 'sinkhorn_p',
                   'sinkhorn_scaling', 'sinkhorn_backend', 'sinkhorn_debias',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
-                  'pc_deterministic_fps', 'pc_add_center_coordinates'],
+                  'pc_deterministic_fps', 'pc_add_center_coordinates',
+                  'param_encoding', 'geometry_cond'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
                      'warmup_epochs', 'val_freq',
-                     'num_train_samples', 'num_val_samples'],
+                     'num_train_samples', 'num_val_samples',
+                     'num_train_plants', 'views_per_epoch', 'max_steps',
+                     'seed'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
         'visualization': ['viz_freq', 'num_viz_samples'],
         'evaluation': ['pc_metric_thresholds', 'pc_metric_chunk_size',
@@ -108,10 +115,19 @@ def config_to_namespace(config):
     ns.pc_deterministic_fps = config['model'].get('pc_deterministic_fps', False)
     ns.pc_add_center_coordinates = config['model'].get(
         'pc_add_center_coordinates', False)
+    # Param token layout ('v1' original | 'v2' z-scored + sin/cos angles) and
+    # the camera-pose + normalisation-radius conditioning token.
+    ns.param_encoding     = config['model'].get('param_encoding', 'v1')
+    ns.geometry_cond      = bool(config['model'].get('geometry_cond', False))
     # Occlusion-like token masking and input occlusion/noise (plant_occlusion.py).
     # Both are off when the key is absent, so older configs train unchanged.
     ns.structured_mask    = config['model'].get('structured_mask', None)
     ns.occlusion          = config.get('occlusion', None)
+    # Reference corruption for the separate robustness evaluations
+    # (eval_robustness.py, eval_param_oracle.py): merged onto the training
+    # occlusion block there, recorded in config.json. Training and validation
+    # never use it -- validation is always clean.
+    ns.eval_occlusion     = (config.get('occlusion') or {}).get('eval_occlusion', None)
     ns.batch_size        = config['training'].get('batch_size', 16)
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
@@ -120,6 +136,17 @@ def config_to_namespace(config):
     ns.val_freq           = config['training'].get('val_freq', 20)
     ns.num_train_samples  = config['training'].get('num_train_samples', None)
     ns.num_val_samples    = config['training'].get('num_val_samples', None)
+    # Plant-level data scaling + per-epoch view sampling (view_sampler.py).
+    # Both off when absent, so older configs train exactly as before.
+    ns.num_train_plants   = config['training'].get('num_train_plants', None)
+    ns.views_per_epoch    = config['training'].get('views_per_epoch', None)
+    # Step budget: epochs are recomputed from it once the loader is built, so
+    # runs at different data sizes take the same number of optimiser steps.
+    ns.max_steps          = config['training'].get('max_steps', None)
+    # Global training seed (init, masking, occlusion, point sampling). None
+    # keeps the historical unseeded behaviour; set it to repeat a run or to
+    # measure seed-to-seed spread.
+    ns.seed               = config['training'].get('seed', None)
     ns.output_dir         = config['checkpointing'].get('output_dir', './outputs/4m_run')
     ns.save_freq          = config['checkpointing'].get('save_freq', 100)
     ns.resume             = config['checkpointing'].get('resume', None)
@@ -191,7 +218,8 @@ def _scatter3d(ax, pts, c, s=2, alpha=0.7, **kw):
 
 def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
                                   num_samples=4, *, mask_ratio,
-                                  occlusion=None, occlusion_seed=42):
+                                  occlusion=None, occlusion_seed=42,
+                                  force_structured=False):
     """5-row × 3-col grid per sample.
     Row 5 shows target vs predicted text for masked tokens.
 
@@ -200,12 +228,25 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
     input with its token mask), column 3 the reconstruction from it. Files get
     an `occ_` prefix. The leaves come from a fixed seed in a forked RNG, so
     every epoch shows the same occlusion and training's RNG stream is untouched.
+
+    `force_structured` draws the token mask the way TRAINING does (structured
+    blobs, every sample) instead of the uniform eval mask, so the pictures show
+    the regime the model is actually trained on. It is restored right after, and
+    only ever affects this function -- validation metrics keep the uniform mask
+    they have always used, so they stay comparable across runs.
     """
     model.eval()
     saved_paths = []
 
+    # Train-regime token masks for the picture only (see force_structured).
+    sm_saved, sm_cfg = model.structured_mask, model.structured_mask
+    if force_structured and sm_cfg is not None:
+        model.structured_mask = replace(sm_cfg, prob=1.0, apply_in_eval=True)
+    structured = force_structured and sm_cfg is not None
+
     batch = next(iter(dataloader))
-    rgb_b, depth_b, pc_b, param_floats_b, text_valid_b, names = batch
+    rgb_b, depth_b, pc_b, param_floats_b, text_valid_b, names = batch[:6]
+    cond_kwargs   = _cond_kwargs(batch, device, num_samples)
     rgb_b         = rgb_b[:num_samples].to(device)
     depth_b       = depth_b[:num_samples].to(device)
     pc_b          = pc_b[:num_samples].to(device)
@@ -232,7 +273,7 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
                 rgb_b, depth_b, pc_b, param_floats_b, text_valid_b,
                 mask_ratio=mask_ratio,
                 compute_sinkhorn=False,
-                **enc_kwargs,
+                **enc_kwargs, **cond_kwargs,
         )
 
         # PC tokens were built from the cloud the encoder saw.
@@ -275,6 +316,8 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
             member_idx_all.append(
                 _pc_token_membership(pc_t, fps_t, model.pc_embed.group_size))
 
+    model.structured_mask = sm_saved
+
     del rgb_b, depth_b, pc_b, param_floats_b, text_valid_b
     del rgb_in, depth_in, pc_in, enc_kwargs
     del pred_rgb, pred_depth, pred_pc, pred_params
@@ -296,6 +339,7 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         pc_in_np   = pc_in_np_all[idx]
         occ        = plant_cov is not None
         in_label   = 'Occluded input, masked' if occ else 'Masked'
+        mask_kind  = 'structured blobs, as in training' if structured else 'uniform'
         mask_pc_s  = m_pc_np[idx]
         n_tok      = model.num_pc_tokens
         n_masked   = int(mask_pc_s.sum())
@@ -316,8 +360,8 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
                        np.ones((model.img_size//g, model.img_size//g)))
         ax.imshow((rgb_in_i * (1 - m_up[:,:,None])).clip(0,1))
         cov_txt = f', plant covered {plant_cov[idx]:.0%}' if occ else ''
-        ax.set_title(f'{in_label} RGB\n({m_rgb_np[idx].mean():.1%} masked{cov_txt})',
-                     fontsize=9)
+        ax.set_title(f'{in_label} RGB — {mask_kind}\n'
+                     f'({m_rgb_np[idx].mean():.1%} masked{cov_txt})', fontsize=9)
         ax.axis('off')
 
         ax = plt.subplot(5, 3, 3)
@@ -449,7 +493,7 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         )
         plt.tight_layout()
 
-        prefix = 'occ_' if occ else ''
+        prefix = ('occ_' if occ else '') + ('struct_' if structured else '')
         path = save_dir / f'epoch_{epoch:03d}_{prefix}sample_{idx+1}_{names[idx]}.png'
         plt.savefig(path, dpi=120, bbox_inches='tight')
         plt.close()
@@ -463,7 +507,13 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
 # Occluded-validation metrics kept in training_history.json (all go to wandb).
-OCC_HISTORY_METRICS = ('loss', 'rgb_mse', 'depth_mse', 'pc_chamfer', 'param_mae')
+def _cond_kwargs(batch, device, n=None):
+    """The geometry-conditioning vector rides along as an optional 7th batch
+    element (SorghumDataset4M(geometry_cond=True)); absent -> no kwarg."""
+    if len(batch) < 7:
+        return {}
+    cond = batch[6] if n is None else batch[6][:n]
+    return {'cond': cond.to(device)}
 
 
 def _encoder_inputs(occlusion, rgb, depth, pc):
@@ -482,7 +532,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, *, mask_ratio,
     model_core = model.module if hasattr(model, 'module') else model
 
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
-    for rgb, depth, pc, param_floats, text_valid, _ in pbar:
+    for batch in pbar:
+        rgb, depth, pc, param_floats, text_valid, _ = batch[:6]
         rgb          = rgb.to(device)
         depth        = depth.to(device)
         pc           = pc.to(device)
@@ -493,6 +544,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, *, mask_ratio,
             rgb, depth, pc, param_floats, text_valid,
             mask_ratio=mask_ratio,
             **_encoder_inputs(occlusion, rgb, depth, pc),
+            **_cond_kwargs(batch, device),
         )
 
         optimizer.zero_grad()
@@ -572,7 +624,8 @@ def evaluate(model, dataloader, device, *, mask_ratio, val_mask_seed=42,
         eval_cuda_generator = torch.Generator(device=device_obj).manual_seed(eval_seed)
         torch.cuda.set_rng_state(eval_cuda_generator.get_state(), device_obj)
 
-    for rgb, depth, pc, param_floats, text_valid, _ in tqdm(dataloader, desc='Evaluating'):
+    for batch in tqdm(dataloader, desc='Evaluating'):
+        rgb, depth, pc, param_floats, text_valid, _ = batch[:6]
         rgb          = rgb.to(device)
         depth        = depth.to(device)
         pc           = pc.to(device)
@@ -585,6 +638,7 @@ def evaluate(model, dataloader, device, *, mask_ratio, val_mask_seed=42,
                 rgb, depth, pc, param_floats, text_valid,
                 mask_ratio=mask_ratio,
                 **_encoder_inputs(occlusion, rgb, depth, pc),
+                **_cond_kwargs(batch, device),
         )
 
         tot       += loss.item()
@@ -690,89 +744,13 @@ def evaluate(model, dataloader, device, *, mask_ratio, val_mask_seed=42,
     return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n), metrics
 
 
-def fixed_subset(dataset, num_samples, seed):
-    """Deterministic fixed-size subset for quick small-scale experiments.
-
-    None/0/>=len(dataset) is a no-op (returns dataset unchanged) so this is
-    safe to call unconditionally from config-driven code.
-    """
-    if not num_samples or num_samples >= len(dataset):
-        return dataset
-    generator = torch.Generator().manual_seed(seed)
-    indices = torch.randperm(len(dataset), generator=generator)[:num_samples].tolist()
-    return Subset(dataset, indices)
-
-
-# ── Worker ────────────────────────────────────────────────────────────────────
-
-def train_worker(rank, world_size, args):
-    if world_size > 1:
-        setup_distributed(rank, world_size, args.dist_backend, args.dist_url)
-
-    is_main = (rank == 0)
-    device = (torch.device(f'cuda:{rank}') if world_size > 1
-              else torch.device(args.device if torch.cuda.is_available() else 'cpu'))
-
-    output_dir     = Path(args.output_dir)
-    viz_dir        = output_dir / 'visualizations'
-    checkpoint_dir = output_dir / 'checkpoints'
-    if is_main:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        viz_dir.mkdir(exist_ok=True)
-        checkpoint_dir.mkdir(exist_ok=True)
-        with open(output_dir / 'config.json', 'w') as f:
-            json.dump(vars(args), f, indent=4)
-
-    if is_main: print(f"\nLoading data from: {args.data_root}")
-
-    train_ds = SorghumDataset4M(args.data_root, img_size=args.img_size,
-                                 num_points=args.num_points, split='train',
-                                 max_leaves=args.max_leaves)
-    val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
-                                 num_points=args.num_points, split='val',
-                                 max_leaves=args.max_leaves)
-
-    if args.num_train_samples or args.num_val_samples:
-        full_train_len, full_val_len = len(train_ds), len(val_ds)
-        train_ds = fixed_subset(train_ds, args.num_train_samples, args.val_mask_seed)
-        val_ds   = fixed_subset(val_ds,   args.num_val_samples,   args.val_mask_seed)
-        if is_main:
-            print(f"⚠️  Small-scale run: train {len(train_ds)}/{full_train_len}, "
-                  f"val {len(val_ds)}/{full_val_len} samples")
-
-    if world_size > 1:
-        train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
-        val_sampler   = DistributedSampler(val_ds,   world_size, rank, shuffle=False)
-        shuffle_train = False
-    else:
-        train_sampler = val_sampler = None
-        shuffle_train = True
-
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size,
-                              shuffle=shuffle_train, sampler=train_sampler,
-                              num_workers=args.num_workers, pin_memory=True)
-    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size,
-                              shuffle=False, sampler=val_sampler,
-                              num_workers=args.num_workers, pin_memory=True)
-
-    if is_main:
-        print(f"\nInitializing EmbodiedMAE-4M-{args.model_size.capitalize()}...")
-        if args.loss_name == 'qal_loss':
-            print(f"Point-cloud loss: QAL (threshold={args.qal_threshold}, "
-                  f"alpha={args.qal_alpha}, squared={args.qal_use_squared}, "
-                  f"weight={args.pc_loss_weight})")
-        else:
-            print(f"Point-cloud loss: Chamfer (weight={args.pc_loss_weight})")
-        if args.sinkhorn_loss_weight > 0:
-            print(f"Sinkhorn auxiliary: weight={args.sinkhorn_loss_weight}, "
-                  f"points={args.sinkhorn_num_points}, "
-                  f"p={args.sinkhorn_p}, blur={args.sinkhorn_blur}, "
-                  f"scaling={args.sinkhorn_scaling}, "
-                  f"backend={args.sinkhorn_backend}, "
-                  f"debias={args.sinkhorn_debias}")
-
-    build_fn = embodied_mae_4m_small if args.model_size == 'small' else embodied_mae_4m_base
-    model = build_fn(
+def build_model(args):
+    """EmbodiedMAE-4M exactly as configured -- shared by training and the
+    evaluation scripts (eval_param_oracle.py) so they cannot drift apart."""
+    build_fn = {'small': embodied_mae_4m_small,
+                'base':  embodied_mae_4m_base,
+                'large': embodied_mae_4m_large}[args.model_size]
+    return build_fn(
         img_size=args.img_size,
         num_pc_tokens=196,
         target_points=args.num_points,
@@ -794,17 +772,152 @@ def train_worker(rank, world_size, args):
         pc_deterministic_fps=args.pc_deterministic_fps,
         pc_add_center_coordinates=args.pc_add_center_coordinates,
         structured_mask=args.structured_mask,
-    ).to(device)
+        param_encoding=args.param_encoding,
+        geometry_cond=args.geometry_cond,
+    )
 
-    # Train-time input occlusion + noise; validation stays clean, plus an
-    # optional second, occluded pass (occlusion.eval_occluded) for robustness.
+
+def fixed_subset(dataset, num_samples, seed):
+    """Deterministic fixed-size subset for quick small-scale experiments.
+
+    None/0/>=len(dataset) is a no-op (returns dataset unchanged) so this is
+    safe to call unconditionally from config-driven code.
+    """
+    if not num_samples or num_samples >= len(dataset):
+        return dataset
+    generator = torch.Generator().manual_seed(seed)
+    indices = torch.randperm(len(dataset), generator=generator)[:num_samples].tolist()
+    return Subset(dataset, indices)
+
+
+# ── Worker ────────────────────────────────────────────────────────────────────
+
+def train_worker(rank, world_size, args):
+    if world_size > 1:
+        setup_distributed(rank, world_size, args.dist_backend, args.dist_url)
+    if args.seed is not None:
+        # Same model init on every rank (DDP broadcasts rank 0's anyway); the
+        # rank offset only decorrelates per-rank masking / occlusion draws.
+        import random
+        random.seed(args.seed + rank)
+        np.random.seed(args.seed + rank)
+        torch.manual_seed(args.seed + rank)
+
+    is_main = (rank == 0)
+    device = (torch.device(f'cuda:{rank}') if world_size > 1
+              else torch.device(args.device if torch.cuda.is_available() else 'cpu'))
+
+    output_dir     = Path(args.output_dir)
+    viz_dir        = output_dir / 'visualizations'
+    checkpoint_dir = output_dir / 'checkpoints'
+    if is_main:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        viz_dir.mkdir(exist_ok=True)
+        checkpoint_dir.mkdir(exist_ok=True)
+        with open(output_dir / 'config.json', 'w') as f:
+            json.dump(vars(args), f, indent=4)
+
+    if is_main: print(f"\nLoading data from: {args.data_root}")
+
+    ds_kwargs = dict(img_size=args.img_size, num_points=args.num_points,
+                     max_leaves=args.max_leaves,
+                     param_encoding=args.param_encoding,
+                     geometry_cond=args.geometry_cond)
+    train_ds = SorghumDataset4M(args.data_root, split='train', **ds_kwargs)
+    val_ds   = SorghumDataset4M(args.data_root, split='val',   **ds_kwargs)
+
+    full_train_len, full_val_len = len(train_ds), len(val_ds)
+    if args.num_train_plants:
+        n_plants_all = len(plant_groups(train_ds))
+        train_ds = fixed_plant_subset(train_ds, args.num_train_plants,
+                                      args.val_mask_seed)
+        if is_main:
+            print(f"🌱 Plant-level subset: {len(plant_groups(train_ds))}/{n_plants_all} "
+                  f"plants → {len(train_ds)}/{full_train_len} train views")
+    if args.num_train_samples or args.num_val_samples:
+        train_ds = fixed_subset(train_ds, args.num_train_samples, args.val_mask_seed)
+        val_ds   = fixed_subset(val_ds,   args.num_val_samples,   args.val_mask_seed)
+        if is_main:
+            print(f"⚠️  Small-scale run: train {len(train_ds)}/{full_train_len}, "
+                  f"val {len(val_ds)}/{full_val_len} samples")
+
+    val_sampler = (DistributedSampler(val_ds, world_size, rank, shuffle=False)
+                   if world_size > 1 else None)
+    if args.views_per_epoch:
+        # One epoch = one look at each plant. Which view is redrawn every epoch,
+        # so training still sees all of them; validation is untouched.
+        train_sampler = ViewSampler(train_ds, views_per_epoch=args.views_per_epoch,
+                                    seed=args.val_mask_seed,
+                                    num_replicas=max(world_size, 1),
+                                    rank=rank if world_size > 1 else 0)
+        shuffle_train = False
+        if is_main:
+            print(f"🔀 View sampling: {train_sampler.num_plants} plants × "
+                  f"{args.views_per_epoch} view/epoch = "
+                  f"{train_sampler.num_plants * args.views_per_epoch} samples per epoch "
+                  f"(of {len(train_ds)} available views)")
+    elif world_size > 1:
+        train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
+        shuffle_train = False
+    else:
+        train_sampler = None
+        shuffle_train = True
+
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size,
+                              shuffle=shuffle_train, sampler=train_sampler,
+                              num_workers=args.num_workers, pin_memory=True)
+    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size,
+                              shuffle=False, sampler=val_sampler,
+                              num_workers=args.num_workers, pin_memory=True)
+
+    steps_per_epoch = len(train_loader)
+    if args.max_steps:
+        # Fixed optimiser-step budget: data size and model size change what an
+        # epoch costs, so comparing runs at equal epochs would compare unequal
+        # compute. The cosine schedule spans the recomputed epoch count, so the
+        # LR still decays to zero exactly at the end of the budget.
+        args.epochs = max(1, math.ceil(args.max_steps / max(steps_per_epoch, 1)))
+        if is_main:
+            print(f"⏱️  Step budget: {args.max_steps:,} steps ÷ {steps_per_epoch} "
+                  f"steps/epoch → {args.epochs} epochs "
+                  f"({args.epochs * steps_per_epoch:,} steps actually run)")
+    elif is_main:
+        print(f"⏱️  {steps_per_epoch} steps/epoch × {args.epochs} epochs = "
+              f"{steps_per_epoch * args.epochs:,} steps")
+
+    if is_main:
+        print(f"\nInitializing EmbodiedMAE-4M-{args.model_size.capitalize()}...")
+        if args.loss_name == 'qal_loss':
+            print(f"Point-cloud loss: QAL (threshold={args.qal_threshold}, "
+                  f"alpha={args.qal_alpha}, squared={args.qal_use_squared}, "
+                  f"weight={args.pc_loss_weight})")
+        elif args.loss_name == 'sinkhorn':
+            print(f"Point-cloud loss: Sinkhorn only (weight="
+                  f"{args.sinkhorn_loss_weight} x pc {args.pc_loss_weight})")
+        else:
+            print(f"Point-cloud loss: Chamfer (weight={args.pc_loss_weight})")
+        if args.sinkhorn_loss_weight > 0:
+            print(f"Sinkhorn auxiliary: weight={args.sinkhorn_loss_weight}, "
+                  f"points={args.sinkhorn_num_points}, "
+                  f"p={args.sinkhorn_p}, blur={args.sinkhorn_blur}, "
+                  f"scaling={args.sinkhorn_scaling}, "
+                  f"backend={args.sinkhorn_backend}, "
+                  f"debias={args.sinkhorn_debias}")
+
+    model = build_model(args).to(device)
+
+    # Train-time input occlusion + noise. Validation is always clean -- no
+    # occlusion, no noise; robustness is measured separately (eval_robustness.py).
     occluder = ProceduralOcclusion.from_config(args.occlusion)
-    eval_occluded = (occluder is not None
-                     and bool((args.occlusion or {}).get('eval_occluded', False)))
     if is_main:
         print(f"Structured masking: {model.structured_mask or 'off'}")
+        print(f"Param encoding:     {args.param_encoding}"
+              f"  |  geometry conditioning (pose + scale): "
+              f"{'on' if args.geometry_cond else 'off'}")
         print(f"Input occlusion:    {occluder or 'off'}"
-              + ("  (+ occluded validation pass)" if eval_occluded else ""))
+              + ("  (training only; validation is clean)" if occluder else ""))
+        if (args.occlusion or {}).get('eval_occluded'):
+            print("occlusion.eval_occluded is ignored: validation is always clean.")
 
     if world_size > 1:
         model = DDP(model, device_ids=[rank], output_device=rank,
@@ -820,39 +933,53 @@ def train_worker(rank, world_size, args):
         if args.resume and os.path.exists(args.resume):
             ckpt = torch.load(args.resume, map_location='cpu')
             wandb_run_id = ckpt.get('wandb_run_id')
-        if wandb_run_id:
-            wandb.init(project=args.wandb_project, entity=args.wandb_entity,
-                       id=wandb_run_id, resume='must')
-        else:
-            wandb.init(project=args.wandb_project, entity=args.wandb_entity,
-                       name=args.wandb_name, config={
-                           'model_size': args.model_size, 'num_points': args.num_points,
-                           'mask_ratio': args.mask_ratio, 'pc_loss_weight': args.pc_loss_weight,
-                           'pc_loss_name': args.loss_name,
-                           'qal_threshold': args.qal_threshold,
-                           'qal_alpha': args.qal_alpha,
-                           'qal_use_squared': args.qal_use_squared,
-                           'sinkhorn_loss_weight': args.sinkhorn_loss_weight,
-                           'sinkhorn_num_points': args.sinkhorn_num_points,
-                           'sinkhorn_blur': args.sinkhorn_blur,
-                           'sinkhorn_p': args.sinkhorn_p,
-                           'sinkhorn_scaling': args.sinkhorn_scaling,
-                           'sinkhorn_backend': args.sinkhorn_backend,
-                           'sinkhorn_debias': args.sinkhorn_debias,
-                           'pc_metric_thresholds': args.pc_metric_thresholds,
-                           'val_mask_seed': args.val_mask_seed,
-                           'text_loss_weight': args.spline_loss_weight,
-                           'max_leaves': args.max_leaves,
-                           'pc_deterministic_fps': args.pc_deterministic_fps,
-                           'pc_add_center_coordinates': args.pc_add_center_coordinates,
-                           'structured_mask': args.structured_mask,
-                           'occlusion': args.occlusion,
-                           'batch_size': args.batch_size, 'epochs': args.epochs,
-                           'lr': args.lr, 'total_params': total_params,
-                           'train_samples': len(train_ds), 'val_samples': len(val_ds),
-                       })
-        print(f"✅ W&B: {wandb.run.url}")
-        wandb.watch(model, log='gradients', log_freq=500)
+        # A logging outage must not kill a multi-hour run: if the wandb service
+        # fails to start (seen as ServicePollForTokenError on busy nodes), train
+        # on without it -- training_history.json still records every metric.
+        try:
+            if wandb_run_id:
+                wandb.init(project=args.wandb_project, entity=args.wandb_entity,
+                           id=wandb_run_id, resume='must')
+            else:
+                wandb.init(project=args.wandb_project, entity=args.wandb_entity,
+                           name=args.wandb_name, config={
+                               'model_size': args.model_size, 'num_points': args.num_points,
+                               'mask_ratio': args.mask_ratio, 'pc_loss_weight': args.pc_loss_weight,
+                               'pc_loss_name': args.loss_name,
+                               'qal_threshold': args.qal_threshold,
+                               'qal_alpha': args.qal_alpha,
+                               'qal_use_squared': args.qal_use_squared,
+                               'sinkhorn_loss_weight': args.sinkhorn_loss_weight,
+                               'sinkhorn_num_points': args.sinkhorn_num_points,
+                               'sinkhorn_blur': args.sinkhorn_blur,
+                               'sinkhorn_p': args.sinkhorn_p,
+                               'sinkhorn_scaling': args.sinkhorn_scaling,
+                               'sinkhorn_backend': args.sinkhorn_backend,
+                               'sinkhorn_debias': args.sinkhorn_debias,
+                               'pc_metric_thresholds': args.pc_metric_thresholds,
+                               'val_mask_seed': args.val_mask_seed,
+                               'text_loss_weight': args.spline_loss_weight,
+                               'max_leaves': args.max_leaves,
+                               'pc_deterministic_fps': args.pc_deterministic_fps,
+                               'pc_add_center_coordinates': args.pc_add_center_coordinates,
+                               'structured_mask': args.structured_mask,
+                               'param_encoding': args.param_encoding,
+                               'geometry_cond': args.geometry_cond,
+                               'occlusion': args.occlusion,
+                               'eval_occlusion': args.eval_occlusion,
+                               'num_train_plants': args.num_train_plants,
+                               'views_per_epoch': args.views_per_epoch,
+                               'max_steps': args.max_steps,
+                               'steps_per_epoch': steps_per_epoch,
+                               'batch_size': args.batch_size, 'epochs': args.epochs,
+                               'lr': args.lr, 'total_params': total_params,
+                               'train_samples': len(train_ds), 'val_samples': len(val_ds),
+                           })
+            print(f"✅ W&B: {wandb.run.url}")
+            wandb.watch(model, log='gradients', log_freq=500)
+        except Exception as e:
+            print(f"⚠️  W&B init failed ({type(e).__name__}: {e}); continuing without W&B")
+            args.use_wandb = False
 
     optimizer = optim.AdamW(model.parameters(), lr=args.lr,
                             weight_decay=args.weight_decay, betas=(0.9, 0.95))
@@ -885,8 +1012,6 @@ def train_worker(rank, world_size, args):
             'val_param_acc05':[],
         }
         result.update({f'val_{name}': [] for name in pc_prf_metric_names})
-        if eval_occluded:
-            result.update({f'val_occ_{name}': [] for name in OCC_HISTORY_METRICS})
         return result
     history = empty_history()
 
@@ -918,7 +1043,7 @@ def train_worker(rank, world_size, args):
         print("=" * 80)
 
     for epoch in range(start_epoch, args.epochs + 1):
-        if world_size > 1:
+        if train_sampler is not None:
             train_sampler.set_epoch(epoch)
 
         if is_main:
@@ -990,31 +1115,7 @@ def train_worker(rank, world_size, args):
                 print(f"Param   — MSE: {vm['param_mse']:.6f}  MAE: {vm['param_mae']:.6f}  "
                       f"MAE(masked): {vm['param_mae_masked']:.6f}  "
                       f"acc@0.05: {vm['param_acc@0.05']:.4f}")
-
-            # Same val set and masking seed, occluded + noisy inputs, clean
-            # targets. Logged only; best-model selection stays on clean val.
-            vm_occ = None
-            if eval_occluded:
-                if is_main: print("\n🌿 Running occluded validation…")
-                _, vm_occ = evaluate(
-                    model, val_loader, device,
-                    pc_metric_thresholds=args.pc_metric_thresholds,
-                    pc_metric_chunk_size=args.pc_metric_chunk_size,
-                    mask_ratio=args.mask_ratio,
-                    val_mask_seed=args.val_mask_seed,
-                    occlusion=occluder)
-                for name in OCC_HISTORY_METRICS:
-                    history[f'val_occ_{name}'].append(vm_occ[name])
-                if is_main:
-                    key = pc_threshold_keys[0]
-                    print(f"Val(occ) — Loss: {vm_occ['loss']:.4f}  "
-                          f"RGB MSE: {vm_occ['rgb_mse']:.6f}  "
-                          f"Depth MSE: {vm_occ['depth_mse']:.6f}  "
-                          f"PC Chamfer: {vm_occ['pc_chamfer']:.6f}  "
-                          f"PC F1@{key}: {vm_occ[f'pc_f1@{key}']:.4f}  "
-                          f"Param MAE: {vm_occ['param_mae']:.6f}")
         else:
-            vm_occ = None
             vl = history['val_loss'][-1] if history['val_loss'] else float('inf')
             vm = {k: history[v][-1] if history[v] else 0.0 for k, v in {
                 'rgb_mse':'val_rgb_mse','depth_mse':'val_depth_mse',
@@ -1057,9 +1158,6 @@ def train_worker(rank, world_size, args):
             }
             wandb_metrics.update({f'metrics/{name}': vm[name]
                                   for name in pc_prf_metric_names})
-            if vm_occ is not None:
-                wandb_metrics.update({f'metrics_occ/{name}': value
-                                      for name, value in vm_occ.items()})
             wandb.log(wandb_metrics)
 
         if is_main and (epoch % args.viz_freq == 0 or epoch == 1):
@@ -1071,16 +1169,19 @@ def train_worker(rank, world_size, args):
             if args.use_wandb and WANDB_AVAILABLE:
                 wandb.log({'visualizations': [wandb.Image(p, caption=Path(p).name)
                                                for p in paths], 'epoch': epoch})
-            if occluder is not None:
-                # Same val samples, occluded input -> reconstruction.
-                occ_paths = visualize_reconstruction_4m(
+            # Second plate: the same val samples under the TRAINING regime --
+            # occluded input and/or structured token masks. Pictures only; the
+            # metrics above keep the uniform-mask protocol.
+            if occluder is not None or mv.structured_mask is not None:
+                train_paths = visualize_reconstruction_4m(
                     mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
                     mask_ratio=args.mask_ratio,
-                    occlusion=occluder, occlusion_seed=args.val_mask_seed)
+                    occlusion=occluder, occlusion_seed=args.val_mask_seed,
+                    force_structured=True)
+                key = 'visualizations_occ' if occluder is not None else 'visualizations_struct'
                 if args.use_wandb and WANDB_AVAILABLE:
-                    wandb.log({'visualizations_occ': [
-                        wandb.Image(p, caption=Path(p).name) for p in occ_paths],
-                        'epoch': epoch})
+                    wandb.log({key: [wandb.Image(p, caption=Path(p).name)
+                                     for p in train_paths], 'epoch': epoch})
 
         scheduler.step()
 
@@ -1136,11 +1237,12 @@ def main():
     parser.add_argument('--data_root',          type=str,   default=None)
     parser.add_argument('--img_size',           type=int,   default=None)
     parser.add_argument('--num_points',         type=int,   default=None)
-    parser.add_argument('--model_size',         type=str,   default=None, choices=['small','base'])
+    parser.add_argument('--model_size',         type=str,   default=None,
+                        choices=['small','base','large'])
     parser.add_argument('--mask_ratio',         type=float, default=None)
     parser.add_argument('--pc_loss_weight',     type=float, default=None)
     parser.add_argument('--loss_name',          type=str,   default=None,
-                        choices=['chamfer', 'qal_loss'])
+                        choices=['chamfer', 'qal_loss', 'sinkhorn'])
     parser.add_argument('--qal_threshold',      type=float, default=None)
     parser.add_argument('--qal_alpha',          type=float, default=None)
     parser.add_argument('--qal_use_squared',    action='store_true', default=None)
@@ -1176,6 +1278,14 @@ def main():
                         help='Cap training set to a fixed random subset (quick experiments)')
     parser.add_argument('--num_val_samples',    type=int,   default=None,
                         help='Cap validation set to a fixed random subset (quick experiments)')
+    parser.add_argument('--num_train_plants',   type=int,   default=None,
+                        help='Data-scaling axis: keep this many whole plants (all their views)')
+    parser.add_argument('--views_per_epoch',    type=int,   default=None,
+                        help='Draw this many views per plant per epoch (off when unset)')
+    parser.add_argument('--max_steps',          type=int,   default=None,
+                        help='Optimiser-step budget; epochs are derived from it')
+    parser.add_argument('--seed',               type=int,   default=None,
+                        help='Global training seed (default: unseeded, as before)')
     parser.add_argument('--viz_freq',           type=int,   default=None)
     parser.add_argument('--num_viz_samples',    type=int,   default=None)
     parser.add_argument('--pc_metric_thresholds', type=float, nargs='+', default=None)
@@ -1245,6 +1355,15 @@ def main():
         parser.error('num_train_samples must be positive if set')
     if cfg.num_val_samples is not None and cfg.num_val_samples <= 0:
         parser.error('num_val_samples must be positive if set')
+    if cfg.num_train_plants is not None and cfg.num_train_plants <= 0:
+        parser.error('num_train_plants must be positive if set')
+    if cfg.views_per_epoch is not None and cfg.views_per_epoch <= 0:
+        parser.error('views_per_epoch must be positive if set')
+    if cfg.max_steps is not None and cfg.max_steps <= 0:
+        parser.error('max_steps must be positive if set')
+    if cfg.num_train_plants and cfg.num_train_samples:
+        parser.error('num_train_plants and num_train_samples both cap the training '
+                     'set; use one (num_train_plants is the plant-level axis)')
     if cfg.sinkhorn_loss_weight < 0:
         parser.error('sinkhorn_loss_weight must be non-negative')
     if cfg.sinkhorn_num_points <= 0:

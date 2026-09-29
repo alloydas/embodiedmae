@@ -272,8 +272,8 @@ class ProceduralOcclusion:
         min_pc_keep      never leave fewer than this fraction of the cloud; a
                          sample whose leaves would hide more keeps its cloud.
         pc_to_image_scale  see module docstring.
-        eval_occluded    (read by the training script) also run a second,
-                         occluded validation pass and log it under *_occ.
+        eval_occluded    ignored: validation is always clean. Accepted so older
+                         configs still load.
 
     Noise levels are drawn per sample from U(0, max) so clean-ish inputs stay
     in the mix, and apply to every sample, occluded or not.
@@ -335,7 +335,8 @@ class ProceduralOcclusion:
         cfg = dict(cfg)
         if not cfg.pop('enabled', True):
             return None
-        cfg.pop('eval_occluded', None)          # consumed by the training script
+        cfg.pop('eval_occluded', None)          # ignored: validation is always clean
+        cfg.pop('eval_occlusion', None)         # eval-only override, same
         unknown = sorted(set(cfg) - set(cls._KEYS))
         if unknown:
             raise ValueError(f"unknown occlusion keys {unknown}; expected {sorted(cls._KEYS)}")

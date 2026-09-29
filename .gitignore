@@ -10,7 +10,6 @@ __pycache__/
 .ipynb_checkpoints/
 .pytest_cache/
 .mypy_cache/
-
 # Training artefacts — ignore everything by default, then whitelist
 outputs/**
 !outputs/4m_run_v3/
@@ -21,7 +20,8 @@ outputs/4m_run_v3/**
 !outputs/4m_run_v3/loss_curves.png
 !outputs/4m_run_v3/REPORT.md
 !outputs/4m_run_v3/config.json
-
+.smoke/
+xdg_${SLURM_JOB_ID}
 # Legacy run dirs (kept for reference but not in git)
 outputs_sorghum_*/
 

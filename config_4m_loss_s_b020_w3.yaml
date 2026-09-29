@@ -1,0 +1,114 @@
+# EmbodiedMAE-4M -- LOSS STUDY arm s_b020_w3: Sinkhorn only, blur 0.02, weight 3
+#
+# Identical to config_4m_params_v1_seed1.yaml (recipe B, seed 1, 3,000 plants,
+# 30,000 steps, global batch 32) except for the point-cloud loss lines marked
+# "LOSS". That run is the study's QAL t=0.01 / alpha=100 arm.
+#
+# Weights were set from loss magnitudes measured on the trained recipe-B model:
+# QAL 0.060, Chamfer 0.0053 (11x smaller), Sinkhorn ~0.055 (same as QAL). So
+# Chamfer needs pc_loss_weight ~10 to pull as hard as QAL at 1.
+#
+# Compare arms on loss-independent metrics only (PC Chamfer metric, F1, final
+# EMD) -- val loss is a different quantity in every arm:
+#   python compare_recipes.py --loss-study
+#
+# Run all arms:  sbatch train_4m_loss.sbatch
+
+data:
+  data_root: "/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K"
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: "base"
+  mask_ratio: 0.75
+  loss_name: "sinkhorn"   # LOSS
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  sinkhorn_loss_weight: 3.0   # LOSS
+  sinkhorn_num_points: 2048   # LOSS
+  sinkhorn_blur: 0.02   # LOSS
+  sinkhorn_p: 2
+  sinkhorn_scaling: 0.8
+  sinkhorn_backend: "tensorized"
+  sinkhorn_debias: true
+  pc_loss_weight: 1.0
+  pc_deterministic_fps: true
+  pc_add_center_coordinates: true
+  depth_norm_type: "minmax"
+  spline_loss_weight: 5.0
+  max_leaves: 24
+  structured_mask:
+    enabled: true
+    prob: 0.5
+    center_bias: 1.5
+    length_scale: 0.20     # VARIED
+    modalities: [rgb, depth, pc]
+    shared_field: true
+    apply_in_eval: false
+
+occlusion:
+  enabled: true
+  prob: 1.0
+  num_leaves: [9, 16]
+  reach: [0.6, 1.2]
+  width: [0.09, 0.18]
+  bend: 0.25
+  heading_jitter_deg: 35
+  depth_scale: [0.8, 0.95]     # ignored: depth_quantile is set
+  depth_quantile: [0.0, 0.8]
+  rgb_noise_std: 0.03      # VARIED (1x sensor noise)
+  depth_noise_std: 0.015    # VARIED
+  pc_noise_std: 0.008       # VARIED
+  occlude_pc: true
+  min_pc_keep: 0.35
+  eval_occluded: true
+  # Reference corruption for the occluded val pass -- identical in all four
+  # configs. Training noise above varies; this does not.
+  eval_occlusion:
+    rgb_noise_std: 0.03
+    depth_noise_std: 0.015
+    pc_noise_std: 0.008
+
+training:
+  batch_size: 8
+  lr: 5.0e-5
+  weight_decay: 0.05
+  warmup_epochs: 10
+  val_freq: 10
+  epochs: 2400              # overridden by max_steps; kept for resume bookkeeping
+  max_steps: 30000          # the real budget: ~320 epochs at 94 steps/epoch
+  num_train_plants: 3000    # plant-level, not view-level
+  views_per_epoch: 1
+  num_val_samples: 225      # same fixed clean val as the 10k runs
+  seed: 1                   # same seed in both runs of the pair
+
+checkpointing:
+  output_dir: "./outputs/loss_s_b020_w3"
+  save_freq: 40
+  resume: null
+
+visualization:
+  viz_freq: 40
+  num_viz_samples: 6
+
+evaluation:
+  pc_metric_thresholds: [0.01, 0.02, 0.03]
+  pc_metric_chunk_size: 512
+  val_mask_seed: 42
+
+distributed:
+  world_size: 4
+  dist_backend: "nccl"
+  dist_url: "env://"
+
+system:
+  num_workers: 32
+  device: "cuda"
+
+wandb:
+  use_wandb: true
+  wandb_project: "embodied-mae-sorghum"
+  wandb_entity: null
+  wandb_name: "loss_s_b020_w3"

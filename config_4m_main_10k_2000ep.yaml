@@ -1,0 +1,115 @@
+# EmbodiedMAE-4M -- MAIN MODEL: 10 000 plants, 2 000 epochs, the winning settings.
+#
+# A long-running model to have ready when real (noisy) data arrives:
+#   * 10 000 train plants, one randomly drawn view per plant per epoch, so the
+#     run sees all ~100 000 views over training. 313 steps/epoch at global
+#     batch 32 (8 per GPU x 4 GPUs) -> 2 000 epochs = 626 000 optimizer steps,
+#     ~4.3 days at ~0.6 s/step.
+#   * QAL loss; params v2 + camera pose/scale token (spline_loss_weight 0.6);
+#     procedural occluding leaves + 1x sensor noise on every training sample;
+#     structured token masking ON (blobs + edge bias, as in paper_maskboth).
+#   * seed 1. Checkpoints every 100 epochs (1.3 GB each; scratch is near full).
+#
+# Resume after a timeout or node failure:
+#   sbatch --export=ALL,RUNS=main_10k_2000ep,TARGET_STEPS=626000 train_4m_continue.sbatch
+
+data:
+  data_root: "/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K"
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: "base"
+  mask_ratio: 0.75
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  sinkhorn_loss_weight: 0
+  sinkhorn_num_points: 512
+  sinkhorn_blur: 0.02
+  sinkhorn_p: 2
+  sinkhorn_scaling: 0.8
+  sinkhorn_backend: "tensorized"
+  sinkhorn_debias: true
+  pc_loss_weight: 1.0
+  pc_deterministic_fps: true
+  pc_add_center_coordinates: true
+  depth_norm_type: "minmax"
+  spline_loss_weight: 0.6
+  max_leaves: 24
+  param_encoding: "v2"
+  geometry_cond: true
+  structured_mask:
+    enabled: true
+    prob: 0.5
+    center_bias: 1.5
+    length_scale: 0.20
+    modalities: [rgb, depth, pc]
+    shared_field: true
+    apply_in_eval: false
+
+occlusion:
+  enabled: true
+  prob: 1.0
+  num_leaves: [9, 16]
+  reach: [0.6, 1.2]
+  width: [0.09, 0.18]
+  bend: 0.25
+  heading_jitter_deg: 35
+  depth_scale: [0.8, 0.95]     # ignored: depth_quantile is set
+  depth_quantile: [0.0, 0.8]
+  rgb_noise_std: 0.03      # VARIED (1x sensor noise)
+  depth_noise_std: 0.015    # VARIED
+  pc_noise_std: 0.008       # VARIED
+  occlude_pc: true
+  min_pc_keep: 0.35
+  eval_occluded: true
+  # Reference corruption for the occluded val pass -- identical in all four
+  # configs. Training noise above varies; this does not.
+  eval_occlusion:
+    rgb_noise_std: 0.03
+    depth_noise_std: 0.015
+    pc_noise_std: 0.008
+
+training:
+  batch_size: 8
+  lr: 5.0e-5
+  weight_decay: 0.05
+  warmup_epochs: 60
+  val_freq: 40
+  epochs: 2400              # overridden by max_steps; kept for resume bookkeeping
+  max_steps: 626000         # 2 000 epochs at 313 steps/epoch
+  num_train_plants: 10000   # plant-level, not view-level
+  views_per_epoch: 1
+  num_val_samples: 225      # same fixed clean val as the 10k runs
+  seed: 1
+
+checkpointing:
+  output_dir: "./outputs/main_10k_2000ep"
+  save_freq: 100
+  resume: null
+
+visualization:
+  viz_freq: 200
+  num_viz_samples: 6
+
+evaluation:
+  pc_metric_thresholds: [0.01, 0.02, 0.03]
+  pc_metric_chunk_size: 512
+  val_mask_seed: 42
+
+distributed:
+  world_size: 4
+  dist_backend: "nccl"
+  dist_url: "env://"
+
+system:
+  num_workers: 32
+  device: "cuda"
+
+wandb:
+  use_wandb: true
+  wandb_project: "embodied-mae-sorghum"
+  wandb_entity: null
+  wandb_name: "main_10k_2000ep"
