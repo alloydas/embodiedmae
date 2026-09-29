@@ -87,6 +87,11 @@ export MASTER_PORT=$((10000 + RANDOM % 50000))
 export OMP_NUM_THREADS=4
 export NCCL_DEBUG=WARN
 export PYTHONUNBUFFERED=1
+# wandb.init starts a wandb-core server and waits x_service_wait (30 s by
+# default) for it. With /work (NFS) slow, loading that binary from the conda env
+# took longer, and on 2026-09-29 all five running jobs died at wandb.init with
+# ServicePollForTokenError before their first step. Allow 10 minutes.
+export WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-600}"
 
 if [ -n "${SLURM_GPUS_ON_NODE:-}" ]; then
   NPROC=${SLURM_GPUS_ON_NODE}
