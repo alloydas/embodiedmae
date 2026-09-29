@@ -87,6 +87,16 @@ identical from the outside:
   two Blackwell nodes are `nova26-gpu-[1-2]` (partitions `nova,scavenger,allnodes`), so a single
   such squatter on each blocks the whole generation. Diagnose with the probe below; the fix is
   patience or the `nova` partition, never a smaller request.
+- **"17 A100s idle" is usually stranded GPUs, not free ones** (checked 2026-09-28). Read
+  `sinfo -N -O NodeList,StateLong,GresUsed,CPUsState,AllocMem,Memory`: a trailing `-` on the
+  state (`mixed-`) means `PLANNED`, i.e. backfill has already promised those GPUs to a
+  higher-priority pending job. The rest are idle GPUs on nodes whose **RAM** is gone (the
+  `instruction` partition's 1-GPU/128 GB jobs left `nova22-gpu-1`/`-3` with 8 GB free) or that
+  host a `nova` / `interactive` job (`OverSubscribe=NO`, which scavenger cannot share).
+  `instruction` (tier 1000) *is* `FORCE:1` and does share with scavenger. `sbatch --test-only`
+  on that day put even a 2-GPU/16-CPU/32 GB/6 h job only ~6 h ahead of the full
+  48-CPU/160 GB/2-day one, so the wall was the queue (other scavenger users with higher
+  fairshare), not the request.
 
 **The probe that separates "my request is too big" from "the nodes are held"**: submit a
 deliberately tiny job — 2 GPUs, 8 CPUs, 32 GB, 5 minutes — alongside the real one and compare
