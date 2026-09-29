@@ -47,7 +47,7 @@ experiments have been *built*, which is durable. For live progress use
 | E3 | data scaling | **2 of 3** | `e3_3k` ✅ `e3_10k` ✅; `e3_1k` resuming from epoch 5654/6169 |
 | E4 | model scaling | **1 of 2** | `e4_small` ✅; `e4_large` resuming from epoch 250/600 |
 | E5 | view regime | **not built** | — |
-| E6 | masking / noise | **done** (`yongyun` branch) | structured masking **hurts** PC reconstruction at 600 epochs, 2 seeds per arm — see [E6 / E7 on the `yongyun` branch](#e6--e7-on-the-yongyun-branch) |
+| E6 | masking / noise | **600-epoch pass done; 1 000-epoch continuation pending** (`yongyun` branch) | structured masking trades clean PC accuracy for robustness: worse clean F1, near-zero degradation under corruption — see [E6 / E7 on the `yongyun` branch](#e6--e7-on-the-yongyun-branch) |
 | E7 | loss study | **first pass done** (`yongyun` branch) | QAL > Chamfer > Sinkhorn-only on F1; Sinkhorn trades precision for recall; `model.loss_name` now also takes `sinkhorn` — see below |
 | E8 | baselines | **not built** | — |
 | E9 | latent analysis | **not built** | — |
@@ -131,7 +131,7 @@ attempt at the full 197 400-step budget was stopped at ~580 epochs and is kept
 in `outputs/_aborted_2100budget/`; its numbers are not comparable because its
 cosine was still at 85 % of peak LR there.
 
-#### E6 — does structured masking help? No: it costs PC reconstruction
+#### E6 — structured masking: worse clean reconstruction, better robustness
 
 | arm | token masking | F1@0.03 s1 / s2 | recall@0.03 s1 / s2 | F1@0.01 s1 / s2 | PC Chamfer s1 / s2 | Depth MSE s1 / s2 |
 |---|---|---|---|---|---|---|
@@ -147,6 +147,41 @@ to ~0.71, which is the same quantity the radial analysis below blamed on
 missing leaf tips — edge-biased masking spends the mask budget on the frame
 border and starves exactly the outer plant. Blobs alone, edge bias alone and
 both together are indistinguishable from each other.
+
+**Robustness is the other half.** The same runs, scored under the occluded
+validation pass — one fixed reference corruption (procedural leaves at 9–16 per
+image plus 1× sensor noise, eval seed 42), identical for every run:
+
+| arm | PC Chamfer clean s1 / s2 | PC Chamfer occluded s1 / s2 | degradation (occ / clean) s1 / s2 |
+|---|---|---|---|
+| `paper_maskoff` | **0.00259 / 0.00181** | **0.00285 / 0.00199** | 1.10 / 1.10 |
+| `paper_maskedge` | 0.00422 / 0.00358 | 0.00432 / 0.00373 | 1.02 / 1.04 |
+| `paper_maskblob` | 0.00421 / 0.00332 | 0.00433 / 0.00348 | 1.03 / 1.05 |
+| `paper_maskboth` | 0.00435 / 0.00436 | 0.00444 / 0.00438 | **1.02 / 1.00** |
+| `paper_paramsv2` | 0.00420 / 0.00435 | 0.00426 / 0.00435 | **1.01 / 1.00** |
+
+Structured masking does what it was built for: corruption barely moves its
+error (0–5 %), while uniform masking loses 10 %. At this corruption strength,
+though, the robustness does not pay for itself — `maskoff` under corruption is
+still better than every structured arm on *clean* input. So the finding is a
+trade-off, not a win either way, and it depends on how hard the test corruption
+is. Whether the curves cross at stronger corruption is the open question
+(`eval_robustness.py`, below). The occluded pass logs Chamfer, RGB and depth
+only — F1/recall under corruption are not recorded yet.
+
+**What structured masking already wins on, measured:**
+
+| property | structured (10 runs: mask arms, loss arms, params v2) | `maskoff` (2 runs) |
+|---|---|---|
+| PC Chamfer degradation under the reference corruption | 1.00–1.05× | 1.10× |
+| Depth MSE (clean) | **0.0363–0.0407 — every one of the 10 runs** | 0.0426 / 0.0470 |
+| F1@0.03 seed-to-seed spread | 0.006 (`maskboth`) | 0.108 |
+
+The depth result has no exceptions: all ten structured runs beat both `maskoff`
+seeds. The stability gap is large but ambiguous — a model can be reproducible
+because it settles on a lower plateau. These are supporting evidence; the
+headline claim needs one of the tests in "Showing where structured masking
+helps" below.
 
 **Caveat before this is quoted:** `maskoff`'s two seeds are 0.734 vs 0.842,
 a much wider spread than any other arm, so the direction is solid but the
@@ -366,6 +401,88 @@ Halving the QAL threshold moves nothing past the noise floor.
   `train_4m_recipe.sbatch` / `train_4m_loss.sbatch` (the 30k screening),
   `train_4m_continue.sbatch` (resume an existing run at a larger
   `--max_steps`; unused now that the runs are single-cosine).
+
+#### Showing where structured masking helps — the three legitimate tests
+
+The claim the method needs is "structured masking makes the model better at
+the thing it is for". Clean reconstruction is not that thing, and on it the
+answer is no. Three tests could show a real advantage; each is worth running,
+and if none shows one, the honest write-up is the trade-off above.
+
+1. **Stronger corruption and test-time blob masks, on TEST** —
+   `eval_robustness.py --split test` scores `best_model.pth` (chosen on val
+   loss, so val numbers carry selection bias; report test) on one view per test
+   plant (2 250 plants, view fixed by seed — 10× the 225-view val subset, no
+   plant counted twice). Levels: `clean`, `1x`, `noise2x`, `noise4x`,
+   `leaves2x`, `leaves2x_noise2x`, and two **blob-mask** levels, `blobmask`
+   (clean input) and `blobmask_1x` (1× corruption), which impose the
+   `maskboth` blob geometry on *every* model's token mask at test time. Every
+   other evaluation masks tokens uniformly — the regime `maskoff` trained on —
+   so the blob levels are the first test on structured masking's own terms:
+   filling large contiguous holes, the shape real occlusion takes. Queued as
+   two 1-GPU jobs (`.smoke/eval_robustness.sbatch`, `EVAL_RUNS` / `EVAL_OUT`,
+   results in `reports/robustness_test_{A,B}.json`), after the 1 000-epoch
+   continuation.
+2. **The programme's actual metric** — decision 6.4 scores value-add with a
+   linear probe on height, leaf angle, leaf count and biomass, *not*
+   reconstruction. Structured masking could help the representation even
+   while it hurts reconstruction; the probe is the test (see "Two gaps").
+3. **Real data (E10)** — real occlusion is what the synthetic corruption
+   imitates; an advantage there is the strongest possible evidence.
+
+#### Operational notes (2026-09-28)
+
+- **The `/work/mech-ai-scratch` filesystem is degraded, cluster-wide.** It is
+  an NFS mount (`novastor010:/stor010/mech-ai-scratch`) at **99 % full — 150 of
+  152 TB**. On a compute node (`nova18-wide-10`), `import numpy` took 175 s and
+  `import torch`, `import open3d` and listing 500 dataset folders each ran past
+  300 s; `ls` takes 4.6 s in `/work/mech-ai-scratch/yongyun` and 12 s in the
+  dataset root, against 4 ms in `/home` and 0.7 s in `/work/mech-ai`. This
+  repo's own checkpoints are ~0.6 TB (~0.4 % of the used space), so freeing
+  them is housekeeping, not a fix; the fix is HPC support and the lab freeing
+  space. Symptoms so far: continuation task 16613000_0 held 4 GPUs for 7 h
+  without leaving the dataset scan; the first robustness eval hit its 4 h limit
+  the same way. **Do not submit GPU jobs until `time python -c "import torch"`
+  is back under a minute** — a stalled job holds 4 GPUs doing nothing.
+- **Auto-submit watcher:** `.smoke/watch_and_submit.sh` (log in
+  `.smoke/watch.log`) probes `import torch` every 10 min; after two healthy
+  probes it pre-builds the index cache with `.smoke/build_index_cache.py`
+  (torch-free, same keys as the loaders, val/test/train), then submits the
+  twelve-run continuation to 1 000 epochs (8 GPUs) and the two test-split
+  robustness evals after it.
+- **Dataset folder index is now cached** in `.index_cache/` (per split, per
+  3M/4M). The first run pays one scan; every later run and evaluation reads the
+  cache. `SORGHUM_INDEX_REFRESH=1` forces a rescan.
+- **`train_4m_continue.sbatch` takes `RUNS` colon-separated.** `sbatch
+  --export` splits its argument on commas, so a comma list silently delivered
+  only the first run and array job 16613000 lost eleven of twelve tasks.
+- **Continuation checkpoints every 100 epochs** (`SAVE_FREQ`, default 100 in
+  `train_4m_continue.sbatch`): at 1.3 GB each, the configs' 30-epoch cadence
+  would add ~200 GB to a 99 %-full disk; 100 adds ~60 GB.
+- **Pending:** all twelve `paper_*` runs resumed from epoch 600 to 1 000
+  (`TARGET_STEPS=94000`), then `eval_robustness.py --split test` on the results.
+
+#### Checkpoint retention — what the paper needs
+
+Keep, per run: **`best_model.pth`** (the reported numbers come from it — it is
+not necessarily the last epoch), **the latest checkpoint** until the run is
+finished (it is the resume point), and **`training_history.json` +
+`config.json`** always (kilobytes; they back every curve and every "what did
+this run use" question). Intermediate checkpoints are not needed — the val
+curves in the history replace them. By group:
+
+| runs | keep | delete when space is needed |
+|---|---|---|
+| `paper_*` (the results) | best + latest (epoch 600 now, 1 000 after the continuation) + history | intermediates (19 per run, ~297 GB) |
+| `params_v1_seed1`, `params_v2cond_seed1` | best, if the oracle table is used | intermediates |
+| 30k screening (`recipe_*`, `loss_*`) | history | all weights (~157 GB) |
+| `_aborted_*` | history (supports "600 epochs is enough") | all weights (~14 GB) |
+
+Two cautions: other project folders under `/work/mech-ai-scratch/yongyun`
+(e.g. `embodiedmae4m`, linked to the epoch-760 results) may hold models the
+paper cites — check before deleting there. And scratch is not backed up, so
+copy the handful of `best_model.pth` files the paper reports off scratch
+(`/work/mech-ai` or external storage). Nothing has been deleted yet.
 
 #### What to run next, in order
 
