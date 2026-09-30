@@ -43,31 +43,35 @@ experiments have been *built*, which is durable. For live progress use
 | | experiment | state | runs |
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
-| E2 | modality value-add | **sorghum done; maize running** | sorghum: all four arms 600/600, results in `reports/RESULTS_DECK_2026-09-20.md`; control arms `e2_pcrgbdt_tg` / `tg40` done and probed; `e2_pcrgbdt_tg100` (text as target only) training. maize: `maize_e2_pcrgbd` ✅ 600/600 (2026-09-30), `maize_e2_pc` / `maize_e2_pcrgb` training — see the handoff section below |
+| E2 | modality value-add | **sorghum done; maize running** | sorghum: all four arms 600/600, results in `reports/RESULTS_DECK_2026-09-20.md`; control arms `e2_pcrgbdt_tg` / `tg40` done and probed; `e2_pcrgbdt_tg100` (text as target only) training. maize: `maize_e2_pcrgbd` ✅ 600/600 (2026-09-30), probed (beats `maize_4m` on 10/11), `maize_e2_pc` / `maize_e2_pcrgb` training — see the handoff section below. Partial-cloud (1 vs 3 cameras) evaluation of the sorghum arms ✅ (2026-09-30) |
 | E3 | data scaling | **done, both species** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize (Nova, jobs 16576132-4, `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`): `maize_e3_1k` ✅ 6169/6169 (2026-09-24), `maize_e3_10k` ✅ 631/631 (2026-09-24), `maize_e3_3k` ✅ 2100/2100 (2026-09-25; last checkpoint 2024). Full-data point is `maize_4m` epoch 600. Probed + E9: `reports/probe_p{r,m}_{6168,2024,624}_*` |
 | E4 | model scaling | **done, both species** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize (Nova, jobs 16576135-6, same launcher): `maize_e4_small` ✅ 600/600 (2026-09-24), `maize_e4_large` ✅ 600/600 (2026-09-25). The base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00). Probed + E9: `reports/probe_p{r,m}_600*_*` |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
-| E8 | baselines | **built, frozen rows done; supervised row training** | `eval/baseline_probe.py` + `eval/baselines/*`: EmbodiedMAE-B, MultiMAE-B, DINOv2 ViT-B/14, Point-MAE, Point-MAE + camera pose, random init, both species, `reports/probe_e8_*`. Supervised-from-scratch row (`train_supervised_4m.py`, `outputs/e8_supervised`) training — see handoff |
+| E8 | baselines | **done (supervised row sorghum only)** | `eval/baseline_probe.py` + `eval/baselines/*`: EmbodiedMAE-B, MultiMAE-B, DINOv2 ViT-B/14, Point-MAE, Point-MAE + camera pose, random init, both species, `reports/probe_e8_*`. Supervised-from-scratch row (`train_supervised_4m.py`, `outputs/e8_supervised`) ✅ 600/600 (2026-09-30), scored in `reports/probe_e8_score_16676974_*`, paired deltas in `reports/e8_supervised_delta_16676974.csv` (`eval/probe_pair_bootstrap.py`) |
 | E9 | latent analysis | **built; E2/E3/E4 arms done** | `eval/latent_analysis.py` / `_maize.py`. Sorghum E2/E3/E4 and maize E3/E4 arms on train/val/test (`reports/e9_pr_*`, `reports/e9_pm_*`); sorghum control arms on val (`reports/e9_pr_tg_*`). Maize E2 arms and `e2_pcrgbdt_tg100` queued with their probes |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
 
-## HANDOFF — live state as of 2026-09-30 12:50 (read this first after a restart)
+## HANDOFF — live state as of 2026-09-30 16:00 (read this first after a restart)
 
 Everything below was true at the time written; check `squeue -u $USER` and each run's
 `outputs/<run>/checkpoints/` before acting. The results page is the private artifact
-https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw ("Sorghum 4M Progress Review", v24). To update it
+https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw ("Sorghum 4M Progress Review", v25). To update it
 from a new session: `Artifact read` that URL, edit the saved copy, then publish with `url` set to it.
 Its sections: sorghum headline/params/views/E2/E3·E4/6.4 probe, `#control` (token-budget control
-arms), sorghum E9, `#maize` (everything for maize), `#e8` (baselines), agenda.
+arms), sorghum E9, `#maize` (everything for maize; `#maize-e2` is the maize E2 table), `#e8`
+(baselines; `#e8-sup` is the supervised row), `#pcview` (1 camera vs 3 cameras), agenda.
 
 ### Training jobs in flight — all run as chained 4-hour chunks on `scavenger`
 
 Why chunks: on 2026-09-29 only jobs of <= 4 h could backfill onto the free scavenger GPUs (those
 nodes are PLANNED for higher-priority jobs; 8-12 h requests waited 1-2 days). Each run is a chain
 of `sbatch --time=04:00:00 --dependency=afterany:<previous chunk>`; every chunk auto-resumes from
-the newest checkpoint that opens (save_freq 25 epochs, so a chunk end loses <= 25 epochs). A chunk
+the newest checkpoint that opens (save_freq 25 epochs, so a chunk end loses <= 25 epochs). The maize
+and E8 launchers check that it opens; `e2_arm_blackwell.sbatch` does not, and since a268a0e
+`train_sorghum_4m.py` itself walks an unreadable `--resume` down (`resolve_resume`), and every
+trainer save is atomic (temp file + `os.replace`). A chunk
 that starts after training already finished resumes at epoch 600, runs no epoch and exits — the
 trainers do nothing after the loop but clean up — so surplus chunks are harmless.
 
@@ -156,20 +160,53 @@ it by hand once the run is done. E8 supervised still needs its `--score_head` pa
 - **New experiment (user, 2026-09-30): 1-view vs 3-view point clouds, sorghum, evaluation only.**
   See "Point-cloud view ablation" below.
 
+**UPDATE 2026-09-30 ~16:00 — E8 supervised row done, view ablation done, trainer saves atomic.**
+
+| run | where | epoch at 15:51 | expected 600 |
+|---|---|---|---|
+| `e8_supervised` | nova 16669527 finished 14:24; leftover chunks exited in seconds | **600/600 done** | — |
+| `maize_e2_pc` | scavenger 16645738 hits its 4 h limit at 16:23 (~591, resumes from 575), then 16645739 | 574 | ~1 h after 16645739 starts |
+| `maize_e2_pcrgb` | nova 16669529 | 527 | ~17:20 (49 ep/h since 13:00) |
+| `e2_pcrgbdt_tg100` | nova 16669526 | 462 | ~20:00 (34 ep/h since 13:00) |
+
+- **E8 supervised row** (scored by 16676974; paired bootstrap 16683553 with the new
+  `eval/probe_pair_bootstrap.py` -> `reports/e8_supervised_delta_16676974.csv`). Its head, val R²:
+  height 0.974, leaf count 0.979, biomass 0.979, branch angle 0.929, roll 0.811, leaf length 0.272.
+  Its CLS probe matches the head within 0.008. Frozen PC+RGB+depth minus supervised, both on CLS:
+  size +0.006 (tight CIs), leaf length +0.08 to +0.12, branch angle a tie, roll a val tie and a test
+  loss (−0.018). **The four-modality arm minus supervised: size −0.008 to −0.014, branch −0.027, roll
+  −0.016 to −0.032, both splits.** Pretraining pays without the parameter stream, and with it the
+  frozen feature is worse than no pretraining. Mean pooling flatters PC+RGB+depth (roll +0.09) but
+  reads the supervised net through tokens its training never shaped. The page has it as `#e8-sup`,
+  plus a row in the sorghum E8 table (mean pool).
+- **View ablation done** (job 16676994, 57 min, 1 A100): results in the subsection below; page `#pcview`.
+- **Trainer fix a268a0e** (found by the review workflow): both 4M trainers wrote checkpoints,
+  best_model, config.json and training_history.json in place. `e2_arm_blackwell.sbatch` resumes from
+  the highest-numbered checkpoint by name without opening it, so a kill mid-save would have burnt
+  the whole tg100 chain at startup, and a probe starting beside a leftover chunk could read a
+  config.json the chunk had just truncated. All four writes now go through temp + `os.replace`, and
+  `train_sorghum_4m.py`'s `resolve_resume` falls back to the newest checkpoint that opens (it raises
+  if none does). CPU-tested on scratch files and a real 1.37 GB checkpoint. Queued chunks read the
+  trainer from disk, so they have it. Running processes never re-read it.
+- **`pm_e2_600` (16669530) trim.** It waits on 16669495, the last `maize_e2_pc` scavenger chunk,
+  which only resumes at 600 and exits. As soon as
+  `outputs/maize_e2_pc/checkpoints/checkpoint_epoch_600.pth` exists, drop that dependency:
+  `scontrol update jobid=16669530 Dependency=afterany:16669529` (or `Dependency=` if 16669529 is gone).
+  Otherwise the probe waits for a GPU chunk that does nothing.
+
 ### What to do when each finishes
 
-- **Maize E2 arms**: `maize_e2_pcrgbd` is probed (above). `pm_e2_600` (16669530) probes all four
-  arms automatically once pc and pcrgb finish; then add the maize E2 table to the page's `#maize`
-  section (mirror sorghum's E2 table). By hand, if needed:
+- **Maize E2 arms**: `maize_e2_pcrgbd` is probed (above) and on the page as `#maize-e2`.
+  `pm_e2_600` (16669530) probes all four arms automatically once pc and pcrgb finish; then fill
+  in the other two arms in `#maize-e2`, with a paired bootstrap like E8's. By hand, if needed:
   `SPECIES=maize CKPT=checkpoints/checkpoint_epoch_600.pth E9_SPLITS=val sbatch --partition=scavenger --account=mech-ai-scavenger --gres=NONE --cpus-per-task=32 --mem=128G slurm/linear_probe.sbatch maize_e2_pc maize_e2_pcrgb maize_e2_pcrgbd maize_4m`
 - **`e2_pcrgbdt_tg100`**: probe at `checkpoint_epoch_600.pth` with the other control arms
   (`slurm/linear_probe.sbatch e2_pcrgbd e2_pcrgbdt e2_pcrgbdt_tg e2_pcrgbdt_tg40 e2_pcrgbdt_tg100`), then add
   its row to the page's `#control` table. It answers "parameters as a target only, never an input":
   if it matches PC+RGB+depth (height 0.981, roll 0.806, leaf length 0.362) the stream helps as
   supervision; if it still loses, the reconstruction target itself hurts the latent.
-- **`e8_supervised`**: `e8_score` 16676974 does the `--score_head` pass and both probes (above);
-  add the rows to `#e8`. It is the row that says what pretraining is worth. If it exited 3 (no
-  epoch 600 yet), resubmit `sbatch slurm/e8_supervised_score.sbatch` once the run is done.
+- **`e8_supervised`**: done and on the page (`#e8-sup`, see the 16:00 update). A maize supervised
+  row does not exist; it would need a maize port of `train_supervised_4m.py`.
 
 ### Point-cloud view ablation — 1 view vs 3 views (sorghum, evaluation only; added 2026-09-30)
 
@@ -196,12 +233,23 @@ RGB and depth stay camera 00's.
   With every token visible the decoder is out of distribution and its cloud collapses, to chamfer
   ~0.024-0.027 against the published ~0.0017-0.005; the maize distillation teacher showed the same.
   Point subsets are seeded per plant, so the full condition is re-extracted, not read from the
-  probe caches. **Submitted as job 16676994** (scavenger, 1 GPU). It writes
-  `reports/pcview_16676994_{coverage,recon,probe}.csv`; add a section to the results page when
-  it lands. A 32-plant CPU check of the masked reconstruction reproduced the published full-cloud
-  val chamfer (e2_pcrgbd 0.00154 vs 0.00171, e2_pc 0.0055 vs 0.0050). At 1 view the chamfer rose to
-  0.0108 / 0.0145, and GT->prediction was worse than just echoing the partial input (0.009-0.011 vs
-  0.004). The decoder does not fill in unseen geometry.
+  probe caches.
+- **Done: job 16676994** (57 min on one A100, all 15,000 plants) ->
+  `reports/pcview_16676994_{coverage,recon,probe}.csv`. Paired bootstrap over plants (job 16683300,
+  `eval/pc_view_bootstrap.py`, CPU) -> `reports/pcview_16676994_bootstrap.csv`. On the page as
+  `#pcview`. The harness is anchored: the full condition reproduces the published E2 val chamfer
+  (0.00494 / 0.00242 / 0.00165 / 0.00243 against 0.00495 / 0.00250 / 0.00171 / 0.00248) and the
+  published probe within 0.005.
+  - **Matched probe (refit per condition): small costs if the arm sees RGB.** Size targets at one
+    camera: −0.01 to −0.03 R², under 0.01 at three; PC-only −0.09 to −0.10 and −0.04. Roll and leaf
+    length lose 0.02-0.06 at one camera. **Depth matters more on partial clouds:** on height at one
+    camera (test), PC+RGB loses −0.027 [−0.030, −0.024] and PC+RGB+D −0.017 [−0.019, −0.015]. The
+    params arm's deficit holds (0.012 behind PC+RGB+D at one camera, 0.015 on the full cloud).
+  - **Transfer (full-cloud probe on partial clouds) collapses:** E1 height 0.983 -> 0.690 (3 cams)
+    -> −0.21 (1 cam). Refitting recovers 0.966, so the information is still there, but the latent
+    moves with coverage. Any readout fitted on complete clouds is biased on real scans (E10).
+  - **Reconstruction: no completion.** At one camera, GT->prediction is 0.0087-0.0104 against 0.0040
+    for echoing the partial input. The decoder reproduces what it is given.
 
 ### Maize distillation — built, reviewed, CPU-tested, NOT submitted; needs a decision first
 
