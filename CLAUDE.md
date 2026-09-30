@@ -35,7 +35,7 @@ The programme is the E1–E10 matrix in the CVPR 2027 plan (the Google Doc is th
 source of truth for scope; this section is the source of truth for *state*).
 Paper deadline **Nov 13 2026**, internal results freeze **Oct 24 2026**.
 
-**Status as of 2026-09-24.** Run state goes stale fast — the table records which
+**Status as of 2026-09-30** (live job state: see the HANDOFF section below). Run state goes stale fast — the table records which
 experiments have been *built*, which is durable. For live progress use
 `squeue -u $USER`, `outputs/<run>/training_history.json`, and
 `outputs/<run>/config.json` (which records what a run actually used).
@@ -43,15 +43,135 @@ experiments have been *built*, which is durable. For live progress use
 | | experiment | state | runs |
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
-| E2 | modality value-add | **done** | all four arms 600/600; results in `reports/RESULTS_DECK_2026-09-20.md` |
+| E2 | modality value-add | **sorghum done; maize running** | sorghum: all four arms 600/600, results in `reports/RESULTS_DECK_2026-09-20.md`; control arms `e2_pcrgbdt_tg` / `tg40` done and probed; `e2_pcrgbdt_tg100` (text as target only) training. maize: `maize_e2_pcrgbd` ✅ 600/600 (2026-09-30), `maize_e2_pc` / `maize_e2_pcrgb` training — see the handoff section below |
 | E3 | data scaling | **sorghum done; maize running** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize (Nova, jobs 16576132-4, `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`): `maize_e3_1k` ✅ 6169/6169 (2026-09-24); `maize_e3_10k` running; `maize_e3_3k` preempted at 1017/2100 and requeued (auto-resumes). Full-data point is `maize_4m` epoch 600 |
 | E4 | model scaling | **sorghum done; maize running** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize (Nova, jobs 16576135-6, same launcher): `maize_e4_small` ✅ 600/600 (2026-09-24); `maize_e4_large` running. The base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00) |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
-| E8 | baselines | **not built** | — |
+| E8 | baselines | **built, frozen rows done; supervised row training** | `eval/baseline_probe.py` + `eval/baselines/*`: EmbodiedMAE-B, MultiMAE-B, DINOv2 ViT-B/14, Point-MAE, Point-MAE + camera pose, random init, both species, `reports/probe_e8_*`. Supervised-from-scratch row (`train_supervised_4m.py`, `outputs/e8_supervised`) training — see handoff |
 | E9 | latent analysis | **built, E2 arms done** | `eval/latent_analysis.py`; all four E2 arms on val. E3/E4 arms and train/test splits not run |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
+
+## HANDOFF — live state as of 2026-09-30 08:45 (read this first after a restart)
+
+Everything below was true at the time written; check `squeue -u $USER` and each run's
+`outputs/<run>/checkpoints/` before acting. The results page is the private artifact
+https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw ("Sorghum 4M Progress Review", v24). To update it
+from a new session: `Artifact read` that URL, edit the saved copy, then publish with `url` set to it.
+Its sections: sorghum headline/params/views/E2/E3·E4/6.4 probe, `#control` (token-budget control
+arms), sorghum E9, `#maize` (everything for maize), `#e8` (baselines), agenda.
+
+### Training jobs in flight — all run as chained 4-hour chunks on `scavenger`
+
+Why chunks: on 2026-09-29 only jobs of <= 4 h could backfill onto the free scavenger GPUs (those
+nodes are PLANNED for higher-priority jobs; 8-12 h requests waited 1-2 days). Each run is a chain
+of `sbatch --time=04:00:00 --dependency=afterany:<previous chunk>`; every chunk auto-resumes from
+the newest checkpoint that opens (save_freq 25 epochs, so a chunk end loses <= 25 epochs). A chunk
+that starts after training already finished resumes at epoch 600, runs no epoch and exits — the
+trainers do nothing after the loop but clean up — so surplus chunks are harmless.
+
+| run | chunk shape | epochs done at 08:30 | chain job IDs still queued (last one) |
+|---|---|---|---|
+| `maize_e2_pc` | a100-pcie:2, 16 CPU, 96G, `--num_workers 7` | 353/600 | ...16645738, 16645739, 16669495 |
+| `maize_e2_pcrgb` | a100-pcie:2, 16 CPU, 96G, `--num_workers 7` | 268/600 | ...16645744, 16645745, 16669496-98 |
+| `e8_supervised` | l40s:2, 32 CPU, 160G, `--num_workers 14` | 376/600 | ...16645750, 16645751, 16669499 |
+| `e2_pcrgbdt_tg100` | l40s:2, 32 CPU, 160G, `--num_workers 14` | 282/600 | ...16645756, 16645757, 16669500-02 |
+| `maize_e2_pcrgbd` | nova, rtx_pro_6000:2, 32 CPU, 160G | **600/600 done** (job 16645060, 16 h 46 m) | — |
+
+Rates were ~88 / ~67 / ~82 / ~61 epochs per 4 h chunk. If a chain runs dry before epoch 600,
+extend it after its last job ID (maize needs `MAIZE_CONDA_ENV` exported at submit):
+
+```bash
+export MAIZE_CONDA_ENV=/work/mech-ai-scratch/alloy/.conda/envs/det_cu128
+sbatch --job-name=maize_e2_pc --partition=scavenger --account=mech-ai-scavenger --requeue \
+  --time=04:00:00 --open-mode=append --dependency=afterany:<LAST_ID> \
+  --gres=gpu:a100-pcie:2 --cpus-per-task=16 --mem=96G \
+  slurm/scale_arm_maize.sbatch maize_e2_pc --num_workers 7
+sbatch --job-name=e8_supervised ... --gres=gpu:l40s:2 --cpus-per-task=32 --mem=160G \
+  slurm/e8_supervised.sbatch --num_workers 14
+sbatch --job-name=e2_pcrgbdt_tg100 ... --gres=gpu:l40s:2 --cpus-per-task=32 --mem=160G \
+  slurm/e2_arm_blackwell.sbatch pcrgbdt_tg100 --num_workers 14
+```
+
+Before trusting a finished run, confirm `checkpoints/checkpoint_epoch_600.pth` exists and
+`training_history.json` has 600 train epochs. Chunks that start after epoch 600 are expected to exit fast.
+
+### What to do when each finishes
+
+- **Maize E2 arms** (pcrgbd can be probed now): probe + E9 at the matched cut, on CPU:
+  `SPECIES=maize CKPT=checkpoints/checkpoint_epoch_600.pth E9_SPLITS=val sbatch --partition=scavenger --account=mech-ai-scavenger --gres=NONE --cpus-per-task=32 --mem=128G slurm/linear_probe.sbatch maize_e2_pc maize_e2_pcrgb maize_e2_pcrgbd maize_4m`
+  then add the maize E2 table to the page's `#maize` section (mirror sorghum's E2 table).
+- **`e2_pcrgbdt_tg100`**: probe at `checkpoint_epoch_600.pth` with the other control arms
+  (`slurm/linear_probe.sbatch e2_pcrgbd e2_pcrgbdt e2_pcrgbdt_tg e2_pcrgbdt_tg40 e2_pcrgbdt_tg100`), then add
+  its row to the page's `#control` table. It answers "parameters as a target only, never an input":
+  if it matches PC+RGB+depth (height 0.981, roll 0.806, leaf length 0.362) the stream helps as
+  supervision; if it still loses, the reconstruction target itself hurts the latent.
+- **`e8_supervised`**: run its `--score_head` pass, then probe at `checkpoint_epoch_600.pth` like the
+  other E8 rows and add it to `#e8`. It is the row that says what pretraining is worth.
+
+### Maize distillation — built, reviewed, CPU-tested, NOT submitted; needs a decision first
+
+`train_maize_4m_distill.py`, `configs/config_maize_distill_all.yaml`, `slurm/distill_maize.sbatch`
+(teacher = student init = `outputs/maize_4m/checkpoints/checkpoint_epoch_600.pth`; 100 epochs, lr 1e-4,
+global batch 128 = 16 x 2 GPUs x accum 4, 821 optimizer steps/epoch like the 8-GPU sorghum run; an
+in-run epoch-0 "before" eval written to `warmstart_eval.json`; `--eval_only` gives it on one GPU).
+**Decide before launch:** with all four modalities fully visible (the sorghum-faithful teacher),
+the maize epoch-600 teacher's point cloud COLLAPSES (chamfer 0.069-0.089, predicted-cloud std 0.05-0.07
+vs ground truth 0.26-0.29), while visible `[rgb, depth, text]` gives 0.0015-0.0021 and
+`teacher_source_mask_ratio 0.5` gives 0.0010-0.0014. Options: (a) run the faithful default and label
+it "teacher out of distribution on maize", or (b) set `distill.teacher_visible: [rgb, depth, text]`
+(or `teacher_source_mask_ratio: 0.5`) as a declared departure. Ideally a short 2-arm GPU A/B first.
+Report per-source before/after, never only the mean — the collapse inflates the maize "before".
+Runtime ~60-70 h on 2xA100: it WILL hit TIMEOUT; re-run the same sbatch line (auto-resume).
+**Before submitting, port two fixes into `slurm/distill_maize.sbatch`:** the split guard still uses
+`ls` (change it to the `stat -c %h` link count used in `scale_arm_maize.sbatch`), and it lacks
+`export WANDB__SERVICE_WAIT=600`.
+
+### E8 results (verified by an independent refit; tables in the page's `#e8` section)
+
+Frozen probe, mean pooling for every model (the only pooling all have); Δ = paired bootstrap over
+plants, 2,000 resamples; "win" = 95% CI excludes 0 on BOTH val and test.
+- **Sorghum:** PC+RGB+depth beats every baseline on all 7 learnable targets; vs EmbodiedMAE-B (the
+  strongest) +0.005 on size (tight CI, 0.90 floor), +0.078 roll, +0.104 leaf length. **The four-modality
+  reference arm LOSES size to EmbodiedMAE-B** (height −0.006, leaf count −0.007, biomass −0.005) and
+  wins roll/leaf length. **Point-MAE beats our PC-only arm on every sorghum target** (height 0.958 vs
+  0.910) — our lead comes from fusing RGB with geometry, not a better PC encoder.
+- **Maize:** `maize_4m` beats EmbodiedMAE-B on 9/11 and the best baseline per target on 5/11
+  (E4-small on 8/11); loses leaf count and curl to Point-MAE and tassel droop to DINOv2 (0.275; every
+  EmbodiedMAE-design encoder is < 0). **Camera-pose sensitivity:** Point-MAE given each view's
+  camera pose (gravity-aligned clouds, which our arms never get) beats `maize_4m` on 8/11 (height −0.115,
+  leaf angle −0.080, leaf count −0.056, curl −0.278 ...); we keep twist (+0.020) and stem radius
+  (+0.241). Orientation alone lifts Point-MAE's height 0.509→0.714. Open decision: give our model
+  gravity-aligned clouds before the Oct 24 freeze, or expect reviewers to run this comparison.
+- Sorghum `pointmae_upright` is bitwise identical to `pointmae` (every sorghum view 00 is one camera).
+- Analysis artefacts (refit script, per-plant predictions, e8_tables.json) lived in the old session's
+  scratchpad and may be gone; everything needed to recompute is in `reports/probe_e8_*.csv` + the
+  `outputs/_probe_cache*` feature caches.
+
+### Infrastructure lessons from 2026-09-28/30 (all fixed in the launchers)
+
+- **`/work/mech-ai-scratch` is NFS (novastor010) and 99% full (150/152 TB); `/work/mech-ai` 98%.**
+  Under load, a readdir of the 105,000-entry maize train split hung for 45+ min in state D while
+  `stat` answered in 0.2 s. The maize guards now count folders from the link count
+  (`stat -c %h` − 2), never `ls`. Anything that lists the split dirs can hang a job.
+- **wandb-core start timeout:** with NFS slow, all five jobs died at `wandb.init` with
+  `ServicePollForTokenError` (30 s default). Launchers now `export WANDB__SERVICE_WAIT=600`
+  (env `WANDB__X` maps to setting `x_...`, wandb 0.28.2).
+- **40 GB A100-PCIe OOM at validation:** chamfer in `evaluate()` allocates (B,N,N,3) = 12 GiB at
+  batch 16 / 8192 pts; it OOMed with 12.86 GiB reserved-but-unallocated. `train_maize_4m.py` now calls
+  `torch.cuda.empty_cache()` before val and test evaluation (no effect on numbers). Batch-16 training
+  itself needs ~22.4 GiB/GPU, so 40/48 GB cards are otherwise fine.
+- **Scheduling:** `--test-only` does not model backfill and was wrong by days; probe with real jobs
+  that run `hostname`. Blockers found in order: CPUs per node (48 did not fit, 32 did), then memory,
+  then **time limit** (planned nodes only admit jobs that end before the reservation). Pending jobs
+  can be reshaped in place: `scontrol update jobid=J TimeLimit=.. / CpusPerTask + MinCPUsNode + NumCPUs
+  (one per call) / TresPerNode=gres/gpu:<type>:2 / MinMemoryNode=<MB>`; moving to `nova` needs
+  `QOS=normal Account=mech-ai Partition=nova` in ONE call. Alternative GPU types via `Features=a|b`
+  made estimates worse — name one type. `nova` jobs count against `mech-ai`'s 17-GPU cap (shared
+  with labmates; the user chose to put only one run there).
+- The user's standing rules: never `scancel`/kill their jobs (probes that cannot start are shrunk to
+  2 CPU / 1 min so they run and exit instead); act without asking; commit and push to `origin/main`.
 
 **On the two resuming arms.** `e3_1k` and `e4_large` both died at exactly
 `2026-09-19T15:51:27` on `nova26-gpu-2` — same second, same node, no traceback, host RSS far
@@ -225,10 +345,7 @@ not the phenotype** — the size factor lives on PC3 while PC1 carries ~30 % of
 variance on something unidentified (camera view is ruled out, every plant is scored
 on its fixed view 00). That last one is an open question, not a loose end.
 
-**2. No baselines exist (E8), and the plan ranks that the #1 reject risk.**
-Nothing in the repo addresses it, and every baseline is itself a training run
-that has to fit before the Oct 24 freeze, so the *decision* about what to
-compare against is more time-critical than the runs.
+**2. E8 baselines now exist** — see "E8 results" in the handoff section below.
 
 ### On E6 and E7 being run elsewhere
 
@@ -412,6 +529,9 @@ separate** — parallel files, not a species flag on the sorghum ones:
 | `configs/config_e3_*` / `config_e4_*` | `configs/config_maize_e3_*` / `config_maize_e4_*` | ✅ |
 | `eval/linear_probe.py` | `eval/linear_probe_maize.py` | ✅ |
 | `eval/latent_analysis.py` | `eval/latent_analysis_maize.py` | ✅ |
+| `train_sorghum_4m_distill.py` | `train_maize_4m_distill.py` | ✅ built + reviewed, not yet run |
+| `configs/config_4m_distill_15k_all.yaml` | `configs/config_maize_distill_all.yaml` | ✅ |
+| (sorghum distill launchers) | `slurm/distill_maize.sbatch` | ✅ |
 
 **Maize fixes decision 6.4.** Sorghum's four named targets have rank 2 — height
 and leaf count are one variable (r = 0.994) and the biomass proxy is that

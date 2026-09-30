@@ -835,6 +835,13 @@ def train_worker(rank, world_size, args):
         if do_val:
             if is_main: print("\n🔍 Running validation…")
             compute_emd = (epoch == args.epochs)
+            # Release the training step's cached-but-unused blocks first. The
+            # chamfer in evaluate() allocates a (B, N, N, 3) tensor -- 12 GiB at
+            # batch 16 and 8192 points -- and on a 40 GB A100 that OOMed on
+            # 2026-09-30 with 12.86 GiB reserved-but-unallocated sitting in the
+            # cache (job 16645741). No effect on any number.
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             (vl, vr, vd, vp, vt), vm = evaluate(
                 model, val_loader, device, compute_emd=compute_emd,
                 mask_ratio=args.mask_ratio, distributed=(world_size > 1))
@@ -884,6 +891,8 @@ def train_worker(rank, world_size, args):
         if do_test:
             if is_main: print(f"\n🧪 Running TEST-set evaluation (epoch {epoch})…")
             compute_emd_test = (epoch == args.epochs)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()   # same reason as before validation
             # evaluate() runs on ALL ranks (each on its DistributedSampler shard) to
             # keep DDP in lockstep; only rank 0 logs the result.
             (tl, tr_, td_, tp_, tt_), tmet = evaluate(

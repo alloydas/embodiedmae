@@ -1,0 +1,149 @@
+# MAIZE cross-modal distillation — the maize twin of
+# configs/config_4m_distill_15k_all.yaml (run outputs/4m_distill_15k_all).
+#
+# Run with train_maize_4m_distill.py, never train_sorghum_4m_distill.py: maize is
+# 14 params/token over 28 leaf slots (29 text tokens) against sorghum's 9 over 24.
+# Launcher: slurm/distill_maize.sbatch.
+#
+# All-source variant: every modality in turn conditions the student (rest fully
+# masked) and must regenerate all four. Teacher AND student warm-start from the
+# SAME maize checkpoint, as sorghum's did.
+#
+# EVERY distillation / optimisation hyperparameter is the sorghum run's, as
+# recorded in outputs/4m_distill_15k_all/config.json. The only differences are:
+#   num_points 8192, max_leaves 28, data_root  — maize width and location
+#   teacher/student checkpoint                 — the maize E2-matched point
+#   accum_steps 4                              — 16 x 2 GPUs x 4 = 128, the
+#                                                reference's 16 x 8 GPUs x 1
+#                                                (equivalent to its 8-rank DDP
+#                                                arrangement, not to one batch
+#                                                of 128 -- nor was the reference)
+#   save_freq 2 / keep_last 2                  — scavenger is preemptible
+#   teacher_source_mask_ratio 0.5              — THE ONE RECIPE DEPARTURE: the
+#                                                maize teacher sees 50 % of each
+#                                                modality, not every token (see
+#                                                the distill section)
+#
+# STEP BUDGET MATCHES THE REFERENCE EXACTLY. Maize train is 105,000 view folders
+# like sorghum's, and like the sorghum distill run this reads all ten views per
+# epoch (no view_sampling). 105,000 / 2 ranks / 16 = 3,282 micro-batches per rank
+# = 821 optimiser steps per epoch (820 groups of 4 + a 2-micro-batch tail, which
+# steps) — the reference's 821 at accum 1. 100 epochs = 82,100 optimiser steps
+# at global batch 128, and the (epoch, step) -> (mode, source) schedule is the
+# reference's schedule step for step.
+#
+# REPORTING: the maize before -> after is its OWN number, not a like-for-like
+# partner of sorghum's 0.3439 -> 0.2781. The teachers differ ~16x in samples seen
+# (sorghum teacher_final: epoch 960 at global batch 256, all views; maize: 197,400
+# steps at 32 with view sampling), and the maize warm start's src=pc row is
+# inflated by the same full-PC collapse (student pc_chamfer ~0.029 from PC vs
+# ~0.003 from RGB), so part of any gain is repairing that. Report per source.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/Maize
+  img_size: 224
+  num_points: 8192          # a pointcloud_cam.ply holds EXACTLY 8192 points
+  max_plants: null          # smoke tests only; the run uses every train plant
+
+model:
+  # Same model section as configs/config_maize.yaml, i.e. the teacher's own
+  # pretraining regime. The trainer checks these against
+  # outputs/maize_4m/config.json and refuses to start on a mismatch.
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80          # full-recon steps; matches the teacher's regime
+  loss_name: "qal_loss"     # -> constructor kwarg pc_loss_name
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28            # 1 plant token + 28 leaf slots = 29 text tokens
+
+distill:
+  # The E2-matched 197,400-step maize point (600 epochs x 329 steps at global
+  # batch 32) -- the one comparable to sorghum's e2_pcrgbdt / e3_* / e4_*.
+  # NOT best_model.pth (that is epoch 300) and NOT outputs/maize_4m_1000ep
+  # (329,000 steps with a cosine restart in it). expect_init_epoch makes the
+  # trainer refuse any file whose recorded epoch is not 600.
+  teacher_checkpoint: ./outputs/maize_4m/checkpoints/checkpoint_epoch_600.pth
+  student_init:       ./outputs/maize_4m/checkpoints/checkpoint_epoch_600.pth
+  expect_init_epoch: 600
+  crossmodal_prob: 0.8
+  sources: [rgb, depth, pc, text]
+  feat_distill_weight: 1.0
+  cls_distill_weight: 0.5
+  output_distill_weight: 0.0
+  distill_masked_only: true
+  source_mask_ratio: 0.0    # the reference run predates the key; 0.0 is its behaviour
+  viz_source: pc            # hardest source — progress is most visible there
+  # What the frozen teacher sees -- a DECLARED DEPARTURE from sorghum. Sorghum's
+  # teacher saw every token of all four modalities (teacher_visible all four,
+  # teacher_source_mask_ratio 0.0). The maize epoch-600 checkpoint collapses its
+  # decoded point cloud in that regime, because its pretraining never showed it
+  # more than 75 % of the PC tokens (min_mask_ratio 0.25). Teacher PC chamfer on
+  # val plants, CPU, four independent probes over 19 maize / 4 sorghum plants:
+  #                                  maize e600        sorghum teacher_final
+  #   all four, every token          0.053-0.089       0.00048  <- sorghum recipe
+  #   all four, PC 90 % visible      0.0157            0.00045
+  #   all four, PC 75 % visible      0.0022            0.00039
+  #   all four, 50 % of each         0.0009-0.0014     0.00035  <- THIS CONFIG
+  #   [rgb, depth, text]             0.0012-0.0021     0.00062
+  #   own Dirichlet 0.80 masking     0.0008-0.0013     0.00101
+  # 50 % of each is where both teachers do best, and unlike [rgb, depth, text] it
+  # keeps the point cloud among the teacher's privileged inputs, so the teacher
+  # plays the role sorghum's did. Recorded in config.json and every checkpoint's
+  # run_meta; the trainer refuses to resume across a change. The literal sorghum
+  # regime (0.0) is refused unless allow_all_visible_teacher: true.
+  # Does NOT affect the 'before'/'after' metric, which never runs the teacher.
+  teacher_visible: [rgb, depth, pc, text]
+  teacher_source_mask_ratio: 0.5
+  allow_all_visible_teacher: false
+
+training:
+  batch_size: 16            # PER GPU. Keep at 16: PointCloudEmbed's BatchNorm1d is
+                            # not synced across ranks, so the per-GPU batch sets its
+                            # statistics even when the global batch matches.
+  accum_steps: 4            # 16 x 2 GPUs x 4 = 128 = reference 16 x 8 GPUs x 1
+  global_batch: 128         # guard: the trainer refuses any other product
+  epochs: 100
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 5          # LambdaLR over EPOCHS, stepped once per epoch (as sorghum)
+  val_freq: 5
+  val_max_batches: 100      # 1,600 val samples per source (the first 160 plants x
+                            # 10 views, in index order) — same subset rule as sorghum
+  val_at_start: true        # score the warm start at epoch 0 (the 'before' number)
+  eval_seed: 0              # fixed FPS/loader RNG for every val point, epoch 0 included
+
+checkpointing:
+  output_dir: ./outputs/maize_distill_all
+  save_freq: 2              # scavenger is preemptible — keep the resume point close
+                            # (the trainer also saves epoch 1, the first resume point)
+  keep_last: 2              # two periodic checkpoints, so the launcher's walk-down
+                            # always has a fallback; best_model.pth is never pruned
+  resume: null              # the launcher passes --resume on a requeue
+
+visualization:
+  viz_freq: 10
+  num_viz_samples: 6
+
+distributed:
+  world_size: 2             # ignored under torchrun, which infers it from nproc
+  dist_backend: nccl
+  dist_url: env://
+  timeout_min: 60           # rank 0 validates alone while rank 1 waits in NCCL
+
+system:
+  num_workers: 16           # per rank. 48 CPUs = 2 x 16 persistent train workers
+                            # + 8 val workers (rank 0, val epochs only) + 2 x ~4
+                            # main-process threads. The maize loader is ~10x cheaper
+                            # per item than sorghum's, so this is ample headroom.
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_distill_all_100ep
