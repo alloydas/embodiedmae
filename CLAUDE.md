@@ -97,6 +97,26 @@ sbatch --job-name=e2_pcrgbdt_tg100 ... --gres=gpu:l40s:2 --cpus-per-task=32 --me
 Before trusting a finished run, confirm `checkpoints/checkpoint_epoch_600.pth` exists and
 `training_history.json` has 600 train epochs. Chunks that start after epoch 600 are expected to exit fast.
 
+**UPDATE 2026-09-30 ~09:00 — the four unfinished runs move to `nova` (user: "mech-ai is free").**
+Each got a `nova` job (account `mech-ai`, QOS normal, rtx_pro_6000:2, 32 CPU, 2-day limit,
+`--num_workers 14`) that starts when its currently running scavenger chunk ends, and the next
+scavenger chunk of each chain was re-pointed (`scontrol update Dependency=afterany:<nova job>`) so
+the chain waits behind the nova job instead of racing it into the same output dir. If the nova job
+finishes, the leftover scavenger chunks resume at epoch 600 and exit; if it fails, they carry on.
+
+| run | nova job | runs after | scavenger chain now waits on it |
+|---|---|---|---|
+| `e2_pcrgbdt_tg100` | 16669526 | 16645755 | 16645756 -> ... |
+| `e8_supervised` | 16669527 | 16645749 | 16645750 -> ... |
+| `maize_e2_pc` | 16669528 | 16645737 | 16645738 -> ... |
+| `maize_e2_pcrgb` | 16669529 | 16645743 | 16645744 -> ... |
+
+CPU probes are queued behind them (scavenger, `--gres=NONE`, checkpoint_epoch_600, E9 on val):
+16669530 `pm_e2_600` (maize_e2_pc/pcrgb/pcrgbd + maize_4m, after 16669528 and 16669529) and
+16669531 `pr_tg100_600` (the five sorghum control-comparison arms, after 16669526). They use
+`afterany`, so if a run had not reached epoch 600 its probe fails on the missing checkpoint: rerun
+it by hand once the run is done. E8 supervised still needs its `--score_head` pass and a probe by hand.
+
 ### What to do when each finishes
 
 - **Maize E2 arms** (pcrgbd can be probed now): probe + E9 at the matched cut, on CPU:
