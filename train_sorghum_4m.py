@@ -203,6 +203,27 @@ def cleanup_distributed():
         dist.destroy_process_group()
 
 
+# ── Atomic writes ─────────────────────────────────────────────────────────────
+# Write to a hidden temp file in the same dir, then rename. A job killed mid-write
+# leaves the previous file (or none), never a truncated one; a reader racing the
+# write (a probe starting beside a leftover chunk) sees old or new, never empty.
+# The temp name matches no checkpoint_epoch_*.pth glob.
+
+def _atomic_torch_save(obj, path):
+    path = Path(path)
+    tmp = path.with_name(f'.{path.name}.tmp{os.getpid()}')
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
+
+
+def _atomic_json(obj, path):
+    path = Path(path)
+    tmp = path.with_name(f'.{path.name}.tmp{os.getpid()}')
+    with open(tmp, 'w') as f:
+        json.dump(obj, f, indent=4)
+    os.replace(tmp, path)
+
+
 # ── Image / PC helpers ────────────────────────────────────────────────────────
 
 def unpatchify(x, patch_size, channels, img_size):
@@ -683,6 +704,60 @@ def build_model_from_args(args):
     )
 
 
+def _ckpt_epoch(path):
+    """'.../checkpoint_epoch_375.pth' -> 375; None for any other file name."""
+    name = Path(path).name
+    num = name[len('checkpoint_epoch_'):-len('.pth')]
+    if name.startswith('checkpoint_epoch_') and name.endswith('.pth') and num.isdigit():
+        return int(num)
+    return None
+
+
+def _ckpt_opens(path):
+    """True if torch can open the checkpoint. The mmap load reads the zip directory
+    and the pickle, not the tensors; a write killed part-way has no zip directory,
+    so it fails in a second. Full load only for files mmap cannot read."""
+    for mmap in (True, False):
+        try:
+            torch.load(path, map_location='cpu', weights_only=False, mmap=mmap)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def resolve_resume(args):
+    """Walk --resume down to the newest checkpoint_epoch_*.pth that opens.
+
+    e2_arm_blackwell.sbatch passes the highest-numbered checkpoint by name without
+    opening it (the maize and E8 launchers do check). A job killed while torch.save
+    was writing -- before saves went through _atomic_torch_save -- leaves that file
+    truncated, and every later chunk would die at startup on the same file, burning
+    its whole chain. Only a --resume named checkpoint_epoch_N.pth is walked: a
+    warm-start from anywhere else must open or fail as before. If nothing opens,
+    refuse rather than start from scratch into a run's output dir.
+    """
+    if not (args.resume and os.path.exists(args.resume)):
+        return
+    start = Path(args.resume)
+    e0 = _ckpt_epoch(start)
+    if e0 is None or _ckpt_opens(start):
+        return
+    loud = int(os.environ.get('RANK', 0)) == 0
+    if loud: print(f"⚠️  --resume {start.name} does not open (truncated write?)")
+    older = sorted((p for p in start.parent.glob('checkpoint_epoch_*.pth')
+                    if _ckpt_epoch(p) is not None and _ckpt_epoch(p) < e0),
+                   key=_ckpt_epoch, reverse=True)
+    for p in older:
+        if _ckpt_opens(p):
+            if loud: print(f"📂 Falling back to {p.name}")
+            args.resume = str(p)
+            return
+        if loud: print(f"⚠️  {p.name} does not open either")
+    raise RuntimeError(f"--resume {args.resume}: no checkpoint in {start.parent} opens; "
+                       f"refusing to start from scratch into a run's output dir")
+
+
 def check_resume_text_mask_ratio(args):
     """Refuse a resume whose checkpoint was trained under different text masking.
 
@@ -724,8 +799,7 @@ def train_worker(rank, world_size, args):
         viz_dir.mkdir(exist_ok=True)
         test_viz_dir.mkdir(exist_ok=True)
         checkpoint_dir.mkdir(exist_ok=True)
-        with open(output_dir / 'config.json', 'w') as f:
-            json.dump(vars(args), f, indent=4)
+        _atomic_json(vars(args), output_dir / 'config.json')
 
     if is_main: print(f"\nLoading data from: {args.data_root}")
 
@@ -977,7 +1051,7 @@ def train_worker(rank, world_size, args):
 
         if is_main and epoch % args.save_freq == 0:
             ms = (model.module if world_size > 1 else model).state_dict()
-            torch.save({
+            _atomic_torch_save({
                 'epoch': epoch, 'model_state_dict': ms,
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -992,7 +1066,7 @@ def train_worker(rank, world_size, args):
         if is_main and do_val and vl < best_val_loss:
             best_val_loss = vl
             ms = (model.module if world_size > 1 else model).state_dict()
-            torch.save({
+            _atomic_torch_save({
                 'epoch': epoch, 'model_state_dict': ms,
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -1005,8 +1079,7 @@ def train_worker(rank, world_size, args):
             print(f"⭐ New best model! Val Loss: {vl:.4f}")
 
         if is_main:
-            with open(output_dir / 'training_history.json', 'w') as f:
-                json.dump(history, f, indent=4)
+            _atomic_json(history, output_dir / 'training_history.json')
 
     if world_size > 1:
         cleanup_distributed()
@@ -1095,6 +1168,7 @@ def main():
         }
         cfg = config_to_namespace(merge_config_with_args(default_cfg, args))
 
+    resolve_resume(cfg)
     check_resume_text_mask_ratio(cfg)
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))

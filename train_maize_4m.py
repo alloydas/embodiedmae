@@ -189,6 +189,27 @@ def cleanup_distributed():
         dist.destroy_process_group()
 
 
+# ── Atomic writes ─────────────────────────────────────────────────────────────
+# Write to a hidden temp file in the same dir, then rename. A job killed mid-write
+# leaves the previous file (or none), never a truncated one; a reader racing the
+# write (a probe starting beside a leftover chunk) sees old or new, never empty.
+# The temp name matches no checkpoint_epoch_*.pth glob.
+
+def _atomic_torch_save(obj, path):
+    path = Path(path)
+    tmp = path.with_name(f'.{path.name}.tmp{os.getpid()}')
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
+
+
+def _atomic_json(obj, path):
+    path = Path(path)
+    tmp = path.with_name(f'.{path.name}.tmp{os.getpid()}')
+    with open(tmp, 'w') as f:
+        json.dump(obj, f, indent=4)
+    os.replace(tmp, path)
+
+
 # ── Image / PC helpers ────────────────────────────────────────────────────────
 
 def unpatchify(x, patch_size, channels, img_size):
@@ -660,8 +681,7 @@ def train_worker(rank, world_size, args):
         viz_dir.mkdir(exist_ok=True)
         test_viz_dir.mkdir(exist_ok=True)
         checkpoint_dir.mkdir(exist_ok=True)
-        with open(output_dir / 'config.json', 'w') as f:
-            json.dump(vars(args), f, indent=4)
+        _atomic_json(vars(args), output_dir / 'config.json')
 
     if is_main: print(f"\nLoading data from: {args.data_root}")
 
@@ -933,7 +953,7 @@ def train_worker(rank, world_size, args):
 
         if is_main and epoch % args.save_freq == 0:
             ms = (model.module if world_size > 1 else model).state_dict()
-            torch.save({
+            _atomic_torch_save({
                 'epoch': epoch, 'model_state_dict': ms,
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -947,7 +967,7 @@ def train_worker(rank, world_size, args):
         if is_main and do_val and vl < best_val_loss:
             best_val_loss = vl
             ms = (model.module if world_size > 1 else model).state_dict()
-            torch.save({
+            _atomic_torch_save({
                 'epoch': epoch, 'model_state_dict': ms,
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
@@ -959,8 +979,7 @@ def train_worker(rank, world_size, args):
             print(f"⭐ New best model! Val Loss: {vl:.4f}")
 
         if is_main:
-            with open(output_dir / 'training_history.json', 'w') as f:
-                json.dump(history, f, indent=4)
+            _atomic_json(history, output_dir / 'training_history.json')
 
     if world_size > 1:
         cleanup_distributed()
