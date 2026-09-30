@@ -80,7 +80,14 @@ nvidia-smi -L || true
 # on a silent subset and the 821-steps/epoch budget would stop matching the
 # sorghum reference -- the thing this run exists to hold fixed.
 for split in train val; do
-  n=$(ls "/work/mech-ai-scratch/alloy/Maize/${split}" 2>/dev/null | grep -c '^plant_' || true)
+  # Count folders from the directory's link count (subdirectories + 2), not by
+  # listing it -- same guard as slurm/scale_arm_maize.sbatch. /work is NFS: on
+  # 2026-09-29 an `ls` of the 105,000-entry train split sat in uninterruptible NFS
+  # wait for 45+ min while `stat` on the same directory returned in 0.2 s. The split
+  # roots hold only plant_* folders plus _params.json, a file, which adds no link --
+  # so links - 2 is the view-folder count exactly (train 105002 -> 105000).
+  links=$(stat -c %h "/work/mech-ai-scratch/alloy/Maize/${split}" 2>/dev/null || echo 2)
+  n=$(( links - 2 ))
   case "${split}" in
     train) want=105000 ;;
     val)   want=22500  ;;
@@ -98,6 +105,11 @@ export OMP_NUM_THREADS=4
 export NCCL_DEBUG=WARN
 # Unbuffered: a preempted job otherwise logs nothing at all.
 export PYTHONUNBUFFERED=1
+# wandb.init starts a wandb-core server and waits x_service_wait (30 s by
+# default) for it. With /work (NFS) slow, loading that binary from the conda env
+# took longer, and on 2026-09-29 all five running jobs died at wandb.init with
+# ServicePollForTokenError before their first step. Allow 10 minutes.
+export WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-600}"
 
 # Newest checkpoint that actually opens: a preemption can leave the last one
 # truncated (the trainer writes temp + os.replace, but a file from any other
