@@ -50,6 +50,12 @@ from maize_dataset_4m import MaizeDataset4M
 
 MODALITY_ORDER = ('rgb', 'depth', 'pc', 'text')
 
+# The frame point clouds are fed in. train_maize_4m_gravity.py sets 'gravity'
+# before calling main(). A config whose data.pc_frame disagrees is refused, so a
+# levelled-cloud config cannot silently train camera-frame clouds through this
+# entry point (config_to_namespace would otherwise drop the key unread).
+PC_FRAME = 'camera'
+
 # Metrics evaluate() may return, as (metric key, val-history key, test-history key,
 # format). A key is ABSENT -- not zero -- when its modality is inactive, so that a
 # reduced E2 arm never records 0.0 for a modality it does not model (a 0.0 there
@@ -1045,7 +1051,14 @@ def main():
 
     if os.path.exists(args.config):
         print(f"📋 Loading config: {args.config}")
-        cfg = config_to_namespace(merge_config_with_args(load_config(args.config), args))
+        raw = load_config(args.config)
+        frame = (raw.get('data') or {}).get('pc_frame', 'camera')
+        if frame != PC_FRAME:
+            raise SystemExit(
+                f"{args.config} sets data.pc_frame: {frame}, but this entry point feeds "
+                f"{PC_FRAME}-frame point clouds. pc_frame: gravity runs through "
+                f"train_maize_4m_gravity.py.")
+        cfg = config_to_namespace(merge_config_with_args(raw, args))
     else:
         # No silent fallback. Sorghum's entry point has a built-in default config
         # here; copying it to maize would mean a typo'd --config path quietly

@@ -86,6 +86,14 @@ CONFIG="configs/config_${SLUG}.yaml"
 [ -f "${CONFIG}" ] || { echo "no such config: ${CONFIG}"; exit 2; }
 CKPT_DIR="./outputs/${SLUG}/checkpoints"
 
+# A config with data.pc_frame: gravity (levelled clouds) runs through
+# train_maize_4m_gravity.py; train_maize_4m.py refuses it rather than silently
+# training camera-frame clouds into that run's directory.
+TRAINER=train_maize_4m.py
+if grep -qE '^[[:space:]]*pc_frame:[[:space:]]*gravity' "${CONFIG}"; then
+  TRAINER=train_maize_4m_gravity.py
+fi
+
 source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh
 
 # Pick the env from the GPU we land on rather than pinning the gres: `det` is a
@@ -106,6 +114,7 @@ conda activate "${CONDA_ENV}"
 echo "JobID   : ${SLURM_JOB_ID:-none}"
 echo "Slug    : ${SLUG}"
 echo "Config  : ${CONFIG}"
+echo "Trainer : ${TRAINER}"
 echo "Node    : $(hostname)"
 echo "GPU     : ${GPU_NAME}"
 echo "Env     : ${CONDA_ENV}"
@@ -185,7 +194,7 @@ fi
 
 srun --kill-on-bad-exit=1 \
   torchrun --standalone --nnodes=1 --nproc_per_node=${NPROC} \
-    train_maize_4m.py --config "${CONFIG}" --batch_size 16 --num_workers 38 \
+    "${TRAINER}" --config "${CONFIG}" --batch_size 16 --num_workers 38 \
     ${RESUME_ARG} "$@"
 
 echo "Done at $(date)"

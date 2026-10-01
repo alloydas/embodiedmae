@@ -173,6 +173,9 @@ REGISTRY = {
     'maize_e2_pc_gravity':     'maize_e2_pc_gravity',
     'maize_e2_pcrgbd_gravity': 'maize_e2_pcrgbd_gravity',
     'maize_4m_gravity':        'maize_4m_gravity',
+    # Our PC+RGB+depth arm PRETRAINED on levelled clouds (train_maize_4m_gravity.py),
+    # probed on them: its own training distribution, partner of pointmae_gravity.
+    'maize_e2_pcrgbd_levelled': 'maize_e2_pcrgbd_levelled',
 }
 NAMES = tuple(REGISTRY)
 
