@@ -161,6 +161,11 @@ REGISTRY = {
     'dinov2_vitb14':    'dinov2_vitb14',     # DINOv2 ViT-B/14, RGB
     'pointmae':         'pointmae',          # official Point-MAE ShapeNet, PC
     'pointmae_upright': 'pointmae_upright',  # SENSITIVITY row: + per-view camera pose
+    # SENSITIVITY rows, maize only: our own frozen arms given the same per-view pose,
+    # the like-for-like partners of pointmae_upright (eval/baselines/_arm_upright.py)
+    'maize_e2_pc_upright':     'maize_e2_pc_upright',
+    'maize_e2_pcrgbd_upright': 'maize_e2_pcrgbd_upright',
+    'maize_4m_upright':        'maize_4m_upright',
 }
 NAMES = tuple(REGISTRY)
 

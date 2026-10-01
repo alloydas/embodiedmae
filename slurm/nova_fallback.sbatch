@@ -49,7 +49,11 @@
 #      and only then release the hold. NOVA is kept, not cancelled: at the tail
 #      it resumes from the newest checkpoint, so it exits at once if the chain
 #      finished and carries on if the chain ran dry.
-#   5. swap NOVA for the tail in PROBE's dependency list.
+#   5. swap NOVA for the tail in PROBE's dependency list. Trade-off (review
+#      2026-09-30): keeping NOVA in it would stall the probe behind a nova job
+#      that may pend on AssocGrpGRES only to exit at once. But if the chain runs
+#      dry before epoch 600, NOVA carries on while the probe starts when the tail
+#      ends and fails on the missing checkpoint: rerun it by hand after NOVA.
 # Failure policy: before NEXT is touched, a problem releases NOVA only if NEXT
 # still waits on it (the original, safe chain); after NEXT is touched, NOVA
 # stays HELD and the script exits 1. A held job shows as JobHeldUser in squeue
@@ -234,6 +238,8 @@ if [ -n "${PROBE}" ] && [ "$(state "${PROBE}")" = PENDING ]; then
   ids="$(grep -oE '[0-9]{5,}' <<<"${pd}" | sed "s/^${NOVA}\$/${REAL_TAIL}/" | sort -u | paste -sd: -)"
   if [ -n "${ids}" ] && scontrol update jobid="${PROBE}" Dependency="afterany:${ids}"; then
     log "PROBE ${PROBE}: ${pd} -> $(deps "${PROBE}")"
+    log "   if the chain runs dry before epoch 600, NOVA trains on and PROBE fails on the" \
+        "missing checkpoint: rerun PROBE by hand once NOVA is done"
   else
     log "!! PROBE ${PROBE} dependency not updated (was ${pd:-none})"
   fi
