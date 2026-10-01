@@ -43,25 +43,26 @@ experiments have been *built*, which is durable. For live progress use
 | | experiment | state | runs |
 |---|---|---|---|
 | E1 | headline pretrain | **done** | `4m_pretrain_15k_v2_depthfix_qal`, 1000/1000 ep, global batch 256 |
-| E2 | modality value-add | **done, both species** (tg100 probe pending) | sorghum: all four arms 600/600, results in `reports/RESULTS_DECK_2026-09-20.md`; control arms `e2_pcrgbdt_tg` / `tg40` done and probed; `e2_pcrgbdt_tg100` (text as target only) trained, probe pending. maize: all four arms ✅ 600/600 and probed (2026-09-30, `reports/probe_pm_e2_600_16669530.csv`): PC+RGB(+D) beat `maize_4m` on 10/11 — see the handoff section below. `e2_pcrgbdt_tg100` ✅ 600/600, probe pending. Partial-cloud (1 vs 3 cameras) evaluation of the sorghum arms ✅ (2026-09-30) |
+| E2 | modality value-add | **done, both species** | sorghum: all four arms 600/600, results in `reports/RESULTS_DECK_2026-09-20.md`; control arms `e2_pcrgbdt_tg` / `tg40` / `tg100` done and probed (tg100 = text as target only, probe 16686383, 2026-10-01: still below PC+RGB+depth on every learnable target). maize: all four arms ✅ 600/600 and probed (2026-09-30, `reports/probe_pm_e2_600_16669530.csv`): PC+RGB(+D) beat `maize_4m` on 10/11 — see the handoff section below. Partial-cloud (1 vs 3 cameras) evaluation of the sorghum arms ✅ (2026-09-30) |
 | E3 | data scaling | **done, both species** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize (Nova, jobs 16576132-4, `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`): `maize_e3_1k` ✅ 6169/6169 (2026-09-24), `maize_e3_10k` ✅ 631/631 (2026-09-24), `maize_e3_3k` ✅ 2100/2100 (2026-09-25; last checkpoint 2024). Full-data point is `maize_4m` epoch 600. Probed + E9: `reports/probe_p{r,m}_{6168,2024,624}_*` |
 | E4 | model scaling | **done, both species** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize (Nova, jobs 16576135-6, same launcher): `maize_e4_small` ✅ 600/600 (2026-09-24), `maize_e4_large` ✅ 600/600 (2026-09-25). The base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00). Probed + E9: `reports/probe_p{r,m}_600*_*` |
 | E5 | view regime | **not built** | — |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
-| E8 | baselines | **done (supervised row sorghum only)** | `eval/baseline_probe.py` + `eval/baselines/*`: EmbodiedMAE-B, MultiMAE-B, DINOv2 ViT-B/14, Point-MAE, Point-MAE + camera pose, random init, both species, `reports/probe_e8_*`. Supervised-from-scratch row (`train_supervised_4m.py`, `outputs/e8_supervised`) ✅ 600/600 (2026-09-30), scored in `reports/probe_e8_score_16676974_*`, paired deltas in `reports/e8_supervised_delta_16676974.csv` (`eval/probe_pair_bootstrap.py`) |
-| E9 | latent analysis | **built; E2/E3/E4 arms done** | `eval/latent_analysis.py` / `_maize.py`. Sorghum E2/E3/E4 and maize E3/E4 arms on train/val/test (`reports/e9_pr_*`, `reports/e9_pm_*`); sorghum control arms on val (`reports/e9_pr_tg_*`). Maize E2 arms done (`reports/e9_pm_e2_600_16669530/`); `e2_pcrgbdt_tg100` with its probe |
+| E8 | baselines | **done (supervised row sorghum only)** | `eval/baseline_probe.py` + `eval/baselines/*`: EmbodiedMAE-B, MultiMAE-B, DINOv2 ViT-B/14, Point-MAE, Point-MAE + camera pose, random init, both species, `reports/probe_e8_*`. Supervised-from-scratch row (`train_supervised_4m.py`, `outputs/e8_supervised`) ✅ 600/600 (2026-09-30), scored in `reports/probe_e8_score_16676974_*`, paired deltas in `reports/e8_supervised_delta_16676974.csv` (`eval/probe_pair_bootstrap.py`). Maize camera-pose rows (2026-10-01): gravity-only (`*_gravity`, 16686506) and full pose (`*_upright`, 16684794), CIs in `reports/maize_{gravity,upright}_delta_*.csv`; arm pretrained on levelled clouds `maize_e2_pcrgbd_levelled` training (chain 16687759-64) |
+| E9 | latent analysis | **built; E2/E3/E4 arms done** | `eval/latent_analysis.py` / `_maize.py`. Sorghum E2/E3/E4 and maize E3/E4 arms on train/val/test (`reports/e9_pr_*`, `reports/e9_pm_*`); sorghum control arms on val (`reports/e9_pr_tg_*`). Maize E2 arms done (`reports/e9_pm_e2_600_16669530/`); `e2_pcrgbdt_tg100` done (`reports/e9_pr_tg100_600_16686383/`) |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
 
-## HANDOFF — live state as of 2026-09-30 16:00 (read this first after a restart)
+## HANDOFF — live state as of 2026-10-01 14:30 (read this first after a restart)
 
 Everything below was true at the time written; check `squeue -u $USER` and each run's
 `outputs/<run>/checkpoints/` before acting. The results page is the private artifact
-https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw ("Sorghum 4M Progress Review", v26). To update it
+https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw ("Sorghum 4M Progress Review", v27). To update it
 from a new session: `Artifact read` that URL, edit the saved copy, then publish with `url` set to it.
 Its sections: sorghum headline/params/views/E2/E3·E4/6.4 probe, `#control` (token-budget control
 arms), sorghum E9, `#maize` (everything for maize; `#maize-e2` is the maize E2 table), `#e8`
-(baselines; `#e8-sup` is the supervised row), `#pcview` (1 camera vs 3 cameras), agenda.
+(baselines; `#e8-sup` is the supervised row, `#e8-pose` the maize camera-pose rows), `#pcview` (1 camera vs 3
+cameras), agenda.
 
 ### Training jobs in flight — all run as chained 4-hour chunks on `scavenger`
 
@@ -231,6 +232,71 @@ it by hand once the run is done. E8 supervised still needs its `--score_head` pa
   orientation anyway. No gain says nothing about an arm pretrained on upright clouds, which
   is the next step if this one is ambiguous.
 
+**UPDATE 2026-10-01 ~14:30 — tg100 answered; the maize pose lead is mostly a generator artefact;
+a levelled-cloud arm is training.** Page v27. Code: b30348b, 46fc650.
+
+- **tg100 (parameters as a target only).** Probe 16669531 died at 21:12 on `OSError: [Errno 116]
+  Stale file handle` (NFS), 40 min into extracting tg100's train split. All four extraction
+  loops now go through `_RetryTransientIO` (`eval/linear_probe*.py`, also used by
+  `baseline_probe.py` and `pc_view_eval.py`): an ESTALE/EIO item is retried in the worker with the
+  RNG state restored, so point subsets match a failure-free run. Rerun 16686383 (CPU, 52 min) ->
+  `reports/probe_pr_tg100_600_16686383.csv`, E9 `reports/e9_pr_tg100_600_16686383/`, paired CIs
+  `reports/control_delta_16686383.csv` and `control_delta_vs_tg_16686383.csv`. Val R²: height 0.970,
+  leaf count 0.973, roll 0.737, leaf length 0.259 (PC+RGB+depth 0.981 / 0.984 / 0.806 / 0.362).
+  Against PC+RGB+depth it loses every learnable target on both splits: size −0.011, branch angle
+  −0.028 / −0.016, roll −0.069 / −0.077, leaf length −0.102 / −0.097. So the reconstruction target
+  hurts the latent too, not only the input. Against the arm as trained: size +0.005, roll −0.06.
+  Against tg (20 % visible): size +0.012 to +0.014, roll −0.027 / −0.031, so the visibility trend
+  is clean on size only. E9: the most size-dominated latent of the five (PC1 43 %, |r| 0.95 with
+  leaf count; participation ratio 4.6). The sorghum leaf tokens carry per-leaf length and roll,
+  the two targets lost most. Roll is encoded linearly although it is circular: an untested
+  candidate cause.
+- **Full-pose rows (16684794; CIs 16686395 -> `reports/maize_upright_delta_16684794.csv`).** Our
+  frozen arms given cameraToWorld-rotated clouds. The fused arms lose 7 of 11 against their own
+  camera-frame rows (CLS) and win only twist and curl. PC-only gains 6 and loses stem radius. All still lose 9 to 10 of
+  11 to `pointmae_upright`. `maize_4m` against `pointmae_upright` reproduces the E8 numbers
+  exactly (test height −0.115, curl −0.278, ...).
+- **The full pose leaks the plant's azimuth.** In the maize renderer's world frame (y up), every
+  plant's leaf plane is the same world plane: axial resultant 0.993 over 194 val plants, view 00.
+  The generator places leaf i at 180 i + U(−15, 15) degrees with no per-plant yaw. Camera azimuths
+  span the full circle, and elevations run −86 to +86 degrees. So `pointmae_upright` got gravity
+  plus a canonical plant orientation, which no rig has. Each view's cloud is the same surface,
+  resampled per view (NN 2.9e-3 against 2.1e-3 spacing).
+- **Gravity-only rows (16686506; CIs 16687493 -> `reports/maize_gravity_delta_16686506.csv`).**
+  `eval/baselines/_gravity.py` applies cameraToWorld and then the yaw that puts the camera back at
+  azimuth 0: a level camera at its own azimuth (resultant 0.114). Rows: `pointmae_gravity`,
+  `maize_{e2_pc,e2_pcrgbd,4m}_gravity`. Point-MAE val R², camera -> gravity -> full: height
+  0.509 -> 0.588 -> 0.714, curl 0.199 -> 0.309 -> 0.417. Gravity helps 10 of 11; the azimuth adds a
+  significant gain on all 11 on top. **Against Point-MAE + gravity, camera-frame PC+RGB+depth
+  (no pose) wins 5** (test: height +0.046, biomass +0.040, twist +0.046, width +0.055, stem radius
+  +0.232) **and loses 4** (leaf angle −0.021, leaf count −0.027, curl −0.181, tassel droop −0.210);
+  droop and leaf length tie. `maize_4m` wins 4 and loses 5. Our frozen fused arms gain nothing
+  from levelled clouds (PC+RGB+depth 0 wins and 5 losses; `maize_4m` 1 and 6). PC-only gains 5
+  with no losses. Camera-frame mean-pooled features for maize_e2_pc and maize_e2_pcrgbd: 16686725
+  -> `reports/probe_pm_e2_mean600_16686725.csv`. `eval/probe_pair_bootstrap.py` now reads E8
+  caches by `base:<name>`. The upright caches' fingerprints were checked unchanged.
+- **Decision (delegated): pretrain a levelled arm.** `maize_e2_pcrgbd_levelled` is
+  `maize_e2_pcrgbd` with every cloud levelled as in the gravity rows: same seeds, views and point
+  permutations (the rotation draws no RNG), 197,400 steps. `train_maize_4m_gravity.py`
+  installs a dataset subclass into `train_maize_4m` rather than editing `maize_dataset_4m.py`,
+  which the running distillation re-imports at every requeue. `train_maize_4m.py` only gained a
+  `PC_FRAME` guard (a config's `data.pc_frame` must match the entry point). The launcher picks the
+  trainer from `pc_frame`. Probe row `maize_e2_pcrgbd_levelled` asserts `config.json` records
+  gravity. Chain **16687759** -> 16687760 -> ... -> **16687764** (6 x 4 h, scavenger, 2x L40S, 32
+  CPU, 160G, `--num_workers 14`, `MAIZE_CONDA_ENV=det_cu128`; the per-chunk rate is unmeasured
+  until the first chunk runs, so check that six chunks reach 600). It went to
+  scavenger because labmates had pending jobs under the 17-GPU cap. Extend with
+  `--dependency=afterany:<last ID>`. A full-pose arm is deliberately not trained: its extra gain
+  is the generator's azimuth.
+- **Distillation 16684364**: epoch 47 of 100 at 11:30, ~19.5 min per epoch, requeueing cleanly
+  every ~3 h 50 m (Restarts=3 at 08:00). Expected to finish early on 2 Oct. Val mean_gen has been
+  flat at ~0.297 since epoch 10. Per source, epoch 45 against epoch 0:
+  - src=pc: chamfer 0.052 -> 0.0021, collapse repaired; param MAE −13 %;
+  - src=rgb / src=depth: chamfer −39 / −41 %, param MAE −6 %;
+  - src=text: chamfer 0.033 -> 0.012.
+
+  Train loss keeps falling (0.292 -> 0.229).
+
 ### What to do when each finishes
 
 - **Maize E2 arms**: done, all four probed (19:50 update) and on the page as `#maize-e2`.
@@ -239,11 +305,16 @@ it by hand once the run is done. E8 supervised still needs its `--score_head` pa
   warm start's full-PC collapse (smoke: src=pc pc_chamfer 0.056 vs 0.0019 from RGB). If it ends
   TIMEOUT without requeueing, re-run `sbatch --partition=nova --account=mech-ai --qos=normal --gres=gpu:rtx_pro_6000:2 --cpus-per-task=48 --mem=160G --time=2-00:00:00 slurm/distill_maize.sbatch`
   (auto-resume).
-- **`e2_pcrgbdt_tg100`**: probe at `checkpoint_epoch_600.pth` with the other control arms
-  (`slurm/linear_probe.sbatch e2_pcrgbd e2_pcrgbdt e2_pcrgbdt_tg e2_pcrgbdt_tg40 e2_pcrgbdt_tg100`), then add
-  its row to the page's `#control` table. It answers "parameters as a target only, never an input":
-  if it matches PC+RGB+depth (height 0.981, roll 0.806, leaf length 0.362) the stream helps as
-  supervision; if it still loses, the reconstruction target itself hurts the latent.
+- **`e2_pcrgbdt_tg100`**: done and on the page (`#control` row, see the 2026-10-01 update): the
+  reconstruction target itself hurts the latent.
+- **`maize_e2_pcrgbd_levelled`** (chain 16687759-64, 6 x 4 h scavenger, 2x L40S): before trusting
+  it, confirm `checkpoint_epoch_600.pth` exists and `config.json` records `"pc_frame": "gravity"`.
+  If the chain runs dry, extend it after its last ID with the same line as below. Probe it with
+  `sbatch --job-name=e8_lvl_maize slurm/baseline_probe.sbatch maize maize_e2_pcrgbd_levelled`
+  (NOT eval/linear_probe_maize.py, which would feed it camera-frame clouds), then pair it with
+  `eval/probe_pair_bootstrap.py --species maize --feature mean --a base:maize_e2_pcrgbd_levelled
+  --b base:pointmae_gravity` and `--b maize_e2_pcrgbd` (its camera-frame twin), and add it to
+  the page's `#e8-pose` table.
 - **`e8_supervised`**: done and on the page (`#e8-sup`, see the 16:00 update). A maize supervised
   row does not exist; it would need a maize port of `train_supervised_4m.py`.
 
@@ -324,8 +395,10 @@ plants, 2,000 resamples; "win" = 95% CI excludes 0 on BOTH val and test.
   EmbodiedMAE-design encoder is < 0). **Camera-pose sensitivity:** Point-MAE given each view's
   camera pose (gravity-aligned clouds, which our arms never get) beats `maize_4m` on 8/11 (height −0.115,
   leaf angle −0.080, leaf count −0.056, curl −0.278 ...); we keep twist (+0.020) and stem radius
-  (+0.241). Orientation alone lifts Point-MAE's height 0.509→0.714. Open decision: give our model
-  gravity-aligned clouds before the Oct 24 freeze, or expect reviewers to run this comparison.
+  (+0.241). Orientation alone lifts Point-MAE's height 0.509→0.714. **But that full rotation also hands
+  over the generator's fixed plant azimuth** (see the 2026-10-01 update): with gravity only,
+  PC+RGB+depth wins 5 and loses 4 against Point-MAE. Decision taken 2026-10-01: an arm
+  pretrained on levelled clouds (`maize_e2_pcrgbd_levelled`) is training.
 - Sorghum `pointmae_upright` is bitwise identical to `pointmae` (every sorghum view 00 is one camera).
 - Analysis artefacts (refit script, per-plant predictions, e8_tables.json) lived in the old session's
   scratchpad and may be gone; everything needed to recompute is in `reports/probe_e8_*.csv` + the
