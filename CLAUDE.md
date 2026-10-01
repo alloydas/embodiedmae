@@ -57,7 +57,7 @@ experiments have been *built*, which is durable. For live progress use
 
 Everything below was true at the time written; check `squeue -u $USER` and each run's
 `outputs/<run>/checkpoints/` before acting. The results page is the private artifact
-https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw ("Sorghum 4M Progress Review", v27). To update it
+https://claude.ai/artifact/A6nkyfGFfnpy31dq9AdYWw ("Sorghum 4M Progress Review", v28). To update it
 from a new session: `Artifact read` that URL, edit the saved copy, then publish with `url` set to it.
 Its sections: sorghum headline/params/views/E2/E3·E4/6.4 probe, `#control` (token-budget control
 arms), sorghum E9, `#maize` (everything for maize; `#maize-e2` is the maize E2 table), `#e8`
@@ -233,7 +233,7 @@ it by hand once the run is done. E8 supervised still needs its `--score_head` pa
   is the next step if this one is ambiguous.
 
 **UPDATE 2026-10-01 ~14:30 — tg100 answered; the maize pose lead is mostly a generator artefact;
-a levelled-cloud arm is training.** Page v27. Code: b30348b, 46fc650.
+a levelled-cloud arm is training.** Page v28. Code: b30348b, 46fc650.
 
 - **tg100 (parameters as a target only).** Probe 16669531 died at 21:12 on `OSError: [Errno 116]
   Stale file handle` (NFS), 40 min into extracting tg100's train split. All four extraction
@@ -282,11 +282,13 @@ a levelled-cloud arm is training.** Page v27. Code: b30348b, 46fc650.
   which the running distillation re-imports at every requeue. `train_maize_4m.py` only gained a
   `PC_FRAME` guard (a config's `data.pc_frame` must match the entry point). The launcher picks the
   trainer from `pc_frame`. Probe row `maize_e2_pcrgbd_levelled` asserts `config.json` records
-  gravity. Chain **16687759** -> 16687760 -> ... -> **16687764** (6 x 4 h, scavenger, 2x L40S, 32
-  CPU, 160G, `--num_workers 14`, `MAIZE_CONDA_ENV=det_cu128`; the per-chunk rate is unmeasured
-  until the first chunk runs, so check that six chunks reach 600). It went to
-  scavenger because labmates had pending jobs under the 17-GPU cap. Extend with
-  `--dependency=afterany:<last ID>`. A full-pose arm is deliberately not trained: its extra gain
+  gravity. Chain **16687759** -> 16687760 -> ... -> **16687764** (6 x 4 h, `afterany`, 32 CPU,
+  `--num_workers 14`, `MAIZE_CONDA_ENV=det_cu128`). Submitted to scavenger 2x L40S, then moved in
+  place at 13:45 to **nova, 2x RTX PRO 6000, 128G** (`scontrol update` Partition/QOS/Account,
+  TresPerNode, MinMemoryNode; dependencies verified intact). The L40S nodes were reserved, and
+  labmates' pending jobs were waiting on Priority/Resources, not the 17-GPU cap (13 -> 15 of 17).
+  `maize_e2_pcrgbd` took 16 h 46 m on this shape, so about 4.2 chunks; check that six reach 600.
+  Extend with `--dependency=afterany:<last ID>`. A full-pose arm is deliberately not trained: its extra gain
   is the generator's azimuth.
 - **Distillation 16684364**: epoch 47 of 100 at 11:30, ~19.5 min per epoch, requeueing cleanly
   every ~3 h 50 m (Restarts=3 at 08:00). Expected to finish early on 2 Oct. Val mean_gen has been
@@ -307,7 +309,7 @@ a levelled-cloud arm is training.** Page v27. Code: b30348b, 46fc650.
   (auto-resume).
 - **`e2_pcrgbdt_tg100`**: done and on the page (`#control` row, see the 2026-10-01 update): the
   reconstruction target itself hurts the latent.
-- **`maize_e2_pcrgbd_levelled`** (chain 16687759-64, 6 x 4 h scavenger, 2x L40S): before trusting
+- **`maize_e2_pcrgbd_levelled`** (chain 16687759-64, 6 x 4 h on nova, 2x RTX PRO 6000): before trusting
   it, confirm `checkpoint_epoch_600.pth` exists and `config.json` records `"pc_frame": "gravity"`.
   If the chain runs dry, extend it after its last ID with the same line as below. Probe it with
   `sbatch --job-name=e8_lvl_maize slurm/baseline_probe.sbatch maize maize_e2_pcrgbd_levelled`
