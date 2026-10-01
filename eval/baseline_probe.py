@@ -259,8 +259,8 @@ def extract_split(mod, model, sp, data_root, split, features, batch_size,
     if max_plants is not None and max_plants < len(ds):
         ds = Subset(ds, range(max_plants))
     loader = DataLoader(
-        ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
-        pin_memory=True, drop_last=False,
+        sp.probe._RetryTransientIO(ds), batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=True, drop_last=False,
         persistent_workers=False,   # same rule as the training loaders
         worker_init_fn=sp.probe._worker_init,
     )

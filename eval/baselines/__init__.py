@@ -166,6 +166,13 @@ REGISTRY = {
     'maize_e2_pc_upright':     'maize_e2_pc_upright',
     'maize_e2_pcrgbd_upright': 'maize_e2_pcrgbd_upright',
     'maize_4m_upright':        'maize_4m_upright',
+    # SENSITIVITY rows, maize only: up axis known, plant azimuth as the camera saw
+    # it. cameraToWorld also hands over the renderer's canonical plant azimuth;
+    # these do not (eval/baselines/_gravity.py). The realistic pose rows.
+    'pointmae_gravity':        'pointmae_gravity',
+    'maize_e2_pc_gravity':     'maize_e2_pc_gravity',
+    'maize_e2_pcrgbd_gravity': 'maize_e2_pcrgbd_gravity',
+    'maize_4m_gravity':        'maize_4m_gravity',
 }
 NAMES = tuple(REGISTRY)
 

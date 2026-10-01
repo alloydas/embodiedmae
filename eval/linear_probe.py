@@ -64,8 +64,10 @@ import pathlib as _pathlib
 _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
 
 import argparse
+import errno
 import json
 import os
+import random
 import time
 from pathlib import Path
 
@@ -199,6 +201,39 @@ def _worker_init(worker_id):
     np.random.seed(seed)
 
 
+# NFS (novastor010) sometimes fails a read that a retry serves. Job 16669531 died
+# at train 9632/10500 on `OSError: [Errno 116] Stale file handle` inside a spline
+# read, 40 min into an extraction, and an exception in one worker ends the whole
+# loop. So each item is retried in the worker. The RNG state is restored before
+# every attempt: the PLY subsample draws from np.random (rule 5), and a retry that
+# consumed extra draws would hand every later item of that worker another cloud.
+_TRANSIENT_ERRNO = (errno.ESTALE, errno.EIO)
+
+
+class _RetryTransientIO(torch.utils.data.Dataset):
+    def __init__(self, ds, tries=5, wait=10.0):
+        self.ds, self.tries, self.wait = ds, tries, wait
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, i):
+        for t in range(self.tries):
+            state = random.getstate(), np.random.get_state(), torch.get_rng_state()
+            try:
+                return self.ds[i]
+            except OSError as e:
+                if e.errno not in _TRANSIENT_ERRNO or t == self.tries - 1:
+                    raise
+                random.setstate(state[0])
+                np.random.set_state(state[1])
+                torch.set_rng_state(state[2])
+                pause = self.wait * (t + 1)
+                print(f'  ⚠️  item {i}: {e}; retry {t + 1}/{self.tries - 1} in {pause:.0f}s',
+                      flush=True)
+                time.sleep(pause)
+
+
 @torch.no_grad()
 def extract_split(model, cfg, data_root, split, feature, batch_size,
                   num_workers, device, seed, repeats):
@@ -215,7 +250,7 @@ def extract_split(model, cfg, data_root, split, feature, batch_size,
         # score arms on different yardsticks.
     )
     loader = DataLoader(
-        ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
+        _RetryTransientIO(ds), batch_size=batch_size, shuffle=False, num_workers=num_workers,
         pin_memory=True, drop_last=False,
         persistent_workers=False,   # same rule as the training loaders
         worker_init_fn=_worker_init,

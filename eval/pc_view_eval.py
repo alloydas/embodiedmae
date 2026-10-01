@@ -188,7 +188,7 @@ def extract(runs, args, split, do_recon):
         print(f'  loaded {run} @ {ckpt} (epoch {epoch}, active {list(model.active_modalities)}, '
               f'recon source mask ratio {mr})')
     ds = PCViewSet(args.data_root, split, masks, args.num_points, 224, 24, args.seed, args.limit)
-    loader = DataLoader(ds, batch_size=args.batch_size, shuffle=False,
+    loader = DataLoader(LP._RetryTransientIO(ds), batch_size=args.batch_size, shuffle=False,
                         num_workers=args.num_workers, pin_memory=True,
                         persistent_workers=False)
     feats = {(r, c): [] for r in models for c in CONDITIONS}

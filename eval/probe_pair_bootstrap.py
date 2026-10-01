@@ -6,7 +6,10 @@
     python eval/probe_pair_bootstrap.py --species maize --a maize_e2_pcrgbd --b maize_4m
 
 --species picks the probe module (eval/linear_probe.py or eval/linear_probe_maize.py),
-its cache directory and naming, and its data root.
+its cache directory and naming, and its data root. A run named `base:<name>` is read
+from eval/baseline_probe.py's cache for that species instead (an E8 row, e.g.
+`--a base:maize_4m_upright --b base:pointmae_upright --feature mean`); --ckpt does
+not apply to it.
 
 Refits eval/linear_probe.py's ridge (train-only standardiser, alpha by 5-fold CV)
 on each run's cached features in outputs/_probe_cache/, keeps the per-plant val and
@@ -63,9 +66,11 @@ def r2_rows(y, p, idx):
 
 
 def load(args, run, feature, split):
-    ck = Path(args.ckpt).stem
-    f = Path(args.cache_dir) / (f'{args.prefix}{run}__{ck}__{split}__{feature}'
-                                f'__seed{args.seed}__rep{args.repeats}.npz')
+    if run.startswith('base:'):    # an E8 row: eval/baseline_probe.py's cache name
+        stem = f'base_{run[5:]}__{args.species}__{split}__{feature}'
+    else:
+        stem = f'{args.prefix}{run}__{Path(args.ckpt).stem}__{split}__{feature}'
+    f = Path(args.cache_dir) / f'{stem}__seed{args.seed}__rep{args.repeats}.npz'
     z = np.load(f, allow_pickle=True)   # maize plant ids are strings ('plant_0000')
     return z['plants'], z['feats']
 
