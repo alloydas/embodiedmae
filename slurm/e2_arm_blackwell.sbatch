@@ -59,6 +59,18 @@
 # scavenger is preemptible by design -- it is not subject to the lab's 18-GPU
 # AssocGrpGRES cap. --requeue plus the auto-resume below caps a preemption at
 # save_freq epochs.
+#
+# ON NOVA (2026-10-02, data version 2). Scavenger cannot reach the Blackwell nodes
+# while nova jobs sit on them (dheerajt's 20-day CPU jobs, since 09-28), so E2 runs
+# there through nova, inside the mech-ai 17-GPU cap. Both nodes are PLANNED for
+# another user's 12 h CPU jobs: a 2-day request never got a start time, while 4 h
+# and 11 h requests were placed within 5 min. So submit long with --time-min, let
+# backfill cut the limit to what fits, and requeue before the wall:
+#   sbatch --job-name=e2_<arm>_d2 --partition=nova --account=mech-ai --qos=normal \
+#     --gres=gpu:rtx_pro_6000:2 --cpus-per-task=80 --mem=160G \
+#     --time=2-00:00:00 --time-min=04:00:00 --signal=B:USR1@600 --requeue \
+#     --open-mode=append slurm/e2_arm_blackwell.sbatch <arm>_d2
+# 160G: the v1 arms peaked at ~61 GiB (sacct MaxRSS) with 38 workers x 2 ranks.
 
 set -euo pipefail
 
@@ -115,8 +127,32 @@ if [ -d "${CKPT_DIR}" ]; then
   fi
 fi
 
+# Self-requeue before the wall, opt-in: only a job submitted with
+# --signal=B:USR1@600 gets USR1, ~10 min before its limit. The trap then requeues
+# the same job id, which resumes from the newest checkpoint (as
+# slurm/distill_maize.sbatch and pretrain_15k_d2.sbatch do). --requeue alone does
+# NOT cover TIMEOUT. A requeue is not an end, so a chunk queued afterany on this job
+# keeps waiting (checked 2026-10-02). Without the signal nothing here changes.
+requeue_before_wall() {
+  echo "$(date) USR1: walltime in ~10 min; requeueing job ${SLURM_JOB_ID:-?} to resume"
+  if scontrol requeue "${SLURM_JOB_ID}"; then
+    echo "$(date) requeued ${SLURM_JOB_ID}"
+  else
+    echo "$(date) scontrol requeue FAILED: the job will end TIMEOUT and its chain carries on"
+  fi
+}
+trap requeue_before_wall USR1
+
 srun --kill-on-bad-exit=1 \
   torchrun --standalone --nnodes=1 --nproc_per_node=${NPROC} \
-    train_sorghum_4m.py --config "${CONFIG}" --batch_size 16 --num_workers 38 ${RESUME_ARG} "$@"
-
-echo "Done at $(date)"
+    train_sorghum_4m.py --config "${CONFIG}" --batch_size 16 --num_workers 38 ${RESUME_ARG} "$@" &
+SRUN_PID=$!
+rc=0
+wait "${SRUN_PID}" || rc=$?
+if [ "${rc}" -gt 128 ] && kill -0 "${SRUN_PID}" 2>/dev/null; then
+  # woken by the signal, not by srun: keep waiting (the requeue kills the step)
+  rc=0
+  wait "${SRUN_PID}" || rc=$?
+fi
+echo "srun exit ${rc}; done at $(date)"
+exit "${rc}"

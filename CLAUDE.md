@@ -84,12 +84,12 @@ beginning on it ("start the experiments from the begining"), on scavenger.
 - The trainer refuses to resume a run dir of the other data version, frees cached GPU memory
   before val/test, and can prune checkpoints (`checkpointing.keep_last` / `keep_every`; E1 only).
 
-**Runs (all `_d2`, all on scavenger, 4 h chunks chained `afterany`, resume from the newest
-checkpoint):** 2x A100 / 32 CPU / 160G / `--num_workers 14` unless noted.
+**Runs (all `_d2`; on scavenger in 4 h chunks chained `afterany`, resuming from the newest
+checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 160G / `--num_workers 14` unless noted.
 
 | run | launcher | chain |
 |---|---|---|
-| `e2_pc_d2`, `e2_pcrgb_d2`, `e2_pcrgbd_d2`, `e2_pcrgbdt_d2` | `e2_arm_blackwell.sbatch <arm>_d2` | 16690567-79, 16690580-92, 16690593-605, 16690606-18 |
+| `e2_pc_d2`, `e2_pcrgb_d2`, `e2_pcrgbd_d2`, `e2_pcrgbdt_d2` | `e2_arm_blackwell.sbatch <arm>_d2` | 16690567-79, 16690580-92, 16690593-605, 16690606-18 (pc, pcrgbd, pcrgbdt: nova jobs spliced in front, below) |
 | `e2_pcrgbdt_tg_d2`, `_tg40_d2`, `_tg100_d2` | same | 13 chunks each, from 16695901 / 16695914 / 16695927 |
 | `e3_1k_d2`, `e3_3k_d2`, `e3_10k_d2` | `scale_arm_blackwell.sbatch <slug>` | 14 chunks each, from 16695940 / 16695954 / 16695968 |
 | `e4_small_d2` / `e4_large_d2` (2x **H200**) | same | 16695982-94 / 16695995-6010 |
@@ -98,6 +98,35 @@ checkpoint):** 2x A100 / 32 CPU / 160G / `--num_workers 14` unless noted.
 
 - First E2 chunks (2026-10-02 00:20-08:20) did 55-90 epochs per 4 h; a chunk loses up to
   save_freq epochs at its end, so ~50 effective. Extend a chain with `--dependency=afterany:<last id>`.
+- **E2 moved to the Blackwell nodes through nova (2026-10-02 10:15; user: "do e2 like you are doing
+  previously").** The v1 arms each ran as ONE scavenger job on 2x RTX PRO 6000 / 80 CPU / 320G /
+  38 workers per rank (12-31 h per arm). Scavenger cannot get those nodes now (nova CPU jobs on both),
+  so three arms run there via nova (mech-ai cap: 6 of the 17 GPUs), each splicing nova jobs IN FRONT
+  of its scavenger chain, which stays as the fallback (it resumes at 600 and exits once training is done):
+
+  | arm | nova jobs, in order | then scavenger from | fallback guard |
+  |---|---|---|---|
+  | `e2_pc_d2` | 16696145 (4 h, 10:15-14:15) -> **16696287** | 16690568 | 16696288 |
+  | `e2_pcrgbdt_d2` | 16696146 (11 h, 10:15-21:15) -> **16696289** | 16690606 | 16696290 |
+  | `e2_pcrgbd_d2` | (scavenger 16690594 until ~14:06) -> **16696291** | 16690595 | 16696292 |
+  | `e2_pcrgb_d2` | none: stays on scavenger (cap full); move it when `pc` finishes | 16690581 | — |
+
+  The bold jobs are `--time=2-00:00:00 --time-min=04:00:00 --signal=B:USR1@600 --mem=160G` with the
+  launcher's new opt-in USR1 trap: backfill cuts the limit to what fits, and the job requeues itself
+  10 min before the wall until epoch 600. A requeue keeps the `afterany` dependent waiting (tested,
+  jobs 16696237/8). A 2-day request never got a start time (both nodes PLANNED for another user's
+  12 h CPU jobs); the 4 h and 11 h ones were placed in 5 min. Each guard is `nova_fallback.sbatch`
+  with GRACE 1800: if its nova job is still pending 30 min after the predecessor ends, it moves the
+  nova job behind the chain's tail and lets the scavenger chain run. **A requeued nova job that pends
+  for hours is NOT guarded**: check with `squeue -n e2_<arm>_d2`; to fall back by hand, hold the nova
+  job, then clear its scavenger successor's dependency.
+- **Why a fresh Blackwell job starts slow: the page cache, not the GPU.** On 2026-10-02 a cold NFS
+  read of one item (the four files, 2.6 MB) took 1.1-1.3 s on nova26 and the login node (~2 MB/s per
+  stream), while the A100 nodes that had run E2/E3 for hours returned even random items in 2 ms
+  (cached). The first Blackwell epochs took 8:28, then fell every epoch to 2:22 by epoch 64, as the
+  node cached the views (both arms read the same files: same `view_seed`). Steady state is set by
+  the GPU: 5.7 it/s for `pc` (~1 min/epoch), 4.0 it/s for `pcrgbdt` (~1.4 min); the A100s do 2:08-2:44.
+  The node's cache outlives the job, so a follow-on job on the same node starts warm.
 - **E1 is the long pole.** It reads all 105,000 views per epoch and is loader-bound (~1.4-2.4
   items/s per worker on the A100 nodes, four NFS files per item). On a 96-CPU A100 node that is
   ~8-14 min/epoch, ~6-10 days of running. The user moved it from nova (8x RTX PRO 6000, 180 CPUs,
