@@ -35,6 +35,10 @@ The programme is the E1–E10 matrix in the CVPR 2027 plan (the Google Doc is th
 source of truth for scope; this section is the source of truth for *state*).
 Paper deadline **Nov 13 2026**, internal results freeze **Oct 24 2026**.
 
+**2026-10-02: the sorghum programme restarted on DATA VERSION 2** (rgb_nobg.png + leaf width;
+see "Data version 2" at the top of the HANDOFF section). Every sorghum result in the table below
+is data version 1 and is superseded as its `_d2` twin finishes. Maize is unaffected.
+
 **Status as of 2026-09-30** (live job state: see the HANDOFF section below). Run state goes stale fast — the table records which
 experiments have been *built*, which is durable. For live progress use
 `squeue -u $USER`, `outputs/<run>/training_history.json`, and
@@ -53,7 +57,60 @@ experiments have been *built*, which is durable. For live progress use
 | E9 | latent analysis | **built; E2/E3/E4 arms done** | `eval/latent_analysis.py` / `_maize.py`. Sorghum E2/E3/E4 and maize E3/E4 arms on train/val/test (`reports/e9_pr_*`, `reports/e9_pm_*`); sorghum control arms on val (`reports/e9_pr_tg_*`). Maize E2 arms done (`reports/e9_pm_e2_600_16669530/`); `e2_pcrgbdt_tg100` done (`reports/e9_pr_tg100_600_16686383/`) |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
 
-## HANDOFF — live state as of 2026-10-01 14:30 (read this first after a restart)
+## HANDOFF — live state as of 2026-10-02 10:00 (read this first after a restart)
+
+### Data version 2 — the sorghum restart (2026-10-02; code b708117)
+
+The user changed the sorghum dataset and asked for every experiment to restart from the
+beginning on it ("start the experiments from the begining"), on scavenger.
+- **rgb_nobg.png** in every view folder (`shorgum_data/remove_background.py`, 2026-10-01): RGBA,
+  straight alpha, background transparent, edges un-blended from the renderer's grey.
+  `SorghumDataset.load_rgb` composites it over BLACK with its alpha (default
+  `sorghum_dataset.RGB_FILE = 'rgb_nobg.png'`). Runs record `rgb_file` in config.json; the probe
+  reads each run's own file (no key = a data-v1 run = `rgb.png`).
+- **Spline files rewritten** (`shorgum_data/add_leaf_width.py`, 2026-09-30): waviness_frequency and
+  waviness_period_start removed, per-leaf blade `width` (m, mesh-measured, 0.046-0.148) added. Leaf
+  token layout is now `[sp, ln, ra, ba, width, 0, 0, 0, 0]` (`embodied_mae_4m.LEAF_FIELDS`), and the
+  length scale is 1.25 (was 1.0, which clipped 0.54 % of leaves). **The old code would not have
+  crashed on the new files: its leaf filter required the waviness keys, so it would have dropped
+  EVERY leaf token.** `load_spline_params` now raises if a plant's leaves all fail the check.
+- Both changes were checked in all 150,000 view folders (stat sweep), the leaf widths for all
+  15,000 plants. Plant 0 has two geometry-only leaves (no params); they are not tokens or targets.
+- Probe targets gained `leaf_width_mean` / `leaf_width_max` (`data_split/leaf_width_targets.csv`,
+  built by `data_split/make_leaf_width_targets.py`). Between-plant spread is small (mean
+  0.0985 +- 0.0023 m) and nearly uncorrelated with every other target (|r| < 0.2).
+- E8 harness caches of RGB adapters are named `...__rgb_nobg.npz`; `probe_pair_bootstrap.py
+  --rgb-tag rgb_nobg` reads them. Data-v1 caches keep their names and stay valid.
+- The trainer refuses to resume a run dir of the other data version, frees cached GPU memory
+  before val/test, and can prune checkpoints (`checkpointing.keep_last` / `keep_every`; E1 only).
+
+**Runs (all `_d2`, all on scavenger, 4 h chunks chained `afterany`, resume from the newest
+checkpoint):** 2x A100 / 32 CPU / 160G / `--num_workers 14` unless noted.
+
+| run | launcher | chain |
+|---|---|---|
+| `e2_pc_d2`, `e2_pcrgb_d2`, `e2_pcrgbd_d2`, `e2_pcrgbdt_d2` | `e2_arm_blackwell.sbatch <arm>_d2` | 16690567-79, 16690580-92, 16690593-605, 16690606-18 |
+| `e2_pcrgbdt_tg_d2`, `_tg40_d2`, `_tg100_d2` | same | 13 chunks each, from 16695901 / 16695914 / 16695927 |
+| `e3_1k_d2`, `e3_3k_d2`, `e3_10k_d2` | `scale_arm_blackwell.sbatch <slug>` | 14 chunks each, from 16695940 / 16695954 / 16695968 |
+| `e4_small_d2` / `e4_large_d2` (2x **H200**) | same | 16695982-94 / 16695995-6010 |
+| `e8_supervised_d2` | `E8_CONFIG=configs/config_e8_supervised_d2.yaml e8_supervised.sbatch` | 16696011-23 |
+| **E1** `4m_pretrain_15k_d2` | `slurm/pretrain_15k_d2.sbatch` (self-requeuing) | **16696027**: 8x A100 80 GB, 90 CPU, 440G, `NUM_WORKERS=10` |
+
+- First E2 chunks (2026-10-02 00:20-08:20) did 55-90 epochs per 4 h; a chunk loses up to
+  save_freq epochs at its end, so ~50 effective. Extend a chain with `--dependency=afterany:<last id>`.
+- **E1 is the long pole.** It reads all 105,000 views per epoch and is loader-bound (~1.4-2.4
+  items/s per worker on the A100 nodes, four NFS files per item). On a 96-CPU A100 node that is
+  ~8-14 min/epoch, ~6-10 days of running. The user moved it from nova (8x RTX PRO 6000, 180 CPUs,
+  ~3-5 days, but it needed 8 of the account's 17 GPUs) to scavenger. Both Blackwell nodes host nova
+  CPU jobs, which scavenger cannot share.
+- **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
+  start from `outputs/4m_pretrain_15k_d2/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
+  Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
+  E9, the E8 baselines (RGB ones re-extract on the new images automatically), partial clouds.
+- **Maize runs cancelled at the user's request (2026-10-01 17:48):** `distill_maize` 16684364 at
+  epoch 59/100 (`checkpoint_epoch_58.pth` kept; resubmitting `slurm/distill_maize.sbatch` resumes it)
+  and `maize_e2_pcrgbd_levelled` at epoch 9 (no checkpoint). The user wants them left cancelled.
+  The video-eeg-ensembling jobs in the queue are the user's other project: never touch them.
 
 Everything below was true at the time written; check `squeue -u $USER` and each run's
 `outputs/<run>/checkpoints/` before acting. The results page is the private artifact
@@ -755,10 +812,11 @@ Plant and leaf parameters are normalised to [0, 1] via fixed `_PLANT_SCALE / _PL
 `SorghumDataset` expects:
 ```
 data_root/{train,val,test}/<sample_name>/
-    rgb.png              # 224-ready RGB render
+    rgb.png              # 224-ready RGB render (grey background; data version 1)
+    rgb_nobg.png         # RGBA, transparent background (data version 2, the default since 2026-10-01)
     depth.png            # big-endian packed RGBA depth
     *_nc_cam.ply         # camera-frame, normals-cleaned point cloud
-    *_spline.yml         # 4M only — procedural generation params
+    *_spline.yml         # 4M only — procedural generation params (since 2026-09-30: width, no waviness)
 ```
 
 Sample folders are named `Sorghum_<plant>_<view>`, so `Sorghum_0_00 … Sorghum_0_09` are ten views of one plant. **Only those four files are read by the loaders.** The `Sorghum_<n>.obj` and `Sorghum_<n>_nc.ply` that sit alongside them are source assets, are duplicated in full into every one of a plant's ten view folders, and are never opened during training — they are ~64 % of the bytes on disk.
