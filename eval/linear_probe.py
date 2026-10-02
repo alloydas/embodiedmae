@@ -105,6 +105,10 @@ TARGETS = [
     ('leaf_len_mean',   'leaf_len_mean',  'ind', 'len'),
     ('leaf_len_max',    'leaf_len_max',   'ind', 'len'),
     ('waviness',        'wav_mean',       'ind', '-'),
+    # leaf blade width (m), in the spline files since 2026-09-30; per-plant mean and
+    # max over the parameterised leaves, from data_split/leaf_width_targets.csv
+    ('leaf_width_mean', 'width_mean',     'ind', 'm'),
+    ('leaf_width_max',  'width_max',      'ind', 'm'),
 ]
 
 
@@ -125,6 +129,14 @@ def load_targets(data_root):
     # probe target: TARGETS is an explicit list, so extra columns are inert here.
     assign = pd.read_csv(root / 'assignment.csv')[['plant', 'split', 'extremeness']]
     df = feats.merge(assign, on='plant', validate='1:1')
+    # features.csv predates the width rewrite of the spline files; the per-plant
+    # width table is built and checked against them by
+    # data_split/make_leaf_width_targets.py
+    width = pd.read_csv(REPO / 'data_split' / 'leaf_width_targets.csv')
+    if not (df.set_index('plant').n_leaves.sort_index()
+            == width.set_index('plant').n_leaves.sort_index()).all():
+        raise SystemExit('leaf_width_targets.csv counts different leaves from features.csv')
+    df = df.merge(width[['plant', 'width_mean', 'width_max']], on='plant', validate='1:1')
     df['biomass'] = df['n_leaves'] * df['leaf_len_mean']
     return df.set_index('plant')
 
@@ -248,6 +260,9 @@ def extract_split(model, cfg, data_root, split, feature, batch_size,
         deterministic_view=True,   # alone is a silent no-op
         # max_plants is deliberately NOT passed -- a capped probe set would
         # score arms on different yardsticks.
+        # The images the run trained on: runs from before 2026-10-01 have no
+        # rgb_file in config.json and read rgb.png (grey background).
+        rgb_file=cfg.get('rgb_file', 'rgb.png'),
     )
     loader = DataLoader(
         _RetryTransientIO(ds), batch_size=batch_size, shuffle=False, num_workers=num_workers,

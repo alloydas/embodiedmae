@@ -38,6 +38,7 @@ from embodied_mae_4m import (
     N_PARAMS,
 )
 from embodied_mae import chamfer_distance, earth_movers_distance
+from sorghum_dataset import RGB_FILE
 from sorghum_dataset_4m import SorghumDataset4M
 
 
@@ -88,14 +89,14 @@ def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points',
                  'view_sampling', 'view_seed', 'max_plants',
-                 'plant_subset_seed'],
+                 'plant_subset_seed', 'rgb_file'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
                   'active_modalities', 'text_mask_ratio'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
                      'warmup_epochs', 'val_freq', 'test_freq'],
-        'checkpointing': ['output_dir', 'save_freq', 'resume'],
+        'checkpointing': ['output_dir', 'save_freq', 'resume', 'keep_last', 'keep_every'],
         'visualization': ['viz_freq', 'num_viz_samples'],
         'distributed': ['world_size', 'dist_backend', 'dist_url'],
         'system': ['num_workers', 'device'],
@@ -118,6 +119,9 @@ def config_to_namespace(config):
     ns.num_points         = config['data'].get('num_points', 8196)
     ns.view_sampling      = bool(config['data'].get('view_sampling', False))
     ns.view_seed          = int(config['data'].get('view_seed', 0))
+    # rgb_nobg.png (black background) since 2026-10-01; see sorghum_dataset.RGB_FILE.
+    # Recorded in config.json so evaluation reads the images the run trained on.
+    ns.rgb_file           = config['data'].get('rgb_file', RGB_FILE)
     # E3 data scaling: cap the TRAIN split at this many plants (nested subsets,
     # see SorghumDataset4M). None -> every plant. val/test are never capped.
     _mp                   = config['data'].get('max_plants', None)
@@ -170,6 +174,12 @@ def config_to_namespace(config):
     ns.output_dir         = config['checkpointing'].get('output_dir', './outputs/4m_run')
     ns.save_freq          = config['checkpointing'].get('save_freq', 100)
     ns.resume             = config['checkpointing'].get('resume', None)
+    # Optional pruning (default: keep every checkpoint, as every run before
+    # 2026-10-02 did). keep_last N keeps the newest N checkpoint_epoch_*.pth, and
+    # keep_every M also keeps every epoch divisible by M. E1 saves every 5 epochs
+    # for 1000, i.e. 200 x 1.4 GB on a filesystem with ~2 TB free.
+    ns.keep_last          = config['checkpointing'].get('keep_last', None)
+    ns.keep_every         = config['checkpointing'].get('keep_every', None)
     ns.viz_freq           = config['visualization'].get('viz_freq', 50)
     ns.num_viz_samples    = config['visualization'].get('num_viz_samples', 6)
     ns.world_size         = config['distributed'].get('world_size', 1)
@@ -782,6 +792,45 @@ def check_resume_text_mask_ratio(args):
             f"start from scratch or use a matching config.")
 
 
+def prune_checkpoints(checkpoint_dir, keep_last, keep_every=None):
+    """Delete checkpoint_epoch_*.pth beyond the newest `keep_last`, sparing every
+    epoch divisible by `keep_every`. Called right after a save, which is atomic, so
+    the newest file is complete; keeping >= 2 leaves resolve_resume a fallback."""
+    keep_last = max(int(keep_last), 2)
+    ckpts = sorted((e, f) for f in Path(checkpoint_dir).glob('checkpoint_epoch_*.pth')
+                   if (e := _ckpt_epoch(f)) is not None)
+    for e, f in ckpts[:-keep_last]:
+        if keep_every and e % int(keep_every) == 0:
+            continue
+        try:
+            f.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def check_resume_data_version(args):
+    """Refuse to continue a run directory written under the other data version.
+
+    Since 2026-10-01 a run reads rgb_nobg.png and the width leaf layout
+    (embodied_mae_4m.LEAF_FIELDS); every earlier run read rgb.png and the waviness
+    layout. config.json from before then has neither key. Resuming such a
+    directory would mix the two inside one run; train_worker rewrites config.json
+    first thing, so the check has to happen before it.
+    """
+    from embodied_mae_4m import LEAF_FIELDS
+    args.leaf_fields = list(LEAF_FIELDS)
+    prev = Path(args.output_dir) / 'config.json'
+    if not prev.exists():
+        return
+    old = json.loads(prev.read_text())
+    was = (old.get('rgb_file', 'rgb.png'), old.get('leaf_fields'))
+    now = (args.rgb_file, args.leaf_fields)
+    if was != now:
+        raise SystemExit(f"{prev} records rgb_file={was[0]!r}, leaf_fields={was[1]} but "
+                         f"this run uses rgb_file={now[0]!r}, leaf_fields={now[1]}: "
+                         f"refusing to mix data versions in one run directory")
+
+
 def train_worker(rank, world_size, args):
     if world_size > 1:
         setup_distributed(rank, world_size, args.dist_backend, args.dist_url)
@@ -812,15 +861,18 @@ def train_worker(rank, world_size, args):
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, view_seed=args.view_seed,
                                  max_plants=args.max_plants,
-                                 plant_subset_seed=args.plant_subset_seed)
+                                 plant_subset_seed=args.plant_subset_seed,
+                                 rgb_file=args.rgb_file)
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
-                                 view_sampling=vs, deterministic_view=True)
+                                 view_sampling=vs, deterministic_view=True,
+                                 rgb_file=args.rgb_file)
     test_ds  = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='test',
                                  max_leaves=args.max_leaves,
-                                 view_sampling=vs, deterministic_view=True)
+                                 view_sampling=vs, deterministic_view=True,
+                                 rgb_file=args.rgb_file)
 
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
@@ -962,6 +1014,12 @@ def train_worker(rank, world_size, args):
         if do_val:
             if is_main: print("\n🔍 Running validation…")
             compute_emd = (epoch == args.epochs)
+            # Chamfer in evaluate() allocates (B, N, N, 3), 12.9 GB at batch 16 and
+            # 8196 points; on a 40 GB card the training step's cached-but-free
+            # blocks are what tip it over (the maize trainer OOMed so, job
+            # 16645741). Freeing them first changes no number.
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             (vl, vr, vd, vp, vt), vm = evaluate(
                 model, val_loader, device, compute_emd=compute_emd,
                 mask_ratio=args.mask_ratio, distributed=(world_size > 1))
@@ -1011,6 +1069,8 @@ def train_worker(rank, world_size, args):
         if do_test:
             if is_main: print(f"\n🧪 Running TEST-set evaluation (epoch {epoch})…")
             compute_emd_test = (epoch == args.epochs)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()   # same reason as before validation
             # evaluate() runs on ALL ranks (each on its DistributedSampler shard) to
             # keep DDP in lockstep; only rank 0 logs the result.
             (tl, tr_, td_, tp_, tt_), tmet = evaluate(
@@ -1062,6 +1122,8 @@ def train_worker(rank, world_size, args):
                                  and wandb.run else None),
             }, checkpoint_dir / f'checkpoint_epoch_{epoch}.pth')
             print(f"💾 Checkpoint saved: checkpoint_epoch_{epoch}.pth")
+            if args.keep_last:
+                prune_checkpoints(checkpoint_dir, int(args.keep_last), args.keep_every)
 
         if is_main and do_val and vl < best_val_loss:
             best_val_loss = vl
@@ -1106,6 +1168,8 @@ def main():
                         help='Plan 6.1: one drawn view per plant per epoch '
                              '(10x cheaper epoch, same view diversity).')
     parser.add_argument('--view_seed',          type=int,   default=None)
+    parser.add_argument('--rgb_file',           type=str,   default=None,
+                        help=f'RGB image per sample folder (default {RGB_FILE})')
     parser.add_argument('--max_plants',         type=int,   default=None,
                         help='E3: cap the TRAIN split at N plants (nested subsets)')
     parser.add_argument('--plant_subset_seed',  type=int,   default=None)
@@ -1170,6 +1234,7 @@ def main():
 
     resolve_resume(cfg)
     check_resume_text_mask_ratio(cfg)
+    check_resume_data_version(cfg)
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))
     if local_rank >= 0:

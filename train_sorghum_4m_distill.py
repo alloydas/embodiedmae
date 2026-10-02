@@ -75,6 +75,7 @@ from embodied_mae_4m import (
     N_PARAMS,
 )
 from embodied_mae import chamfer_distance
+from sorghum_dataset import RGB_FILE
 from sorghum_dataset_4m import SorghumDataset4M
 from train_sorghum_4m import (
     setup_distributed, cleanup_distributed, unpatchify,
@@ -99,6 +100,9 @@ def config_to_namespace(c):
     ns.data_root          = c['data']['data_root']
     ns.img_size           = g('data', 'img_size', 224)
     ns.num_points         = g('data', 'num_points', 8196)
+    # rgb_nobg.png (black background) since 2026-10-01; see sorghum_dataset.RGB_FILE.
+    # A student warm-started from a run must see the images that run trained on.
+    ns.rgb_file           = g('data', 'rgb_file', RGB_FILE)
     ns.model_size         = g('model', 'model_size', 'base')
     ns.mask_ratio         = g('model', 'mask_ratio', 0.75)
     ns.pc_loss_weight     = g('model', 'pc_loss_weight', 10.0)
@@ -600,10 +604,10 @@ def train_worker(rank, world_size, args):
     # Data
     train_ds = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                 num_points=args.num_points, split='train',
-                                max_leaves=args.max_leaves)
+                                max_leaves=args.max_leaves, rgb_file=args.rgb_file)
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                 num_points=args.num_points, split='val',
-                                max_leaves=args.max_leaves)
+                                max_leaves=args.max_leaves, rgb_file=args.rgb_file)
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
         shuffle_train = False

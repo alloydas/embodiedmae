@@ -53,6 +53,7 @@ _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
 
 import argparse
 import importlib.util
+import json
 import os
 import sys
 import time
@@ -94,10 +95,11 @@ class PCViewSet(Dataset):
     """View 00 of every plant, with its cloud under each CONDITION."""
 
     def __init__(self, data_root, split, masks, num_points, img_size, max_leaves, seed,
-                 limit=None):
+                 limit=None, rgb_file='rgb.png'):
         self.base = SorghumDataset4M(data_root, img_size=img_size, num_points=num_points,
                                      split=split, max_leaves=max_leaves,
-                                     view_sampling=True, deterministic_view=True)
+                                     view_sampling=True, deterministic_view=True,
+                                     rgb_file=rgb_file)
         self.folders = []
         for views in self.base.plant_views:
             folder = self.base.samples[views[0]]
@@ -126,7 +128,7 @@ class PCViewSet(Dataset):
         import open3d as o3d
         folder = self.folders[i]
         plant = int(folder.name.split('_')[1])
-        rgb = self.base.rgb_transform(Image.open(folder / 'rgb.png').convert('RGB'))
+        rgb = self.base.load_rgb(folder)
         depth = self.base.load_depth(folder / 'depth.png')
         pts = np.asarray(o3d.io.read_point_cloud(
             str(self.base.find_pointcloud_file(folder))).points, dtype=np.float64)
@@ -187,7 +189,15 @@ def extract(runs, args, split, do_recon):
         models[run] = (model, ckpt, 1 + int(cfg.get('max_leaves', 24)), epoch, mr)
         print(f'  loaded {run} @ {ckpt} (epoch {epoch}, active {list(model.active_modalities)}, '
               f'recon source mask ratio {mr})')
-    ds = PCViewSet(args.data_root, split, masks, args.num_points, 224, 24, args.seed, args.limit)
+    # One data pass serves every run, so they must have trained on the same images
+    # (runs before 2026-10-01 have no rgb_file in config.json: rgb.png).
+    rgb_files = {json.loads((REPO / 'outputs' / run / 'config.json').read_text()).get('rgb_file', 'rgb.png')
+                 for run, _ in todo}
+    if len(rgb_files) != 1:
+        raise SystemExit(f'runs in one pass read different RGB files {sorted(rgb_files)}: '
+                         f'evaluate them separately')
+    ds = PCViewSet(args.data_root, split, masks, args.num_points, 224, 24, args.seed, args.limit,
+                   rgb_file=rgb_files.pop())
     loader = DataLoader(LP._RetryTransientIO(ds), batch_size=args.batch_size, shuffle=False,
                         num_workers=args.num_workers, pin_memory=True,
                         persistent_workers=False)

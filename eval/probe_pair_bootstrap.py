@@ -65,12 +65,29 @@ def r2_rows(y, p, idx):
     return 1 - ((yy - p[idx]) ** 2).sum(1) / ((yy - yy.mean(1, keepdims=True)) ** 2).sum(1)
 
 
+def base_reads_rgb(name):
+    """Whether the E8 adapter `name` takes RGB (its INPUTS), from the registry."""
+    import importlib
+    from eval import baselines as B
+    return 'rgb' in importlib.import_module(f'eval.baselines.{B.REGISTRY[name]}').INPUTS
+
+
 def load(args, run, feature, split):
     if run.startswith('base:'):    # an E8 row: eval/baseline_probe.py's cache name
         stem = f'base_{run[5:]}__{args.species}__{split}__{feature}'
     else:
         stem = f'{args.prefix}{run}__{Path(args.ckpt).stem}__{split}__{feature}'
     f = Path(args.cache_dir) / f'{stem}__seed{args.seed}__rep{args.repeats}.npz'
+    if run.startswith('base:') and base_reads_rgb(run[5:]):
+        # An RGB adapter's cache for the 2026-10-01 images is named with the image's
+        # stem (baseline_probe.rgb_tag); a PC-only adapter has one cache whatever the
+        # images. Never fall back from one image version to the other.
+        tagged = sorted(f.parent.glob(f'{f.stem}__rgb_*.npz'))
+        if args.rgb_tag is None and tagged:
+            raise SystemExit(f'{run}: caches exist for more than one image file '
+                             f'({f.name} and {[t.name for t in tagged]}): pass --rgb-tag')
+        if args.rgb_tag not in (None, 'legacy'):
+            f = f.parent / f'{f.stem}__{args.rgb_tag}.npz'
     z = np.load(f, allow_pickle=True)   # maize plant ids are strings ('plant_0000')
     return z['plants'], z['feats']
 
@@ -89,6 +106,9 @@ def main():
     ap.add_argument('--alphas', type=float, nargs='+', default=[0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0])
     ap.add_argument('--n-boot', type=int, default=2000)
     ap.add_argument('--targets', nargs='+', default=None, help='probe target names (default: all)')
+    ap.add_argument('--rgb-tag', default=None,
+                    help="for base: runs, which image file's cache to read when an RGB adapter "
+                         "has several: 'rgb_nobg' (images since 2026-10-01) or 'legacy' (rgb.png)")
     ap.add_argument('--out', default=None)
     args = ap.parse_args()
     global LP

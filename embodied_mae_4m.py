@@ -11,7 +11,7 @@ Spline / parameter modality (encoder → decoder design):
 
 Parameter layout (N_PARAMS = 9 per token):
   Plant token (idx 0) : [sl, sd_x, sd_y, sd_z, ps_x, ps_y, ps_z, pa, pr]
-  Leaf  token (idx 1+): [sp, ln,   ra,   ba,   wf,   wp0,  wp1,  0,  0 ]
+  Leaf  token (idx 1+): [sp, ln,   ra,   ba,   wd,   0,    0,    0,  0 ]
   All values normalised to [0, 1] — see _PLANT_SCALE / _LEAF_SCALE below.
 """
 
@@ -48,9 +48,18 @@ _PLANT_SCALE = np.array([3.0, 2.0, 2.0, 2.0,  1.0, 1.0, 1.0, 50.0, 0.02], np.flo
 _PLANT_SHIFT = np.array([0.0, 1.0, 1.0, 1.0,  0.0, 0.0, 0.0,  0.0,  0.0], np.float32)
 # [sl,   sdx,  sdy,  sdz,  psx, psy, psz, pa,  pr ]
 
-_LEAF_SCALE  = np.array([1.0, 1.0, 360.0, 180.0, 0.1, 360.0, 360.0, 1.0, 1.0], np.float32)
-_LEAF_SHIFT  = np.array([0.0, 0.0,   0.0,   0.0, 0.0,   0.0,   0.0, 0.0, 0.0], np.float32)
-# [sp,  ln,  ra,   ba,   wf,  wp0,  wp1, (unused×2)]
+# Leaf fields since the 2026-09-30 spline rewrite (shorgum_data/add_leaf_width.py):
+# waviness_frequency and waviness_period_start were removed from every
+# *_spline.yml and a per-leaf blade `width` (metres, max margin-to-margin distance
+# on the mesh, 0.046-0.148 over all 292,082 leaves) was added. Runs before that
+# date used [sp, ln, ra, ba, wf, wp0, wp1, 0, 0] and cannot be rebuilt from the
+# current files.
+# The length scale was 1.0 until then, which clipped the 0.54 % of leaves longer
+# than 1.0 (max 1.125, 1,504 of 15,000 plants); 1.25 keeps every leaf in range.
+LEAF_FIELDS = ('starting_point', 'length', 'roll_angle', 'branching_angle', 'width')
+_LEAF_SCALE  = np.array([1.0, 1.25, 360.0, 180.0, 0.2, 1.0, 1.0, 1.0, 1.0], np.float32)
+_LEAF_SHIFT  = np.array([0.0, 0.0,   0.0,   0.0, 0.0, 0.0, 0.0, 0.0, 0.0], np.float32)
+# [sp,  ln,  ra,   ba,   wd, (unused×4)]
 
 
 def _plant_to_params(plant: dict) -> np.ndarray:
@@ -68,17 +77,10 @@ def _plant_to_params(plant: dict) -> np.ndarray:
 
 
 def _leaf_to_params(leaf: dict) -> np.ndarray:
-    wps = leaf['waviness_period_start']
-    raw7 = np.array([
-        float(leaf['starting_point']),
-        float(leaf['length']),
-        float(leaf['roll_angle']),
-        float(leaf['branching_angle']),
-        float(leaf['waviness_frequency']),
-        float(wps[0]), float(wps[1]),
-    ], dtype=np.float32)
-    norm7 = np.clip((raw7 + _LEAF_SHIFT[:7]) / _LEAF_SCALE[:7], 0.0, 1.0)
-    return np.concatenate([norm7, [0.0, 0.0]])   # pad to N_PARAMS=9
+    n = len(LEAF_FIELDS)
+    raw = np.array([float(leaf[k]) for k in LEAF_FIELDS], dtype=np.float32)
+    norm = np.clip((raw + _LEAF_SHIFT[:n]) / _LEAF_SCALE[:n], 0.0, 1.0)
+    return np.concatenate([norm, np.zeros(N_PARAMS - n, np.float32)])   # pad to N_PARAMS
 
 
 def _params_to_plant_text(params: np.ndarray) -> str:
@@ -90,11 +92,10 @@ def _params_to_plant_text(params: np.ndarray) -> str:
 
 
 def _params_to_leaf_text(params: np.ndarray) -> str:
-    p    = np.clip(params[:7], 0.0, 1.0)
-    raw7 = p * _LEAF_SCALE[:7] - _LEAF_SHIFT[:7]
-    sp, ln, ra, ba, wf, wp0, wp1 = raw7
-    return (f"sp={sp:.4f} ln={ln:.4f} ra={ra:06.2f} ba={ba:06.2f} "
-            f"wf={wf:.6f} wp={wp0:06.2f},{wp1:06.2f}")
+    n = len(LEAF_FIELDS)
+    p = np.clip(params[:n], 0.0, 1.0)
+    sp, ln, ra, ba, wd = p * _LEAF_SCALE[:n] - _LEAF_SHIFT[:n]
+    return (f"sp={sp:.4f} ln={ln:.4f} ra={ra:06.2f} ba={ba:06.2f} wd={wd:.4f}")
 
 
 def _bounded_proportional_allocation(total, weights, lower, upper):
@@ -247,63 +248,6 @@ def _visible_token_counts(lengths, weights, mask_ratio_total,
     return _bounded_proportional_allocation(
         total_visible, weights, allocation_lower, upper)
 
-# norm = (raw + shift) / scale  →  raw = norm * scale - shift
-# All outputs land in [0, 1] for the expected data ranges.
-_PLANT_SCALE = np.array([3.0, 2.0, 2.0, 2.0,  1.0, 1.0, 1.0, 50.0, 0.02], np.float32)
-_PLANT_SHIFT = np.array([0.0, 1.0, 1.0, 1.0,  0.0, 0.0, 0.0,  0.0,  0.0], np.float32)
-# [sl,   sdx,  sdy,  sdz,  psx, psy, psz, pa,  pr ]
-
-_LEAF_SCALE  = np.array([1.0, 1.0, 360.0, 180.0, 0.1, 360.0, 360.0, 1.0, 1.0], np.float32)
-_LEAF_SHIFT  = np.array([0.0, 0.0,   0.0,   0.0, 0.0,   0.0,   0.0, 0.0, 0.0], np.float32)
-# [sp,  ln,  ra,   ba,   wf,  wp0,  wp1, (unused×2)]
-
-def _plant_to_params(plant: dict) -> np.ndarray:
-    p  = plant['Parameters']
-    sd = p['stem_direction']
-    ps = p['panicle_size']
-    raw = np.array([
-        float(p['stem_length']),
-        float(sd[0]), float(sd[1]), float(sd[2]),
-        float(ps[0]), float(ps[1]), float(ps[2]),
-        float(p['panicle_seed_amount']),
-        float(p['panicle_seed_radius']),
-    ], dtype=np.float32)
-    return np.clip((raw + _PLANT_SHIFT) / _PLANT_SCALE, 0.0, 1.0)
-
-
-def _leaf_to_params(leaf: dict) -> np.ndarray:
-    wps = leaf['waviness_period_start']
-    raw7 = np.array([
-        float(leaf['starting_point']),
-        float(leaf['length']),
-        float(leaf['roll_angle']),
-        float(leaf['branching_angle']),
-        float(leaf['waviness_frequency']),
-        float(wps[0]), float(wps[1]),
-    ], dtype=np.float32)
-    norm7 = np.clip((raw7 + _LEAF_SHIFT[:7]) / _LEAF_SCALE[:7], 0.0, 1.0)
-    return np.concatenate([norm7, [0.0, 0.0]])   # pad to N_PARAMS=9
-
-
-def _params_to_plant_text(params: np.ndarray) -> str:
-    p   = np.clip(params, 0.0, 1.0)
-    raw = p * _PLANT_SCALE - _PLANT_SHIFT
-    sl, sdx, sdy, sdz, psx, psy, psz, pa, pr = raw
-    return (f"sl={sl:.4f} sd={sdx:+.3f},{sdy:+.3f},{sdz:+.3f} "
-            f"ps={psx:.3f},{psy:.3f},{psz:.3f} pa={int(round(pa))} pr={pr:.4f}")
-
-
-def _params_to_leaf_text(params: np.ndarray) -> str:
-    p    = np.clip(params[:7], 0.0, 1.0)
-    raw7 = p * _LEAF_SCALE[:7] - _LEAF_SHIFT[:7]
-    sp, ln, ra, ba, wf, wp0, wp1 = raw7
-    return (f"sp={sp:.4f} ln={ln:.4f} ra={ra:06.2f} ba={ba:06.2f} "
-            f"wf={wf:.6f} wp={wp0:06.2f},{wp1:06.2f}")
-
-
-# ── Data loading ──────────────────────────────────────────────────────────────
-
-
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 def load_spline_params(yml_path, max_leaves: int = 24):
@@ -326,9 +270,16 @@ def load_spline_params(yml_path, max_leaves: int = 24):
     plant  = data['Sorghums'][0]
     # Some leaves are geometry-only (Center/Left/Right Points but no procedural
     # params) — skip them so they don't become param tokens and crash _leaf_to_params.
-    _REQ_LEAF = ('starting_point', 'length', 'roll_angle', 'branching_angle',
-                 'waviness_frequency', 'waviness_period_start')
-    leaves = [lf for lf in plant['Leaves'] if all(k in lf for k in _REQ_LEAF)]
+    # A plant whose leaves ALL fail the check is an error, not a plant with no
+    # leaves: that is what a spline file of the other format looks like (before the
+    # width rewrite this filter required the waviness keys, and against today's
+    # files it would have dropped every leaf token without a word).
+    leaves = [lf for lf in plant['Leaves'] if all(k in lf for k in LEAF_FIELDS)]
+    if plant['Leaves'] and not leaves:
+        lacks = sorted(set(LEAF_FIELDS) - set(plant['Leaves'][0]))
+        raise ValueError(f"{yml_path}: no leaf has all of {LEAF_FIELDS} (the first "
+                         f"lacks {lacks}); is this a spline file from before the "
+                         f"width rewrite?")
 
     n_tokens     = 1 + max_leaves
     valid        = np.zeros(n_tokens,            dtype=np.float32)

@@ -142,7 +142,7 @@ from embodied_mae_4m import (
     embodied_mae_4m_base,
     embodied_mae_4m_large,
 )
-from sorghum_dataset import SorghumDataset
+from sorghum_dataset import RGB_FILE, SorghumDataset
 from sorghum_dataset_4m import SorghumDataset4M
 
 REPO = Path(__file__).resolve().parent
@@ -225,7 +225,7 @@ def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points',
                  'view_sampling', 'view_seed', 'max_plants',
-                 'plant_subset_seed'],
+                 'plant_subset_seed', 'rgb_file'],
         'model': ['model_size', 'pc_loss_weight', 'depth_norm_type',
                   'spline_loss_weight', 'max_leaves', 'loss_name',
                   'qal_threshold', 'qal_alpha', 'qal_use_squared',
@@ -260,6 +260,8 @@ def config_to_namespace(config):
         raise SystemExit("data.view_sampling must be true: E8 is matched to "
                          "e2_pcrgbdt's one-view-per-plant epoch.")
     ns.view_seed          = int(config['data'].get('view_seed', 42))
+    # rgb_nobg.png (black background) since 2026-10-01; see sorghum_dataset.RGB_FILE.
+    ns.rgb_file           = config['data'].get('rgb_file', RGB_FILE)
     _mp                   = config['data'].get('max_plants', None)
     ns.max_plants         = None if _mp in (None, 0, 'null') else int(_mp)
     ns.plant_subset_seed  = int(config['data'].get('plant_subset_seed', 42))
@@ -674,15 +676,16 @@ def train_worker(rank, world_size, args):
         args.data_root, img_size=args.img_size, num_points=args.num_points,
         split='train', max_leaves=args.max_leaves,
         view_sampling=True, view_seed=args.view_seed,
-        max_plants=args.max_plants, plant_subset_seed=args.plant_subset_seed)
+        max_plants=args.max_plants, plant_subset_seed=args.plant_subset_seed,
+        rgb_file=args.rgb_file)
     val_base = SupervisedSorghumDataset(
         args.data_root, img_size=args.img_size, num_points=args.num_points,
         split='val', max_leaves=args.max_leaves,
-        view_sampling=True, deterministic_view=True)
+        view_sampling=True, deterministic_view=True, rgb_file=args.rgb_file)
     test_base = SupervisedSorghumDataset(
         args.data_root, img_size=args.img_size, num_points=args.num_points,
         split='test', max_leaves=args.max_leaves,
-        view_sampling=True, deterministic_view=True)
+        view_sampling=True, deterministic_view=True, rgb_file=args.rgb_file)
 
     n_cap = args.smoke_plants
     train_plants = train_base.plant_ints()[:n_cap] if n_cap else train_base.plant_ints()
@@ -1126,6 +1129,8 @@ def main():
     parser.add_argument('--img_size',           type=int,   default=None)
     parser.add_argument('--num_points',         type=int,   default=None)
     parser.add_argument('--view_seed',          type=int,   default=None)
+    parser.add_argument('--rgb_file',           type=str,   default=None,
+                        help=f'RGB image per sample folder (default {RGB_FILE})')
     parser.add_argument('--max_plants',         type=int,   default=None,
                         help='cap the TRAIN split at N plants (nested subsets, as E3)')
     parser.add_argument('--plant_subset_seed',  type=int,   default=None)

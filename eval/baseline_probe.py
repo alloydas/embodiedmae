@@ -180,12 +180,14 @@ class Species:
     data_root: str
     cache_dir: Path
     active_col: bool       # sorghum rows carry `active`; maize rows do not
+    rgb_file: str = 'rgb.png'   # the RGB image the dataset reads per sample folder
 
 
 def get_species(name):
     """Import only the requested species' probe: maize's pulls in open3d + XML."""
     if name == 'sorghum':
         import linear_probe as P
+        from sorghum_dataset import RGB_FILE
         return Species(
             name='sorghum', probe=P, dataset=P.SorghumDataset4M,
             ds_attr='SorghumDataset4M',
@@ -195,7 +197,9 @@ def get_species(name):
             plant_of=lambda n: int(n.rsplit('_', 1)[0].split('_')[-1]),
             plant_dtype=np.int64,
             data_root=P.DATA_ROOT, cache_dir=REPO / 'outputs' / '_probe_cache',
-            active_col=True)
+            active_col=True,
+            # rgb_nobg.png since 2026-10-01; caches of RGB adapters are keyed by it
+            rgb_file=RGB_FILE)
     if name == 'maize':
         import linear_probe_maize as P
         return Species(
@@ -253,6 +257,7 @@ def extract_split(mod, model, sp, data_root, split, features, batch_size,
         max_leaves=sp.max_leaves,
         view_sampling=True,        # both flags required: deterministic_view
         deterministic_view=True,   # alone is a silent no-op
+        **({'rgb_file': sp.rgb_file} if sp.name == 'sorghum' else {}),
         # max_plants is deliberately NOT passed: it draws a random TRAIN
         # subset for E3; the cap below is a prefix, for testing only.
     )
@@ -333,9 +338,24 @@ def extract_split(mod, model, sp, data_root, split, features, batch_size,
     return np.asarray(plants, dtype=sp.plant_dtype), out
 
 
-def cache_path(args, name, split, feature):
-    stem = (f'base_{name}__{args.species}__{split}__{feature}'
+def rgb_tag(mod, args):
+    """'' for the legacy rgb.png, else the image's stem, for adapters that read RGB.
+
+    The sorghum images changed on 2026-10-01 (rgb_nobg.png, black background), so
+    an RGB adapter's features from before then must never be served for the new
+    images, while every existing cache keeps its name and stays valid. PC-only
+    adapters read no image and are unaffected.
+    """
+    if 'rgb' not in mod.INPUTS or args.rgb_file == 'rgb.png':
+        return ''
+    return Path(args.rgb_file).stem
+
+
+def cache_path(args, mod, split, feature):
+    stem = (f'base_{mod.NAME}__{args.species}__{split}__{feature}'
             f'__seed{args.seed}__rep{args.repeats}')
+    if rgb_tag(mod, args):
+        stem += f'__{rgb_tag(mod, args)}'
     if args.max_plants_per_split is not None:
         stem += f'__cap{args.max_plants_per_split}'
     path = Path(args.cache_dir) / f'{stem}.npz'
@@ -351,6 +371,8 @@ def cache_settings(mod, args):
     PC adapter, the loader shape, which picks each plant's point subset.
     """
     s = {'source': mod.SOURCE, 'code': B.code_fingerprint(mod)}
+    if rgb_tag(mod, args):
+        s['rgb_file'] = args.rgb_file
     if 'pc' in mod.INPUTS:
         s.update(batch_size=args.batch_size, num_workers=args.num_workers)
     return s
@@ -365,7 +387,7 @@ def cached_features(mod, get_model, sp, args, split, features):
     settings = cache_settings(mod, args)
     out, plants, todo = {}, None, []
     for feat in features:
-        path = cache_path(args, mod.NAME, split, feat)
+        path = cache_path(args, mod, split, feat)
         if not path.exists() or args.refresh:
             todo.append(feat)
             continue
@@ -399,7 +421,7 @@ def cached_features(mod, get_model, sp, args, split, features):
                                f'features of another mode: --refresh')
         plants = p
         for feat in todo:
-            path = cache_path(args, mod.NAME, split, feat)
+            path = cache_path(args, mod, split, feat)
             meta = {'baseline': mod.NAME, 'species': sp.name, 'split': split,
                     'feature': feat, 'seed': args.seed, 'repeats': args.repeats,
                     'max_plants_per_split': args.max_plants_per_split,
@@ -684,6 +706,7 @@ def main():
     sp = get_species(args.species)
     args.data_root = args.data_root or sp.data_root
     args.cache_dir = args.cache_dir or str(sp.cache_dir)
+    args.rgb_file = sp.rgb_file
     args.split_set = [s.strip() for s in args.split_set.split(',') if s.strip()]
     if sp.name == 'sorghum' and args.split_set != ['train', 'val', 'test']:
         ap.error('sorghum --split-set must be train,val,test: linear_probe.py fits on '

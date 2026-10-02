@@ -42,8 +42,11 @@ mkdir -p logs
 source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh
 conda activate /work/mech-ai-scratch/alloy/.conda/envs/det_cu128
 
-CONFIG=configs/config_e8_supervised.yaml
-CKPT_DIR=./outputs/e8_supervised/checkpoints
+# E8_CONFIG picks another config (the data-version-2 run: configs/config_e8_supervised_d2.yaml);
+# the checkpoint dir follows its output_dir, so the two can never disagree.
+CONFIG="${E8_CONFIG:-configs/config_e8_supervised.yaml}"
+CKPT_DIR="$(python -c "import yaml,sys; print(yaml.safe_load(open(sys.argv[1]))['checkpointing']['output_dir'])" "${CONFIG}")/checkpoints"
+echo "Config  : ${CONFIG} -> ${CKPT_DIR}"
 
 echo "JobID   : ${SLURM_JOB_ID}"
 echo "Node    : $(hostname)"

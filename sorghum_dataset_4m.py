@@ -15,7 +15,7 @@ import random
 
 import torch
 from sorghum_dataset import (
-    SorghumDataset, _read_index_cache, _write_index_cache,
+    RGB_FILE, SorghumDataset, _read_index_cache, _write_index_cache,
 )
 from embodied_mae_4m import load_spline_params
 
@@ -25,9 +25,9 @@ class SorghumDataset4M(SorghumDataset):
     def __init__(self, data_root, img_size=224, num_points=8196, split=None,
                  max_leaves=24, view_sampling=False, view_seed=0,
                  deterministic_view=False, max_plants=None,
-                 plant_subset_seed=42):
+                 plant_subset_seed=42, rgb_file=RGB_FILE):
         super().__init__(data_root, img_size=img_size,
-                         num_points=num_points, split=split)
+                         num_points=num_points, split=split, rgb_file=rgb_file)
         self.max_leaves = max_leaves
 
         # Same caching treatment as the base index: one glob per folder over 105k

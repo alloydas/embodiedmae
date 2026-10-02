@@ -31,6 +31,15 @@ import tempfile
 # sample folder change — set SORGHUM_INDEX_REBUILD=1 to force a rescan in that case.
 INDEX_CACHE_VERSION = 1
 
+# The RGB file a sample folder is read from. Since 2026-10-01 the active dataset
+# carries rgb_nobg.png next to rgb.png: RGBA, straight alpha, background fully
+# transparent (shorgum_data/remove_background.py un-blends the edge pixels from
+# the renderer's flat grey, mask from depth.png != 0). load_rgb composites it over
+# BLACK, alpha-weighted, so the plant sits on black with anti-aliased edges. Every
+# run trained before that date read rgb.png (grey background), and its config.json
+# has no rgb_file key: evaluation code must pass rgb_file='rgb.png' for those runs.
+RGB_FILE = 'rgb_nobg.png'
+
 
 def _index_cache_dir():
     return Path(os.environ.get(
@@ -127,17 +136,20 @@ class SorghumDataset(Dataset):
         # OR if using Option 1
         val_dataset = SorghumDataset(data_root='./data', split='val')
     """
-    def __init__(self, data_root, img_size=224, num_points=10000, split=None):
+    def __init__(self, data_root, img_size=224, num_points=10000, split=None,
+                 rgb_file=RGB_FILE):
         """
         Args:
             data_root: Path to data directory
             img_size: Image size for resizing
             num_points: Number of points in point cloud
             split: Optional split name ('train' or 'val'). If provided, will look for data_root/split/
+            rgb_file: RGB image in each sample folder (see RGB_FILE)
         """
         self.data_root = Path(data_root)
         self.img_size = img_size
         self.num_points = num_points
+        self.rgb_file = rgb_file
         
         # Determine the folder to load from
         if split is not None:
@@ -174,7 +186,7 @@ class SorghumDataset(Dataset):
                     continue
 
                 # Check for required files
-                rgb_path = folder / 'rgb.png'
+                rgb_path = folder / self.rgb_file
                 depth_path = folder / 'depth.png'
 
                 # Find point cloud file ending with _nc.ply
@@ -194,7 +206,7 @@ class SorghumDataset(Dataset):
         
         if len(self.samples) == 0:
             raise ValueError(f"No valid samples found in {self.load_dir}!\n"
-                           f"Expected structure: folder/*_nc.ply, folder/rgb.png, folder/depth.png")
+                           f"Expected structure: folder/*_nc.ply, folder/{self.rgb_file}, folder/depth.png")
         
         print(f"✅ Loaded {len(self.samples)} samples from {self.load_dir.name}")
     
@@ -247,6 +259,21 @@ class SorghumDataset(Dataset):
         except Exception as e:
             raise RuntimeError(f"Error loading point cloud from {ply_path}: {e}")
     
+    def load_rgb(self, folder):
+        """(3, img_size, img_size) normalised RGB from folder/self.rgb_file.
+
+        An RGBA file (rgb_nobg.png) is composited over opaque black with its
+        alpha, which is what a black-background render would give: a pixel 10 %
+        covered becomes 0.1 x its plant colour. Dropping the alpha instead would
+        keep the un-blended colour at full strength on every edge pixel and grow
+        the silhouette by up to 2 px. An RGB file (rgb.png) is read as before.
+        """
+        with Image.open(Path(folder) / self.rgb_file) as im:
+            if im.mode == 'RGBA':
+                im = Image.alpha_composite(Image.new('RGBA', im.size, (0, 0, 0, 255)), im)
+            rgb = im.convert('RGB')
+        return self.rgb_transform(rgb)
+
     def load_depth(self, depth_path):
         """Load depth without collapsing packed RGBA values to luminance.
 
@@ -297,10 +324,8 @@ class SorghumDataset(Dataset):
         sample_dir = self.samples[idx]
         
         try:
-            # Load RGB
-            rgb_path = sample_dir / 'rgb.png'
-            rgb = Image.open(rgb_path).convert('RGB')
-            rgb = self.rgb_transform(rgb)
+            # Load RGB (rgb_nobg.png composited over black, or rgb.png)
+            rgb = self.load_rgb(sample_dir)
             
             # Load Depth
             depth_path = sample_dir / 'depth.png'
