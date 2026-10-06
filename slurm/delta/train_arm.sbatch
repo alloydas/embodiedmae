@@ -255,9 +255,17 @@ fi
 # 22.05 stopped reading it; 23.11 brought it back as SRUN_CPUS_PER_TASK). Left
 # to default, the step can be pinned to ONE core and all ${NW}x${NPROC} workers
 # share it -- a run that is merely slow, never an error. Pass it both ways.
-# --gpu-bind=none: one task drives every GPU, so do not bind it to a subset.
+# NOT --gpu-bind=none. The intent is right -- one task drives every GPU -- but on
+# Delta's Slurm it does the opposite. Measured in job 22376656 on gpuA40x4-preempt:
+# a 2-GPU allocation (SLURM_JOB_GPUS=1,2) gives a --gpu-bind=none step
+# CUDA_VISIBLE_DEVICES=1 and device_count 1, while bare srun, --gpus-per-node=2,
+# --gres=gpu:2 and --gpus=2 all give 2. Passing the count explicitly also survives
+# a requeue onto a node whose GPU indices differ. Without this, the CUDA check
+# below aborts the run ("step sees 1 GPUs, launcher expects 2") -- which is how
+# this was found, in maize job 22373005; unchecked it would have trained the arm
+# at global batch 16.
 export SRUN_CPUS_PER_TASK="${CPUS}"
-SRUN=(srun --kill-on-bad-exit=1 --ntasks=1 --cpus-per-task="${CPUS}" --gpu-bind=none)
+SRUN=(srun --kill-on-bad-exit=1 --ntasks=1 --cpus-per-task="${CPUS}" --gpus-per-node="${NPROC}")
 
 # CUDA sanity inside the SAME kind of step torchrun will get. A wrong-generation
 # build fails at the first kernel launch, not at import (CLAUDE.md), so launch
