@@ -135,6 +135,89 @@ def _leaf_to_params(leaf, leaf_index: int) -> np.ndarray:
     return np.clip((raw + _LEAF_SHIFT) / _LEAF_SCALE, 0.0, 1.0)
 
 
+# ── Data version 2 (2026-10-06): the trimmed XML ─────────────────────────────
+# The maize data was re-exported with a trimmed spline XML (`params/index.json`:
+# "trimmed record, same fields as <view>/maize_<no>_spline.xml"). It carries
+#   <plant height>  ·  <leaf id distance leafLength leafWidth leafAzimuthDeg
+#   leafAngle droopiness avgCurvature bendAngleDeg bladeLength>  ·  <LeafCurvature>
+# and NONE of the v1 fields (Tassel, Tiller radius/stemShrink, stemInclinationDeg,
+# widthTaper, leafTwist, leafCurl, wave*). The v1 builders read every field with
+# `.get(k, 0.0)`, so on a v2 file they do not fail: they emit seven constant leaf
+# slots and three constant plant slots. Hence a separate, STRICT layout here.
+#
+# Dropped from v2, measured over all 15,000 plants / 186,134 leaves
+# (plant_params.jsonl) and val+test XML:
+#   * bladeLength  == 0.8052-0.8055 x leafLength — a deterministic restatement.
+#   * bendAngleDeg == -droopiness - 4.5..10.2, r = -1.0000 (linear R² from the
+#                     other fields 0.9999999) — a restatement.
+#   * <LeafCurvature> meanLeafCurvature / meanBendAngleDeg are the per-leaf means
+#     (max|diff| 4e-06), and avgCurvature is r = 0.996 with them.
+#   * <leaves number> == the leaf count; <leaf id> is the token index.
+# Kept: height (genuinely new; r = 0.984 with internode sum, 0.226 with leaf
+# count) and per-leaf avgCurvature (1/m; r = -0.906 with leafLength).
+# Observed ranges over all 15,000 plants, which the scales below cover with
+# zero clipping: height 0.618-1.443, leaves 3-22, internode sum 0.434-1.239,
+# distance 0.0127-0.335, leafLength 0.100-0.751, leafWidth 0.010-0.117,
+# leafAngle -49.9..103.8 (v1's [-90, 90] would clip it), droopiness
+# -121.3..-54.3, avgCurvature 2.45-16.8, azJitterDeg -15..15.
+# N_PARAMS stays 14 so model shapes (and every v1 checkpoint) are unchanged; the
+# unused slots are zero, as v1's plant token already was for 9 of its 14.
+PARAM_SCHEMAS = ('v1', 'v2')
+
+PLANT_FIELDS_V2 = ('leafCount', 'stemInternodeSum', 'height')
+LEAF_FIELDS_V2 = ('distance', 'leafLength', 'leafWidth', 'leafAngle',
+                  'droopiness', 'avgCurvature', 'azJitterDeg')
+
+_PLANT_SCALE_V2 = np.array([32.0, 2.0, 2.0] + [1.0] * 11, np.float32)
+_PLANT_SHIFT_V2 = np.zeros(N_PARAMS, np.float32)
+_LEAF_SCALE_V2 = np.array([0.40, 0.85, 0.15, 180.0, 120.0, 25.0, 40.0]
+                          + [1.0] * 7, np.float32)
+_LEAF_SHIFT_V2 = np.array([0.00, -0.05, 0.00, 60.0, 150.0, 0.0, 20.0]
+                          + [0.0] * 7, np.float32)
+
+
+def xml_param_schema(root) -> str:
+    """'v1' for the full generator XML, 'v2' for the 2026-10-06 trimmed one."""
+    tiller = root.find('Tiller')
+    leaf = tiller.find('./leaves/leaf') if tiller is not None else None
+    if root.find('Tassel') is not None or (leaf is not None and 'leafTwist' in leaf.attrib):
+        return 'v1'
+    if 'height' in root.attrib:
+        return 'v2'
+    raise ValueError('maize spline XML matches neither known schema '
+                     '(no <Tassel>/leafTwist for v1, no <plant height> for v2)')
+
+
+def _plant_to_params_v2(root, leaves) -> np.ndarray:
+    raw = np.zeros(N_PARAMS, dtype=np.float32)
+    raw[0] = float(len(leaves))
+    raw[1] = float(sum(float(lf.attrib['distance']) for lf in leaves))
+    raw[2] = float(root.attrib['height'])
+    return np.clip((raw + _PLANT_SHIFT_V2) / _PLANT_SCALE_V2, 0.0, 1.0)
+
+
+def _leaf_to_params_v2(leaf, leaf_index: int) -> np.ndarray:
+    a = leaf.attrib                              # KeyError, never a silent 0.0
+    raw = np.zeros(N_PARAMS, dtype=np.float32)
+    raw[:7] = [float(a['distance']), float(a['leafLength']), float(a['leafWidth']),
+               float(a['leafAngle']), float(a['droopiness']), float(a['avgCurvature']),
+               _wrap180(float(a['leafAzimuthDeg']) - 180.0 * leaf_index)]
+    return np.clip((raw + _LEAF_SHIFT_V2) / _LEAF_SCALE_V2, 0.0, 1.0)
+
+
+def _params_to_plant_text_v2(params: np.ndarray) -> str:
+    raw = np.clip(np.asarray(params, dtype=np.float32), 0.0, 1.0) * _PLANT_SCALE_V2 - _PLANT_SHIFT_V2
+    n, isum, h = raw[:3]
+    return f"n={n:.1f} internode={isum:.4f} height={h:.4f}"
+
+
+def _params_to_leaf_text_v2(params: np.ndarray) -> str:
+    raw = np.clip(np.asarray(params, dtype=np.float32), 0.0, 1.0) * _LEAF_SCALE_V2 - _LEAF_SHIFT_V2
+    d, ln, w, ang, drp, cur, azj = raw[:7]
+    return (f"d={d:.4f} len={ln:.4f} w={w:.4f} ang={ang:+06.2f} "
+            f"droop={drp:+07.2f} curv={cur:.3f} azJit={azj:+06.2f}")
+
+
 def _params_to_plant_text(params: np.ndarray) -> str:
     p = np.clip(np.asarray(params, dtype=np.float32), 0.0, 1.0)
     raw = p * _PLANT_SCALE - _PLANT_SHIFT
@@ -153,8 +236,12 @@ def _params_to_leaf_text(params: np.ndarray) -> str:
             f"wAmp={wa:.5f} wFreq={wf:+06.2f} azJit={azj:+06.2f} ph={phase:+.3f}")
 
 
-def load_spline_params(xml_path, max_leaves: int = MAX_LEAVES):
+def load_spline_params(xml_path, max_leaves: int = MAX_LEAVES, schema=None):
     """Parse a maize spline XML into the 4M text-modality tensors.
+
+    `schema` ('v1' | 'v2' | None) is the layout the caller expects; the file's
+    own schema is detected and a mismatch raises. None accepts either (eval
+    code written before data version 2 passes nothing).
 
     Returns
       valid        : (1+max_leaves,)            float32 — 1=real token, 0=pad
@@ -171,17 +258,25 @@ def load_spline_params(xml_path, max_leaves: int = MAX_LEAVES):
     if tiller is None:
         raise ValueError(f'{xml_path}: no <Tiller>')
     leaves = tiller.findall('./leaves/leaf')
+    found = xml_param_schema(root)
+    if schema is not None and found != schema:
+        raise ValueError(f'{xml_path}: spline XML is schema {found}, '
+                         f'this run expects {schema}')
+    if found == 'v2' and not leaves:
+        raise ValueError(f'{xml_path}: no <leaf> elements')
 
     n_tokens = 1 + max_leaves
     valid = np.zeros(n_tokens, dtype=np.float32)
     param_floats = np.zeros((n_tokens, N_PARAMS), dtype=np.float32)
 
     valid[0] = 1.0
-    param_floats[0] = _plant_to_params(tassel, tiller, leaves)
+    param_floats[0] = (_plant_to_params_v2(root, leaves) if found == 'v2'
+                       else _plant_to_params(tassel, tiller, leaves))
 
+    leaf_fn = _leaf_to_params_v2 if found == 'v2' else _leaf_to_params
     for i, leaf in enumerate(leaves[:max_leaves]):
         valid[1 + i] = 1.0
-        param_floats[1 + i] = _leaf_to_params(leaf, i)
+        param_floats[1 + i] = leaf_fn(leaf, i)
 
     return torch.from_numpy(valid), torch.from_numpy(param_floats)
 
@@ -196,8 +291,13 @@ class EmbodiedMAE4MMaize(EmbodiedMAE4M):
     — they read widths off the tensors.
     """
 
-    def __init__(self, *args, max_leaves: int = MAX_LEAVES, **kwargs):
+    def __init__(self, *args, max_leaves: int = MAX_LEAVES, param_schema: str = 'v1',
+                 **kwargs):
+        if param_schema not in PARAM_SCHEMAS:
+            raise ValueError(f'param_schema must be one of {PARAM_SCHEMAS}, got {param_schema!r}')
         super().__init__(*args, max_leaves=max_leaves, **kwargs)
+        # Only decode_params_to_text reads this; shapes are identical in v1 and v2.
+        self.param_schema = param_schema
 
         if 'text' in self.active_modalities:
             # Encoder side: embodied_mae_4m.py:491 built this at sorghum width.
@@ -246,8 +346,11 @@ class EmbodiedMAE4MMaize(EmbodiedMAE4M):
             raise ValueError(
                 f'decode_params_to_text expects (B, n_text_tokens, N_PARAMS); '
                 f'got shape {p.shape}. Pass the batch, not a single sample.')
-        return [[_params_to_plant_text(p[b, t]) if t == 0
-                 else _params_to_leaf_text(p[b, t])
+        plant_fn, leaf_fn = ((_params_to_plant_text_v2, _params_to_leaf_text_v2)
+                             if self.param_schema == 'v2'
+                             else (_params_to_plant_text, _params_to_leaf_text))
+        return [[plant_fn(p[b, t]) if t == 0
+                 else leaf_fn(p[b, t])
                  for t in range(p.shape[1])]
                 for b in range(p.shape[0])]
 

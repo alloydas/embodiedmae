@@ -119,8 +119,16 @@ class MaizeDataset4M(Dataset):
 
     def __init__(self, data_root, img_size=224, num_points=8192, split=None,
                  max_leaves=MAX_LEAVES, view_sampling=False, view_seed=0,
-                 deterministic_view=False, max_plants=None, plant_subset_seed=42):
+                 deterministic_view=False, max_plants=None, plant_subset_seed=42,
+                 rgb_file='rgb.png', param_schema=None):
+        # Data version 2 (2026-10-06) adds rgba.png -- straight alpha, background
+        # transparent -- and a trimmed spline XML (embodied_mae_4m_maize,
+        # PLANT_FIELDS_V2). A d2 run passes rgb_file='rgba.png',
+        # param_schema='v2'; the defaults are what every earlier run read.
+        # The folder index still keys on rgb.png, which v2 folders also carry.
         self.data_root = Path(data_root)
+        self.rgb_file = rgb_file
+        self.param_schema = param_schema
         self.img_size = img_size
         self.num_points = num_points
         self.max_leaves = max_leaves
@@ -243,6 +251,18 @@ class MaizeDataset4M(Dataset):
 
     # ── modality loaders (copies, not imports — see the module docstring) ─────
 
+    def load_rgb(self, folder):
+        """(3, img_size, img_size) normalised RGB from folder/self.rgb_file.
+
+        An RGBA file (rgba.png) is composited over opaque black with its alpha,
+        the same convention as sorghum's rgb_nobg.png (sorghum_dataset.load_rgb).
+        """
+        with Image.open(folder / self.rgb_file) as im:
+            if im.mode == 'RGBA':
+                im = Image.alpha_composite(Image.new('RGBA', im.size, (0, 0, 0, 255)), im)
+            rgb = im.convert('RGB')
+        return self.rgb_transform(rgb)
+
     def load_depth(self, depth_path):
         """Big-endian packed RGBA uint32 -> float32 (1, img_size, img_size)."""
         with Image.open(depth_path) as image:
@@ -288,13 +308,14 @@ class MaizeDataset4M(Dataset):
         idx = self._resolve_index(idx)
         folder = self.samples[idx]
 
-        rgb = self.rgb_transform(Image.open(folder / 'rgb.png').convert('RGB'))
+        rgb = self.load_rgb(folder)
         depth = self.load_depth(folder / 'depth.png')
         pc = torch.from_numpy(self.load_pointcloud(folder / PC_FILENAME))
 
         cached = self._xml_names.get(folder.name)
         xml = (folder / cached) if cached else next(folder.glob('maize_*_spline.xml'))
-        text_valid, param_floats = load_spline_params(xml, self.max_leaves)
+        text_valid, param_floats = load_spline_params(xml, self.max_leaves,
+                                                      schema=self.param_schema)
 
         return rgb, depth, pc, param_floats, text_valid, folder.name
 

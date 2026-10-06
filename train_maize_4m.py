@@ -99,7 +99,7 @@ def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points',
                  'view_sampling', 'view_seed', 'max_plants',
-                 'plant_subset_seed'],
+                 'plant_subset_seed', 'rgb_file', 'param_schema'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
@@ -134,6 +134,11 @@ def config_to_namespace(config):
     _mp                   = config['data'].get('max_plants', None)
     ns.max_plants         = None if _mp in (None, 0, 'null') else int(_mp)
     ns.plant_subset_seed  = int(config['data'].get('plant_subset_seed', 42))
+    # Maize data version 2 (2026-10-06): rgba.png + the trimmed spline XML. The
+    # defaults are data version 1, i.e. every run before that date, whose
+    # config.json carries neither key. See check_resume_data_version.
+    ns.rgb_file           = config['data'].get('rgb_file', 'rgb.png')
+    ns.param_schema       = config['data'].get('param_schema', 'v1')
     ns.model_size         = config['model'].get('model_size', 'base')
     ns.mask_ratio         = config['model'].get('mask_ratio', 0.15)
     ns.pc_loss_weight     = config['model'].get('pc_loss_weight', 10.0)
@@ -668,6 +673,28 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
     return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n), metrics
 
 
+def check_resume_data_version(args):
+    """Refuse to continue a run directory written under the other data version.
+
+    Maize data version 2 (2026-10-06) replaced the files under the same root:
+    rgba.png beside rgb.png, and a trimmed spline XML with a different token
+    layout. A config.json from before then has neither key (= rgb.png / v1).
+    train_worker rewrites config.json first thing, so this runs before it.
+    """
+    if args.param_schema not in ('v1', 'v2'):
+        raise SystemExit(f"data.param_schema must be v1 or v2, got {args.param_schema!r}")
+    prev = Path(args.output_dir) / 'config.json'
+    if not prev.exists():
+        return
+    old = json.loads(prev.read_text())
+    was = (old.get('rgb_file', 'rgb.png'), old.get('param_schema', 'v1'))
+    now = (args.rgb_file, args.param_schema)
+    if was != now:
+        raise SystemExit(f"{prev} records rgb_file={was[0]!r}, param_schema={was[1]!r} but "
+                         f"this run uses rgb_file={now[0]!r}, param_schema={now[1]!r}: "
+                         f"refusing to mix data versions in one run directory")
+
+
 # ── Worker ────────────────────────────────────────────────────────────────────
 
 def train_worker(rank, world_size, args):
@@ -700,15 +727,21 @@ def train_worker(rank, world_size, args):
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, view_seed=args.view_seed,
                                  max_plants=args.max_plants,
-                                 plant_subset_seed=args.plant_subset_seed)
+                                 plant_subset_seed=args.plant_subset_seed,
+                                 rgb_file=args.rgb_file,
+                                 param_schema=args.param_schema)
     val_ds   = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
-                                 view_sampling=vs, deterministic_view=True)
+                                 view_sampling=vs, deterministic_view=True,
+                                 rgb_file=args.rgb_file,
+                                 param_schema=args.param_schema)
     test_ds  = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='test',
                                  max_leaves=args.max_leaves,
-                                 view_sampling=vs, deterministic_view=True)
+                                 view_sampling=vs, deterministic_view=True,
+                                 rgb_file=args.rgb_file,
+                                 param_schema=args.param_schema)
 
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
@@ -741,6 +774,7 @@ def train_worker(rank, world_size, args):
         target_points=args.num_points,
         pc_loss_weight=args.pc_loss_weight,
         max_leaves=args.max_leaves,
+        param_schema=args.param_schema,
         spline_loss_weight=args.spline_loss_weight,
         depth_norm_type=args.depth_norm_type,
         pc_loss_name=args.pc_loss_name,
@@ -1015,6 +1049,10 @@ def main():
     parser.add_argument('--max_plants',         type=int,   default=None,
                         help='E3: cap the TRAIN split at N plants (nested subsets)')
     parser.add_argument('--plant_subset_seed',  type=int,   default=None)
+    parser.add_argument('--rgb_file',           type=str,   default=None,
+                        help='RGB image per view folder: rgb.png (data v1) or rgba.png (v2)')
+    parser.add_argument('--param_schema',       type=str,   default=None, choices=['v1', 'v2'],
+                        help='spline XML layout: v1 (full generator XML) or v2 (trimmed, 2026-10-06)')
     parser.add_argument('--model_size',         type=str,   default=None, choices=['small','base','large'])
     parser.add_argument('--active_modalities',  type=str,   default=None,
                         help="E2 arm, e.g. 'pc' or 'pc,rgb' or 'pc,rgb,depth'. "
@@ -1071,6 +1109,8 @@ def main():
             "train_maize_4m.py has no default config on purpose — maize width "
             "(14 params / 28 leaves / 8192 points) and the E2-matched schedule "
             "live in the YAML. Pass --config configs/config_maize.yaml.")
+
+    check_resume_data_version(cfg)
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))
     if local_rank >= 0:
