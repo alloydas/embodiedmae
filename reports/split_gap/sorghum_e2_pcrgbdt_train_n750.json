@@ -1,0 +1,69 @@
+{
+ "species": "sorghum",
+ "run": "e2_pcrgbdt",
+ "ckpt": "checkpoints/checkpoint_epoch_600.pth",
+ "ckpt_epoch": 600,
+ "split": "train",
+ "n_plants": 750,
+ "view": "00 (view_sampling + deterministic_view)",
+ "sources": [],
+ "model_size": "base",
+ "active_modalities": [
+  "rgb",
+  "depth",
+  "pc",
+  "text"
+ ],
+ "target_points": 8196,
+ "mask_ratio_ref": 0.8,
+ "data_root": "/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K",
+ "regime": {},
+ "ref_regime": "forward_encoder(mask_ratio) over all active modalities, one Dirichlet draw per plant, REAL params (the trainer val path)",
+ "metric": "chamfer = embodied_mae.chamfer_distance (squared NN, mean both ways); miss_0p01 = frac of GT points whose nearest pred point is > 0.01 (Euclidean, unit-sphere-normalised cloud); precision_t = frac of pred points within t of the GT, recall_t = frac of GT points within t of the pred (= 1 - miss_t), f1_t their harmonic mean, per plant",
+ "seed_scheme": "0 + plant id; numpy before the read, torch before each forward",
+ "stats": {
+  "ref": {
+   "n": 750,
+   "chamfer_mean": 0.0024603134472854435,
+   "chamfer_median": 0.002333924639970064,
+   "chamfer_p10": 0.0017522680689580738,
+   "chamfer_p90": 0.0032643851358443504,
+   "chamfer_std": 0.0006861241250534746,
+   "chamfer_sem": 2.5053710702685568e-05,
+   "miss_0p01_mean": 0.8290465169747671,
+   "miss_0p01_median": 0.8299780189990997,
+   "miss_0p02_mean": 0.5941983026663462,
+   "acc_pred_to_gt_mean": 0.0010188227403753747,
+   "comp_gt_to_pred_mean": 0.0014414907021758456,
+   "f1_0p01_mean": 0.2658824376206461,
+   "precision_0p01_mean": 0.6524836471726497,
+   "recall_0p01_mean": 0.1709534730017185,
+   "f1_0p02_mean": 0.5449969763879512,
+   "precision_0p02_mean": 0.8389248206019402,
+   "recall_0p02_mean": 0.4058016914923986,
+   "f1_0p03_mean": 0.7290130335643092,
+   "precision_0p03_mean": 0.8896810025374094,
+   "recall_0p03_mean": 0.619760697166125
+  }
+ },
+ "recorded_val_pc_chamfer": {
+  "epoch": 600,
+  "val_pc_chamfer": 0.002504222485249941
+ },
+ "leak_check_max_abs_diff": {},
+ "ref_mean_visible_tokens": {
+  "rgb": 37.053333333333335,
+  "depth": 34.03333333333333,
+  "pc": 36.32933333333333,
+  "text": 14.584
+ },
+ "runtime_s": 546.9247026443481,
+ "loop_s_per_plant": 0.5268387171427409,
+ "slurm_job_id": "16691627",
+ "slurm_restart_count": null,
+ "host": "nova18-wide-55",
+ "threads": 16,
+ "workers": 6,
+ "torch": "2.11.0+cu130",
+ "python": "3.10.20"
+}

@@ -1,0 +1,99 @@
+# QAL-variant twin of config_sm_scene_struct.yaml: identical except the PC loss --
+# qal_threshold 0.02 (was 0.01), qal_use_squared true (was false) and
+# pc_loss_weight 15.0 (was 1.0). Squaring the distances shrinks the PC term
+# 11x at epoch 20 and 17x at epoch 200 (measured on sm_scene_s1's own
+# predictions, 2026-10-02, job 16702293), so the weight is raised to keep PC's
+# share of the total loss about where it was; at 1.0 the PC head would get
+# little gradient (see CLAUDE.md, "Three traps in a QAL sweep").
+# Paired with its random-masking (config_sm_scene_q02sq.yaml) twin under the same loss, so the masking-policy
+# comparison is not confounded by the loss change. 200 epochs = 65 800 steps,
+# like every scene arm.
+#
+#   sbatch --job-name=sm_scene_struct_q02sq_s1 slurm/sm_arm.sbatch scene_struct_q02sq 1
+#
+# ---- config_sm_scene_struct.yaml as it was ----------------------------------------------------
+# Occluded-scene training, STRUCTURED-MASKING arm (occlusion_scene.py).
+#
+# Identical to config_sm_scene.yaml (the meeting's setup: occluded scene in,
+# clean target plant out, the target's params as conditioning) except
+# mask_policy: neighbour_first -- on a scene sample, the image patches where a
+# neighbour shows (>= patch_frac of the patch) and the PC tokens whose FPS
+# centre is a neighbour point are masked FIRST, the rest of the Dirichlet budget
+# is filled uniformly. Clean samples (the other half) are masked uniformly.
+# Validation is uniform for every arm (SceneConfig.for_validation), so this arm
+# is scored on exactly the occluded val scenes sm_scene_s1 / sm_scene_off_s1
+# were, under the deployable masking: the question is whether training with
+# neighbour-first masking makes the model better at test time, not whether the
+# oracle masking itself helps.
+#
+#   sbatch --job-name=sm_scene_struct_s1 slurm/sm_arm.sbatch scene_struct 1
+#
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  # The view folders' *_spline.yml were rewritten 2026-09-30 (no waviness);
+  # these are the untouched originals every earlier run's params came from.
+  spline_root: /work/mech-ai-scratch/alloy/shorgum_data/SorghumData
+  img_size: 224
+  num_points: 8196
+  view_sampling: true
+  view_seed: 42            # identical in both arms: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80         # over pc/rgb/depth; text is outside the budget
+  text_mask_ratio: 0.0     # params = conditioning: all 25 tokens visible
+  loss_name: "qal_loss"
+  qal_threshold: 0.02
+  qal_alpha: 100.0
+  qal_use_squared: true
+  pc_loss_weight: 15.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+  occlusion_scene:         # defaults spelled out; config.json records them all
+    prob: 0.5              # share of training samples given neighbours
+    neighbours: 2          # one each side of a row through the target
+    spacing: [0.35, 0.8]   # stem-to-stem, metres (leaves reach ~0.5 m)
+    row_jitter: 0.1        # metres off the row line
+    yaw: true
+    crop_radius: 0.75      # cloud cut to this cylinder around the target stem
+    splat_px: 1
+    mask_policy: neighbour_first   # THE change vs config_sm_scene.yaml
+    patch_frac: 0.3
+    val_seed: 0            # same val scenes in every arm
+
+training:
+  batch_size: 16           # per GPU; the launcher runs 2 GPUs -> global 32
+  epochs: 200
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 13
+  val_freq: 20             # 10 val points, each clean + occluded
+  test_freq: 0
+  seed: null               # set per run by the launcher (--seed)
+
+checkpointing:
+  output_dir: ./outputs/sm_scene_struct_q02sq
+  save_freq: 20
+  resume: null
+
+visualization:
+  viz_freq: 20             # = val_freq: clean + occluded-scene figures to W&B (visualizations/, scene_visualizations/)
+  num_viz_samples: 6
+
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: sm_scene_struct_q02sq

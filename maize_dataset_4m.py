@@ -115,12 +115,23 @@ class MaizeDataset4M(Dataset):
     loop is unchanged:
         (rgb, depth, pc, param_floats, text_valid, name)
          (3,H,W) (1,H,W) (N,3)  (1+max_leaves, 14)  (1+max_leaves,)  str
+
+    return_pc_norm=True appends pc_norm (4,): the cloud's centroid (camera-frame
+    metres) and scale, so pc * scale + centroid is the camera-frame cloud.
+    return_pose=True (implies it) appends cam2world (4, 4) from
+    camera_pose.json and near_far (2,): that view's depth.png near and far
+    planes, which maize's renderer sets PER PLANT (sorghum's are fixed).
+    occlusion_scene.compose needs all three; the order matches
+    SorghumDataset4M's, with near_far as a ninth item sorghum does not have.
     """
 
     def __init__(self, data_root, img_size=224, num_points=8192, split=None,
                  max_leaves=MAX_LEAVES, view_sampling=False, view_seed=0,
-                 deterministic_view=False, max_plants=None, plant_subset_seed=42):
+                 deterministic_view=False, max_plants=None, plant_subset_seed=42,
+                 return_pc_norm=False, return_pose=False):
         self.data_root = Path(data_root)
+        self.return_pose = bool(return_pose)
+        self.return_pc_norm = bool(return_pc_norm) or self.return_pose
         self.img_size = img_size
         self.num_points = num_points
         self.max_leaves = max_leaves
@@ -278,10 +289,15 @@ class MaizeDataset4M(Dataset):
         else:
             pad = points[np.random.choice(n, self.num_points - n, replace=True)]
             points = np.vstack([points, pad])
-        points = points - np.mean(points, axis=0)
+        centroid = np.mean(points, axis=0)
+        points = points - centroid
         max_dist = np.max(np.linalg.norm(points, axis=1))
         if max_dist > 0:
             points = points / max_dist
+        # Kept for return_pc_norm: one __getitem__ at a time per worker, so
+        # reading it right after this call is safe.
+        self._last_pc_norm = np.append(
+            centroid, max_dist if max_dist > 0 else 1.0).astype(np.float32)
         return points.astype(np.float32)
 
     def __getitem__(self, idx):
@@ -296,6 +312,16 @@ class MaizeDataset4M(Dataset):
         xml = (folder / cached) if cached else next(folder.glob('maize_*_spline.xml'))
         text_valid, param_floats = load_spline_params(xml, self.max_leaves)
 
+        if self.return_pc_norm:
+            pc_norm = torch.from_numpy(self._last_pc_norm.copy())
+            if self.return_pose:
+                with open(folder / 'camera_pose.json') as fh:
+                    pose = json.load(fh)
+                cam2world = torch.tensor(pose['cameraToWorld'], dtype=torch.float32).view(4, 4)
+                near_far = torch.tensor([pose['near'], pose['far']], dtype=torch.float32)
+                return (rgb, depth, pc, param_floats, text_valid, folder.name, pc_norm,
+                        cam2world, near_far)
+            return rgb, depth, pc, param_floats, text_valid, folder.name, pc_norm
         return rgb, depth, pc, param_floats, text_valid, folder.name
 
 

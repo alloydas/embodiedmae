@@ -219,7 +219,13 @@ class PointCloudEmbed(nn.Module):
         
         # Farthest point sampling
         fps_idx = self.fps(xyz, self.num_tokens)
-        
+        # The centres this pass actually used (token order). Read by the 4M
+        # model's structured masking to tell which tokens a neighbour hides;
+        # storing them draws no random numbers, so masks are unchanged.
+        self.last_centers = xyz[torch.arange(B, device=xyz.device)[:, None],
+                                fps_idx].detach()
+        self.last_fps_idx = fps_idx.detach()
+
         # Grouping
         grouped_points = self.knn_grouping(xyz, None, fps_idx)  # (B, num_tokens, group_size, 3)
         

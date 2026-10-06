@@ -242,6 +242,11 @@ class SorghumDataset(Dataset):
             max_dist = np.max(np.linalg.norm(points, axis=1))
             if max_dist > 0:
                 points = points / max_dist
+            # Kept so a caller can map the unit cloud back to camera-frame
+            # metres (SorghumDataset4M(return_pc_norm=True)); one __getitem__ at
+            # a time per worker, so reading it right after this call is safe.
+            self._last_pc_norm = np.append(
+                centroid, max_dist if max_dist > 0 else 1.0).astype(np.float32)
             
             return points.astype(np.float32)
         except Exception as e:

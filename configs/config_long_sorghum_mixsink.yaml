@@ -1,0 +1,89 @@
+# LONG RUN for real-data testing (sorghum): the best-so-far pieces in one config.
+#   masking : MIXED -- neighbour-first on half the occluded-scene samples
+#             (nf_prob 0.5), uniform on the rest; scenes on half of each batch.
+#             >= uniform on every measure in both species (2026-10-04).
+#   loss    : QAL 0.02 squared (x15) + Sinkhorn (effective 0.5) -- the best
+#             sorghum F1@0.01 of any arm (sm_scene_q02sq_sink_s1).
+#   params  : OFF (pc, rgb, depth only). Real plants have no procedural
+#             parameters; a model trained with them always visible would meet
+#             an input it never saw. Expect lower synthetic scores than the
+#             param arms (the no-param arm cost +31 % / +48 % chamfer).
+#   scale   : 4 GPUs x 16 = global batch 64, lr 3e-4, 600 epochs (~98,700
+#             steps). Not comparable step-for-step with the 2 x 16 arms, and
+#             its occluded val scenes differ too (scene seeds depend on rank).
+# This exact combination has not run before; each piece has.
+#
+#   sbatch --job-name=long_sorghum_mixsink_s1 slurm/long_arm.sbatch sorghum_mixsink 1
+#
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  # The view folders' *_spline.yml were rewritten 2026-09-30 (no waviness);
+  # these are the untouched originals every earlier run's params came from.
+  spline_root: /work/mech-ai-scratch/alloy/shorgum_data/SorghumData
+  img_size: 224
+  num_points: 8196
+  view_sampling: true
+  view_seed: 42            # identical in both arms: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth"   # NO parameter stream: real plants have none
+  model_size: base
+  mask_ratio: 0.80         # over pc/rgb/depth; text is outside the budget
+  text_mask_ratio: null    # no text stream
+  loss_name: "qal_loss"
+  qal_threshold: 0.02
+  qal_alpha: 100.0
+  qal_use_squared: true
+  pc_loss_weight: 15.0     # squaring shrinks the QAL term 11-17x (job 16702293)
+  pc_sinkhorn_weight: 0.0333   # x pc_loss_weight 15 = 0.5 effective (pc_sinkhorn.py)
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+  occlusion_scene:         # defaults spelled out; config.json records them all
+    prob: 0.5              # share of training samples given neighbours
+    neighbours: 2          # one each side of a row through the target
+    spacing: [0.35, 0.8]   # stem-to-stem, metres (leaves reach ~0.5 m)
+    row_jitter: 0.1        # metres off the row line
+    yaw: true
+    crop_radius: 0.75      # cloud cut to this cylinder around the target stem
+    splat_px: 1
+    mask_policy: neighbour_first   # THE change vs config_sm_scene.yaml
+    nf_prob: 0.5           # half the scene samples neighbour-first, half uniform
+    patch_frac: 0.3
+    val_seed: 0            # same val scenes in every arm
+
+training:
+  batch_size: 16           # per GPU x 4 GPUs = global 64
+  epochs: 600
+  lr: 3.0e-4               # 1.5e-4 at global 32, scaled linearly to 64
+  weight_decay: 0.05
+  warmup_epochs: 39        # same 6.5 % of the schedule as the 200-epoch arms
+  val_freq: 20             # 30 val points, each clean + occluded
+  test_freq: 0
+  seed: null               # set per run by the launcher (--seed)
+
+checkpointing:
+  output_dir: ./outputs/long_sorghum_mixsink
+  save_freq: 20
+  resume: null
+
+visualization:
+  viz_freq: 20             # = val_freq: clean + occluded-scene figures to W&B (visualizations/, scene_visualizations/)
+  num_viz_samples: 6
+
+distributed:
+  world_size: 4
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: long_sorghum_mixsink

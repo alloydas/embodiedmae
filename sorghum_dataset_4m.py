@@ -8,10 +8,27 @@ Each sample returns:
     param_floats: (1 + max_leaves, N_PARAMS)     float32  — encoder input + target
     text_valid  : (1 + max_leaves,)              float32  — 1=real, 0=padding
     name        : str
+    pc_norm     : (4,)                           float32  — only with
+                  return_pc_norm=True: the cloud's centroid (xyz, metres, camera
+                  frame) and scale, so pc * scale + centroid is the camera-frame
+                  cloud. Structured masking needs it to project points.
+    cam2world   : (4, 4)                         float32  — only with
+                  return_pose=True (which implies return_pc_norm): the view's
+                  camera_pose.json cameraToWorld. Occluded-scene training needs
+                  it to stand neighbouring plants on the target's ground.
+
+Spline params: on 2026-09-30 Alloy's alloy/shorgum_data/add_leaf_width.py
+rewrote every *_spline.yml copy in Sorghum_15K in place (per-leaf `width` added,
+both waviness keys dropped). load_spline_params needs the waviness keys, and its
+leaf filter used to drop every leaf of a rewritten file without a word -- the
+text stream became the plant token alone. See _resolve_spline_root.
 """
 
 from pathlib import Path
+import json
+import os
 import random
+import re
 
 import torch
 from sorghum_dataset import (
@@ -20,15 +37,24 @@ from sorghum_dataset import (
 from embodied_mae_4m import load_spline_params
 
 
+def is_rewritten_spline(text):
+    """True for a *_spline.yml that add_leaf_width.py rewrote (width, no waviness)."""
+    return ('waviness_' not in text
+            and re.search(r'^\s+width:', text, re.MULTILINE) is not None)
+
+
 class SorghumDataset4M(SorghumDataset):
 
     def __init__(self, data_root, img_size=224, num_points=8196, split=None,
                  max_leaves=24, view_sampling=False, view_seed=0,
                  deterministic_view=False, max_plants=None,
-                 plant_subset_seed=42):
+                 plant_subset_seed=42, return_pc_norm=False,
+                 return_pose=False, spline_root=None):
         super().__init__(data_root, img_size=img_size,
                          num_points=num_points, split=split)
         self.max_leaves = max_leaves
+        self.return_pose = bool(return_pose)
+        self.return_pc_norm = bool(return_pc_norm) or self.return_pose
 
         # Same caching treatment as the base index: one glob per folder over 105k
         # folders is minutes of shared-filesystem traffic at every job start, and
@@ -49,6 +75,7 @@ class SorghumDataset4M(SorghumDataset):
         self._spline_names = {name: yml for name, yml in entries}
         self.samples = [self.load_dir / name for name, _ in entries]
         print(f"✅ {len(self.samples)} samples have spline data")
+        self.spline_root = self._resolve_spline_root(spline_root)
 
         # ── Data scaling (CVPR plan §5, experiment E3) ────────────────────
         # max_plants restricts the split to a NESTED random subset of plants:
@@ -117,6 +144,42 @@ class SorghumDataset4M(SorghumDataset):
                   f"{len(self.plant_views)} items, not {len(self.samples)}"
                   + ("  [deterministic: view 0]" if self.deterministic_view else ""))
 
+    def _resolve_spline_root(self, spline_root):
+        """Directory to read <plant>_spline.yml from, or None for the view folders.
+
+        The SorghumData originals the per-view copies were made from are
+        untouched by the 2026-09-30 rewrite (add_leaf_width.py only rewrites a
+        copy that is byte-identical to its original), so reading them gives the
+        exact tensor every run before the rewrite trained on. Order: the
+        argument, then $SORGHUM_SPLINE_ROOT, then -- only when the folder copies
+        turn out to be rewritten -- Nova's layout, <data_root>/../../SorghumData.
+        A copy left original keeps loading from its folder, unchanged.
+        """
+        explicit = spline_root or os.environ.get('SORGHUM_SPLINE_ROOT')
+        if explicit:
+            root = Path(explicit)
+            if not root.is_dir():
+                raise ValueError(f"spline_root {root} is not a directory")
+            print(f"📄 spline params from {root} (set explicitly)")
+            return root
+        if not self.samples:
+            return None
+        folder = self.samples[0]
+        if not is_rewritten_spline(
+                (folder / self._spline_names[folder.name]).read_text()):
+            return None
+        root = self.data_root.parent.parent / 'SorghumData'
+        probe = root / f"{folder.name.rsplit('_', 1)[0]}_spline.yml"
+        if not probe.exists() or is_rewritten_spline(probe.read_text()):
+            raise ValueError(
+                f"{folder.name}'s *_spline.yml was rewritten by add_leaf_width.py "
+                f"(no waviness keys), and no original was found at {probe}. Set "
+                f"data.spline_root (or $SORGHUM_SPLINE_ROOT) to the SorghumData "
+                f"folder; without it the text stream loads no leaves.")
+        print(f"📄 spline copies under {self.load_dir.name}/ were rewritten on "
+              f"2026-09-30 (no waviness); reading the originals in {root}")
+        return root
+
     def set_epoch(self, epoch):
         """Advance the view draw. No-op unless view_sampling is on."""
         self._epoch = int(epoch)
@@ -147,10 +210,22 @@ class SorghumDataset4M(SorghumDataset):
         rgb, depth, pc, name = super().__getitem__(idx)
 
         folder = self.samples[idx]
-        cached = self._spline_names.get(folder.name)
-        yml    = (folder / cached) if cached else list(folder.glob('*_spline.yml'))[0]
+        if self.spline_root is not None:
+            yml = self.spline_root / f"{folder.name.rsplit('_', 1)[0]}_spline.yml"
+        else:
+            cached = self._spline_names.get(folder.name)
+            yml    = (folder / cached) if cached else list(folder.glob('*_spline.yml'))[0]
         text_valid, param_floats = load_spline_params(yml, self.max_leaves)
 
+        if self.return_pc_norm:
+            pc_norm = torch.from_numpy(self._last_pc_norm.copy())
+            if self.return_pose:
+                with open(folder / 'camera_pose.json') as fh:
+                    c2w = json.load(fh)['cameraToWorld']
+                cam2world = torch.tensor(c2w, dtype=torch.float32).view(4, 4)
+                return (rgb, depth, pc, param_floats, text_valid, name, pc_norm,
+                        cam2world)
+            return rgb, depth, pc, param_floats, text_valid, name, pc_norm
         return rgb, depth, pc, param_floats, text_valid, name
 
 

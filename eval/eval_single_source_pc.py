@@ -91,9 +91,14 @@ SPECIES = {
                 'num_points': 8196, 'max_leaves': 24},
 }
 MODALITIES = ('rgb', 'depth', 'pc', 'text')      # the 13-tuple's order
+# F-score thresholds, Euclidean on the unit-sphere-normalised cloud -- the
+# same three train_sorghum_4m.pc_scores and eval/eval_occlusion.py report.
+THRESHOLDS = (0.01, 0.02, 0.03)
+FSCORE = [f'{m}_{t:.2f}'.replace('0.', '0p') for t in THRESHOLDS
+          for m in ('f1', 'precision', 'recall')]
 FIELDS = ['plant', 'plant_id', 'view', 'seed', 'mode', 'chamfer',
           'acc_pred_to_gt', 'comp_gt_to_pred', 'miss_0p01', 'miss_0p02',
-          'nn_gt_median']
+          'nn_gt_median', *FSCORE]
 
 
 def load_species(species, run_dir, ckpt, device):
@@ -174,10 +179,17 @@ def score(pred, gt):
     nn_pr = d.min(dim=0).values                   # per pred point -> nearest GT
     acc, comp = float((nn_pr ** 2).mean()), float((nn_gt ** 2).mean())
     assert abs((acc + comp) - cd) <= 1e-7 + 1e-4 * cd, (cd, acc + comp)
-    return {'chamfer': cd, 'acc_pred_to_gt': acc, 'comp_gt_to_pred': comp,
-            'miss_0p01': float((nn_gt > 0.01).float().mean()),
-            'miss_0p02': float((nn_gt > 0.02).float().mean()),
-            'nn_gt_median': float(nn_gt.median())}
+    out = {'chamfer': cd, 'acc_pred_to_gt': acc, 'comp_gt_to_pred': comp,
+           'miss_0p01': float((nn_gt > 0.01).float().mean()),
+           'miss_0p02': float((nn_gt > 0.02).float().mean()),
+           'nn_gt_median': float(nn_gt.median())}
+    for t in THRESHOLDS:
+        k = f'{t:.2f}'.replace('0.', '0p')
+        prec = float((nn_pr < t).float().mean())   # predicted points near the GT
+        rec = float((nn_gt < t).float().mean())    # GT points the prediction covers
+        out[f'precision_{k}'], out[f'recall_{k}'] = prec, rec
+        out[f'f1_{k}'] = 2 * prec * rec / max(prec + rec, 1e-9)
+    return out
 
 
 def noise_like(x, g, kind):
@@ -201,7 +213,8 @@ def stats(rows, mode):
             'miss_0p01_mean': float(ms.mean()), 'miss_0p01_median': float(np.median(ms)),
             'miss_0p02_mean': float(m2.mean()),
             'acc_pred_to_gt_mean': float(np.mean([x['acc_pred_to_gt'] for x in r])),
-            'comp_gt_to_pred_mean': float(np.mean([x['comp_gt_to_pred'] for x in r]))}
+            'comp_gt_to_pred_mean': float(np.mean([x['comp_gt_to_pred'] for x in r])),
+            **{f'{k}_mean': float(np.mean([x[k] for x in r])) for k in FSCORE}}
 
 
 def write_rows(path, rows):
@@ -247,6 +260,8 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--species', required=True, choices=sorted(SPECIES))
     ap.add_argument('--run', default=None, help='outputs/<run> (default per species)')
+    ap.add_argument('--outputs-root', default=None,
+                    help='directory holding <run>/ (default: this repo\'s outputs/)')
     ap.add_argument('--ckpt', default='checkpoints/checkpoint_epoch_600.pth')
     ap.add_argument('--sources', default='rgb,depth')
     ap.add_argument('--split', default='val')
@@ -268,7 +283,7 @@ def main():
     torch.set_num_threads(args.threads)
     sp = SPECIES[args.species]
     run = args.run or sp['run']
-    run_dir = REPO / 'outputs' / run
+    run_dir = Path(args.outputs_root or REPO / 'outputs') / run
     data_root = args.data_root or sp['data_root']
     sources = [s.strip() for s in args.sources.split(',') if s.strip()]
     device = torch.device(args.device)
@@ -392,7 +407,9 @@ def main():
                        'Dirichlet draw per plant, REAL params (the trainer val path)'),
         'metric': ('chamfer = embodied_mae.chamfer_distance (squared NN, mean both ways); '
                    'miss_0p01 = frac of GT points whose nearest pred point is > 0.01 '
-                   '(Euclidean, unit-sphere-normalised cloud)'),
+                   '(Euclidean, unit-sphere-normalised cloud); precision_t = frac of '
+                   'pred points within t of the GT, recall_t = frac of GT points within '
+                   't of the pred (= 1 - miss_t), f1_t their harmonic mean, per plant'),
         'seed_scheme': f'{args.seed} + plant id; numpy before the read, torch before each forward',
         'stats': {m: stats(rows, m) for m in modes},
         'recorded_val_pc_chamfer': recorded_val_chamfer(run_dir, cfg, epoch),
@@ -419,6 +436,12 @@ def main():
         print(f"{m:>6}{st['n']:>6}{st['chamfer_mean']:>11.6f}{st['chamfer_median']:>11.6f}"
               f"{st['chamfer_p10']:>11.6f}{st['chamfer_p90']:>11.6f}"
               f"{st['miss_0p01_mean']:>11.4f}{st['miss_0p02_mean']:>11.4f}")
+    print(f"\n{'mode':>6}" + ''.join(f"{'F1/P/R@' + str(t):>24}" for t in THRESHOLDS))
+    for m in modes:
+        st = summary['stats'][m]
+        print(f"{m:>6}" + ''.join(
+            f"{st[f'f1_{k}_mean']:>10.4f}/{st[f'precision_{k}_mean']:.4f}/{st[f'recall_{k}_mean']:.4f}"
+            .rjust(24) for k in (f'{t:.2f}'.replace('0.', '0p') for t in THRESHOLDS)))
     print(f'recorded val_pc_chamfer: {summary["recorded_val_pc_chamfer"]}')
     print(f'leak check: {leak}')
     print(f'wrote {csv_path} and {json_path}  [{time.time()-t0:.0f}s]')

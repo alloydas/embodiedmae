@@ -1,0 +1,85 @@
+# Structured-masking comparison, NEIGHBOUR-OCCLUSION arm.
+#
+# Question (lab meetings 2026-09-29): does occlusion-shaped token masking make
+# the model better at reconstructing a plant its neighbours partly hide? The
+# two arms differ ONLY in `model.structured_mask`: config_sm_off.yaml is this
+# file without the block below. See structured_mask.py for what it does and
+# why: on half the training samples, two other plants from the batch are placed
+# beside the target, a per-pixel depth test finds what they hide, and those
+# RGB / depth / point-cloud tokens are masked first; the rest of each
+# modality's Dirichlet budget is filled uniformly as usual.
+#
+# Base: config_e2_pcrgbdt.yaml (all four streams, mask 0.80, QAL, global batch
+# 32), shortened to 200 epochs = 65 800 optimizer steps at 329 steps/epoch --
+# ONE cosine over 200 epochs, so it is NOT e2_pcrgbdt at epoch 200 and is not
+# comparable to the 197 400-step E2/E3/E4 table. It is a two-arm comparison.
+# Warmup / val / save are e2_pcrgbdt's scaled by 200/600.
+#
+# Seeds and output dirs come from the launcher (slurm/sm_arm.sbatch):
+#   outputs/sm_off_s<seed>, outputs/sm_nbr_s<seed>
+# Score both with eval/eval_occlusion.py on the TEST split -- validation here
+# is clean input + uniform masks, which is not what the arms differ on.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  img_size: 224
+  num_points: 8196
+  view_sampling: true
+  view_seed: 42            # identical in both arms: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+  structured_mask:         # defaults spelled out; config.json records them all
+    prob: 0.5              # half the samples structured, half plain uniform
+    neighbours: 2          # one each side
+    offset: [0.0, 0.7]     # x (target + neighbour half-widths); 1 = touching
+    depth_offset: [-0.5, 0.1]   # metres; mostly in front, leaves interleave
+    vertical_jitter: 0.1
+    flip: true
+    patch_hidden_frac: 0.4
+    min_patch_plant: 0.05
+    apply_in_eval: false   # validation stays uniform in both arms
+
+training:
+  batch_size: 16           # per GPU; the launcher runs 2 GPUs -> global 32
+  epochs: 200
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 13
+  val_freq: 20             # 10 val points
+  test_freq: 0
+  seed: null               # set per run by the launcher (--seed)
+
+checkpointing:
+  output_dir: ./outputs/sm_nbr
+  save_freq: 20
+  resume: null
+
+visualization:
+  viz_freq: 0
+  num_viz_samples: 6
+
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: sm_nbr

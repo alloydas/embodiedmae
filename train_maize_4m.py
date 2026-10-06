@@ -11,7 +11,9 @@ the visualisation grid — is shared logic that happens to be species-neutral.
 """
 import os
 import json
+import random
 import argparse
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -42,8 +44,17 @@ from embodied_mae_4m_maize import (
     MAX_LEAVES,
     N_PARAMS,
 )
-from embodied_mae import chamfer_distance, earth_movers_distance
+from embodied_mae import earth_movers_distance
 from maize_dataset_4m import MaizeDataset4M
+from occlusion_scene import SceneConfig, compose as compose_scene
+from leaf_mask import LeafMaskConfig, mask_weights as leaf_mask_weights
+# Species-agnostic pieces shared with the sorghum trainer: the point-cloud
+# scorer (chunked chamfer + F1/precision/recall), the history-alignment helper
+# and the occluded-scene figure. Everything that reads maize data or builds the
+# maize model stays in this file.
+from train_sorghum_4m import (
+    PC_THRESHOLDS, PC_FSCORE_KEYS, pc_scores, _append_aligned, visualize_scene_4m,
+)
 
 
 # ── Config helpers ────────────────────────────────────────────────────────────
@@ -65,6 +76,8 @@ METRIC_KEYS = [
     ('param_mae_masked', 'val_param_mae_masked', 'test_param_mae_masked', '.6f'),
     ('param_acc@0.05',   'val_param_acc05',      'test_param_acc05',      '.4f'),
 ]
+METRIC_KEYS += [(k, f"val_pc_{k.replace('@0.', '_0')}", f"test_pc_{k.replace('@0.', '_0')}", '.4f')
+                for k in PC_FSCORE_KEYS]
 
 
 def _fmt_metrics(md):
@@ -99,7 +112,7 @@ def merge_config_with_args(config, args):
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
                   'active_modalities'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
-                     'warmup_epochs', 'val_freq', 'test_freq'],
+                     'warmup_epochs', 'val_freq', 'test_freq', 'seed'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
         'visualization': ['viz_freq', 'num_viz_samples'],
         'distributed': ['world_size', 'dist_backend', 'dist_url'],
@@ -140,12 +153,36 @@ def config_to_namespace(config):
     ns.qal_threshold      = config['model'].get('qal_threshold', 0.01)
     ns.qal_alpha          = config['model'].get('qal_alpha', 100.0)
     ns.qal_use_squared    = config['model'].get('qal_use_squared', False)
+    ns.pc_sinkhorn_weight = config['model'].get('pc_sinkhorn_weight', 0.0)
+    ns.pc_sinkhorn_points = config['model'].get('pc_sinkhorn_points', 2048)
+    ns.pc_sinkhorn_blur   = config['model'].get('pc_sinkhorn_blur', 0.01)
     # E2 modality value-add. None -> all four streams (the headline model).
     # A subset names which token streams exist AT ALL: an inactive modality has
     # no embedder, no decoder head and no loss term, so it is absent from the
     # model rather than merely masked. 'pc' is mandatory (it anchors the target).
     # Accepts a YAML list or a comma-separated string.
     ns.active_modalities  = _parse_modalities(config['model'].get('active_modalities'))
+    # Params as conditioning (the occluded-scene arms): 0.0 keeps every param
+    # token visible and reconstructs none, outside the Dirichlet budget. None =
+    # text inside the shared budget -- every maize run before 2026-10-02.
+    _tmr                  = config['model'].get('text_mask_ratio', None)
+    ns.text_mask_ratio    = None if _tmr in (None, 'null') else float(_tmr)
+    if ns.text_mask_ratio is not None and not 0.0 <= ns.text_mask_ratio <= 1.0:
+        raise ValueError(f"text_mask_ratio must be in [0, 1], got {ns.text_mask_ratio}")
+    # Occluded-scene training (occlusion_scene.py), as in train_sorghum_4m.py.
+    # The scene geometry is the same (stem at the world origin, y up, 40 deg
+    # FOV, checked on maize 2026-10-02); maize's depth near/far are per plant
+    # and come from camera_pose.json. Maize plants are ~0.58x sorghum's
+    # footprint, so the maize configs set their own spacing / crop_radius.
+    _sc                   = SceneConfig.from_dict(config['model'].get('occlusion_scene'))
+    ns.occlusion_scene    = None if _sc is None else _sc.to_dict()
+    # Leaf-weighted masking (leaf_mask.py), YAML only: the target's leaves are
+    # masked more often than its stem. Training only; validation stays uniform.
+    _lm                   = LeafMaskConfig.from_dict(config['model'].get('leaf_mask'))
+    ns.leaf_mask          = None if _lm is None else _lm.to_dict()
+    if _lm is not None and _sc is not None and _sc.prob > 0 and _sc.mask_policy != 'uniform':
+        raise ValueError("leaf_mask needs occlusion_scene.mask_policy: uniform -- "
+                         "both would set the masking")
     ns.batch_size         = config['training'].get('batch_size', 16)
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
@@ -153,6 +190,10 @@ def config_to_namespace(config):
     ns.warmup_epochs      = config['training'].get('warmup_epochs', 10)
     ns.val_freq           = config['training'].get('val_freq', 20)
     ns.test_freq          = config['training'].get('test_freq', 50)
+    # Seeds model init, masks and loader draws (as train_sorghum_4m.py). None =
+    # unseeded, as every maize run before 2026-10-02 was.
+    _seed                 = config['training'].get('seed', None)
+    ns.seed               = None if _seed in (None, 'null') else int(_seed)
     ns.output_dir         = config['checkpointing'].get('output_dir', './outputs/4m_run')
     ns.save_freq          = config['checkpointing'].get('save_freq', 100)
     ns.resume             = config['checkpointing'].get('resume', None)
@@ -257,7 +298,9 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
         return saved_paths
 
     batch = next(iter(dataloader))
-    rgb_b, depth_b, pc_b, param_floats_b, text_valid_b, names = batch
+    # [:6]: a loader built for occluded scenes also yields pc_norm, cam2world
+    # and near_far.
+    rgb_b, depth_b, pc_b, param_floats_b, text_valid_b, names = batch[:6]
     rgb_b         = rgb_b[:num_samples].to(device)
     depth_b       = depth_b[:num_samples].to(device)
     pc_b          = pc_b[:num_samples].to(device)
@@ -486,20 +529,46 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
-def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75):
+def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75,
+                    scene=None, scene_stats=None, leaf=None):
+    """One epoch. `scene` (a SceneConfig with prob > 0) turns a share of each
+    batch into occluded scenes -- the encoder reads the scene, the loss scores
+    the clean plant -- and `scene_stats`, a dict, collects their mean stats."""
     model.train()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
+    m = model.module if hasattr(model, 'module') else model
+    sstats, n_scene = {}, 0
 
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
-    for rgb, depth, pc, param_floats, text_valid, _ in pbar:
-        rgb          = rgb.to(device)
-        depth        = depth.to(device)
-        pc           = pc.to(device)
-        param_floats = param_floats.to(device)
-        text_valid   = text_valid.to(device)
+    for batch in pbar:
+        rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
+
+        kw = {}
+        if scene is not None:
+            # batch[6:9] = pc_norm, cam2world, near_far (MaizeDataset4M return_pose)
+            sc = compose_scene(rgb, depth, pc, batch[6].to(device), batch[7].to(device),
+                               scene, patch_size=m.patch_size,
+                               near_far=batch[8].to(device))
+            if sc is not None:
+                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': pc},
+                      'loss_tokens': sc['loss_tokens'],
+                      'mask_flags': sc.get('mask_flags')}
+                rgb, depth, pc = sc['rgb'], sc['depth'], sc['pc']
+                for k, v in sc['stats'].items():
+                    sstats[k] = sstats.get(k, 0.0) + v
+                n_scene += 1
+        if leaf is not None:
+            # Weights from the TARGET's geometry: its clean cloud for the image
+            # patches, the (possibly scene) input cloud for the PC tokens, with
+            # neighbour points left at weight 1. batch[6:8] = pc_norm, cam2world.
+            clean_pc = kw['targets']['pc'] if 'targets' in kw else pc
+            kw['mask_flags'] = leaf_mask_weights(
+                pc, clean_pc, batch[6].to(device), batch[7].to(device), leaf,
+                rgb.shape[-2], rgb.shape[-1], m.patch_size,
+                nb_point=sc['nb_point'] if 'targets' in kw else None)
 
         loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
-                                              mask_ratio=mask_ratio)
+                                              mask_ratio=mask_ratio, **kw)
 
         optimizer.zero_grad()
         loss.backward()
@@ -521,31 +590,64 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
         })
 
     n = len(dataloader)
+    if scene_stats is not None and n_scene:
+        scene_stats.update({k: v / n_scene for k, v in sstats.items()})
     return tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n
 
 
 @torch.no_grad()
 def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
-             distributed=False):
+             distributed=False, scene=None, scene_seed=0, oracle=False):
+    """Validation / test pass. With `scene` (a SceneConfig) every batch is first
+    turned into occluded scenes -- scene.for_validation(): all samples, uniform
+    masking -- from a CPU generator seeded by (scene_seed, batch index), so
+    every arm is scored on the same scenes. All metrics stay against the CLEAN
+    plant, and two more report how occluded the scenes were (occ_*). The loader
+    must be built with return_pose=True."""
     model.eval()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     tot_rgb_mse = tot_depth_mse = tot_chamfer = tot_emd = 0.0
     tot_param_mse = tot_param_mae = tot_param_mae_masked = tot_param_acc05 = 0.0
+    tot_hidden = tot_nbpts = n_scene = 0.0
+    n_text_masked = 0.0
+    tot_fs = dict.fromkeys(PC_FSCORE_KEYS, 0.0)
 
     m = model.module if hasattr(model, 'module') else model
+    if scene is not None:
+        scene = scene.for_validation()
+        if oracle:
+            # ORACLE (eval/eval_scene_oracle.py only): mask the tokens that show a
+            # neighbour first, as neighbour_first training does -- i.e. assume a
+            # segmentation of the target is available at test time.
+            scene = replace(scene, mask_policy='neighbour_first')
 
-    for rgb, depth, pc, param_floats, text_valid, _ in tqdm(dataloader, desc='Evaluating'):
-        rgb          = rgb.to(device)
-        depth        = depth.to(device)
-        pc           = pc.to(device)
-        param_floats = param_floats.to(device)
-        text_valid   = text_valid.to(device)
+    desc = 'Evaluating' + (' (occluded scenes)' if scene is not None else '')
+    for bi, batch in enumerate(tqdm(dataloader, desc=desc)):
+        rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
+
+        x_rgb, x_depth, x_pc, kw = rgb, depth, pc, {}
+        if scene is not None:
+            sc = compose_scene(
+                rgb, depth, pc, batch[6].to(device), batch[7].to(device), scene,
+                patch_size=m.patch_size, near_far=batch[8].to(device),
+                generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi))
+            if sc is not None:
+                x_rgb, x_depth, x_pc = sc['rgb'], sc['depth'], sc['pc']
+                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': pc},
+                      'loss_tokens': sc['loss_tokens']}
+                if oracle:
+                    kw['mask_flags'] = sc['mask_flags']
+                tot_hidden += sc['stats']['hidden_px']
+                tot_nbpts  += sc['stats']['nb_points']
+                n_scene    += 1
 
         loss, (lr, ld, lp, lt), \
             (pred_rgb_p, pred_depth_p, pred_pc, pred_params), \
             (_, _, _, mask_text) = model(
-                rgb, depth, pc, param_floats, text_valid, mask_ratio=mask_ratio
+                x_rgb, x_depth, x_pc, param_floats, text_valid, mask_ratio=mask_ratio,
+                **kw
         )
+        del x_rgb, x_depth, x_pc, kw
 
         tot       += loss.item()
         tot_rgb   += lr.item()
@@ -571,7 +673,10 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
             tot_depth_mse += torch.mean((pred_depth_img - depth) ** 2).item()
             del pred_depth_img
 
-        tot_chamfer += chamfer_distance(pred_pc, pc).item()
+        pcs = pc_scores(pred_pc, pc)     # chunked: the dense chamfer is 12 GiB at B=16
+        tot_chamfer += pcs['pc_chamfer']
+        for k in PC_FSCORE_KEYS:
+            tot_fs[k] += pcs[k]
         if compute_emd:
             tot_emd += earth_movers_distance(pred_pc, pc, num_samples=500).item()
 
@@ -583,6 +688,7 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
             diff_sq  = ((pred_params - param_floats) ** 2).mean(-1)  # (B, L)
 
             real_n   = text_valid.sum().clamp(min=1)
+            n_text_masked += (text_valid * mask_text).sum().item()
             masked_n = (text_valid * mask_text).sum().clamp(min=1)
 
             tot_param_mse        += ((diff_sq  * text_valid).sum() / real_n).item()
@@ -604,12 +710,17 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
             [tot, tot_rgb, tot_depth, tot_pc, tot_txt,
              tot_rgb_mse, tot_depth_mse, tot_chamfer, tot_emd,
              tot_param_mse, tot_param_mae, tot_param_mae_masked, tot_param_acc05,
+             tot_hidden, tot_nbpts, n_scene, n_text_masked,
+             *(tot_fs[k] for k in PC_FSCORE_KEYS),
              float(n)], dtype=torch.float64, device=device)
         dist.all_reduce(packed, op=dist.ReduceOp.SUM)
+        packed = packed.tolist()
         (tot, tot_rgb, tot_depth, tot_pc, tot_txt,
          tot_rgb_mse, tot_depth_mse, tot_chamfer, tot_emd,
          tot_param_mse, tot_param_mae, tot_param_mae_masked, tot_param_acc05,
-         n) = packed.tolist()
+         tot_hidden, tot_nbpts, n_scene, n_text_masked) = packed[:17]
+        tot_fs = dict(zip(PC_FSCORE_KEYS, packed[17:-1]))
+        n = packed[-1]
 
     act = m.active_modalities
 
@@ -621,6 +732,7 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
         'loss':              tot / n,
         'pc_loss':           tot_pc / n,
         'pc_chamfer':        tot_chamfer / n,
+        **{k: tot_fs[k] / n for k in PC_FSCORE_KEYS},
         # pc_emd only when it was actually computed -- EMD is expensive so it runs
         # at the final epoch only. Reporting 0.0 otherwise would read as a perfect
         # match, the same trap as reporting 0.0 for an inactive modality.
@@ -636,9 +748,34 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
         metrics['text_loss']        = tot_txt / n
         metrics['param_mse']        = tot_param_mse / n
         metrics['param_mae']        = tot_param_mae / n
-        metrics['param_mae_masked'] = tot_param_mae_masked / n
-        metrics['param_acc@0.05']   = tot_param_acc05 / n
+        # Absent, not 0.0, when no param token was ever masked (text_mask_ratio
+        # 0.0: params as conditioning) -- 0.0 MAE would read as perfect.
+        if n_text_masked > 0:
+            metrics['param_mae_masked'] = tot_param_mae_masked / n
+            metrics['param_acc@0.05']   = tot_param_acc05 / n
+    if scene is not None and n_scene:
+        metrics['occ_hidden_px'] = tot_hidden / n_scene
+        metrics['occ_nb_points'] = tot_nbpts / n_scene
     return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n), metrics
+
+
+def check_resume_scene_args(args):
+    """Refuse a resume whose checkpoint was trained under different text masking
+    or occluded-scene settings (as train_sorghum_4m.check_resume_text_mask_ratio):
+    resuming would switch the regime mid-run and leave config.json describing
+    only the last segment. Checkpoints predating the keys read as None."""
+    if not (args.resume and os.path.exists(args.resume)):
+        return
+    try:
+        ckpt = torch.load(args.resume, map_location='cpu', weights_only=False, mmap=True)
+    except RuntimeError:
+        ckpt = torch.load(args.resume, map_location='cpu', weights_only=False)
+    for key in ('text_mask_ratio', 'occlusion_scene'):
+        if ckpt.get(key, None) != getattr(args, key):
+            raise ValueError(
+                f"--resume {args.resume} was trained with {key}={ckpt.get(key, None)}, "
+                f"this run asks for {getattr(args, key)}; start from scratch or use a "
+                f"matching config.")
 
 
 # ── Worker ────────────────────────────────────────────────────────────────────
@@ -663,22 +800,36 @@ def train_worker(rank, world_size, args):
         with open(output_dir / 'config.json', 'w') as f:
             json.dump(vars(args), f, indent=4)
 
+    if args.seed is not None:
+        # Same seed on every rank for the init (DDP broadcasts rank 0's weights
+        # anyway); reseeded per rank below so ranks do not draw identical masks.
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
+        random.seed(args.seed)
+
     if is_main: print(f"\nLoading data from: {args.data_root}")
 
     # view_sampling (plan §6.1): an epoch is one drawn view per PLANT, not all
     # ten renders. Train rotates the view each epoch; val/test pin view 0 so the
     # metric moves only when the model does.
     vs = args.view_sampling
+    # Occluded scenes: trained on when prob > 0, validated on whenever the
+    # block is present (so a clean control arm is scored on the same scenes).
+    scene_cfg   = SceneConfig.from_dict(args.occlusion_scene)
+    scene_train = scene_cfg if scene_cfg is not None and scene_cfg.prob > 0 else None
+    leaf_cfg    = LeafMaskConfig.from_dict(getattr(args, 'leaf_mask', None))
     train_ds = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='train',
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, view_seed=args.view_seed,
                                  max_plants=args.max_plants,
-                                 plant_subset_seed=args.plant_subset_seed)
+                                 plant_subset_seed=args.plant_subset_seed,
+                                 return_pose=scene_train is not None or leaf_cfg is not None)
     val_ds   = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
-                                 view_sampling=vs, deterministic_view=True)
+                                 view_sampling=vs, deterministic_view=True,
+                                 return_pose=scene_cfg is not None)
     test_ds  = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='test',
                                  max_leaves=args.max_leaves,
@@ -721,7 +872,21 @@ def train_worker(rank, world_size, args):
         qal_threshold=args.qal_threshold,
         qal_alpha=args.qal_alpha,
         qal_use_squared=args.qal_use_squared,
+        pc_sinkhorn_weight=getattr(args, 'pc_sinkhorn_weight', 0.0),
+        pc_sinkhorn_points=getattr(args, 'pc_sinkhorn_points', 2048),
+        pc_sinkhorn_blur=getattr(args, 'pc_sinkhorn_blur', 0.01),
+        text_mask_ratio=args.text_mask_ratio,
     ).to(device)
+    if args.seed is not None:
+        torch.manual_seed(args.seed * 1000 + 1 + rank)
+
+    if is_main and scene_cfg is not None:
+        print(f"Occluded scenes ({'train p=' + str(scene_cfg.prob) + ' + ' if scene_train else ''}"
+              f"occluded val): {args.occlusion_scene}")
+    if is_main and leaf_cfg is not None:
+        print(f"Leaf-weighted masking (train only): {args.leaf_mask}")
+        print("Text masking: " + ("shared Dirichlet budget" if args.text_mask_ratio is None
+                                  else f"independent at {args.text_mask_ratio}"))
 
     if world_size > 1:
         model = DDP(model, device_ids=[rank], output_device=rank,
@@ -750,6 +915,8 @@ def train_worker(rank, world_size, args):
                            'batch_size': args.batch_size, 'epochs': args.epochs,
                            'lr': args.lr, 'total_params': total_params,
                            'train_samples': len(train_ds), 'val_samples': len(val_ds),
+                           'text_mask_ratio': args.text_mask_ratio,
+                           'occlusion_scene': args.occlusion_scene,
                        })
         print(f"✅ W&B: {wandb.run.url}")
         wandb.watch(model, log='gradients', log_freq=500)
@@ -821,17 +988,24 @@ def train_worker(rank, world_size, args):
             print(f"Epoch {epoch}/{args.epochs}  lr={optimizer.param_groups[0]['lr']:.6f}")
             print(f"{'='*80}")
 
+        tr_scene = {}
         tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt = train_one_epoch(
-            model, train_loader, optimizer, device, epoch, mask_ratio=args.mask_ratio)
+            model, train_loader, optimizer, device, epoch, mask_ratio=args.mask_ratio,
+            scene=scene_train, scene_stats=tr_scene, leaf=leaf_cfg)
         for k, v in zip(['train_loss','train_rgb','train_depth','train_pc','train_text'],
                         [tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt]):
             history[k].append(v)
+        for k, v in tr_scene.items():
+            history.setdefault(f'train_occ_{k}', []).append(v)
 
         if is_main:
             print(f"\nTrain — Loss: {tr_loss:.4f}  RGB: {tr_rgb:.4f}  "
                   f"Depth: {tr_depth:.4f}  PC: {tr_pc:.4f}  Text: {tr_txt:.4f}")
+            if tr_scene:
+                print("Train scenes — " + "  ".join(f"{k}: {v:.3f}" for k, v in tr_scene.items()))
 
         do_val = (epoch % args.val_freq == 0 or epoch == args.epochs or epoch == 1)
+        occ_log = {}
         if do_val:
             if is_main: print("\n🔍 Running validation…")
             compute_emd = (epoch == args.epochs)
@@ -843,25 +1017,43 @@ def train_worker(rank, world_size, args):
                 history[k].append(v)
             for mk, hk, _, _ in METRIC_KEYS:
                 if mk in vm:
-                    history[hk].append(vm[mk])
+                    _append_aligned(history, hk, vm[mk], 'val_loss')
             if is_main:
                 print(f"Val   — Loss: {vl:.4f}  RGB: {vr:.4f}  Depth: {vd:.4f}  "
                       f"PC: {vp:.4f}  Text: {vt:.4f}")
                 print(f"Metrics — {_fmt_metrics(vm)}")
+            # The same val plants as occluded scenes, scored against the clean
+            # plant -- the number the occlusion arms are compared on. Seeds
+            # depend on (val_seed, rank, batch), so arms run at the same GPU
+            # count see identical scenes. best_model.pth stays on clean val.
+            if scene_cfg is not None:
+                _, om = evaluate(
+                    model, val_loader, device, mask_ratio=args.mask_ratio,
+                    distributed=(world_size > 1), scene=scene_cfg,
+                    scene_seed=scene_cfg.val_seed * 1000 + rank)
+                history.setdefault('val_occ_epoch', []).append(epoch)
+                for k, v in om.items():
+                    _append_aligned(history, f'val_occ_{k}', v, 'val_occ_epoch')
+                occ_log = {f'val_occ/{k}': v for k, v in om.items()}
+                if is_main:
+                    print("Val (occluded) — " + "  ".join(
+                        f"{k}: {v:.6f}" for k, v in om.items()))
         else:
             vl = history['val_loss'][-1] if history['val_loss'] else float('inf')
             # Carry forward only metrics that have actually been recorded; an
             # inactive modality stays absent rather than defaulting to 0.0.
-            vm = {mk: history[hk][-1] for mk, hk, _, _ in METRIC_KEYS if history[hk]}
+            vm = {mk: history[hk][-1] for mk, hk, _, _ in METRIC_KEYS if history.get(hk)}
 
         if is_main and args.use_wandb and WANDB_AVAILABLE:
             wandb.log({
                 'epoch': epoch,
                 'train/loss': tr_loss, 'train/rgb': tr_rgb, 'train/depth': tr_depth,
                 'train/pc': tr_pc, 'train/text': tr_txt,
+                **{f'train_occ/{k}': v for k, v in tr_scene.items()},
                 'val/loss': vl,
                 'learning_rate': scheduler.get_last_lr()[0],
                 **{f'metrics/{mk}': vm[mk] for mk, _, _, _ in METRIC_KEYS if mk in vm},
+                **occ_log,
             })
 
         # viz_freq <= 0 disables visualisation entirely (E2 reduced arms cannot
@@ -869,12 +1061,25 @@ def train_worker(rank, world_size, args):
         if is_main and args.viz_freq > 0 and (epoch % args.viz_freq == 0 or epoch == 1):
             print(f"\n📊 Generating visualizations for epoch {epoch}…")
             mv = model.module if world_size > 1 else model
-            paths = visualize_reconstruction_4m(
-                mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
-                mask_ratio=args.mask_ratio)
+            # The 5-row grid needs all four streams; a reduced arm gets the
+            # per-modality figure on clean input instead of nothing.
+            if len(mv.active_modalities) == len(MODALITY_ORDER):
+                figs = {'visualizations': visualize_reconstruction_4m(
+                    mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
+                    mask_ratio=args.mask_ratio)}
+            else:
+                figs = {'visualizations': visualize_scene_4m(
+                    mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
+                    mask_ratio=args.mask_ratio, tag='clean')}
+            # Occluded val scenes -> clean target, the same fixed scenes every epoch.
+            if scene_cfg is not None:
+                figs['scene_visualizations'] = visualize_scene_4m(
+                    mv, val_loader, device, epoch, viz_dir, args.num_viz_samples,
+                    mask_ratio=args.mask_ratio, scene=scene_cfg,
+                    seed=scene_cfg.val_seed, tag='scene')
             if args.use_wandb and WANDB_AVAILABLE:
-                wandb.log({'visualizations': [wandb.Image(p, caption=Path(p).name)
-                                               for p in paths], 'epoch': epoch})
+                wandb.log({**{k: [wandb.Image(p, caption=Path(p).name) for p in v]
+                              for k, v in figs.items() if v}, 'epoch': epoch})
 
         # ── Test-set evaluation + visualizations every test_freq epochs ──────────
         # test_freq <= 0 disables the test pass. The held-out split is scored
@@ -897,7 +1102,7 @@ def train_worker(rank, world_size, args):
                     history[k].append(v)
                 for mk, _, hk, _ in METRIC_KEYS:
                     if hk is not None and mk in tmet:
-                        history[hk].append(tmet[mk])
+                        _append_aligned(history, hk, tmet[mk], 'test_epoch')
                 print(f"Test  — Loss: {tl:.4f}  RGB: {tr_:.4f}  Depth: {td_:.4f}  "
                       f"PC: {tp_:.4f}  Text: {tt_:.4f}")
                 print(f"Test Metrics — {_fmt_metrics(tmet)}")
@@ -929,6 +1134,8 @@ def train_worker(rank, world_size, args):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'best_val_loss': best_val_loss, 'history': history,
+                'text_mask_ratio': args.text_mask_ratio,
+                'occlusion_scene': args.occlusion_scene,
                 'wandb_run_id': (wandb.run.id
                                  if args.use_wandb and WANDB_AVAILABLE
                                  and wandb.run else None),
@@ -943,6 +1150,8 @@ def train_worker(rank, world_size, args):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'val_loss': vl, 'best_val_loss': best_val_loss, 'history': history,
+                'text_mask_ratio': args.text_mask_ratio,
+                'occlusion_scene': args.occlusion_scene,
                 'wandb_run_id': (wandb.run.id
                                  if args.use_wandb and WANDB_AVAILABLE
                                  and wandb.run else None),
@@ -995,6 +1204,8 @@ def main():
     parser.add_argument('--lr',                 type=float, default=None)
     parser.add_argument('--weight_decay',       type=float, default=None)
     parser.add_argument('--warmup_epochs',      type=int,   default=None)
+    parser.add_argument('--seed',               type=int,   default=None,
+                        help='seed model init, masks and loader draws (default: unseeded)')
     parser.add_argument('--val_freq',           type=int,   default=None)
     parser.add_argument('--test_freq',          type=int,   default=None)
     parser.add_argument('--viz_freq',           type=int,   default=None)
@@ -1030,6 +1241,8 @@ def main():
             "train_maize_4m.py has no default config on purpose — maize width "
             "(14 params / 28 leaves / 8192 points) and the E2-matched schedule "
             "live in the YAML. Pass --config configs/config_maize.yaml.")
+
+    check_resume_scene_args(cfg)
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))
     if local_rank >= 0:

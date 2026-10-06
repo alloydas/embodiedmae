@@ -1,0 +1,105 @@
+# LEAF-WEIGHTED MASKING arm (leaf_mask.py) -- config_maize_scene.yaml plus model.leaf_mask,
+# nothing else changed (same occluded-scene training at prob 0.5 with uniform
+# scene masking, same QAL 0.01 loss, 200 epochs = 65 800 steps), so its
+# baseline is maize_scene_s1.
+#
+# Of the ~80 % masking budget, the TARGET's leaves are masked more often than
+# its stem: a point at least stem_radius from the stem axis is leaf and gets
+# masking weight `weight`; stem, background and neighbour tokens get 1. The
+# masked set is a weighted sample (Gumbel top-k), so at weight 3 leaf tokens
+# are masked ~90 % of the time and stem tokens ~55-65 %. Training only --
+# validation stays uniform for every arm, and nothing needs neighbour labels.
+#
+#   sbatch --job-name=maize_scene_leaf_s1 slurm/maize_scene_arm.sbatch scene_leaf 1
+#
+# ---- config_maize_scene.yaml as it was ----------------------------------------------------
+# MAIZE occluded-scene training, SCENE arm (uniform masking) -- the maize twin
+# of config_sm_scene.yaml: the occlusion meeting's setup (occluded scene in,
+# clean target plant out, the target's params as conditioning), built on the
+# fly by occlusion_scene.py from maize's single-plant renders, with maize's
+# per-plant depth near/far (camera_pose.json) and a maize-scaled row.
+#
+# Paired with config_maize_scene_struct.yaml, which differs ONLY in
+# mask_policy (neighbour_first). Both validate on the same clean and occluded
+# val scenes, under uniform masking.
+#
+# 200 epochs x 329 steps = 65 800 steps at global batch 32, one cosine, like
+# the sorghum sm_scene arms -- not comparable to the 197 400-step E2/E3/E4 table.
+#
+#   sbatch --job-name=maize_scene_s1 slurm/maize_scene_arm.sbatch scene 1
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/Maize
+  img_size: 224
+  num_points: 8192         # exact point count in pointcloud_cam.ply
+  view_sampling: true
+  view_seed: 42            # identical in both arms: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80         # over pc/rgb/depth; text is outside the budget
+  text_mask_ratio: 0.0     # params = conditioning: all 29 tokens visible
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28
+  leaf_mask:               # leaf_mask.py: leaves masked more than the stem (train only)
+    weight: 3.0            # leaf token's masking weight; stem / background / neighbour = 1
+    stem_radius: 0.05      # metres from the stem axis below which a point is stem (~25 % of points)
+  occlusion_scene:         # config.json records every field
+    prob: 0.5              # share of training samples given neighbours
+    neighbours: 2          # one each side of a row through the target
+    # Maize plants are ~0.58x sorghum's footprint (95 % of points within 0.30 m
+    # of the stem vs 0.52 m; farthest 0.38 vs ~0.9 m), so sorghum's spacing
+    # [0.35, 0.8] / crop 0.75 hide only 4 % of a maize target. Calibrated on 64
+    # val plants (2026-10-02): spacing [0.15, 0.35] -- a real in-row maize
+    # spacing -- hides 11.7 % of the target's pixels with 65 % of the input
+    # cloud neighbour (sorghum's defaults on sorghum: 16 % / 60 %); crop 0.45
+    # keeps 99.9 % of the target. Preview: reports/scene_preview_maize_val.png.
+    spacing: [0.15, 0.35]
+    row_jitter: 0.05
+    yaw: true
+    crop_radius: 0.45
+    splat_px: 1
+    mask_policy: uniform               # the comparison arm: config_maize_scene_struct.yaml
+    patch_frac: 0.3
+    val_seed: 0            # same val scenes in every arm
+
+training:
+  batch_size: 16           # per GPU; the launcher runs 2 GPUs -> global 32
+  epochs: 200
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 13
+  val_freq: 20             # 10 val points, each clean + occluded
+  test_freq: 0
+  seed: null               # set per run by the launcher (--seed)
+
+checkpointing:
+  output_dir: ./outputs/maize_scene_leaf
+  save_freq: 20
+  resume: null
+
+visualization:
+  viz_freq: 20             # clean + occluded-scene figures to W&B
+  num_viz_samples: 6
+
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_scene_leaf

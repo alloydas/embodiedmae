@@ -31,6 +31,9 @@ from embodied_mae import (
     qal_loss,
     earth_movers_distance,
 )
+from structured_mask import NeighbourMaskConfig, scores_from_flags, training_scores
+from leaf_mask import scores_from_weights
+from pc_sinkhorn import sinkhorn_pc_loss
 
 
 # ── Numeric parameter layout ──────────────────────────────────────────────────
@@ -329,6 +332,15 @@ def load_spline_params(yml_path, max_leaves: int = 24):
     _REQ_LEAF = ('starting_point', 'length', 'roll_angle', 'branching_angle',
                  'waviness_frequency', 'waviness_period_start')
     leaves = [lf for lf in plant['Leaves'] if all(k in lf for k in _REQ_LEAF)]
+    # A file add_leaf_width.py rewrote (2026-09-30: `width` in, waviness out)
+    # fails the filter on EVERY leaf, which used to load as the plant token
+    # alone without a word. SorghumDataset4M reads the untouched originals
+    # instead (see its _resolve_spline_root); anything else must not get here.
+    if not leaves and any('width' in lf and 'length' in lf for lf in plant['Leaves']):
+        raise ValueError(
+            f"{yml_path}: rewritten spline file (per-leaf width, no waviness keys) -- "
+            f"load the SorghumData original instead (data.spline_root or "
+            f"$SORGHUM_SPLINE_ROOT)")
 
     n_tokens     = 1 + max_leaves
     valid        = np.zeros(n_tokens,            dtype=np.float32)
@@ -399,8 +411,12 @@ class EmbodiedMAE4M(nn.Module):
         qal_threshold:       float = 0.01,
         qal_alpha:           float = 100.0,
         qal_use_squared:     bool  = False,
+        pc_sinkhorn_weight:  float = 0.0,
+        pc_sinkhorn_points:  int   = 2048,
+        pc_sinkhorn_blur:    float = 0.01,
         active_modalities=None,
         text_mask_ratio=None,
+        structured_mask=None,
     ):
         super().__init__()
 
@@ -441,6 +457,10 @@ class EmbodiedMAE4M(nn.Module):
         self.active_modalities = tuple(m for m in MODALITIES if m in active)
         self.n_active = len(self.active_modalities)
         self.text_mask_ratio = text_mask_ratio
+        # Neighbour-occlusion masking (structured_mask.py). None = off, and the
+        # off path draws exactly the random numbers it always did, so every
+        # earlier run and checkpoint is unaffected.
+        self.structured_mask = NeighbourMaskConfig.from_dict(structured_mask)
 
         self.img_size           = img_size
         self.patch_size         = patch_size
@@ -454,10 +474,15 @@ class EmbodiedMAE4M(nn.Module):
         self.pc_loss_weight     = pc_loss_weight
         self.spline_loss_weight = spline_loss_weight
         self.depth_norm_type    = depth_norm_type
-        if pc_loss_name not in {'chamfer', 'qal_loss'}:
+        # 'chamfer_cdist': chamfer_distance's formula through torch.cdist, (B, N, M)
+        # instead of chamfer_distance's dense (B, N, M, 3) -- 12 GiB at B=16.
+        # 'sinkhorn': no nearest-neighbour term, the Sinkhorn term alone.
+        if pc_loss_name not in {'chamfer', 'chamfer_cdist', 'qal_loss', 'sinkhorn'}:
             raise ValueError(
                 f"Unsupported point-cloud loss {pc_loss_name!r}; "
-                "expected 'chamfer' or 'qal_loss'")
+                "expected 'chamfer', 'chamfer_cdist', 'qal_loss' or 'sinkhorn'")
+        if pc_loss_name == 'sinkhorn' and not pc_sinkhorn_weight > 0:
+            raise ValueError("pc_loss_name 'sinkhorn' needs pc_sinkhorn_weight > 0")
         if qal_threshold < 0:
             raise ValueError("qal_threshold must be non-negative")
         if qal_alpha <= 0:
@@ -466,6 +491,14 @@ class EmbodiedMAE4M(nn.Module):
         self.qal_threshold      = qal_threshold
         self.qal_alpha          = qal_alpha
         self.qal_use_squared    = qal_use_squared
+        # Optional Sinkhorn term added to the PC loss (pc_sinkhorn.py); 0 = off,
+        # every run before 2026-10-04.
+        if pc_sinkhorn_weight < 0 or pc_sinkhorn_points < 2 or pc_sinkhorn_blur <= 0:
+            raise ValueError('pc_sinkhorn_weight >= 0, pc_sinkhorn_points >= 2 and '
+                             'pc_sinkhorn_blur > 0 are required')
+        self.pc_sinkhorn_weight = float(pc_sinkhorn_weight)
+        self.pc_sinkhorn_points = int(pc_sinkhorn_points)
+        self.pc_sinkhorn_blur   = float(pc_sinkhorn_blur)
         self.target_points      = target_points
         self.points_per_token   = target_points // num_pc_tokens
 
@@ -627,7 +660,8 @@ class EmbodiedMAE4M(nn.Module):
         return out
 
     def random_masking_dirichlet(self, embeds,
-                                 mask_ratio_total=0.75, min_mask_ratio=0.25):
+                                 mask_ratio_total=0.75, min_mask_ratio=0.25,
+                                 scores=None):
         """Mask random positions with an exact, bounded global token budget.
 
         `embeds` is the {name: (B, L, D)} dict from _embed_active. One Dirichlet
@@ -644,6 +678,10 @@ class EmbodiedMAE4M(nn.Module):
         tokens than the PC+RGB+D arm it is compared against). Splitting the
         budget puts every stream at 20%, and leaves arms without text
         bit-identical to the pre-gate model.
+
+        `scores` optionally maps a modality to (B, L) ranking scores that
+        replace that modality's uniform shuffle noise: the lowest-scoring tokens
+        stay visible. Counts are unaffected -- see _structured_scores.
 
         Returns {name: (x_vis, mask, ids_rest)} for the active modalities.
         """
@@ -703,8 +741,14 @@ class EmbodiedMAE4M(nn.Module):
             if self.text_mask_ratio >= 1.0:
                 nv['text'] = 0
 
-        def _mask(x, nv_, L_):
-            noise    = torch.rand(B, L_, device=x.device)
+        scores = scores or {}
+
+        def _mask(x, nv_, L_, noise=None):
+            if noise is None:
+                noise = torch.rand(B, L_, device=x.device)
+            elif noise.shape != (B, L_):
+                raise ValueError(
+                    f"mask scores must have shape {(B, L_)}, got {tuple(noise.shape)}")
             ids_shuf = torch.argsort(noise, dim=1)
             ids_rest = torch.argsort(ids_shuf, dim=1)
             ids_keep = ids_shuf[:, :nv_]
@@ -714,7 +758,8 @@ class EmbodiedMAE4M(nn.Module):
             mask     = torch.gather(mask, 1, ids_rest)
             return x_vis, mask, ids_rest
 
-        return {n: _mask(embeds[n], nv[n], embeds[n].shape[1]) for n in names}
+        return {n: _mask(embeds[n], nv[n], embeds[n].shape[1], scores.get(n))
+                for n in names}
 
     # -- Encoder ---------------------------------------------------------------
 
@@ -739,9 +784,57 @@ class EmbodiedMAE4M(nn.Module):
         lv = tuple(per_mod[n][0].shape[1] if n in per_mod else 0 for n in MODALITIES)
         return (latent,) + m + r + lv
 
-    def forward_encoder(self, x_rgb, x_depth, x_pc, x_param, mask_ratio=0.75):
+    def _structured_scores(self, x_depth, pc_norm):
+        """Neighbour-occlusion ranking scores for this batch, or None (uniform).
+
+        Must run after _embed_active: it reads the FPS centres this pass chose.
+        """
+        cfg = self.structured_mask
+        if cfg is None or not (self.training or cfg.apply_in_eval):
+            return None
+        if pc_norm is None:
+            raise ValueError(
+                "structured_mask needs pc_norm, the per-sample (centroid, scale) "
+                "of the cloud -- build the dataset with return_pc_norm=True")
+        if x_depth is None:
+            raise ValueError("structured_mask needs the depth map to z-test neighbours")
+        return training_scores(x_depth, self.pc_embed.last_centers, pc_norm, cfg,
+                               self.patch_size, self.active_modalities)
+
+    def _flag_scores(self, flags):
+        """Ranking scores from given per-token flags: flagged tokens are masked first.
+
+        flags: {'rgb' | 'depth': (B, L) over patches, 'pc_points': (B, N) over
+        INPUT points}. A PC token takes the value of its FPS centre point, so
+        this must run after _embed_active. Modalities without flags keep
+        uniform noise.
+
+        bool  -> flagged tokens are masked first (occlusion_scene's
+                 neighbour_first policy).
+        float -> positive weights; the masked set is a weighted sample without
+                 replacement (leaf_mask.py's leaf-weighted masking).
+        """
+        def rank(f):
+            return scores_from_flags(f) if f.dtype == torch.bool else scores_from_weights(f)
+
+        out = {}
+        for name in ('rgb', 'depth'):
+            if name in self.active_modalities and name in flags:
+                out[name] = rank(flags[name])
+        if 'pc_points' in flags:
+            out['pc'] = rank(
+                torch.gather(flags['pc_points'], 1, self.pc_embed.last_fps_idx))
+        return out
+
+    def forward_encoder(self, x_rgb, x_depth, x_pc, x_param, mask_ratio=0.75,
+                        pc_norm=None, mask_flags=None):
         embeds = self._embed_active(x_rgb, x_depth, x_pc, x_param)
-        masked = self.random_masking_dirichlet(embeds, mask_ratio)
+        scores = self._structured_scores(x_depth, pc_norm)
+        if mask_flags is not None:
+            if scores is not None:
+                raise ValueError("structured_mask and mask_flags cannot both set the mask")
+            scores = self._flag_scores(mask_flags)
+        masked = self.random_masking_dirichlet(embeds, mask_ratio, scores=scores)
         latent = self._run_encoder([masked[n][0] for n in self.active_modalities])
         return self._pack(masked, latent)
 
@@ -986,8 +1079,17 @@ class EmbodiedMAE4M(nn.Module):
                 alpha=self.qal_alpha,
                 use_squared=self.qal_use_squared,
             )
+        elif self.pc_loss_name == 'chamfer_cdist':
+            d = torch.cdist(pred_pc, pc) ** 2
+            loss_pc = d.min(dim=2).values.mean() + d.min(dim=1).values.mean()
+            del d
+        elif self.pc_loss_name == 'sinkhorn':
+            loss_pc = pred_pc.new_zeros(())
         else:
             loss_pc = chamfer_distance(pred_pc, pc)
+        if self.pc_sinkhorn_weight > 0:
+            loss_pc = loss_pc + self.pc_sinkhorn_weight * sinkhorn_pc_loss(
+                pred_pc, pc, n_points=self.pc_sinkhorn_points, blur=self.pc_sinkhorn_blur)
 
         if 'text' in act:
             # Smooth-L1 (Huber) on normalised float params. All targets and
@@ -1044,7 +1146,8 @@ class EmbodiedMAE4M(nn.Module):
 
     def forward(self, imgs_rgb, imgs_depth, pc, param_floats, text_valid,
                 mask_ratio: float = 0.75, visible=None, return_features: bool = False,
-                source_mask_ratio: float = 0.0):
+                source_mask_ratio: float = 0.0, pc_norm=None,
+                targets=None, loss_tokens=None, mask_flags=None):
         """
         imgs_rgb    : (B, 3, H, W)
         imgs_depth  : (B, 1, H, W)
@@ -1056,6 +1159,18 @@ class EmbodiedMAE4M(nn.Module):
                   iterable subset of {'rgb','depth','pc','text'} → cross-modal mode:
                   those modalities are fully visible, the rest fully masked and
                   reconstructed from them.
+        pc_norm : (B, 4) cloud (centroid, scale) from the dataset; needed only
+                  when structured_mask is on (training).
+        targets : occluded-scene training (occlusion_scene.py). None scores the
+                  inputs themselves (every earlier run). A dict with any of
+                  'rgb', 'depth', 'pc' scores those CLEAN tensors instead while
+                  the encoder reads the scene in imgs_rgb / imgs_depth / pc.
+        loss_tokens : {'rgb' | 'depth': (B, L) bool} patches added to the loss
+                  even when visible -- where a neighbour shows, the input is
+                  not the target, so the visible patch is still a prediction.
+        mask_flags : {'rgb' | 'depth': (B, L), 'pc_points': (B, N) bool} tokens
+                  to mask first (occlusion_scene's neighbour_first policy).
+                  Counts still come from the Dirichlet budget.
         return_features : if True, append (decoder_feats, cls_latent) to the output
                   for distillation. decoder_feats is token-aligned across masking
                   regimes; cls_latent is the encoder CLS token (B, embed_dim).
@@ -1065,8 +1180,11 @@ class EmbodiedMAE4M(nn.Module):
              mr, md, mp, mt,
              rr, rd, rp, rt,
              lr_, ld_, lp_, lt_) = self.forward_encoder(
-                imgs_rgb, imgs_depth, pc, param_floats, mask_ratio)
+                imgs_rgb, imgs_depth, pc, param_floats, mask_ratio,
+                pc_norm=pc_norm, mask_flags=mask_flags)
         else:
+            if mask_flags is not None:
+                raise ValueError("mask_flags applies to Dirichlet masking, not `visible`")
             (latent,
              mr, md, mp, mt,
              rr, rd, rp, rt,
@@ -1082,10 +1200,23 @@ class EmbodiedMAE4M(nn.Module):
         else:
             pred_rgb, pred_depth, pred_pc, pred_params = dec
 
+        targets = targets or {}
+        t_rgb = targets.get('rgb', imgs_rgb)
+        t_depth = targets.get('depth', imgs_depth)
+        t_pc = targets.get('pc', pc)
+        # The loss masks; mr / md themselves are returned untouched, so callers
+        # still see which tokens the encoder actually hid.
+        l_mr, l_md = mr, md
+        if loss_tokens is not None:
+            if mr is not None and 'rgb' in loss_tokens:
+                l_mr = torch.maximum(mr, loss_tokens['rgb'].to(mr.dtype))
+            if md is not None and 'depth' in loss_tokens:
+                l_md = torch.maximum(md, loss_tokens['depth'].to(md.dtype))
+
         total, loss_rgb, loss_depth, loss_pc, loss_text = self.forward_loss(
-            imgs_rgb, imgs_depth, pc, param_floats, text_valid,
+            t_rgb, t_depth, t_pc, param_floats, text_valid,
             pred_rgb, pred_depth, pred_pc, pred_params,
-            mr, md, mp, mt)
+            l_mr, l_md, mp, mt)
 
         out = (total,
                (loss_rgb, loss_depth, loss_pc, loss_text),
