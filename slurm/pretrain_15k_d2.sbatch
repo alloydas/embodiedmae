@@ -5,10 +5,11 @@
 #SBATCH --qos=normal
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:rtx_pro_6000:8
-#SBATCH --cpus-per-task=180
-#SBATCH --mem=600G
-#SBATCH --time=04:00:00
+#SBATCH --gres=gpu:rtx_pro_6000:2
+#SBATCH --cpus-per-task=128
+#SBATCH --mem=480G
+#SBATCH --time=2-00:00:00
+#SBATCH --time-min=04:00:00
 #SBATCH --requeue
 #SBATCH --signal=B:USR1@600
 #SBATCH --open-mode=append
@@ -36,7 +37,18 @@
 # the same job id, which resumes from the newest checkpoint (save_freq 5 epochs,
 # pruned to the newest 3 + every 100th). --requeue alone does NOT cover TIMEOUT.
 #
-#   sbatch slurm/pretrain_15k_d2.sbatch                      # nova, 8x RTX PRO 6000
+# 2 GPUs + GRADIENT ACCUMULATION (2026-10-06, user: "do E1 with 2 GPUs instead of 8").
+# The launcher sets accum = 8 / NPROC, so 2 GPUs x 32 x 4 = the same global batch of
+# 256, same per-GPU batch (PointCloudEmbed's BatchNorm is unsynced), same lr and
+# steps per epoch: the recipe is unchanged, and the 8-GPU checkpoints resume as is.
+# 2 GPUs fit under mech-ai's 17-GPU cap where 8 did not. The GPU ceiling is ~74
+# samples/s per RTX PRO 6000 (batch sweep), so ~12 min/epoch if the loader keeps up
+# (~150 items/s: 60 workers/rank on 128 CPUs); 480G leaves room for the page cache
+# of the ~270 GB the epoch reads. save_freq 2 (passed below) bounds a requeue's loss.
+#
+#   NUM_WORKERS=60 sbatch slurm/pretrain_15k_d2.sbatch --save_freq 2   # nova, 2x RTX PRO 6000
+#   NUM_WORKERS=21 sbatch --gres=gpu:rtx_pro_6000:8 --cpus-per-task=180 --mem=600G \
+#       slurm/pretrain_15k_d2.sbatch                                   # nova, 8x (accum 1)
 #   NUM_WORKERS=10 sbatch --partition=scavenger --account=mech-ai-scavenger --qos=scavenger \
 #       --gres=gpu:a100:8 --cpus-per-task=90 --mem=440G slurm/pretrain_15k_d2.sbatch
 #   (scavenger, 8x A100 80 GB on a 96-CPU node: the user's choice on 2026-10-02; about
@@ -69,7 +81,11 @@ if [ -n "${SLURM_GPUS_ON_NODE:-}" ]; then
 else
   NPROC=$(echo "${CUDA_VISIBLE_DEVICES//,/ }" | wc -w)
 fi
-[ "${NPROC}" -eq 8 ] || { echo "E1 needs 8 GPUs for its global batch of 256 (8 x 32); got ${NPROC}"; exit 2; }
+case "${NPROC}" in
+  1|2|4|8) ACCUM=$((8 / NPROC)) ;;
+  *) echo "E1's global batch of 256 (8 x 32) needs 1, 2, 4 or 8 GPUs; got ${NPROC}"; exit 2 ;;
+esac
+echo "GPUs ${NPROC} x batch 32 x accum ${ACCUM} = global batch 256"
 
 # newest checkpoint by epoch; train_sorghum_4m.resolve_resume walks an unreadable one down
 RESUME_ARG=""
@@ -96,7 +112,8 @@ trap requeue_before_wall USR1
 
 srun --kill-on-bad-exit=1 \
   torchrun --standalone --nnodes=1 --nproc_per_node=${NPROC} \
-    train_sorghum_4m.py --config "${CONFIG}" --num_workers "${NUM_WORKERS}" ${RESUME_ARG} "$@" &
+    train_sorghum_4m.py --config "${CONFIG}" --num_workers "${NUM_WORKERS}" \
+      --accum_steps "${ACCUM}" ${RESUME_ARG} "$@" &
 SRUN_PID=$!
 rc=0
 wait "${SRUN_PID}" || rc=$?

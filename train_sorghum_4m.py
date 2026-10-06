@@ -4,6 +4,7 @@ Training script for EmbodiedMAE-4M (RGB + Depth + PointCloud + Text parameters).
 
 import os
 import json
+import contextlib
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -95,7 +96,7 @@ def merge_config_with_args(config, args):
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
                   'active_modalities', 'text_mask_ratio'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
-                     'warmup_epochs', 'val_freq', 'test_freq'],
+                     'warmup_epochs', 'val_freq', 'test_freq', 'accum_steps'],
         'checkpointing': ['output_dir', 'save_freq', 'resume', 'keep_last', 'keep_every'],
         'visualization': ['viz_freq', 'num_viz_samples'],
         'distributed': ['world_size', 'dist_backend', 'dist_url'],
@@ -165,6 +166,13 @@ def config_to_namespace(config):
                   f"active modality ({','.join(ns.active_modalities)})")
             ns.text_mask_ratio = None
     ns.batch_size         = config['training'].get('batch_size', 16)
+    # Gradient accumulation: global batch = batch_size x world_size x accum_steps,
+    # so E1's 8 x 32 = 256 is 2 GPUs x 32 x 4 on a quarter of the cards (2026-10-06).
+    # The per-GPU batch, and so PointCloudEmbed's unsynced BatchNorm, is unchanged.
+    # 1 (the default, every earlier run) is exactly the pre-accumulation code path.
+    ns.accum_steps        = int(config['training'].get('accum_steps', 1) or 1)
+    if ns.accum_steps < 1:
+        raise ValueError(f"accum_steps must be >= 1, got {ns.accum_steps}")
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
     ns.weight_decay       = config['training'].get('weight_decay', 0.05)
@@ -531,25 +539,49 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
-def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75):
+def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75,
+                    accum_steps=1):
     model.train()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
 
+    # `accum_steps` micro-batches make one optimiser step. A trailing partial group
+    # still steps (scaled by its own size), as the last short batch did at accum 1,
+    # so the steps per epoch match the run's 8-GPU segments (411 for E1).
+    n_batches = len(dataloader)
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
-    for rgb, depth, pc, param_floats, text_valid, _ in pbar:
+    for bi, (rgb, depth, pc, param_floats, text_valid, _) in enumerate(pbar):
         rgb          = rgb.to(device)
         depth        = depth.to(device)
         pc           = pc.to(device)
         param_floats = param_floats.to(device)
         text_valid   = text_valid.to(device)
 
-        loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
-                                              mask_ratio=mask_ratio)
+        if accum_steps == 1:
+            loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
+                                                  mask_ratio=mask_ratio)
 
-        optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+        else:
+            g0      = (bi // accum_steps) * accum_steps
+            g_size  = min(accum_steps, n_batches - g0)
+            is_last = (bi + 1 == g0 + g_size)
+            if bi == g0:
+                optimizer.zero_grad()
+            # DDP all-reduces only on a group's last micro-batch. The forward must sit
+            # inside no_sync() too: DDP arms its reducer during forward.
+            sync_ctx = (model.no_sync() if (not is_last and hasattr(model, 'no_sync'))
+                        else contextlib.nullcontext())
+            with sync_ctx:
+                loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats,
+                                                      text_valid, mask_ratio=mask_ratio)
+                # mean over the global batch, as DDP's mean-reduction gives at accum 1
+                (loss / g_size).backward()
+            if is_last:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
 
         tot     += loss.item()
         tot_rgb += lr.item()
@@ -927,6 +959,7 @@ def train_worker(rank, world_size, args):
                            'text_loss_weight': args.spline_loss_weight,
                            'max_leaves': args.max_leaves,
                            'batch_size': args.batch_size, 'epochs': args.epochs,
+                           'accum_steps': args.accum_steps,
                            'lr': args.lr, 'total_params': total_params,
                            'train_samples': len(train_ds), 'val_samples': len(val_ds),
                        })
@@ -1001,7 +1034,8 @@ def train_worker(rank, world_size, args):
             print(f"{'='*80}")
 
         tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt = train_one_epoch(
-            model, train_loader, optimizer, device, epoch, mask_ratio=args.mask_ratio)
+            model, train_loader, optimizer, device, epoch, mask_ratio=args.mask_ratio,
+            accum_steps=args.accum_steps)
         for k, v in zip(['train_loss','train_rgb','train_depth','train_pc','train_text'],
                         [tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt]):
             history[k].append(v)
@@ -1187,6 +1221,9 @@ def main():
     parser.add_argument('--spline_loss_weight', type=float, default=None)
     parser.add_argument('--max_leaves',         type=int,   default=None)
     parser.add_argument('--batch_size',         type=int,   default=None)
+    parser.add_argument('--accum_steps',        type=int,   default=None,
+                        help='Micro-batches per optimiser step (global batch = '
+                             'batch_size x world_size x accum_steps). Default 1.')
     parser.add_argument('--epochs',             type=int,   default=None)
     parser.add_argument('--lr',                 type=float, default=None)
     parser.add_argument('--weight_decay',       type=float, default=None)
@@ -1243,7 +1280,8 @@ def main():
         cfg.world_size = world_size
         if rank == 0:
             print(f"\n🚀 Multi-GPU (torchrun)  GPUs={world_size}  "
-                  f"batch/GPU={cfg.batch_size}  total={cfg.batch_size*world_size}")
+                  f"batch/GPU={cfg.batch_size}  accum={cfg.accum_steps}  "
+                  f"total={cfg.batch_size*world_size*cfg.accum_steps}")
         train_worker(rank, world_size, cfg)
     elif cfg.world_size > 1:
         print(f"\n🚀 Multi-GPU (mp.spawn)  GPUs={cfg.world_size}  "

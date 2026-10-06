@@ -132,6 +132,17 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   ~8-14 min/epoch, ~6-10 days of running. The user moved it from nova (8x RTX PRO 6000, 180 CPUs,
   ~3-5 days, but it needed 8 of the account's 17 GPUs) to scavenger. Both Blackwell nodes host nova
   CPU jobs, which scavenger cannot share.
+- **E1 moved to 2 GPUs (2026-10-06, user: "do E1 with 2 GPUs instead of 8").** It had sat at
+  epoch 21 since 10-04 (16696027, 8x A100 scavenger, pending). `train_sorghum_4m.py` gained
+  `training.accum_steps` / `--accum_steps` (default 1 = the old code path; DDP `no_sync` on all but
+  a group's last micro-batch; a trailing partial group still steps, so 411 steps/epoch as at 8 GPUs;
+  checked equal to a full-batch step to 1e-9 under 2-process DDP). `slurm/pretrain_15k_d2.sbatch`
+  now sets accum = 8 / NPROC: 2 x 32 x 4 = global batch 256, same per-GPU batch, lr, schedule, so
+  the 8-GPU checkpoints resume as is. Job **16740746**: nova, 2x RTX PRO 6000, 128 CPU, 480G,
+  `NUM_WORKERS=60`, `--save_freq 2`, 2-day limit with `--time-min=04:00:00` and the USR1 requeue.
+  Expected ~12 min/epoch (GPU ceiling ~74 samples/s/GPU), ~8 days for the rest, if the loader
+  keeps up. 16696027 (8x A100 scavenger, old spooled script, accum 1) now waits `afterany:16740746`
+  as the fallback: it resumes at 1000 and exits if E1 finished.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
