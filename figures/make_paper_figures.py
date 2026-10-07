@@ -181,7 +181,11 @@ def load(args):
     with torch.no_grad():
         # (a) Dirichlet-masked pretraining step at the training ratio
         torch.manual_seed(1)
+        # Paper design: the parameter stream is a reconstruction target only, so
+        # it is taken out of the shared budget and fully hidden (text_mask_ratio 1).
+        model.text_mask_ratio = 1.0
         _, _, (pr, pd, pp, pt), (mr, md, mp, mt) = model(*b, mask_ratio=0.8)
+        model.text_mask_ratio = None
         fps = model.pc_embed.fps(b[2], model.num_pc_tokens)
         members = _pc_token_membership(b[2], fps, model.pc_embed.group_size)
         out['masked'] = dict(
@@ -328,6 +332,7 @@ def architecture(s, path):
                 'text': 'MLP → 9 floats per token\nSmooth-L1 on hidden, real tokens'}
     vis_pts = pc_visible_points(s)
     hidden_leaf = next((t for t in range(1, 25) if s['tv'][t] > 0.5 and m['m_text'][t] > 0.5), 1)
+    n_vis['text'] = int((m['m_text'] < 0.5).sum())
     rows_gt, toks = recipe_rows(s['par'], s['tv'], (hidden_leaf,), with_tokens=True)
     tok_hidden = [bool(m['m_text'][t] > 0.5) if t is not None else False for t in toks]
     par_rec = torch.where(torch.as_tensor(m['m_text'])[:, None] > 0.5, m['par'], s['par'])
@@ -351,7 +356,8 @@ def architecture(s, path):
         arrow(ax, (cols['in'] + cw['in'], y + rh / 2), (cols['tok'], y + rh / 2), color=c, lw=0.7)
         # masked
         box(ax, cols['mask'], y, cw['mask'], rh, fill='white', edge=c, lw=0.8, rounding=0.008)
-        label(ax, cols['mask'] + 0.004, y + rh - 0.012, f'{n_vis[r]} / {L[r]} visible', fs=5.0, color=c, ha='left', va='top')
+        label(ax, cols['mask'] + 0.004, y + rh - 0.012,
+              f'{n_vis[r]} / {L[r]} visible' + (' — target' if r == 'text' else ''), fs=5.0, color=c, ha='left', va='top')
         mx = cols['mask'] + 0.034
         if r == 'rgb':
             show_rgb(img_axes(fig, mx, y + 0.006, iw, ih), masked_image(s['rgb'], m['m_rgb']))
@@ -377,7 +383,8 @@ def architecture(s, path):
             show_pc(img_axes(fig, ox - 0.004, y + 0.002, iw + 0.008, ih + 0.012, projection='3d'), m['pc'], s=0.25)
         else:
             show_recipe(img_axes(fig, cols['out'] + 0.004, y + 0.004, cw['out'] - 0.008, rh - 0.03),
-                        recipe_rows(par_rec, s['tv'], (hidden_leaf,)), dim=[not h for h in tok_hidden], fs=4.2)
+                        recipe_rows(par_rec, s['tv'], (hidden_leaf,)),
+                        dim=[(t is not None and not h) for t, h in zip(toks, tok_hidden)], fs=4.2)
 
     # encoder block
     ey0 = ry['text']; ey1 = ry['rgb'] + rh
@@ -385,11 +392,11 @@ def architecture(s, path):
     label(ax, cols['enc'] + cw['enc'] / 2, ey1 - 0.014, 'ViT-B encoder', fs=6.2, bold=True, color=ENC_EDGE, va='top')
     label(ax, cols['enc'] + cw['enc'] / 2, ey1 - 0.04, '12 blocks, d = 768\nsees CLS + visible\ntokens only', fs=5.0, color=DARK, va='top')
     total_vis = sum(n_vis.values())
-    tax = img_axes(fig, cols['enc'] + 0.008, ey0 + 0.075, cw['enc'] - 0.016, 0.02)
+    tax = img_axes(fig, cols['enc'] + 0.008, ey0 + 0.1, cw['enc'] - 0.016, 0.02)
     token_strip(tax, [(r, n_vis[r]) for r in rows])
-    label(ax, cols['enc'] + cw['enc'] / 2, ey0 + 0.062, f'{total_vis + 1} tokens in', fs=4.8, color=GREY, va='top')
+    label(ax, cols['enc'] + cw['enc'] / 2, ey0 + 0.09, f'{total_vis + 1} tokens in', fs=4.8, color=GREY, va='top')
     label(ax, cols['enc'] + cw['enc'] / 2, ey0 + 0.012,
-          'Dirichlet(α=1) splits the\nvisible budget per step;\n≥ 25 % of each stream hidden', fs=4.6, color=DARK, va='bottom')
+          'Dirichlet(α=1) splits the\nvisible budget over the three\nsensor streams; ≥ 25 % hidden', fs=4.6, color=DARK, va='bottom')
     # decoder trunk (thin, between encoder and heads)
     dx = cols['enc'] + cw['enc'] + 0.012; dw = cols['dec'] - dx - 0.012
     box(ax, dx, ey0, dw, ey1 - ey0, fill=DEC_FILL, edge=DEC_EDGE, lw=0.8, rounding=0.01)
@@ -407,7 +414,7 @@ def architecture(s, path):
     # teacher
     tx, tw_ = 0.012, 0.36
     box(ax, tx, by, tw_, bh, fill='#fafafa', edge='#adb5bd', lw=0.7, rounding=0.012)
-    label(ax, tx + 0.008, by + bh - 0.012, 'frozen teacher — all four streams, nothing hidden', fs=5.8, bold=True, ha='left', va='top')
+    label(ax, tx + 0.008, by + bh - 0.012, 'frozen teacher — RGB, depth, cloud; nothing hidden', fs=5.6, bold=True, ha='left', va='top')
     thumbs = [('rgb', lambda a: show_rgb(a, s['rgb'])), ('depth', lambda a: show_depth(a, s['depth'], s['bg'])),
               ('pc', lambda a: show_pc(a, s['pc'], s=0.2, lim=1.0)), ('text', None)]
     tw0 = 0.058; ty = by + 0.065; th0 = bh - 0.115
@@ -417,13 +424,14 @@ def architecture(s, path):
         if mo == 'pc':
             show_pc(img_axes(fig, x + 0.002, ty + 0.004, tw0 - 0.004, th0 - 0.008, projection='3d'), s['pc'], s=0.2, lim=1.0, zoom=1.3)
         elif mo == 'text':
-            show_recipe(img_axes(fig, x + 0.002, ty + 0.004, tw0 - 0.004, th0 - 0.012), recipe_rows(s['par'], s['tv'], (1,)), fs=4.0, stacked=True)
+            label(ax, x + tw0 / 2, ty + th0 / 2, '∅', fs=9, color='#ced4da')
+            label(ax, x + tw0 / 2, ty + 0.012, 'recipe:\ntarget only', fs=4.2, color=C['text'], va='bottom')
         else:
             fn(img_axes(fig, x + 0.004, ty + 0.004, tw0 - 0.008, th0 - 0.008))
     tex = tx + 0.012 + 4 * (tw0 + 0.008) + 0.004; tew = tx + tw_ - tex - 0.01
     box(ax, tex, ty, tew, th0, 'encoder\n+\ndecoder', fill=ENC_FILL, edge=ENC_EDGE, fs=5.4, bold=True)
     arrow(ax, (tex - 0.006, ty + th0 / 2), (tex, ty + th0 / 2), color=DARK, lw=0.7)
-    label(ax, tx + tw_ / 2, by + 0.012, 'targets:  c$^T$ (CLS latent),  F$^T$ ∈ ℝ$^{613×512}$ (decoder features)', fs=5.2, color=DARK, va='bottom')
+    label(ax, tx + tw_ / 2, by + 0.012, 'never sees parameters;  emits  c$^T$ (CLS)  and  F$^T$ ∈ ℝ$^{613×512}$', fs=5.2, color=DARK, va='bottom')
 
     # student
     sx, sw_ = 0.40, 0.36
@@ -461,8 +469,7 @@ def architecture(s, path):
     arrow(ax, (tx + tw_, by + bh * 0.3), (sx, by + bh * 0.3), color='#adb5bd', lw=0.8, ls=(0, (2, 2)))
     label(ax, (tx + tw_ + sx) / 2, by + bh * 0.3 + 0.012, 'targets', fs=4.8, color=GREY)
 
-    label(ax, 0.5, 0.012, f'all panels: held-out plant {s["name"]}, real inputs, masks and model outputs; '
-          'grey recipe values in (a) are visible tokens passed through, not predictions', fs=5, color=GREY, va='bottom', style='italic')
+    label(ax, 0.5, 0.012, f'all panels: held-out plant {s["name"]}, real inputs, masks and model outputs', fs=5, color=GREY, va='bottom', style='italic')
     for ext in ('pdf', 'png'):
         fig.savefig(path.with_suffix('.' + ext), dpi=300, facecolor='white')
     plt.close(fig)
