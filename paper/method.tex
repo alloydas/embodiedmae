@@ -34,8 +34,9 @@
   cloud truncated by row neighbors), \CropCode{} recovers the full procedural
   representation of the plant: a kilobyte-scale, physiologically interpretable
   parameter set that re-renders to complete geometry, feeds simulation, and
-  supports trait analytics at field scale. Right: real outputs of the RGB-only
-  student on a held-out plant.}
+  supports trait analytics at field scale. Both species are shown: sorghum
+  (top) and maize (bottom). Right: real outputs of the RGB-only model on a
+  held-out plant of each species.}
   \label{fig:teaser}
 \end{figure*}
 
@@ -147,7 +148,8 @@ view regime.
   reconstruct all streams. The parameter stream is decoded, never encoded
   (Sec.~\ref{sec:param-stream}). (b)~A frozen teacher shown all four streams,
   parameters included, is distilled into single-sensor students for deployment. All panels show real inputs,
-  masks and model outputs for one held-out plant.}
+  masks and model outputs for one held-out sorghum plant; the maize model is
+  identical apart from its recipe tokens ($1{+}28$ tokens of 14 values).}
   \label{fig:arch}
 \end{figure*}
 
