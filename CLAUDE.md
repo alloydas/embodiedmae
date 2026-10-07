@@ -143,6 +143,12 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   Expected ~12 min/epoch (GPU ceiling ~74 samples/s/GPU), ~8 days for the rest, if the loader
   keeps up. 16696027 (8x A100 scavenger, old spooled script, accum 1) now waits `afterany:16740746`
   as the fallback: it resumes at 1000 and exits if E1 finished.
+- **`e2_pc_d2` moved to the front of its chain (2026-10-07 09:10, user: "move e2_pc to nova").**
+  Its scavenger chunks kept being preempted within minutes (stuck at 257 since 10-06). Nova job
+  16696287 (2x RTX PRO 6000, 80 CPU, 2-day limit, `--time-min` 4 h, USR1 requeue) had its
+  dependency cleared; the next scavenger chunk 16690568 now waits `afterany:16696287`. No guard job
+  (the user does not want watchers): if 16696287 pends for long on `AssocGrpGRES`, fall back by
+  hand by holding it and clearing 16690568's dependency.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
