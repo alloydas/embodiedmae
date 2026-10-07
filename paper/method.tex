@@ -65,11 +65,12 @@ Two commitments follow. First, the generator supplies both the training data
 and the output representation: \CropCode{} is pretrained entirely on
 $G$-rendered plants paired with their exact $\theta$, so the model's target is
 the very parameterization that downstream simulation consumes. Second,
-$\theta$ is available in simulation and never in the field, so we treat it
-strictly as a prediction \emph{target}. Whether it should also enter the
-encoder as an input modality is a design question we answer empirically
-(Sec.~\ref{sec:param-stream}); the formulation here leaves that choice open
-through a single masking ratio.
+$\theta$ is available in simulation and never in the field, so at deployment
+it is strictly a prediction \emph{target}; during training it may serve as
+privileged information. Whether it should also enter the encoder as an input
+modality during pretraining is a design question we answer empirically
+(Sec.~\ref{sec:param-stream}); the formulation leaves that choice open through
+a single masking ratio.
 
 \subsection{A procedural field-data engine}
 \label{sec:data}
@@ -144,8 +145,8 @@ view regime.
   \caption{\textbf{\CropCode{} overview.} (a)~Four token streams enter a shared
   encoder under a Dirichlet masking budget; modality-specific decoders
   reconstruct all streams. The parameter stream is decoded, never encoded
-  (Sec.~\ref{sec:param-stream}). (b)~The vision-complete teacher is distilled
-  into single-sensor students for deployment. All panels show real inputs,
+  (Sec.~\ref{sec:param-stream}). (b)~A frozen teacher shown all four streams,
+  parameters included, is distilled into single-sensor students for deployment. All panels show real inputs,
   masks and model outputs for one held-out plant.}
   \label{fig:arch}
 \end{figure*}
@@ -207,24 +208,30 @@ ablation arms are matched in \emph{optimizer steps} (197{,}400 at global batch
 plant count and equal epochs would hand a 10k-plant arm ten times the updates
 of a 1k arm.
 
-\subsection{A vision-complete teacher, single-sensor students}
+\subsection{A full-modality teacher, single-sensor students}
 \label{sec:distill}
 
 At $\rho{=}0.80$ the encoder never sees one modality standing alone with the
 others entirely absent, so the pretrained model completes a single sensor only
-out of distribution. We close the gap by self-distillation~\cite{hinton2015distill}.
-The \emph{teacher} is the pretrained checkpoint with the lowest validation
-loss, frozen, shown RGB, depth and the point cloud with nothing hidden and
-\emph{no} parameter tokens (vision-complete, never parameter-complete; the
-parameters remain a target). It emits its encoder CLS latent
-$c^T\in\R^{768}$ and its decoder feature sequence $F^T\in\R^{613\times512}$
-after the final decoder norm. Because the decoder layout is independent of the
-mask, every position of $F^T$ has a student counterpart. One caution we found
+out of distribution. We close the gap by self-distillation~\cite{hinton2015distill}
+from a teacher that holds privileged information. The \emph{teacher} is the
+pretrained checkpoint with the lowest validation loss, frozen, and shown
+\emph{all four} streams with nothing hidden: RGB, depth, the point cloud, and
+the parameter tokens themselves. Since $\theta$ is exactly what the student
+must infer from a single sensor, the teacher's representation is formed with
+the answer in hand, and distilling it is a learning-using-privileged-information
+setting rather than plain multi-sensor to single-sensor transfer. The teacher
+emits its encoder CLS latent $c^T\in\R^{768}$ and its decoder feature sequence
+$F^T\in\R^{613\times512}$ after the final decoder norm; because the decoder
+layout is independent of the mask, every position of $F^T$ has a student
+counterpart, including the $1{+}K$ parameter positions. One caution we found
 necessary: an all-visible teacher is itself out of distribution for a model
-trained at $\ge$25\,\% masking per stream. On sorghum the cost is small, but on
-maize the teacher's point cloud collapsed (Chamfer $0.05$--$0.09$ vs.\
-$\sim$$0.001$); there we show the teacher half of each stream's tokens instead,
-and we measure a teacher's own reconstructions before distilling from it.
+trained at $\ge$25\,\% masking per stream. On sorghum the cost is small
+(full-cloud Chamfer $4.8\times10^{-4}$ all-visible vs.\ $3.5\times10^{-4}$ at
+50\,\% visible per stream), but on maize the teacher's point cloud collapsed
+(Chamfer $0.05$--$0.09$ vs.\ $\sim$$0.001$); there we show the teacher half of
+each stream's tokens instead, and we measure a teacher's own reconstructions
+before distilling from it.
 
 The \emph{student} starts from the teacher's weights and trains for 100 epochs
 (AdamW, lr $10^{-4}$, cosine, global batch 128) on two step types chosen by a
@@ -235,7 +242,9 @@ a regularizer, and the loss is
 $\sum_m\ell_m+\lambda_F\,\overline{\|F^S_j-F^T_j\|^2}_{j\notin s}+\lambda_c\|c^S-c^T\|^2$
 with $\lambda_F{=}1$, $\lambda_c{=}0.5$: ground-truth reconstruction of all
 streams including $\theta$, plus feature matching on the positions the student
-must \emph{generate}. With probability 0.2 an ordinary masked step from
+must \emph{generate}---for an RGB source, the depth, cloud and parameter
+positions, where the teacher's features were computed with the parameters in
+view. The student never receives parameter tokens. With probability 0.2 an ordinary masked step from
 Sec.~\ref{sec:pretrain}; one such step in five is what keeps the non-target
 heads alive (a depth head collapsed by $7\times$ within ten epochs without it
 and recovered in one epoch with it). Specialists restrict the source list and,

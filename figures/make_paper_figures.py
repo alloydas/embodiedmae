@@ -414,7 +414,7 @@ def architecture(s, path):
     # teacher
     tx, tw_ = 0.012, 0.36
     box(ax, tx, by, tw_, bh, fill='#fafafa', edge='#adb5bd', lw=0.7, rounding=0.012)
-    label(ax, tx + 0.008, by + bh - 0.012, 'frozen teacher — RGB, depth, cloud; nothing hidden', fs=5.6, bold=True, ha='left', va='top')
+    label(ax, tx + 0.008, by + bh - 0.012, 'frozen teacher — all four streams, nothing hidden', fs=5.8, bold=True, ha='left', va='top')
     thumbs = [('rgb', lambda a: show_rgb(a, s['rgb'])), ('depth', lambda a: show_depth(a, s['depth'], s['bg'])),
               ('pc', lambda a: show_pc(a, s['pc'], s=0.2, lim=1.0)), ('text', None)]
     tw0 = 0.058; ty = by + 0.065; th0 = bh - 0.115
@@ -424,14 +424,13 @@ def architecture(s, path):
         if mo == 'pc':
             show_pc(img_axes(fig, x + 0.002, ty + 0.004, tw0 - 0.004, th0 - 0.008, projection='3d'), s['pc'], s=0.2, lim=1.0, zoom=1.3)
         elif mo == 'text':
-            label(ax, x + tw0 / 2, ty + th0 / 2, '∅', fs=9, color='#ced4da')
-            label(ax, x + tw0 / 2, ty + 0.012, 'recipe:\ntarget only', fs=4.2, color=C['text'], va='bottom')
+            show_recipe(img_axes(fig, x + 0.002, ty + 0.004, tw0 - 0.004, th0 - 0.012), recipe_rows(s['par'], s['tv'], (1,)), fs=4.0, stacked=True)
         else:
             fn(img_axes(fig, x + 0.004, ty + 0.004, tw0 - 0.008, th0 - 0.008))
     tex = tx + 0.012 + 4 * (tw0 + 0.008) + 0.004; tew = tx + tw_ - tex - 0.01
     box(ax, tex, ty, tew, th0, 'encoder\n+\ndecoder', fill=ENC_FILL, edge=ENC_EDGE, fs=5.4, bold=True)
     arrow(ax, (tex - 0.006, ty + th0 / 2), (tex, ty + th0 / 2), color=DARK, lw=0.7)
-    label(ax, tx + tw_ / 2, by + 0.012, 'never sees parameters;  emits  c$^T$ (CLS)  and  F$^T$ ∈ ℝ$^{613×512}$', fs=5.2, color=DARK, va='bottom')
+    label(ax, tx + tw_ / 2, by + 0.012, 'sees the recipe (privileged);  emits  c$^T$ (CLS)  and  F$^T$ ∈ ℝ$^{613×512}$', fs=5.2, color=DARK, va='bottom')
 
     # student
     sx, sw_ = 0.40, 0.36
