@@ -1,0 +1,436 @@
+% ---------------------------------------------------------------------------
+% Methodology -- EmbodiedMAE-4M on procedurally generated sorghum
+%
+% Written from the code on 2026-10-07 (embodied_mae_4m.py, embodied_mae.py,
+% sorghum_dataset*.py, train_sorghum_4m.py, train_sorghum_4m_distill.py,
+% shorgum_data/capture.py, data_split/make_split.py, eval/*).  Every number
+% below is the value the code uses; where a config varies it, the text says so.
+%
+% Things to settle before submission are marked \todo{...}.  The biggest one:
+% Sec.~\ref{sec:field} describes the field protocol the code implements, but
+% NO real-image evaluation exists in the repo yet (E10 is unfinished), so the
+% real-data paragraph is a placeholder.
+%
+% Requires: amsmath, amssymb, booktabs, xcolor.  \todo is defined below; drop
+% it (or make it a no-op) for the camera-ready.
+% ---------------------------------------------------------------------------
+
+\providecommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\rgb}{\mathrm{rgb}}
+\newcommand{\dep}{\mathrm{d}}
+\newcommand{\pc}{\mathrm{pc}}
+\newcommand{\prm}{\theta}
+\newcommand{\Mods}{\mathcal{M}}
+\newcommand{\vis}{\mathcal{V}}
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Problem formulation}
+\label{sec:problem}
+
+A plant $x$ is observed through up to four streams,
+$\Mods=\{\rgb,\dep,\pc,\prm\}$: an RGB image $x^{\rgb}\in\mathbb{R}^{3\times224\times224}$,
+a depth map $x^{\dep}\in\mathbb{R}^{1\times224\times224}$ from the same camera, a
+point cloud $x^{\pc}\in\mathbb{R}^{N\times3}$ ($N{=}8196$) expressed in that camera's
+frame, and the \emph{procedural parameters} $x^{\prm}$ that generated the plant.
+The first three are what a sensor rig can deliver in the field. The fourth exists
+only in simulation: it is the recipe (stem length, stem direction, panicle
+geometry, and per-leaf insertion height, length, roll, branching angle and blade
+width) from which the mesh, and hence every image and scan of the plant, was
+produced. Our premise is that a representation forced to \emph{explain} its visual
+inputs in terms of this recipe is a better phenotyping representation than one
+trained to reconstruct pixels and points alone, and that the recipe is a natural
+target for inverse procedural modelling: given a photograph, recover the plant's
+generative parameters in a single forward pass.
+
+We cast all of this as one masked-modelling problem. Each modality $m$ is
+tokenised into a sequence $T_m$ of $L_m$ tokens; a shared transformer encoder
+$f_\phi$ reads the \emph{visible} subset of the concatenated tokens and a lighter
+decoder $g_\psi$ reconstructs every token of every active modality. Writing
+$\vis\subseteq\bigcup_m T_m$ for the visible set,
+\begin{equation}
+  \hat{x}^{m} = g_\psi\!\big(f_\phi(\vis)\big)_m, \qquad
+  \mathcal{L}(\phi,\psi) = \sum_{m\in\Mods_{\mathrm{act}}} w_m\,\ell_m\!\big(\hat{x}^{m},x^{m}\big),
+  \label{eq:objective}
+\end{equation}
+where $\Mods_{\mathrm{act}}\subseteq\Mods$ is the set of modalities a given arm is
+built with and $\ell_m$ is a modality-specific reconstruction loss
+(Sec.~\ref{sec:pretrain}). The choice of $\vis$ is the whole design space:
+\emph{pretraining} draws it at random across modalities, so that the model learns
+to complete any stream from any other; \emph{distillation} fixes it to a single
+sensor stream, so that a deployed model can run from one camera; and
+\emph{probing} fixes it to the sensor streams only, so that the procedural
+parameters, which no field sensor observes, can never leak into a phenotype
+estimate. Throughout, $x^{\prm}$ is treated as an \emph{input} only during
+pretraining; at evaluation and deployment it is always a target.
+
+Downstream, the quantity of interest is phenotype $y$ (height, leaf count, a
+biomass proxy, leaf angle, leaf length, leaf width). We read it from the frozen
+encoder's CLS token by ridge regression (Sec.~\ref{sec:field}), so the comparison
+between arms is a comparison of representations, not of decoders.
+
+\subsection{A procedural field-data engine}
+\label{sec:data}
+
+\paragraph{Generator.}
+Every plant is a draw from a single procedural sorghum generator
+(\texttt{SorghumGenerator/Random.sg}) seeded with the plant index, so the
+population is one continuous distribution with no discrete genotype variable.
+Each draw emits a textured mesh (stem plus a double-shell $u$--$v$ grid per leaf)
+and a parameter record: five plant-level quantities (stem length and direction,
+panicle size, seed count and radius) and, per leaf, the insertion point along the
+stem, length, roll angle, branching angle and blade width, the last measured on the
+mesh as the maximal margin-to-margin distance over the blade. The generator couples
+some of these: stem length is $0.05\,n_{\mathrm{leaves}}-0.001$ ($R^2{=}0.988$), so
+height and leaf count are one latent variable, and the branching angle varies by
+only $0.27^\circ$ across the population. We report this explicitly because it
+bounds what any phenotype probe on this data can show
+(Sec.~\ref{sec:field}).\footnote{Leaf \emph{roll} is a near-uniform circular draw per
+leaf; its per-plant mean is the only probe target uncorrelated with plant size.}
+
+\paragraph{Rendering.}
+We render with an offscreen OpenGL rasteriser (pyrender/trimesh, EGL): $1024^2$
+images, vertical field of view $40^\circ$, one shared leaf texture under a
+metallic-roughness material, three fixed directional lights plus ambient, and a
+uniform grey background. Ten cameras per plant sit on a Fibonacci sphere of radius
+$2.5$\,m centred on the mesh bounding box, at elevations
+$\pm64.2^\circ,\pm44.4^\circ,\pm30.0^\circ,\pm17.5^\circ,\pm5.7^\circ$ with
+golden-angle azimuths and a $\pm0.05$\,rad jitter; the rig seed is fixed, so every
+plant sees the same ten poses. Depth is stored losslessly as
+$(d-0.025)/(50-0.025)$ clipped to $[0,1]$ and packed into 32-bit big-endian RGBA.
+For each view we also export the complete plant cloud (${\sim}75$k points, sampled
+from the mesh) rigidly transformed into that camera's frame, together with the
+camera pose. The cloud is therefore the \emph{whole} plant, not a scan from that
+camera; Sec.~\ref{sec:field} describes how we simulate the partial clouds a rig
+would capture. A post-processing pass solves a straight alpha matte from the depth
+mask and the known background colour, so RGB can be composited over any background
+(we train on black).
+
+\paragraph{Scale and split.}
+The corpus is $15{,}000$ plants $\times$ 10 views $=150{,}000$ samples, with
+4--35 leaves per plant and stem lengths of 0.19--1.74\,m. We split \emph{by
+plant}, 70/15/15, and deliberately enrich the held-out splits with unusual
+plants: each plant's \emph{extremeness} is its Mahalanobis distance from the
+population centroid in six standardised features (leaf count, stem length, mean and
+max leaf length, mean and s.d.\ of leaf roll); plants are drawn into val+test
+without replacement with probability $\propto(\mathrm{rank}+0.02)^2$ and the pool
+is halved (seed 42). The result is 10{,}500 / 2{,}250 / 2{,}250 plants with median
+extremeness 2.03 on train versus 2.76 on val and test, and 4.7\,\% versus
+22--23\,\% of plants in the top extremeness decile. Held-out $R^2$ is thus
+comparable \emph{between} models on a split but is not a portable absolute
+number; we report native-unit MAE alongside it.
+
+\paragraph{Views as augmentation (one plant set, two camera sets).}
+An epoch visits every training plant once with \emph{one} randomly chosen view,
+drawn from a hash of (view seed, epoch, plant) so that all data workers and all
+GPUs agree. Every ablation arm shares the view seed and therefore sees the same
+views in the same order. Validation and test always use view 00. Data-scaling arms
+take nested random subsets of plants (1k $\subset$ 3k $\subset$ 10k) with all ten
+views, so a step along the data axis never changes the augmentation regime.
+
+\paragraph{Loader.}
+RGB is alpha-composited over black, resized to $224^2$ and ImageNet-normalised.
+Depth is decoded from its packed representation to $[0,1]$ (background $=0$) and
+resized. The cloud is subsampled without replacement to $N{=}8196$ points (padded
+with replacement if short), centred at its centroid and scaled to the unit sphere.
+The parameter record becomes $1+K$ tokens of nine floats, $K{=}24$: token~0 is the
+plant, $[\,\text{stem length},\ \text{stem dir}_{xyz},\ \text{panicle}_{xyz},\
+\text{seeds},\ \text{seed radius}\,]$; tokens $1\ldots K$ are leaves,
+$[\,\text{insertion},\ \text{length},\ \text{roll},\ \text{branch},\ \text{width},\
+0,0,0,0\,]$. Each field is affinely mapped to $[0,1]$ by a fixed scale and shift
+(e.g.\ length$/1.25$, roll$/360^\circ$, branch$/180^\circ$, width$/0.2$,
+$(\text{dir}+1)/2$) and clipped; a validity mask marks real leaf tokens and zeros
+pad the rest. Plants with more than $K$ leaves (1{,}586 of 15{,}000) lose their
+excess leaf tokens. \todo{decide whether to raise $K$ or state the truncation as a
+limitation.}
+
+\subsection{Four-stream masked pretraining}
+\label{sec:pretrain}
+
+\paragraph{Tokenisers.}
+RGB and depth are patchified by a stride-16 convolution into $14\times14=196$
+tokens each, with fixed 2-D sine--cosine positional embeddings shared between the
+two image streams. The cloud is grouped Point-MAE style: farthest-point sampling
+picks 196 centres (random start), $k$NN gathers 32 neighbours per centre, each
+group is expressed relative to its centre and passed through a two-stage
+mini-PointNet (Conv$_{3\to128\to256}$, max-pool, concatenate the pooled global
+feature, Conv$_{512\to512\to D}$, max-pool) to one token per group. PC tokens
+receive a learned positional table indexed by FPS order. The parameter stream uses
+no text model: each nine-float token is projected by
+$\mathrm{LN}(\mathrm{GELU}(W\,p+b))$ with its own learned positional table (slot~0
+the plant, slots $1\ldots K$ the leaves). Every token receives a learned
+per-modality embedding; a learned CLS token is prepended. Four backbone sizes share
+this skeleton (Table~\ref{tab:sizes}); an inactive modality has no tokeniser, no
+head and no loss, it is absent rather than masked.
+
+\begin{table}[t]
+\centering\small
+\caption{Backbone configurations. Decoder width is 512 except for \emph{small};
+all MLP ratios are 4. Parameter counts are for the four-modality model.}
+\label{tab:sizes}
+\begin{tabular}{lcccccr}
+\toprule
+ & $D$ & depth & heads & dec.\ $D$ & dec.\ depth & params \\
+\midrule
+small & 384 & 12 & 6  & 192 & 4 & 25.1\,M \\
+base  & 768 & 12 & 12 & 512 & 8 & 114.3\,M \\
+large & 1024 & 24 & 16 & 512 & 8 & 332.2\,M \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Dirichlet allocation with exact budgets.}
+Let $L_m$ be the token count of modality $m$ and $\rho{=}0.80$ the total mask
+ratio. The visible budget is $V=\lfloor(1-\rho)\sum_m L_m\rfloor$ (117 tokens for
+three $196$-token streams). Once per forward pass we draw
+$\lambda\sim\mathrm{Dirichlet}(\alpha\mathbf{1})$, $\alpha{=}1$, over the budgeted
+modalities and allocate $V$ in proportion to $\lambda$ by capped water-filling with
+largest-remainder rounding, subject to $1\le n_m\le\lfloor L_m(1-\rho_{\min})\rfloor$
+with $\rho_{\min}{=}0.25$: every modality keeps at least one visible token and loses
+at least a quarter. The counts $n_m$ sum to $V$ exactly and are shared by the
+batch, so no sample ever has a zero-token modality and no padding enters the
+encoder; \emph{which} positions are visible is drawn per sample by a uniform
+shuffle. This exact-budget allocator follows EmbodiedMAE's fixed-visible-count
+scheme \todo{cite} and departs from it only in the floor $\rho_{\min}$.
+
+The parameter stream is a special case. Left inside the shared budget, its 25
+short tokens are on average 59\,\% visible at $\rho{=}0.80$ while the vision
+streams fall from 20\,\% to 18\,\%, i.e.\ adding the fourth stream silently taxes
+the other three. We therefore gate it: a separate ratio $\rho_\prm$ fixes
+$n_\prm=\max(1,\lfloor(1+K)(1-\rho_\prm)\rfloor)$ visible parameter tokens, and the
+Dirichlet budget is allocated over the vision streams alone, which makes the
+vision masks of a four-stream arm bit-identical to those of its three-stream
+sibling under the same seed. Setting $\rho_\prm{=}1$ removes the parameters from
+the input altogether and keeps them only as a target. Our controlled ablation runs
+$\rho_\prm\in\{\text{shared},0.80,0.40,1.0\}$.
+
+\paragraph{Decoder and heads.}
+Encoder outputs are projected to the decoder width, the CLS dropped, and every
+modality's full sequence restored in canonical order (rgb, depth, pc, $\prm$;
+$196{+}196{+}196{+}25=613$ positions) with a learned mask token in the hidden
+slots and fixed decoder positional embeddings. Because the layout never depends on
+the mask, teacher and student decoder sequences in Sec.~\ref{sec:distill} align
+position for position. After eight pre-LN blocks, per-modality heads read out:
+linear $16^2\!\cdot\!3$ and $16^2\!\cdot\!1$ values per image patch; for the cloud a
+FoldingNet-style head that concatenates each of the 196 token features (projected
+to 512) with a point on a $7\times7$ grid in $[-1,1]^2$ and folds it through a
+three-layer MLP to $\lfloor N/196\rfloor{=}41$ points, i.e.\ the \emph{entire}
+$N$-point cloud is regenerated regardless of which PC tokens were visible; and for
+the parameters a two-layer MLP to nine unbounded floats per token.
+
+\paragraph{Losses.}
+With $M_m$ the binary mask of modality $m$ (1 = hidden), the per-stream terms in
+Eq.~\eqref{eq:objective} are
+\begin{align}
+  \ell_{\rgb} &= \frac{\sum_i M^{\rgb}_i\,\big\|\hat{p}_i-\tilde{p}_i\big\|_2^2/|p_i|}{\max(\sum_i M^{\rgb}_i,1)},
+  \qquad \tilde{p}_i=\frac{p_i-\mu_i}{\sqrt{\sigma_i^2+10^{-6}}}, \\
+  \ell_{\dep} &= \text{as }\ell_{\rgb}\text{ on } \tilde{d}=\frac{d-\min d}{\max(\max d-\min d,\,10^{-6})}
+  \ \text{(per image)}, \\
+  \ell_{\pc} &= \frac1N\sum_{i}\sigma\!\big(a(d_i-\tau)\big)\,d_i
+             + \frac1N\sum_{j}\sigma\!\big(a(e_j-\tau)\big)\,e_j,
+  \label{eq:qal} \\
+  \ell_{\prm} &= \frac{\sum_t M^{\prm}_t\,v_t\,\overline{\mathrm{SmoothL1}}_{\beta=0.1}(\hat{\theta}_t,\theta_t)}{\max(\sum_t M^{\prm}_t v_t,1)} .
+\end{align}
+$\ell_{\rgb}$ is the per-patch-normalised MSE of MAE; $\ell_{\dep}$ is the same on a
+per-image min--max-normalised target, so the model predicts normalised depth
+directly. $\ell_{\pc}$ is a \emph{quality-aware} Chamfer: $d_i$ and $e_j$ are the
+Euclidean (not squared) nearest-neighbour distances from prediction to target and
+back, each weighted by a sigmoid gate $\sigma(a(\cdot-\tau))$ with $\tau{=}0.01$ and
+$a{=}100$ that down-weights residuals already under one centimetre on the unit
+sphere and concentrates the gradient on the thin-leaf geometry that plain Chamfer
+neglects \todo{cite the QAL source}. It is computed on the full regenerated cloud.
+$\ell_{\prm}$ is averaged over the nine slots and counted only on tokens that are
+both hidden ($M^{\prm}_t{=}1$) and real ($v_t{=}1$). Weights are
+$w_{\rgb}{=}w_{\dep}{=}1$, $w_{\pc}{=}1$ and $w_{\prm}{=}5$. Because the sum runs over
+$\Mods_{\mathrm{act}}$, totals are not comparable across arms with different
+modality sets; we compare arms by downstream probes and by per-modality metrics,
+never by total loss.
+
+\paragraph{Schedule.}
+AdamW ($\beta{=}(0.9,0.95)$, weight decay 0.05), linear warm-up then half-cosine
+decay to zero, gradient-norm clipping at 1.0, mixed modality masking at every step.
+The headline model (E1) trains the \emph{base} backbone on all 105{,}000 views per
+epoch for 1{,}000 epochs at global batch 256 (lr $6\times10^{-4}$, 20 warm-up
+epochs), where global batch is per-GPU batch $\times$ GPUs $\times$ accumulation
+steps; we keep the per-GPU batch at 32 across hardware because the PointNet
+tokeniser's BatchNorm statistics are not synchronised across ranks. Ablation arms
+(modality, data scale, model scale) use the view-sampling regime above at global
+batch 32 and are matched in \emph{optimiser steps}, not epochs: at one view per
+plant an epoch is the plant count, so a 1k-plant arm runs 6{,}169 epochs, a 3k arm
+2{,}100 and a 10k arm 631 to reach the same $197{,}400$ updates as a 600-epoch
+full-data arm. Warm-up, validation and checkpoint frequencies scale by the same
+factor.
+
+\subsection{A vision-complete teacher}
+\label{sec:distill}
+
+A field model must run from whatever sensor is present, which the pretraining
+objective does not guarantee: at $\rho{=}0.80$ the encoder has never seen a single
+modality standing alone with the others entirely absent. We close that gap by
+self-distillation from a frozen copy of the pretrained model that \emph{is} shown
+everything.
+
+The teacher is the pretrained checkpoint with the lowest validation loss (epoch
+960 of 1{,}000 for the headline model), frozen and run in evaluation mode. It
+receives all four streams with no masking at all, $\vis=\bigcup_m T_m$, and emits
+three things: the encoder CLS latent $c^{T}\in\mathbb{R}^{D}$, the full
+613-position decoder feature sequence $F^{T}\in\mathbb{R}^{613\times512}$ taken
+after the final decoder LayerNorm, and (optionally) its reconstructions. Only the
+first two are used. Because the teacher sees the parameters, $F^{T}$ at the
+parameter positions is a vision-and-recipe-informed target for a student that will
+be shown pixels alone; and because the decoder layout is mask-independent, every
+one of the 613 positions has a student counterpart.
+
+Two remarks on the teacher regime, both verified in our runs. First, an
+all-visible teacher is \emph{out of distribution} for a model pretrained at
+$\rho_{\min}{=}0.25$; on the sorghum headline model the cost is small (full-cloud
+Chamfer $4.8\times10^{-4}$ all-visible versus $3.5\times10^{-4}$ at 50\,\% visible
+per stream), but on a second species it was catastrophic (the cloud collapsed,
+Chamfer $0.05$--$0.09$), and there we distil from a teacher shown half of each
+stream's tokens instead. The teacher's own reconstruction quality should be
+measured before distilling from it. Second, distillation's value shrinks as the
+teacher improves: against a weak early teacher the same recipe cut cross-modal
+generation loss by 54\,\%; against the headline model it cuts 19\,\%
+(Sec.~\ref{sec:results}). \todo{confirm the final numbers against the $d2$ rerun.}
+
+\subsection{Single-sensor students}
+\label{sec:students}
+
+The student is initialised from the same checkpoint as the teacher and trained
+for 100 epochs (AdamW, lr $10^{-4}$, 5 warm-up epochs, cosine, global batch 128)
+on a mixture of two step types chosen by a seeded coin so that all GPUs agree:
+
+\begin{itemize}
+\item \textbf{Cross-modal steps} (probability $p_{\mathrm{xm}}{=}0.8$). A single
+  source modality $s$ is selected, cycling deterministically through
+  $(\rgb,\dep,\pc,\prm)$ across steps; $\vis=T_s$ and the other three streams
+  contribute no tokens to the encoder (their masks are all ones, so the decoder
+  rebuilds them from mask tokens alone). Optionally a fraction $\rho_s$ of the
+  source's \emph{own} tokens is hidden as well (\emph{source masking};
+  $\rho_s{=}0.5$ in our specialist arms, 0 in the generalist), which turns the
+  source into a reconstruction target too and prevents the student from learning
+  a whole-image shortcut. The loss is
+  \begin{equation}
+    \mathcal{L}_{\mathrm{xm}} = \sum_{m\in\Mods_{\mathrm{act}}} w_m\,\ell_m
+      \;+\; \lambda_F\,\frac{\sum_{j} u_j\,\big\|F^{S}_j-F^{T}_j\big\|_2^2/512}{\sum_j u_j}
+      \;+\; \lambda_c\,\big\|c^{S}-c^{T}\big\|_2^2/D ,
+    \label{eq:distill}
+  \end{equation}
+  with $\lambda_F{=}1$, $\lambda_c{=}0.5$, teacher terms detached, and $u_j{=}1$ on
+  the positions of the three \emph{generated} modalities and $0$ on the source's
+  own positions (or $1$ on a single target modality's positions when a specialist
+  is trained with a declared target). The first term is ground-truth
+  reconstruction of all four streams from the one that was shown, i.e.\ the
+  student is asked to regenerate the depth map, the full cloud and the
+  procedural recipe from an RGB image. Output-level distillation
+  (matching the teacher's reconstructions) is implemented but switched off.
+\item \textbf{Full-reconstruction steps} (probability $1-p_{\mathrm{xm}}$). An
+  ordinary Dirichlet-masked pretraining step at $\rho{=}0.80$ with no distillation
+  terms. One such step in five is what keeps the non-target heads alive: with
+  $p_{\mathrm{xm}}{=}1$ the depth head of an RGB$\to$PC specialist collapsed by
+  $7\times$ within ten epochs, and $p_{\mathrm{xm}}{=}0.8$ repaired it in one epoch
+  and held it.
+\end{itemize}
+
+Under gradient accumulation the step type and source are keyed on the optimiser
+step, so an accumulation group is homogeneous and the effective global batch is
+not mixed. The generalist uses $\vis\in\{T_\rgb,T_\dep,T_\pc,T_\prm\}$; specialists
+fix the source list to one stream and may declare a target (e.g.\ RGB$\to$cloud,
+RGB$\to$parameters, cloud$\to$parameters), in which case $\sum_m w_m\ell_m$ and
+$u_j$ are restricted to that target and the model-selection metric is that
+target's own generation quality (Chamfer for the cloud, parameter MAE for the
+recipe).
+
+\paragraph{Evaluation of generation.}
+Every $k$ epochs and at the end we run each source alone over 1{,}600 held-out
+plants with the source \emph{unmasked} ($\rho_s{=}0$, so source masking is a pure
+training-time regulariser and all arms are scored on identical footing) and report,
+per source: masked RGB and depth MSE, Chamfer between the generated and true cloud,
+and MAE of the generated parameters over real leaf tokens. We always report
+per-source numbers and the \emph{epoch-0} numbers of the undistilled warm start,
+measured by the same routine, because the first epoch of distillation already
+captures much of the gain for some sources and \emph{costs} ground for others
+(RGB$\to$parameters was 6.8\,\% worse than its warm start after one epoch and did
+not cross back under it until epoch 7).
+
+\subsection{Crossing into the field}
+\label{sec:field}
+
+Three properties separate field deployment from the synthetic regime above, and
+the protocol addresses each.
+
+\paragraph{The recipe is never observed.}
+All downstream phenotype estimates use the frozen encoder's CLS token under
+$\vis=\{T_\rgb,T_\dep,T_\pc\}\cap\Mods_{\mathrm{act}}$ with the parameter tensor
+\emph{zeroed}, and no source masking. This is not a convenience: the plant token's
+first slot is stem length, i.e.\ the height target verbatim, and a probe that let
+an arm see it would be handed the answer. (We verified the leak is structurally
+impossible: features with real and zeroed parameters differ by exactly 0.) A
+side-effect is that the three- and four-stream arms are probed on an identical
+589-token input, so the only difference between them is what pretraining taught
+the encoder. The probe itself is ridge regression on one deterministic view per
+plant (ten views share a label, so view rows would inflate $n$ tenfold and shrink
+every error bar by $\sim3.2\times$), with the standardiser fit on train only and
+$R^2$ reported on the extreme-enriched val and test plants; paired bootstrap over
+plants (2{,}000 resamples) gives confidence intervals on every between-arm
+difference, and a "win" requires the 95\,\% CI to exclude zero on \emph{both}
+splits. Feature extraction is stochastic in two places even under
+\texttt{no\_grad} (FPS's first centroid and the cloud subsample), so both are
+seeded. Point targets are height, leaf count, the biomass proxy
+$n_{\mathrm{leaves}}\times\overline{\text{leaf length}}$, mean leaf roll, mean and
+max leaf length, and mean and max blade width; because the generator ties height
+to leaf count, the four named 6.4 targets have rank two, and we print each target's
+correlation with leaf count beside its score.
+
+\paragraph{A camera sees part of a plant.}
+Every training cloud is the complete plant moved into the camera frame. To ask
+what a model loses when its cloud is what a rig would capture, we cast a ray from
+each camera to every point's nearest mesh location and mark the point visible if
+the ray is unobstructed to within 0.5\,mm and the point lies inside the camera
+frustum ($f\approx1406$\,px at $1024^2$, fitted from the rendered silhouettes;
+checked against the renderer: 95\,\% of visible points land on the silhouette and
+71\,\% match its depth within 5\,mm, against 3\,\% of occluded points). Camera 00
+alone covers $48.8\pm7\,\%$ of a plant; cameras 00+01+02 cover $78.3\pm4\,\%$. We
+then score each arm under full, three-camera and one-camera clouds in two ways:
+\emph{matched}, refitting the probe per condition, which measures information
+retained; and \emph{transfer}, applying the full-cloud probe to partial clouds,
+which measures what a readout calibrated on complete scans does on real ones.
+Reconstruction under partial input is scored against the complete cloud and must
+be run in the masked regime (visible streams token-masked at the training
+$\rho$): with every token visible the decoder is out of distribution and the cloud
+collapses by an order of magnitude, the same failure that makes an all-visible
+teacher unsafe (Sec.~\ref{sec:distill}).
+
+\paragraph{One sensor at a time.}
+The deployed models are the single-sensor students of Sec.~\ref{sec:students}
+run with $\vis=T_s$ for whichever stream the rig provides. We score generation on
+held-out plants against two floors: the Chamfer between a plant's cloud and a
+\emph{different} sorghum plant's cloud (the "another plant" floor, $\approx0.049$),
+and the distance to the dataset-mean cloud; skill is $1-\text{model}/\text{floor}$.
+Chamfer is split into prediction$\to$truth (accuracy) and truth$\to$prediction
+(completeness) because the two fail differently on partial inputs. On the
+extreme-enriched test split the RGB-only student reaches $7.9\times10^{-4}$
+(98.4\,\% skill), the depth-only student $6.2\times10^{-4}$, with a val$\to$test gap
+under 2\,\%, i.e.\ no degradation from the enriched tails. We also report
+generation error as a function of camera elevation, which is U-shaped and
+symmetric about the horizon: steep views from above \emph{or} below are hardest.
+
+\paragraph{Real images.}
+\todo{E10 is not yet run. The repo contains no real-image inference or results;
+everything above is on unseen synthetic plants. When field data arrive, the
+intended protocol is: segment or matte the plant, composite over black (matching
+training), run the RGB-only student with $\vis=T_\rgb$, and report (i) the
+recovered procedural parameters against field-measured height, leaf count and
+leaf width, (ii) qualitative generated clouds, and (iii) the transfer-vs-matched
+probe gap of the paragraph above as the predicted sim-to-real penalty. State
+plainly in the paper that the probe readouts are calibrated on complete synthetic
+clouds and that the partial-cloud transfer result bounds what to expect on scans.}
+
+Two caveats carry through every field claim. The renderer's three fixed lights,
+single leaf texture and grey background are a narrow appearance distribution, and
+RGB is the stream our ablations identify as carrying the phenotype; the transfer
+to field appearance is therefore the open question, not the geometry. And a
+readout fitted on complete clouds is biased on partial ones (our transfer probe
+loses most of its height $R^2$ at one camera while a refit recovers it), so any
+field use of the frozen latent must refit the probe on the sensor's own coverage.
