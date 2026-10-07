@@ -5,16 +5,16 @@ following the house style (show the modality, not a label; one colour for the
 point cloud at every stage).  Writes paper/fig_teaser.{pdf,png} and
 paper/fig_architecture.{pdf,png}.
 
-Model: by default the data-v1 distilled generalist
-(outputs/4m_distill_15k_all/best_model.pth) fed its own input (rgb.png on grey),
-because it is the only finished model that generates every stream from RGB
-alone.  Pass --ckpt / --rgb_file to redraw from a data-v2 model once the _d2
-distillation exists; the leaf-token columns shown (sp, ln, ra, ba) are the four
-that have the same meaning in both layouts.
+Two species.  Sorghum uses DATA VERSION 2 (rgb_nobg.png over black, the width
+leaf layout) and the finished four-stream arm e2_pcrgbdt_d2 (epoch 600); its
+RGB-only generation in the teaser is therefore zero-shot (no _d2 distillation
+exists yet; pass --sorghum_ckpt when one does).  Maize uses the distilled
+generalist (outputs/maize_distill_all, epoch 58, the last checkpoint before the
+run was cancelled).  The architecture figure is drawn on the sorghum sample.
 
     conda activate det
-    python figures/make_paper_figures.py                   # CPU, ~1 min
-    python figures/make_paper_figures.py --plant 10 --view 4
+    python figures/make_paper_figures.py                   # CPU, ~2 min
+    python figures/make_paper_figures.py --sorghum_view 4 --maize_plant 0 --maize_view 4
 """
 import sys as _sys, pathlib as _pathlib
 _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
@@ -29,12 +29,39 @@ import numpy as np
 import torch
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle
 
-from embodied_mae_4m import embodied_mae_4m_base, _PLANT_SCALE, _PLANT_SHIFT, _LEAF_SCALE
+import embodied_mae_4m as sorghum_model
+import embodied_mae_4m_maize as maize_model
 from sorghum_dataset_4m import SorghumDataset4M
+from maize_dataset_4m import MaizeDataset4M
 from train_sorghum_4m import _unnorm_pix, unpatchify, _pc_token_membership
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / 'paper'
+
+# ── species ─────────────────────────────────────────────────────────────────
+# recipe rows: (label, token slot, scale, shift, format) on the un-normalised
+# value raw = p * scale - shift.  Only fields that read directly as a trait.
+SPECIES = {
+    'sorghum': dict(
+        title='Sorghum', ds=lambda root: SorghumDataset4M(root, split='val', num_points=8196, rgb_file='rgb_nobg.png'),
+        root='/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K',
+        model=lambda: sorghum_model.embodied_mae_4m_base(target_points=8196),
+        ckpt=str(REPO / 'outputs/e2_pcrgbdt_d2/checkpoints/checkpoint_epoch_600.pth'),
+        name=lambda plant, view: f'Sorghum_{plant}_{view:02d}', n_leaf_tokens=24,
+        plant_rows=[('stem len', 0, 3.0, 0.0, '{:.2f} m')],
+        leaf_rows=[('len', 1, 1.25, 0.0, '{:.2f} m'), ('width', 4, 0.2, 0.0, '{:.3f} m'), ('angle', 3, 180.0, 0.0, '{:.0f}°')],
+        zero_shot=True),
+    'maize': dict(
+        title='Maize', ds=lambda root: MaizeDataset4M(root, split='val', num_points=8192),
+        root='/work/mech-ai-scratch/alloy/Maize',
+        model=lambda: maize_model.embodied_mae_4m_maize_base(target_points=8192),
+        ckpt=str(REPO / 'outputs/maize_distill_all/checkpoints/checkpoint_epoch_58.pth'),
+        name=lambda plant, view: f'plant_{plant:04d}_{view:02d}', n_leaf_tokens=28,
+        plant_rows=[('leaf count', 0, 32.0, 0.0, '{:.0f}'), ('internodes', 4, 2.0, 0.0, '{:.2f} m')],
+        leaf_rows=[('len', 1, 0.85, -0.05, '{:.2f} m'), ('width', 2, 0.15, 0.0, '{:.3f} m'), ('angle', 3, 180.0, 90.0, '{:.0f}°')],
+        zero_shot=False),
+}
+
 
 # ── style ───────────────────────────────────────────────────────────────────
 C = {'rgb': '#d1495b', 'depth': '#edae49', 'pc': '#2a9d8f', 'text': '#30638e'}
@@ -108,22 +135,21 @@ def show_pc(ax, pc, color=C['pc'], s=0.35, alpha=0.75, lim=None, elev=12, azim=-
     ax.patch.set_alpha(0)
 
 
-def recipe_rows(params, valid, leaves=(1,), with_tokens=False):
-    """Human-readable rows from a (25, 9) [0,1] tensor for the plant token and
-    the given leaf tokens.  Only fields whose meaning is identical in the
-    data-v1 and data-v2 leaf layouts are shown.  with_tokens also returns the
-    token index behind each row (None for the leaf count)."""
+def recipe_rows(sp, params, valid, leaves=(1,), with_tokens=False):
+    """Human-readable rows for a species from a (1+K, N) [0,1] tensor: the plant
+    token's trait fields and the given leaf tokens.  with_tokens also returns
+    the token index behind each row (None for the leaf count)."""
     p = params.clamp(0, 1).numpy() if torch.is_tensor(params) else np.clip(params, 0, 1)
-    plant = p[0] * np.asarray(_PLANT_SCALE) - np.asarray(_PLANT_SHIFT)
-    rows, toks = [('stem len', f'{plant[0]:.2f} m')], [0]
+    rows, toks = [], []
+    for lab, slot, sc, sh, fmt in sp['plant_rows']:
+        rows.append((lab, fmt.format(p[0, slot] * sc - sh))); toks.append(0)
     for i, t in enumerate(leaves):
         if valid[t] < 0.5:
             continue
-        leaf = p[t] * np.asarray(_LEAF_SCALE)
-        rows += [(f'leaf{i + 1} len', f'{leaf[1]:.2f} m'), (f'leaf{i + 1} roll', f'{leaf[2]:.0f}°'),
-                 (f'leaf{i + 1} angle', f'{leaf[3]:.0f}°')]
-        toks += [t, t, t]
-    rows.append(('leaves', f'{int(valid[1:].sum())}')); toks.append(None)
+        for lab, slot, sc, sh, fmt in sp['leaf_rows']:
+            rows.append((f'leaf{i + 1} {lab}', fmt.format(p[t, slot] * sc - sh))); toks.append(t)
+    if not any(lab == 'leaf count' for lab, *_ in sp['plant_rows']):
+        rows.append(('leaves', f'{int(valid[1:].sum())}')); toks.append(None)
     return (rows, toks) if with_tokens else rows
 
 
@@ -157,32 +183,35 @@ def token_strip(ax, counts, total=None, width=1.0, height=1.0, y0=0.0, cell_gap=
 
 
 # ── data + model ────────────────────────────────────────────────────────────
-def load(args):
+def load(species, plant, view, ckpt=None):
+    sp = SPECIES[species]
     torch.manual_seed(0); np.random.seed(0)
-    ds = SorghumDataset4M(args.data_root, split='val', num_points=8196, rgb_file=args.rgb_file)
-    want = f'Sorghum_{args.plant}_{args.view:02d}'
+    ds = sp['ds'](sp['root'])
+    want = sp['name'](plant, view)
     idx = next(i for i, f in enumerate(ds.samples) if Path(f).name == want)
     rgb, depth, pc, par, tv, name = ds[idx]
-    print('sample', name)
+    print(species, 'sample', name)
 
-    model = embodied_mae_4m_base(target_points=8196).eval()
-    ck = torch.load(args.ckpt, map_location='cpu', weights_only=False)
+    model = sp['model']().eval()
+    ckpt = ckpt or sp['ckpt']
+    ck = torch.load(ckpt, map_location='cpu', weights_only=False)
     sd = {k[7:] if k.startswith('module.') else k: v for k, v in ck.get('model_state_dict', ck).items()}
     miss, unexp = model.load_state_dict(sd, strict=False)
     assert not miss and not unexp, (len(miss), len(unexp))
-    print('model', args.ckpt, 'epoch', ck.get('epoch'))
+    print(species, 'model', ckpt, 'epoch', ck.get('epoch'))
 
     b = [t.unsqueeze(0) for t in (rgb, depth, pc, par, tv)]
     mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1); std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-    out = {'name': name, 'rgb': (rgb * std + mean).permute(1, 2, 0).numpy(), 'depth': depth[0].numpy(),
+    out = {'species': species, 'sp': sp, 'name': name, 'epoch': ck.get('epoch'),
+           'rgb': (rgb * std + mean).permute(1, 2, 0).numpy(), 'depth': depth[0].numpy(),
            'pc': pc.numpy(), 'par': par, 'tv': tv.numpy()}
     out['bg'] = out['depth'] < 1e-3
 
     with torch.no_grad():
-        # (a) Dirichlet-masked pretraining step at the training ratio
+        # (a) Dirichlet-masked pretraining step at the training ratio.  Paper
+        # design: the parameter stream is a reconstruction target only, so it is
+        # taken out of the shared budget and fully hidden (text_mask_ratio 1).
         torch.manual_seed(1)
-        # Paper design: the parameter stream is a reconstruction target only, so
-        # it is taken out of the shared budget and fully hidden (text_mask_ratio 1).
         model.text_mask_ratio = 1.0
         _, _, (pr, pd, pp, pt), (mr, md, mp, mt) = model(*b, mask_ratio=0.8)
         model.text_mask_ratio = None
@@ -200,7 +229,7 @@ def load(args):
         out['rgb_only'] = dict(
             depth=unpatchify(pd, 16, 1, 224)[0, 0].numpy(), pc=pp[0].numpy(), par=pt[0],
             chamfer=float(d2.min(2).values.mean() + d2.min(1).values.mean()))
-    print('RGB-only chamfer', out['rgb_only']['chamfer'])
+    print(species, 'RGB-only chamfer', out['rgb_only']['chamfer'])
     return out
 
 
@@ -223,78 +252,75 @@ def masked_image(img, mask, fill=1.0):
 
 
 # ── Figure 1: teaser ────────────────────────────────────────────────────────
-def teaser(s, path):
-    fig = plt.figure(figsize=(6.9, 2.35))
+def teaser(S, path):
+    """S: list of two species dicts (sorghum, maize)."""
+    fig = plt.figure(figsize=(6.9, 3.45))
     ax = overlay(fig)
+    label(ax, 0.228, 0.972, 'In simulation: two crops, each plant with its recipe', fs=7.5, bold=True)
+    label(ax, 0.745, 0.972, 'In the field: one camera, everything else inferred', fs=7.5, bold=True)
+    ax.plot([0.455, 0.455], [0.05, 0.93], color='#ced4da', lw=0.6, ls=(0, (3, 3)))
 
-    # panel titles
-    label(ax, 0.215, 0.965, 'In simulation: every plant comes with its recipe', fs=7.5, bold=True)
-    label(ax, 0.745, 0.965, 'In the field: one camera, everything else inferred', fs=7.5, bold=True)
-    ax.plot([0.455, 0.455], [0.05, 0.92], color='#ced4da', lw=0.6, ls=(0, (3, 3)))
+    # ── left: two species × four streams → shared encoder ──
+    tw, th = 0.088, 0.33
+    xs = [0.012 + i * (tw + 0.004) for i in range(4)]
+    ys = {0: 0.515, 1: 0.10}
+    mods = ['rgb', 'depth', 'pc', 'text']
+    for k, s in enumerate(S):
+        y = ys[k]
+        label(ax, 0.012, y + th + 0.012, s['sp']['title'], fs=6.2, bold=True, color=DARK, ha='left', va='bottom')
+        for m, x in zip(mods, xs):
+            box(ax, x, y, tw, th, fill='white', edge=C[m], lw=0.8, rounding=0.008)
+            if k == 0:
+                label(ax, x + tw / 2, y + th + 0.048, NAME[m].replace('Procedural ', ''), fs=5.4, color=C[m], va='bottom')
+            iw, ih = tw - 0.01, th - 0.02
+            if m == 'rgb':
+                show_rgb(img_axes(fig, x + 0.005, y + 0.01, iw, ih), s['rgb'])
+            elif m == 'depth':
+                show_depth(img_axes(fig, x + 0.005, y + 0.01, iw, ih), s['depth'], s['bg'])
+            elif m == 'pc':
+                show_pc(img_axes(fig, x + 0.002, y + 0.005, iw + 0.006, ih + 0.01, projection='3d'), s['pc'], s=0.25, zoom=1.35)
+            else:
+                show_recipe(img_axes(fig, x + 0.003, y + 0.006, iw + 0.004, ih), recipe_rows(s['sp'], s['par'], s['tv'], (1,)), fs=3.9, stacked=True)
+    # species name sits above its row; the top row's name shares the line with the stream labels
+    ex, ey, ew, eh = 0.388, 0.22, 0.06, 0.56
+    box(ax, ex, ey, ew, eh, 'shared\nencoder\n+\ndecoder', fill=ENC_FILL, edge=ENC_EDGE, fs=6.2, bold=True)
+    for k in (0, 1):
+        yy = ys[k] + th / 2
+        arrow(ax, (xs[3] + tw, yy), (ex, yy), color=DARK, lw=0.8, style='<|-|>')
+    label(ax, ex + ew / 2, 0.905, '80 % of tokens\nhidden; any\nstream completes\nany other', fs=4.5, color=GREY)
+    label(ax, ex + ew / 2, 0.80, 'pretrain', fs=6, color=ENC_EDGE, style='italic')
 
-    # left: four streams -> shared encoder
-    tw, th = 0.105, 0.33
-    xs = [0.015, 0.125]; ys = [0.50, 0.10]
-    cells = [('rgb', 0, 0), ('depth', 1, 0), ('pc', 0, 1), ('text', 1, 1)]
-    for m, i, j in cells:
-        x, y = xs[i], ys[j]
-        box(ax, x, y, tw, th, fill='white', edge=C[m], lw=0.9, rounding=0.01)
-        label(ax, x + tw / 2, y + th - 0.035, NAME[m], fs=5.8, bold=True, color=C[m])
-        iw, ih = tw - 0.012, th - 0.085
-        if m == 'rgb':
-            show_rgb(img_axes(fig, x + 0.006, y + 0.012, iw, ih), s['rgb'])
-        elif m == 'depth':
-            show_depth(img_axes(fig, x + 0.006, y + 0.012, iw, ih), s['depth'], s['bg'])
-        elif m == 'pc':
-            show_pc(img_axes(fig, x + 0.004, y + 0.005, iw + 0.004, ih + 0.02, projection='3d'), s['pc'], zoom=1.35)
-        else:
-            show_recipe(img_axes(fig, x + 0.004, y + 0.01, iw, ih), recipe_rows(s['par'], s['tv'], (1,)), fs=4.6)
+    # ── right: per species, one RGB photo → student → cloud + recipe ──
+    rows_y = {0: 0.515, 1: 0.10}
+    rw, rh = 0.105, 0.345
+    mx, mw, mh = 0.60, 0.07, 0.22
+    ow, oh = 0.135, rh
+    for k, s in enumerate(S):
+        y = rows_y[k]; r = s['rgb_only']
+        rx = 0.472
+        box(ax, rx, y, rw, rh, fill='white', edge=C['rgb'], lw=0.8, rounding=0.008)
+        label(ax, rx, y + rh + 0.015, f"{s['sp']['title']}: one RGB photo", fs=5.6, bold=True, color=C['rgb'], ha='left', va='bottom')
+        show_rgb(img_axes(fig, rx + 0.005, y + 0.01, rw - 0.01, rh - 0.02), s['rgb'])
+        my = y + (rh - mh) / 2
+        box(ax, mx, my, mw, mh, 'single-\nsensor\nstudent', fill=ENC_FILL, edge=ENC_EDGE, fs=5.6, bold=True)
+        arrow(ax, (rx + rw, y + rh / 2), (mx, y + rh / 2), color=C['rgb'])
+        # cloud
+        ox = 0.69
+        box(ax, ox, y, ow, oh, fill='white', edge=C['pc'], lw=0.8, rounding=0.008)
+        label(ax, ox + 0.005, y + oh - 0.012, 'point cloud', fs=5.4, bold=True, color=C['pc'], ha='left', va='top')
+        show_pc(img_axes(fig, ox + 0.03, y + 0.02, ow - 0.035, oh - 0.07, projection='3d'), r['pc'], lim=1.0, s=0.3, zoom=1.35)
+        label(ax, ox + 0.005, y + 0.012, f"Chamfer {r['chamfer']:.4f} vs. true", fs=4.6, color=GREY, ha='left', va='bottom')
+        arrow(ax, (mx + mw, y + rh / 2), (ox, y + rh / 2), color=C['pc'], lw=0.7)
+        # recipe
+        px = ox + ow + 0.012; pw = 0.985 - px
+        box(ax, px, y, pw, oh, fill='white', edge=C['text'], lw=0.8, rounding=0.008)
+        label(ax, px + 0.005, y + oh - 0.012, 'procedural recipe', fs=5.4, bold=True, color=C['text'], ha='left', va='top')
+        show_recipe(img_axes(fig, px + 0.004, y + 0.006, pw - 0.008, oh - 0.05), recipe_rows(s['sp'], r['par'], s['tv'], (1, 2)), fs=4.2)
+        arrow(ax, (ox + ow, y + rh / 2), (px, y + rh / 2), color=C['text'], lw=0.7)
 
-    ex, ey, ew, eh = 0.27, 0.20, 0.09, 0.60
-    box(ax, ex, ey, ew, eh, 'shared\nencoder\n+\ndecoder', fill=ENC_FILL, edge=ENC_EDGE, fs=6.5, bold=True)
-    for (m, i, j) in cells:
-        x, y = xs[i] + tw, ys[j] + th / 2
-        if i == 0:
-            continue
-        arrow(ax, (x, y), (ex, y), color=C[m], lw=0.8, style='<|-|>')
-    label(ax, ex + ew / 2, 0.11, '80 % of all tokens hidden;\nany stream completes any other', fs=5.4, color=GREY)
-    label(ax, ex + ew / 2, 0.86, 'pretrain', fs=6, color=ENC_EDGE, style='italic')
-
-    # right: RGB -> model -> three outputs (real predictions)
-    rx, ry, rw, rh = 0.475, 0.27, 0.12, 0.42
-    box(ax, rx, ry, rw, rh, fill='white', edge=C['rgb'], lw=0.9, rounding=0.01)
-    label(ax, rx + rw / 2, ry + rh - 0.035, 'one RGB photo', fs=5.8, bold=True, color=C['rgb'])
-    show_rgb(img_axes(fig, rx + 0.006, ry + 0.012, rw - 0.012, rh - 0.085), s['rgb'])
-
-    mx, my, mw, mh = 0.615, 0.33, 0.075, 0.30
-    box(ax, mx, my, mw, mh, 'single-\nsensor\nstudent', fill=ENC_FILL, edge=ENC_EDGE, fs=6.2, bold=True)
-    arrow(ax, (rx + rw, ry + rh / 2), (mx, my + mh / 2), color=C['rgb'])
-    label(ax, mx + mw / 2, 0.86, 'deploy', fs=6, color=ENC_EDGE, style='italic')
-
-    ow, oh = 0.135, 0.255
-    ox = 0.725
-    oys = [0.635, 0.35, 0.065]
-    r = s['rgb_only']
-    outs = [('pc', 'point cloud', lambda a: show_pc(a, r['pc'], lim=1.0, elev=12, azim=-62)),
-            ('text', 'procedural recipe', None),
-            ('depth', 'depth', lambda a: show_depth(a, r['depth'], s['bg']))]
-    for (m, t, fn), oy in zip(outs, oys):
-        box(ax, ox, oy, ow, oh, fill='white', edge=C[m], lw=0.9, rounding=0.01)
-        label(ax, ox + 0.006, oy + oh - 0.03, t, fs=5.6, bold=True, color=C[m], ha='left')
-        arrow(ax, (mx + mw, my + mh / 2), (ox, oy + oh / 2), color=C[m], lw=0.7)
-        if m == 'pc':
-            show_pc(img_axes(fig, ox + 0.05, oy + 0.005, 0.082, oh - 0.02, projection='3d'), r['pc'], lim=1.0, zoom=1.35)
-            label(ax, ox + 0.006, oy + 0.03, f'Chamfer {r["chamfer"]:.4f}\nvs. true cloud', fs=4.8, color=GREY, ha='left', va='bottom')
-        elif m == 'text':
-            rows = recipe_rows(r['par'], s['tv'], (1, 2))
-            show_recipe(img_axes(fig, ox + 0.003, oy + 0.005, ow - 0.006, oh - 0.045), rows, fs=4.4)
-        else:
-            show_depth(img_axes(fig, ox + 0.07, oy + 0.008, 0.06, oh - 0.045), r['depth'], s['bg'])
-            label(ax, ox + 0.006, oy + 0.11, 'and a frozen\nlatent that\nreads out\nphenotype', fs=4.8, color=GREY, ha='left')
-
-    # footer
-    label(ax, 0.5, 0.012, f'held-out plant {s["name"]}; real model outputs, no ground truth shown on the right',
-          fs=5, color=GREY, va='bottom', style='italic')
+    zs = ', '.join(f"{s['sp']['title'].lower()} {'zero-shot from the pretrained arm' if s['sp']['zero_shot'] else 'distilled student'}" for s in S)
+    label(ax, 0.5, 0.012, f"held-out plants {S[0]['name']} and {S[1]['name']}; real model outputs on the right ({zs}); no ground truth shown",
+          fs=4.8, color=GREY, va='bottom', style='italic')
     for ext in ('pdf', 'png'):
         fig.savefig(path.with_suffix('.' + ext), dpi=300, facecolor='white')
     plt.close(fig)
@@ -325,7 +351,7 @@ def architecture(s, path):
     ry = {r: hy - 0.03 - (i + 1) * (rh + gap) + gap for i, r in enumerate(rows)}
     tok_txt = {'rgb': '16×16 patches\n→ 196 tokens', 'depth': '16×16 patches\n→ 196 tokens',
                'pc': 'FPS → 196 centres\nkNN 32, mini-PointNet\n→ 196 tokens',
-               'text': '1 plant + 24 leaf tokens\n9 floats each\nLinear–GELU–LN'}
+               'text': '1 plant + 24 leaf tokens\n9 floats each (maize 28 / 14)\nLinear–GELU–LN'}
     head_txt = {'rgb': 'linear → 16²·3 per patch\nnorm-pixel MSE on hidden patches',
                 'depth': 'linear → 16² per patch\nMSE on per-image min–max target',
                 'pc': 'fold a 7×7 grid → 41 pts per token\nQAL Chamfer on the whole cloud',
@@ -333,7 +359,7 @@ def architecture(s, path):
     vis_pts = pc_visible_points(s)
     hidden_leaf = next((t for t in range(1, 25) if s['tv'][t] > 0.5 and m['m_text'][t] > 0.5), 1)
     n_vis['text'] = int((m['m_text'] < 0.5).sum())
-    rows_gt, toks = recipe_rows(s['par'], s['tv'], (hidden_leaf,), with_tokens=True)
+    rows_gt, toks = recipe_rows(s['sp'], s['par'], s['tv'], (hidden_leaf,), with_tokens=True)
     tok_hidden = [bool(m['m_text'][t] > 0.5) if t is not None else False for t in toks]
     par_rec = torch.where(torch.as_tensor(m['m_text'])[:, None] > 0.5, m['par'], s['par'])
     for r in rows:
@@ -383,7 +409,7 @@ def architecture(s, path):
             show_pc(img_axes(fig, ox - 0.004, y + 0.002, iw + 0.008, ih + 0.012, projection='3d'), m['pc'], s=0.25)
         else:
             show_recipe(img_axes(fig, cols['out'] + 0.004, y + 0.004, cw['out'] - 0.008, rh - 0.03),
-                        recipe_rows(par_rec, s['tv'], (hidden_leaf,)),
+                        recipe_rows(s['sp'], par_rec, s['tv'], (hidden_leaf,)),
                         dim=[(t is not None and not h) for t, h in zip(toks, tok_hidden)], fs=4.2)
 
     # encoder block
@@ -424,7 +450,7 @@ def architecture(s, path):
         if mo == 'pc':
             show_pc(img_axes(fig, x + 0.002, ty + 0.004, tw0 - 0.004, th0 - 0.008, projection='3d'), s['pc'], s=0.2, lim=1.0, zoom=1.3)
         elif mo == 'text':
-            show_recipe(img_axes(fig, x + 0.002, ty + 0.004, tw0 - 0.004, th0 - 0.012), recipe_rows(s['par'], s['tv'], (1,)), fs=4.0, stacked=True)
+            show_recipe(img_axes(fig, x + 0.002, ty + 0.004, tw0 - 0.004, th0 - 0.012), recipe_rows(s['sp'], s['par'], s['tv'], (1,)), fs=4.0, stacked=True)
         else:
             fn(img_axes(fig, x + 0.004, ty + 0.004, tw0 - 0.008, th0 - 0.008))
     tex = tx + 0.012 + 4 * (tw0 + 0.008) + 0.004; tew = tx + tw_ - tex - 0.01
@@ -468,7 +494,8 @@ def architecture(s, path):
     arrow(ax, (tx + tw_, by + bh * 0.3), (sx, by + bh * 0.3), color='#adb5bd', lw=0.8, ls=(0, (2, 2)))
     label(ax, (tx + tw_ + sx) / 2, by + bh * 0.3 + 0.012, 'targets', fs=4.8, color=GREY)
 
-    label(ax, 0.5, 0.012, f'all panels: held-out plant {s["name"]}, real inputs, masks and model outputs', fs=5, color=GREY, va='bottom', style='italic')
+    label(ax, 0.5, 0.012, f'all panels: held-out sorghum plant {s["name"]} (data v2), real inputs, masks and model outputs; '
+          'the maize model is identical apart from its recipe tokens (1 + 28 tokens of 14 floats)', fs=5, color=GREY, va='bottom', style='italic')
     for ext in ('pdf', 'png'):
         fig.savefig(path.with_suffix('.' + ext), dpi=300, facecolor='white')
     plt.close(fig)
@@ -477,17 +504,18 @@ def architecture(s, path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--ckpt', default=str(REPO / 'outputs/4m_distill_15k_all/best_model.pth'))
-    ap.add_argument('--rgb_file', default='rgb.png', help="rgb.png for data-v1 models, rgb_nobg.png for _d2")
-    ap.add_argument('--data_root', default='/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K')
-    ap.add_argument('--plant', type=int, default=10)
-    ap.add_argument('--view', type=int, default=4)
+    ap.add_argument('--sorghum_ckpt', default=None); ap.add_argument('--maize_ckpt', default=None)
+    ap.add_argument('--sorghum_plant', type=int, default=10); ap.add_argument('--sorghum_view', type=int, default=4)
+    ap.add_argument('--maize_plant', type=int, default=0); ap.add_argument('--maize_view', type=int, default=4)
     ap.add_argument('--out', default=str(OUT))
     args = ap.parse_args()
     out = Path(args.out); out.mkdir(exist_ok=True)
-    s = load(args)
-    teaser(s, out / 'fig_teaser.pdf')
-    architecture(s, out / 'fig_architecture.pdf')
+    so = load('sorghum', args.sorghum_plant, args.sorghum_view, args.sorghum_ckpt)
+    ma = load('maize', args.maize_plant, args.maize_view, args.maize_ckpt)
+    teaser([so, ma], out / 'fig_teaser.pdf')
+    architecture(so, out / 'fig_architecture.pdf')
+
+
 
 
 if __name__ == '__main__':
