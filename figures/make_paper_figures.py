@@ -5,16 +5,21 @@ following the house style (show the modality, not a label; one colour for the
 point cloud at every stage).  Writes paper/fig_teaser.{pdf,png} and
 paper/fig_architecture.{pdf,png}.
 
-Two species.  Sorghum uses DATA VERSION 2 (rgb_nobg.png over black, the width
-leaf layout) and the finished four-stream arm e2_pcrgbdt_d2 (epoch 600); its
-RGB-only generation in the teaser is therefore zero-shot (no _d2 distillation
-exists yet; pass --sorghum_ckpt when one does).  Maize uses the distilled
-generalist (outputs/maize_distill_all, epoch 58, the last checkpoint before the
-run was cancelled).  The architecture figure is drawn on the sorghum sample.
+Two species, read from the raw sample folders committed under paper/data/
+(so the figures rebuild off-cluster; only the checkpoints are not in git):
+  paper/data/Sorghum_10_04         sorghum DATA VERSION 2 (rgb_nobg.png, width layout)
+  paper/data/Maize_1_plant_0004_04 the Maize_1 re-render (rgba.png, simplified XML)
+Sorghum runs through the finished four-stream arm e2_pcrgbdt_d2 (epoch 600), so
+its RGB-only generation is zero-shot (no _d2 distillation yet).  Maize runs
+through the distilled generalist trained on the first maize render
+(outputs/maize_distill_all, epoch 58): Maize_1 keeps that render's rgb.png,
+depth packing and 8192-point cloud, so the model reads it, but no model has
+been trained on Maize_1 itself and its recipe tokens follow the OLD schema;
+the ground-truth recipe shown comes from the Maize_1 XML.
 
     conda activate det
     python figures/make_paper_figures.py                   # CPU, ~2 min
-    python figures/make_paper_figures.py --sorghum_view 4 --maize_plant 0 --maize_view 4
+    python figures/make_paper_figures.py --sorghum_dir <folder> --maize_dir <folder>
 """
 import sys as _sys, pathlib as _pathlib
 _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
@@ -29,10 +34,12 @@ import numpy as np
 import torch
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle
 
+import xml.etree.ElementTree as ET
+import open3d as o3d
+from PIL import Image
+
 import embodied_mae_4m as sorghum_model
 import embodied_mae_4m_maize as maize_model
-from sorghum_dataset_4m import SorghumDataset4M
-from maize_dataset_4m import MaizeDataset4M
 from train_sorghum_4m import _unnorm_pix, unpatchify, _pc_token_membership
 
 REPO = Path(__file__).resolve().parent.parent
@@ -41,23 +48,35 @@ OUT = REPO / 'paper'
 # ── species ─────────────────────────────────────────────────────────────────
 # recipe rows: (label, token slot, scale, shift, format) on the un-normalised
 # value raw = p * scale - shift.  Only fields that read directly as a trait.
+def _maize1_gt(folder):
+    """Ground-truth recipe rows from a Maize_1 XML (<plant height> + per-leaf
+    attributes).  Returns (rows_by_leaf_index, n_leaves, height)."""
+    root = ET.parse(next(Path(folder).glob('*_spline.xml'))).getroot()
+    leaves = root.findall('.//leaf')
+    rows = {int(l.get('id')): dict(len=float(l.get('leafLength')), width=float(l.get('leafWidth')),
+                                   angle=float(l.get('leafAngle'))) for l in leaves}
+    return rows, len(leaves), float(root.get('height'))
+
+
 SPECIES = {
     'sorghum': dict(
-        title='Sorghum', ds=lambda root: SorghumDataset4M(root, split='val', num_points=8196, rgb_file='rgb_nobg.png'),
-        root='/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K',
+        title='Sorghum', folder=str(REPO / 'paper/data/Sorghum_10_04'), num_points=8196,
+        rgb_file='rgb_nobg.png', pc_glob='*_nc_cam.ply',
         model=lambda: sorghum_model.embodied_mae_4m_base(target_points=8196),
         ckpt=str(REPO / 'outputs/e2_pcrgbdt_d2/checkpoints/checkpoint_epoch_600.pth'),
-        name=lambda plant, view: f'Sorghum_{plant}_{view:02d}', n_leaf_tokens=24,
+        n_leaf_tokens=24,
+        params=lambda folder: sorghum_model.load_spline_params(next(Path(folder).glob('*_spline.yml')), 24),
         plant_rows=[('stem len', 0, 3.0, 0.0, '{:.2f} m')],
         leaf_rows=[('len', 1, 1.25, 0.0, '{:.2f} m'), ('width', 4, 0.2, 0.0, '{:.3f} m'), ('angle', 3, 180.0, 0.0, '{:.0f}°')],
         zero_shot=True),
     'maize': dict(
-        title='Maize', ds=lambda root: MaizeDataset4M(root, split='val', num_points=8192),
-        root='/work/mech-ai-scratch/alloy/Maize',
+        title='Maize', folder=str(REPO / 'paper/data/Maize_1_plant_0004_04'), num_points=8192,
+        rgb_file='rgb.png', pc_glob='pointcloud_cam.ply',
         model=lambda: maize_model.embodied_mae_4m_maize_base(target_points=8192),
         ckpt=str(REPO / 'outputs/maize_distill_all/checkpoints/checkpoint_epoch_58.pth'),
-        name=lambda plant, view: f'plant_{plant:04d}_{view:02d}', n_leaf_tokens=28,
-        plant_rows=[('leaf count', 0, 32.0, 0.0, '{:.0f}'), ('internodes', 4, 2.0, 0.0, '{:.2f} m')],
+        n_leaf_tokens=28, n_params=14,
+        params=None,                      # Maize_1 XML is not the model's schema: GT rows come from _maize1_gt
+        plant_rows=[('leaf count', 0, 32.0, 0.0, '{:.0f}')],
         leaf_rows=[('len', 1, 0.85, -0.05, '{:.2f} m'), ('width', 2, 0.15, 0.0, '{:.3f} m'), ('angle', 3, 180.0, 90.0, '{:.0f}°')],
         zero_shot=False),
 }
@@ -136,9 +155,10 @@ def show_pc(ax, pc, color=C['pc'], s=0.35, alpha=0.75, lim=None, elev=12, azim=-
 
 
 def recipe_rows(sp, params, valid, leaves=(1,), with_tokens=False):
-    """Human-readable rows for a species from a (1+K, N) [0,1] tensor: the plant
-    token's trait fields and the given leaf tokens.  with_tokens also returns
-    the token index behind each row (None for the leaf count)."""
+    """Human-readable rows for a species from a (1+K, N) [0,1] tensor in the
+    MODEL's schema: the plant token's trait fields and the given leaf tokens.
+    with_tokens also returns the token index behind each row (None for the
+    leaf count)."""
     p = params.clamp(0, 1).numpy() if torch.is_tensor(params) else np.clip(params, 0, 1)
     rows, toks = [], []
     for lab, slot, sc, sh, fmt in sp['plant_rows']:
@@ -151,6 +171,22 @@ def recipe_rows(sp, params, valid, leaves=(1,), with_tokens=False):
     if not any(lab == 'leaf count' for lab, *_ in sp['plant_rows']):
         rows.append(('leaves', f'{int(valid[1:].sum())}')); toks.append(None)
     return (rows, toks) if with_tokens else rows
+
+
+def gt_rows(s, leaves=(1,)):
+    """Ground-truth recipe rows for display.  Sorghum: from the model-schema
+    tensor.  Maize_1: straight from its XML (same row labels as the model's)."""
+    if s['gt_xml'] is None:
+        return recipe_rows(s['sp'], s['par'], s['tv'], leaves)
+    rows_by_leaf, n, height = s['gt_xml']
+    rows = [('leaf count', f'{n}'), ('height', f'{height:.2f} m')]
+    for i, t in enumerate(leaves):
+        r = rows_by_leaf.get(t - 1)       # token t holds leaf id t-1
+        if r is None:
+            continue
+        rows += [(f'leaf{i + 1} len', f"{r['len']:.2f} m"), (f'leaf{i + 1} width', f"{r['width']:.3f} m"),
+                 (f'leaf{i + 1} angle', f"{r['angle']:.0f}°")]
+    return rows
 
 
 def show_recipe(ax, rows, color=C['text'], mask=None, dim=None, fs=5.4, stacked=False):
@@ -183,13 +219,54 @@ def token_strip(ax, counts, total=None, width=1.0, height=1.0, y0=0.0, cell_gap=
 
 
 # ── data + model ────────────────────────────────────────────────────────────
-def load(species, plant, view, ckpt=None):
-    sp = SPECIES[species]
+def load_folder(sp):
+    """Build the model's input tensors from one raw sample folder, the way the
+    datasets do: RGB (RGBA composited over black) -> 224, ImageNet-normalised;
+    big-endian packed depth -> [0,1] -> 224; cloud sampled to num_points,
+    centred, unit sphere; recipe tokens from the spline file when the folder
+    carries the model's schema, else zeros with a validity mask."""
+    folder = Path(sp['folder'])
+    im = Image.open(folder / sp['rgb_file'])
+    if im.mode == 'RGBA':
+        a = np.asarray(im).astype(np.float32) / 255.0
+        rgb8 = (a[..., :3] * a[..., 3:4] * 255).round().astype(np.uint8)
+        im = Image.fromarray(rgb8)
+    im = im.convert('RGB').resize((224, 224), Image.BILINEAR)
+    rgb = torch.from_numpy(np.asarray(im).astype(np.float32) / 255.0).permute(2, 0, 1)
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1); std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+    rgb = (rgb - mean) / std
+
+    dp = np.asarray(Image.open(folder / 'depth.png'))
+    if dp.ndim == 3 and dp.shape[2] == 4:
+        d = dp.astype(np.uint64)
+        v = (d[..., 0] * 256 ** 3 + d[..., 1] * 256 ** 2 + d[..., 2] * 256 + d[..., 3]) / float(256 ** 4 - 1)
+    else:
+        v = dp.astype(np.float64) / np.iinfo(dp.dtype).max
+    depth = torch.from_numpy(np.asarray(Image.fromarray(v.astype(np.float32), mode='F')
+                                        .resize((224, 224), Image.BILINEAR))).unsqueeze(0)
+
+    pts = np.asarray(o3d.io.read_point_cloud(str(next(folder.glob(sp['pc_glob'])))).points, dtype=np.float32)
+    rng = np.random.default_rng(0)
+    n = sp['num_points']
+    idx = rng.choice(len(pts), n, replace=len(pts) < n)
+    pts = pts[idx]; pts -= pts.mean(0); pts /= max(np.linalg.norm(pts, axis=1).max(), 1e-8)
+    pc = torch.from_numpy(pts)
+
+    K = sp['n_leaf_tokens']
+    if sp['params'] is not None:
+        tv, par = sp['params'](folder); gt_xml = None
+    else:
+        gt_xml = _maize1_gt(folder)
+        n_params = sp['n_params']
+        par = torch.zeros(1 + K, n_params); tv = torch.zeros(1 + K); tv[:1 + min(K, gt_xml[1])] = 1.0
+    return rgb, depth, pc, par, tv, gt_xml
+
+
+def load(species, ckpt=None, folder=None):
+    sp = dict(SPECIES[species]); sp['folder'] = folder or sp['folder']
     torch.manual_seed(0); np.random.seed(0)
-    ds = sp['ds'](sp['root'])
-    want = sp['name'](plant, view)
-    idx = next(i for i, f in enumerate(ds.samples) if Path(f).name == want)
-    rgb, depth, pc, par, tv, name = ds[idx]
+    rgb, depth, pc, par, tv, gt_xml = load_folder(sp)
+    name = Path(sp['folder']).name
     print(species, 'sample', name)
 
     model = sp['model']().eval()
@@ -202,7 +279,7 @@ def load(species, plant, view, ckpt=None):
 
     b = [t.unsqueeze(0) for t in (rgb, depth, pc, par, tv)]
     mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1); std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-    out = {'species': species, 'sp': sp, 'name': name, 'epoch': ck.get('epoch'),
+    out = {'species': species, 'sp': sp, 'name': name, 'epoch': ck.get('epoch'), 'gt_xml': gt_xml,
            'rgb': (rgb * std + mean).permute(1, 2, 0).numpy(), 'depth': depth[0].numpy(),
            'pc': pc.numpy(), 'par': par, 'tv': tv.numpy()}
     out['bg'] = out['depth'] < 1e-3
@@ -280,7 +357,7 @@ def teaser(S, path):
             elif m == 'pc':
                 show_pc(img_axes(fig, x + 0.002, y + 0.005, iw + 0.006, ih + 0.01, projection='3d'), s['pc'], s=0.25, zoom=1.35)
             else:
-                show_recipe(img_axes(fig, x + 0.003, y + 0.006, iw + 0.004, ih), recipe_rows(s['sp'], s['par'], s['tv'], (1,)), fs=3.9, stacked=True)
+                show_recipe(img_axes(fig, x + 0.003, y + 0.006, iw + 0.004, ih), gt_rows(s, (1,)), fs=3.9, stacked=True)
     # species name sits above its row; the top row's name shares the line with the stream labels
     ex, ey, ew, eh = 0.388, 0.22, 0.06, 0.56
     box(ax, ex, ey, ew, eh, 'shared\nencoder\n+\ndecoder', fill=ENC_FILL, edge=ENC_EDGE, fs=6.2, bold=True)
@@ -318,8 +395,8 @@ def teaser(S, path):
         show_recipe(img_axes(fig, px + 0.004, y + 0.006, pw - 0.008, oh - 0.05), recipe_rows(s['sp'], r['par'], s['tv'], (1, 2)), fs=4.2)
         arrow(ax, (ox + ow, y + rh / 2), (px, y + rh / 2), color=C['text'], lw=0.7)
 
-    zs = ', '.join(f"{s['sp']['title'].lower()} {'zero-shot from the pretrained arm' if s['sp']['zero_shot'] else 'distilled student'}" for s in S)
-    label(ax, 0.5, 0.012, f"held-out plants {S[0]['name']} and {S[1]['name']}; real model outputs on the right ({zs}); no ground truth shown",
+    zs = ', '.join(f"{s['sp']['title'].lower()} {'zero-shot (pretrained arm)' if s['sp']['zero_shot'] else 'distilled'}" for s in S)
+    label(ax, 0.5, 0.012, f"held-out {S[0]['name']} and {S[1]['name']} (raw files in paper/data); right: real outputs, {zs}; no ground truth shown",
           fs=4.8, color=GREY, va='bottom', style='italic')
     for ext in ('pdf', 'png'):
         fig.savefig(path.with_suffix('.' + ext), dpi=300, facecolor='white')
@@ -505,17 +582,15 @@ def architecture(s, path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--sorghum_ckpt', default=None); ap.add_argument('--maize_ckpt', default=None)
-    ap.add_argument('--sorghum_plant', type=int, default=10); ap.add_argument('--sorghum_view', type=int, default=4)
-    ap.add_argument('--maize_plant', type=int, default=0); ap.add_argument('--maize_view', type=int, default=4)
+    ap.add_argument('--sorghum_dir', default=None, help='raw sample folder (default paper/data/Sorghum_10_04)')
+    ap.add_argument('--maize_dir', default=None, help='raw sample folder (default paper/data/Maize_1_plant_0004_04)')
     ap.add_argument('--out', default=str(OUT))
     args = ap.parse_args()
     out = Path(args.out); out.mkdir(exist_ok=True)
-    so = load('sorghum', args.sorghum_plant, args.sorghum_view, args.sorghum_ckpt)
-    ma = load('maize', args.maize_plant, args.maize_view, args.maize_ckpt)
+    so = load('sorghum', args.sorghum_ckpt, args.sorghum_dir)
+    ma = load('maize', args.maize_ckpt, args.maize_dir)
     teaser([so, ma], out / 'fig_teaser.pdf')
     architecture(so, out / 'fig_architecture.pdf')
-
-
 
 
 if __name__ == '__main__':

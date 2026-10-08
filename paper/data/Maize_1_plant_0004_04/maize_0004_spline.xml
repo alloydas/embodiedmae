@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plant height="0.9813249">
+    <Tiller>
+        <leaves number="10">
+            <leaf id="0" distance="0.10988466" leafLength="0.32100224" leafWidth="0.062709458" leafAzimuthDeg="353.57773" leafAngle="6.1366577" droopiness="-92.620132" avgCurvature="5.729274" bendAngleDeg="84.86412" bladeLength="0.2585246"/>
+            <leaf id="1" distance="0.10988466" leafLength="0.39349023" leafWidth="0.048949309" leafAzimuthDeg="166.28107" leafAngle="4.8907051" droopiness="-93.273392" avgCurvature="4.706826" bendAngleDeg="85.46268" bladeLength="0.3169026"/>
+            <leaf id="2" distance="0.10988466" leafLength="0.40644506" leafWidth="0.055945843" leafAzimuthDeg="357.7341" leafAngle="10.92416" droopiness="-92.81662" avgCurvature="4.534472" bendAngleDeg="85.04416" bladeLength="0.327337"/>
+            <leaf id="3" distance="0.10988466" leafLength="0.40990666" leafWidth="0.069434769" leafAzimuthDeg="188.03235" leafAngle="8.7756615" droopiness="-95.66983" avgCurvature="4.634492" bendAngleDeg="87.65844" bladeLength="0.3301178"/>
+            <leaf id="4" distance="0.10988466" leafLength="0.42203784" leafWidth="0.055545576" leafAzimuthDeg="3.1530762" leafAngle="20.917284" droopiness="-91.42659" avgCurvature="4.301496" bendAngleDeg="83.77053" bladeLength="0.3398983"/>
+            <leaf id="5" distance="0.1025984" leafLength="0.42894176" leafWidth="0.054944646" leafAzimuthDeg="167.80035" leafAngle="6.9331589" droopiness="-99.723305" avgCurvature="4.61662" bendAngleDeg="91.37248" bladeLength="0.3454369"/>
+            <leaf id="6" distance="0.063213222" leafLength="0.35028705" leafWidth="0.060628202" leafAzimuthDeg="355.80823" leafAngle="26.722126" droopiness="-86.975121" avgCurvature="4.9301" bendAngleDeg="79.69183" bladeLength="0.282121"/>
+            <leaf id="7" distance="0.033185165" leafLength="0.29621345" leafWidth="0.050730072" leafAzimuthDeg="170.60608" leafAngle="40.098263" droopiness="-86.191811" avgCurvature="5.777549" bendAngleDeg="78.97411" bladeLength="0.2385714"/>
+            <leaf id="8" distance="0.033185165" leafLength="0.23719867" leafWidth="0.038330529" leafAzimuthDeg="4.6784668" leafAngle="41.486782" droopiness="-76.854698" avgCurvature="6.433012" bendAngleDeg="70.41889" bladeLength="0.1910522"/>
+            <leaf id="9" distance="0.033185165" leafLength="0.18735352" leafWidth="0.039886225" leafAzimuthDeg="169.29395" leafAngle="49.674644" droopiness="-78.209045" avgCurvature="8.2881" bendAngleDeg="71.65982" bladeLength="0.1509031"/>
+        </leaves>
+    </Tiller>
+    <LeafCurvature span="blade s=0.22-1" units="1/m" avgCurvature="5.139695" meanLeafCurvature="5.395194" meanBendAngleDeg="81.8917"/>
+</plant>
