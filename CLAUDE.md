@@ -95,12 +95,10 @@ them for maize"):**
 
 | `maize_e8_supervised_d2` | 22752738 -> 22752739 | `train_supervised_maize_4m.py` (port of the sorghum E8 supervised trainer; `configs/config_maize_e8_supervised_d2.yaml`), `slurm/delta/e8_supervised_maize.sbatch`. After epoch 600 run it again with `SCORE=1` on 1 GPU / 16 CPU (the line in its header): `--score_head` + the cls and mean probes |
 
-**Not yet launched:** `maize_e4_large_d2` (config written). The large model (332 M) may not fit
-2x A100-40GB at batch 16 (sorghum's ran on 96 GB cards); job 22751542 (`memtest`, scratchpad
-script) measures the peak. If it does not fit, use `gpuA100x8` (80 GB A100s, `--gpus-per-node=2`,
-no preempt variant) or `gpuH200x8`; 8 x 4 on four 40 GB cards changes per-rank BatchNorm stats
-and is a last resort. A maize E8 supervised row (`train_supervised_maize_4m.py`, port of
-`train_supervised_4m.py`) is being built; no maize E1 (1000-epoch, batch-256, all-views pretrain)
+**`maize_e4_large_d2`** launched last: 22752834 -> 22752835 -> 22752836 (three 48 h chunks; ~2.5x the base
+arm's 34 h). Memory test 22752773 on an A100-40GB at batch 16, mask 0.80: base 22.4 GiB alloc /
+26.2 reserved (matches the known figure), large 26.9 / 31.3, so the 40 GB cards fit it.
+The maize E8 supervised row is queued (table above); no maize E1 (1000-epoch, batch-256, all-views pretrain)
 exists in either data version and none is planned. Then: E8 baselines on maize d2
 (`eval/baseline_probe.py`, needs `rgba.png` support for maize), `#maize` page sections.
 
