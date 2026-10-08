@@ -1,0 +1,115 @@
+# E8 MAIZE on DATA VERSION 2 -- supervised-from-scratch baseline. The maize twin
+# of configs/config_e8_supervised_d2.yaml, re-based on config_maize_4m_d2.yaml
+# (rgba.png, param_schema v2, 8192 points, 28 leaf slots, Delta data_root).
+#
+# WHAT IT IS. EmbodiedMAE-4M-Maize base with PC + RGB + depth active, the same
+# module as maize_e2_pcrgbd_d2. It is trained END TO END from random init to
+# regress the decision-6.4 probe targets: no masking, every token visible, no
+# reconstruction. A linear head sits on the post-norm CLS token, and the loss
+# is MSE averaged over the 11 eval/linear_probe_maize.py TARGETS, standardised
+# with TRAIN-split statistics only (mean/std stored in every checkpoint). Text
+# is not an active modality, so the param stream (whose plant token carries
+# leafCount and stemInternodeSum, two of the four 6.4 targets, verbatim) cannot
+# reach the encoder by any path. Init is torch.manual_seed(0) immediately
+# before construction, so step 0 is the E8 maize random_init row bit for bit.
+# Rationale for each choice: the docstring of train_supervised_maize_4m.py.
+#
+# WHAT IT ANSWERS. The maize E2/E3/E4 arms are read through a frozen linear
+# probe. This row is what the same encoder reaches when it is simply trained on
+# the labels, with the same data and the same compute. Pretraining earns its
+# keep only by the gap to this row at equal steps.
+#
+# STEP BUDGET AND SHAPE: identical to maize_4m_d2 / maize_e2_pcrgbd_d2.
+#   10,500 plants / global batch 32 = 329 steps/ep x 600 ep = 197,400 steps
+# 16 PER GPU x 2 GPUs, NOT 8 x 4: PointCloudEmbed's BatchNorm1d is per-rank,
+# so the per-GPU batch sets its statistics, and every maize arm trained 16 x 2.
+# The trainer REFUSES any other shape or step count unless --allow_unmatched
+# (or --smoke_plants), records global_batch, steps_per_epoch, total_steps and
+# e2_matched in config.json, and refuses a resume that changes epochs / batch
+# shape / LR schedule / data version. warmup 40 / val 25 / save 25 is the E2
+# schedule. Size in steps, not epochs (CLAUDE.md).
+#
+# SCORE IT TWICE, BOTH AT checkpoints/checkpoint_epoch_600.pth, IN THIS ORDER
+# (Delta: SCORE=1 sbatch ... slurm/delta/e8_supervised_maize.sbatch does both):
+#   1. its own head, on the exact CLS features linear_probe_maize.py extracts
+#      (batch 32 / seed 0 / workers = the probe launcher's cpus - 1 = 15):
+#        python train_supervised_maize_4m.py --config configs/config_maize_e8_supervised_d2.yaml \
+#               --score_head --probe_num_workers 15
+#   2. the probe, unchanged (cache hit on the features step 1 wrote):
+#        python eval/linear_probe_maize.py --runs maize_e8_supervised_d2 \
+#               --ckpt checkpoints/checkpoint_epoch_600.pth --batch-size 32 --num-workers 15
+# There is deliberately NO best_model.pth: it would be selected on val R2 and
+# then reported on val.
+#
+# LAUNCH WITH train_supervised_maize_4m.py ONLY (slurm/delta/e8_supervised_maize.sbatch).
+# slurm/delta/train_maize_arm.sbatch derives configs/config_<slug>.yaml and
+# runs train_maize_4m.py; its slug check refuses maize_e8_*. Should any MAE
+# trainer still read this file, two keys stop it: model.text_mask_ratio is a
+# string (train_maize_4m.py's float() dies at config parse, before any output
+# dir, config.json or W&B run exists) and model.mask_ratio is null (the MAE
+# forward refuses a non-numeric mask ratio at step 1).
+# train_supervised_maize_4m.py reads neither.
+
+# train_supervised_maize_4m.py refuses any config without this key, so pointing
+# it at an E2 YAML cannot write supervised checkpoints over that arm's output_dir.
+entry_point: train_supervised_maize_4m.py
+
+data:
+  data_root: /work/hdd/bepk/adas14/Maize
+  img_size: 224
+  num_points: 8192         # a maize pointcloud_cam.ply holds EXACTLY 8192 points
+  view_sampling: true      # plan 6.1: one view per plant per epoch (required)
+  view_seed: 42            # the E2 arms' value: same views, same order
+  max_plants: null         # every train plant; val/test are never capped
+  rgb_file: rgba.png       # data v2: transparent background, composited over black
+  param_schema: v2         # data v2: trimmed spline XML (construction-only here)
+
+model:
+  model_size: base
+  active_modalities: "pc,rgb,depth"   # text is refused: the params are never an input
+  # Construction-only. No reconstruction loss is computed here, but
+  # linear_probe_maize.build_model rebuilds the module from config.json with
+  # these, so they stay equal to maize_e2_pcrgbd_d2's.
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28           # 1 plant token + 28 leaf slots (maize width)
+  # NOT READ by train_supervised_maize_4m.py. Both exist to stop train_maize_4m.py
+  # (see header); the string is the error message it prints.
+  text_mask_ratio: "E8 supervised config: launch train_supervised_maize_4m.py, never train_maize_4m.py"
+  mask_ratio: null
+
+training:
+  batch_size: 16           # per GPU, x 2 GPUs = 32. The E2 shape; others are refused.
+                           # Check: jq '.batch_size, .world_size, .total_steps, .e2_matched' \
+                           #          outputs/maize_e8_supervised_d2/config.json
+  epochs: 600
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 40
+  val_freq: 25             # 24 val points over 600 epochs (head R2 on val, view 00)
+  test_freq: 0             # test is scored once, at the end, by --score_head
+
+checkpointing:
+  output_dir: ./outputs/maize_e8_supervised_d2
+  save_freq: 25
+  resume: null
+
+distributed:
+  world_size: 2            # mp.spawn only; torchrun infers it from --nproc_per_node
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14          # the launcher overrides (Delta: cpus / 2 - 1)
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_e8_supervised_d2
