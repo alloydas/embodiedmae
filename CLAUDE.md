@@ -93,6 +93,8 @@ them for maize"):**
 | `maize_4m_tg_d2` / `tg40_d2` / `tg100_d2` | 22751640-1 / 22751642-3 / 22751644-5 | the maize twins of sorghum's `e2_pcrgbdt_tg*` controls: `maize_4m_d2` with `model.text_mask_ratio` 0.80 / 0.40 / 1.0. `train_maize_4m.py` gained the key (ported from the sorghum trainer; `None` is bit-identical to every earlier run; recorded in config.json and checkpoints, resume refused on a mismatch) |
 | `maize_distill_all_d2` | smoke 22751636 (1 GPU, `--max_steps 40`) -> full 22751637 (`afterok`, `--kill-on-invalid-dep=yes`) | `slurm/delta/distill_maize.sbatch`, `configs/config_maize_distill_all_d2.yaml`: teacher = student init = `maize_4m_d2` epoch 600, the v1 recipe otherwise (teacher sees all four streams at `teacher_source_mask_ratio` 0.5, 100 ep, global batch 128 = 16 x 2 x accum 4). The trainer now pins `rgb_file` / `param_schema` against the teacher's config.json and a resumed checkpoint. Self-requeues 10 min before the 48 h wall (USR1 trap) |
 
+| `maize_e8_supervised_d2` | 22752738 -> 22752739 | `train_supervised_maize_4m.py` (port of the sorghum E8 supervised trainer; `configs/config_maize_e8_supervised_d2.yaml`), `slurm/delta/e8_supervised_maize.sbatch`. After epoch 600 run it again with `SCORE=1` on 1 GPU / 16 CPU (the line in its header): `--score_head` + the cls and mean probes |
+
 **Not yet launched:** `maize_e4_large_d2` (config written). The large model (332 M) may not fit
 2x A100-40GB at batch 16 (sorghum's ran on 96 GB cards); job 22751542 (`memtest`, scratchpad
 script) measures the peak. If it does not fit, use `gpuA100x8` (80 GB A100s, `--gpus-per-node=2`,
