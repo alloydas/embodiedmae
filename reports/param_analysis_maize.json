@@ -1,0 +1,217 @@
+{
+ "fields": {
+  "D2 distill + mixed": {
+   "leaf count (leaves)": 1.487139344215393,
+   "stem radius (mm)": 1.7339521646499634,
+   "stem shrink": 0.0011266125366091728,
+   "tassel droop": 0.38314253091812134,
+   "stem height (cm)": 6.907346248626709,
+   "leaf position on stem (cm)": 1.0066471099853516,
+   "leaf length (cm)": 4.788221836090088,
+   "leaf width (mm)": 9.984099388122559,
+   "leaf angle (deg)": 8.424830436706543,
+   "droopiness (gen.)": 5.022481918334961,
+   "stem inclination (deg)": 0.17887286841869354,
+   "width taper": 0.09631575644016266,
+   "leaf twist (deg)": 36.420528411865234,
+   "leaf curl": 0.06377698481082916,
+   "wave amplitude (mm)": 1.9488316774368286,
+   "wave frequency": 3.8747406005859375,
+   "azimuth jitter (deg)": 7.4491143226623535,
+   "wave phase sin": 0.6077067852020264,
+   "wave phase cos": 0.44067829847335815
+  },
+  "D1 distill + random": {
+   "leaf count (leaves)": 1.3637970685958862,
+   "stem radius (mm)": 1.5367804765701294,
+   "stem shrink": 0.0009998667519539595,
+   "tassel droop": 0.3776930272579193,
+   "stem height (cm)": 6.339548587799072,
+   "leaf position on stem (cm)": 0.9359103441238403,
+   "leaf length (cm)": 4.5630669593811035,
+   "leaf width (mm)": 9.682596206665039,
+   "leaf angle (deg)": 8.16466999053955,
+   "droopiness (gen.)": 4.917774200439453,
+   "stem inclination (deg)": 0.18497398495674133,
+   "width taper": 0.09629479795694351,
+   "leaf twist (deg)": 36.86250305175781,
+   "leaf curl": 0.059713710099458694,
+   "wave amplitude (mm)": 1.9436743259429932,
+   "wave frequency": 3.8478105068206787,
+   "azimuth jitter (deg)": 7.446032524108887,
+   "wave phase sin": 0.6080472469329834,
+   "wave phase cos": 0.4406975507736206
+  },
+  "D0 hide only + mixed": {
+   "leaf count (leaves)": 1.497065544128418,
+   "stem radius (mm)": 1.7455319166183472,
+   "stem shrink": 0.0011332985013723373,
+   "tassel droop": 0.3830540180206299,
+   "stem height (cm)": 6.840960502624512,
+   "leaf position on stem (cm)": 1.0090996026992798,
+   "leaf length (cm)": 4.788468837738037,
+   "leaf width (mm)": 9.953235626220703,
+   "leaf angle (deg)": 8.446080207824707,
+   "droopiness (gen.)": 5.012527942657471,
+   "stem inclination (deg)": 0.17905481159687042,
+   "width taper": 0.09629692137241364,
+   "leaf twist (deg)": 36.25873947143555,
+   "leaf curl": 0.06392508745193481,
+   "wave amplitude (mm)": 1.9482002258300781,
+   "wave frequency": 3.8702173233032227,
+   "azimuth jitter (deg)": 7.533278942108154,
+   "wave phase sin": 0.6077656745910645,
+   "wave phase cos": 0.4405789375305176
+  },
+  "Alloy distill (clean)": {
+   "leaf count (leaves)": 4.176487445831299,
+   "stem radius (mm)": 2.258303165435791,
+   "stem shrink": 0.0014528679894283414,
+   "tassel droop": 0.3894510865211487,
+   "stem height (cm)": 23.540647506713867,
+   "leaf position on stem (cm)": 2.8588309288024902,
+   "leaf length (cm)": 7.5887322425842285,
+   "leaf width (mm)": 14.416196823120117,
+   "leaf angle (deg)": 12.513300895690918,
+   "droopiness (gen.)": 6.774631977081299,
+   "stem inclination (deg)": 0.20824778079986572,
+   "width taper": 0.10773009806871414,
+   "leaf twist (deg)": 45.208309173583984,
+   "leaf curl": 0.11251237243413925,
+   "wave amplitude (mm)": 2.6052234172821045,
+   "wave frequency": 4.882914066314697,
+   "azimuth jitter (deg)": 9.370528221130371,
+   "wave phase sin": 0.7086930871009827,
+   "wave phase cos": 0.4830871820449829
+  },
+  "training average": {
+   "leaf count (leaves)": 2.6034622192382812,
+   "stem radius (mm)": 1.8146978616714478,
+   "stem shrink": 0.0011795525206252933,
+   "tassel droop": 0.3960171341896057,
+   "stem height (cm)": 9.411772727966309,
+   "leaf position on stem (cm)": 1.5547592639923096,
+   "leaf length (cm)": 6.634449005126953,
+   "leaf width (mm)": 12.064248085021973,
+   "leaf angle (deg)": 11.861921310424805,
+   "droopiness (gen.)": 5.7584662437438965,
+   "stem inclination (deg)": 0.19684521853923798,
+   "width taper": 0.0961248055100441,
+   "leaf twist (deg)": 46.59176254272461,
+   "leaf curl": 0.08750764280557632,
+   "wave amplitude (mm)": 2.0210349559783936,
+   "wave frequency": 4.086376190185547,
+   "azimuth jitter (deg)": 7.5874738693237305,
+   "wave phase sin": 0.6111207604408264,
+   "wave phase cos": 0.46090635657310486
+  }
+ },
+ "leaf_count": {
+  "D2 distill + mixed": {
+   "mae_leaves": 1.4608888626098633,
+   "exact": 0.2875555455684662
+  },
+  "D1 distill + random": {
+   "mae_leaves": 1.3364444971084595,
+   "exact": 0.31555554270744324
+  },
+  "D0 hide only + mixed": {
+   "mae_leaves": 1.4751111268997192,
+   "exact": 0.2728888988494873
+  },
+  "Alloy distill (clean)": {
+   "mae_leaves": 4.166666507720947,
+   "exact": 0.06177777796983719
+  },
+  "training average": {
+   "mae_leaves": 2.5635554790496826,
+   "exact": 0.1088888868689537
+  }
+ },
+ "conditions": {
+  "true parameters": {
+   "cd_mm": 10.677751541137695,
+   "f110mm": 0.6387196183204651,
+   "r10mm": 0.6954836845397949,
+   "p10mm": 0.6048851609230042,
+   "f10.01": 0.4023522734642029
+  },
+  "size replaced by average": {
+   "cd_mm": 20.877859115600586,
+   "f110mm": 0.33969420194625854,
+   "r10mm": 0.35985469818115234,
+   "p10mm": 0.35069823265075684,
+   "f10.01": 0.17713722586631775
+  },
+  "pose replaced by average": {
+   "cd_mm": 20.05313491821289,
+   "f110mm": 0.3679877519607544,
+   "r10mm": 0.389689177274704,
+   "p10mm": 0.3750574588775635,
+   "f10.01": 0.195916086435318
+  },
+  "fine shape replaced by average": {
+   "cd_mm": 14.87928295135498,
+   "f110mm": 0.4511725604534149,
+   "r10mm": 0.5184921622276306,
+   "p10mm": 0.41816970705986023,
+   "f10.01": 0.24892458319664001
+  },
+  "not visible replaced by average": {
+   "cd_mm": 14.937128067016602,
+   "f110mm": 0.49160417914390564,
+   "r10mm": 0.5331099629402161,
+   "p10mm": 0.4733850955963135,
+   "f10.01": 0.27930474281311035
+  },
+  "all replaced by average": {
+   "cd_mm": 26.066926956176758,
+   "f110mm": 0.2468767911195755,
+   "r10mm": 0.2830154001712799,
+   "p10mm": 0.24707356095314026,
+   "f10.01": 0.11786043643951416
+  },
+  "no parameters": {
+   "cd_mm": 27.508886337280273,
+   "f110mm": 0.21041403710842133,
+   "r10mm": 0.21015505492687225,
+   "p10mm": 0.24599865078926086,
+   "f10.01": 0.09732934087514877
+  },
+  "D2 predicted -> best model": {
+   "cd_mm": 22.638952255249023,
+   "f110mm": 0.3020729422569275,
+   "r10mm": 0.33191823959350586,
+   "p10mm": 0.30371034145355225,
+   "f10.01": 0.15092328190803528
+  },
+  "D2 alone, no parameters": {
+   "cd_mm": 17.490514755249023,
+   "f110mm": 0.37113621830940247,
+   "r10mm": 0.40086668729782104,
+   "p10mm": 0.38103780150413513,
+   "f10.01": 0.1779502034187317
+  },
+  "D2 predicted -> D2": {
+   "cd_mm": 21.187280654907227,
+   "f110mm": 0.32604217529296875,
+   "r10mm": 0.3542019724845886,
+   "p10mm": 0.3297175168991089,
+   "f10.01": 0.162295863032341
+  },
+  "Alloy alone, no parameters": {
+   "cd_mm": 40.15628433227539,
+   "f110mm": 0.08811826258897781,
+   "r10mm": 0.12334863096475601,
+   "p10mm": 0.1484147608280182,
+   "f10.01": 0.0308628398925066
+  },
+  "Alloy predicted -> best model": {
+   "cd_mm": 29.4092960357666,
+   "f110mm": 0.19919638335704803,
+   "r10mm": 0.2804473340511322,
+   "p10mm": 0.17680327594280243,
+   "f10.01": 0.09033165872097015
+  }
+ }
+}

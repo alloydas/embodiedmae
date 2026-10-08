@@ -264,10 +264,11 @@ epoch 200 (`reports/test_scene/{sorghum,maize}.json`):
 | mixed | 0.296 | 0.660 | 0.895 | 0.00209 | 0.171 | 0.725 | 0.797 | 0.00235 |
 | random + Sinkhorn | 0.311 | 0.669 | 0.835 | 0.00271 | 0.216 | 0.784 | 0.706 | 0.00256 |
 | **mixed + Sinkhorn** | **0.324** | **0.731** | 0.839 | 0.00223 | **0.255** | **0.824** | 0.716 | 0.00241 |
-| mixed + Sinkhorn, 400 ep* | running | | | | **0.401** | **0.901** | 0.817 | **0.00146** |
+| mixed + Sinkhorn, 400 ep* | **0.383** | **0.813** | 0.863 | **0.00164** | **0.401** | **0.901** | 0.817 | **0.00146** |
 
-\* 200 + 200 epochs with a cosine warm restart; the other rows stop at 200, so
-this row shows "train longer", not "better masking".
+\* 200 + 200 epochs with a cosine warm restart (sorghum and maize both finished
+2026-10-06); the other rows stop at 200, so this row shows "train longer", not
+"better masking", until the 400-epoch baselines below finish.
 
 - Mixed + Sinkhorn beats random on F1@0.01 for 89 % (sorghum) / 90 % (maize) of
   test plants. The gain is at the **leaf tips**: outer-third recall@0.03 0.205 ->
@@ -318,19 +319,22 @@ Results: `reports/test_scene/` (test), `reports/mixed_masking/` (val, per plant)
 `reports/scene_oracle.json`. Scripts: `eval/eval_test_scene.py`,
 `eval/eval_scene_oracle.py`, `export/export_mixed_masking.py`. Launchers:
 `slurm/sm_arm.sbatch`, `slurm/maize_scene_arm.sbatch`, `slurm/long_arm.sbatch`.
-Write-ups (claude.ai pages, private until Yongyun shares them): test + loss +
-400-epoch validation https://claude.ai/artifact/VopKKf1xQFbUFXFL3XEsB5, masking
+Write-ups (claude.ai pages, private until Yongyun shares them): test + loss
+results at 200 epochs https://claude.ai/artifact/VopKKf1xQFbUFXFL3XEsB5 (kept at
+that version on purpose), the same page with the 400-epoch model and validation
+curves https://claude.ai/artifact/8VKWSsWYA7wAPRC3FSSF9P, today's update
+https://claude.ai/artifact/SwZSz9hWfaCHDRQnbWMrrr, masking
 explorer https://claude.ai/artifact/HHwrfv7PRxkTwEc9gJ1AK9, val arms
 https://claude.ai/artifact/1W4vkx8y5NzDbudHNtmsrq. A hands-on walk-through of
 the masking itself (patchify, FPS 196 x kNN 32, neighbour labels, Dirichlet
 budget, the three policies, checked against the model's own masking) is in
 `/work/mech-ai-scratch/yongyun/masking/` (`masking_steps.py`, README).
 
-**Running / next (2026-10-06):** sorghum mixed + Sinkhorn 400 epochs (job
-16734120, at epoch 340; its test eval runs automatically when it ends);
-Chamfer-only and Sinkhorn-only arms (16735518-21). Not started: seed 2,
-continuing the random baseline to 400 epochs for a fair comparison, training
-at 90 % masking, and training on Alloy's renders once they exist.
+**Running / next (2026-10-06):** Chamfer-only and
+Sinkhorn-only arms (16735518-21); the equal-training 400-epoch baselines,
+random and random + Sinkhorn in both species (16736958-61), so the 400-epoch
+row above can be compared fairly. Not started: seed 2, training at 90 %
+masking, and training on Alloy's renders once they exist.
 
 ### Occluded-scene training (structured-masking follow-up, built 2026-10-01)
 
@@ -583,6 +587,99 @@ number, so it is a decision for new runs, not a patch to compare against E1-E4.
   https://claude.ai/artifact/VopKKf1xQFbUFXFL3XEsB5. Gotcha found doing it:
   geomloss turned autograd back ON inside `torch.no_grad()`; `pc_sinkhorn.py`
   now restores the caller's grad mode (training unaffected).
+- **Paired 2 x 2 test eval (2026-10-06, `reports/test_scene/{sorghum,maize}_2x2.json`,
+  jobs 16738688 sorghum / 16738813 maize).** Random / mixed masking x QAL / QAL +
+  Sinkhorn, epoch 200, scored in ONE invocation per species with the seeded
+  loader, so every row is paired. Occluded F1@0.01 sorghum / maize: random 0.285 /
+  0.137, random + Sinkhorn 0.311 / 0.217, mixed 0.296 / 0.169, mixed + Sinkhorn
+  0.324 / 0.254. Share of plants with higher F1: mixed vs random 68 % / 66 % (QAL)
+  and 70 % / 66 % (with Sinkhorn); QAL + Sinkhorn vs QAL 79 % / 85 %; both vs
+  random 89 % / 90 %. New metric `dup0.001` (share of predicted points with
+  another predicted point within 0.001; a real cloud ~0.004): QAL 0.61 / 0.71,
+  QAL + Sinkhorn 0.09 / 0.18, mixed 0.58 / 0.69, mixed + Sinkhorn 0.08 / 0.15 --
+  Sinkhorn is what un-stacks the decoder's clumps, masking barely moves them.
+  Examples now carry `covered` (per drawn target point, whether the FULL
+  prediction comes within 0.03, recall@0.03's rule). Write-up with a 2D
+  nearest-match vs transport illustration and the 3D reconstructions:
+  https://claude.ai/artifact/SwZSz9hWfaCHDRQnbWMrrr. Two traps hit doing it:
+  the eval has no resume, so a scavenger preemption restarts it from the first
+  species (cancel the requeue and rerun only what is missing), and `myenv`
+  is PyTorch 2.11 + CUDA 13.0, which has no V100 kernels -- an unconstrained
+  `--gres=gpu:1` on `nova` can land on `nova20-matrix` (V100); pass
+  `--constraint="a100|l40s|h200|rtxpro6000"`.
+- **Physical units (checked 2026-10-06/07).** Clouds and generator params are in
+  METRES (no file says so: generator stem length tracks the world-frame height
+  measured from the cloud, r = 0.94 sorghum / 0.91 maize; `logs/dv/units_check.py`).
+  The loader divides each cloud by its own radius (max distance from the centroid,
+  kept as `pc_norm[:, 3]`): median 1.00 m sorghum (0.83-1.22), 0.64 m maize
+  (0.46-0.87). So the unit-sphere thresholds are NOT fixed lengths: 0.01 = ~10 mm
+  in sorghum but ~6 mm in maize (0.03 = ~30 / ~19 mm). The older "0.01 = 7 mm on a
+  1.4 m plant" note on the write-ups was wrong, and maize's low F1@0.01 was largely
+  its stricter threshold. QAL's threshold (0.01) is likewise ~10 mm / ~6 mm.
+  `eval/eval_test_scene.py` now reports exact per-plant mm (`scores(..., scale)`):
+  `cd_mm` (mean NN distance, both directions), `f1/r/p{5,10,20}mm`, `radius_m`, and
+  `phys_params` (target params back in metres -> mm). All models, one paired run
+  per species (`reports/test_scene/{sp}_mm.json`), occluded test, error / F1@10mm /
+  R@10mm: sorghum random 200 21.5 mm / 0.282 / 0.18, mixed + Sinkhorn 200 21.8 /
+  0.323 / 0.24, random 400 18.0 / 0.349 / 0.23, random + Sinkhorn 400 19.0 / 0.380 /
+  0.29, mixed + Sinkhorn 400 18.7 / 0.384 / 0.30; maize 15.2 / 0.351 / 0.29, 14.4 /
+  0.487 / 0.52, 10.5 / 0.594 / 0.55, 11.3 / 0.595 / 0.65, 10.7 / 0.638 / 0.70.
+  Mean error slightly favours random 400 in sorghum (median plant 17.8 vs 18.4 mm);
+  F1 / recall at 10 mm favour mixed + Sinkhorn in both. Write-up:
+  https://claude.ai/artifact/YbPAWtW264DXFkJBBJZ6Lr.
+- **Occluded-scene DISTILLATION for predicted parameters (built 2026-10-07, maize).**
+  Goal: real plants have no procedural parameters, so the model must predict them
+  and rebuild the plant without them. `train_maize_4m.py` takes an optional YAML
+  `distill:` block (absent = every earlier run, unchanged): `student_init`,
+  `teacher_checkpoint` (frozen, `text_mask_ratio` forced to 0.0 = always sees the
+  TRUE params), `param_hide_prob` (share of steps the student's params are hidden,
+  `text_mask_ratio` 1.0 = predicted with the spline loss; same draw on all ranks),
+  `feat_weight` / `cls_weight` (token-wise MSE on decoder features, MSE on the CLS
+  latent; both 0 = no teacher), `val_text_mask_ratio` (1.0: validation and test are
+  run WITHOUT params). Student and teacher see the same scene and IDENTICAL masks:
+  the trainer saves the CPU+CUDA RNG state before the student's forward and
+  restores it for the teacher (verified by `logs/dv/align_check.py`: rgb / depth /
+  pc masks equal, only text differs). Arms (60 epochs, lr 5e-5, from the 400-epoch
+  models, scavenger 2 GPUs, jobs 16751251-3): `scene_distill_mix` (D2: distill +
+  mixed), `scene_distill_rand` (D1: distill + random, teacher/init random + Sinkhorn
+  400), `scene_phide_mix` (D0: params hidden + predicted, no distillation). **Why it
+  matters:** the smoke run showed the param-conditioned mixed + Sinkhorn 400 model
+  given NO params falls from occluded val F1@0.01 ~0.40 to ~0.10 -- every scene
+  model so far leans heavily on the true params. Still to build: the two-pass
+  readout (predicted params fed back as conditioning) in the test eval, and sorghum.
+  **Results (60 epochs, occluded val, no params):** F1@0.01 D0 0.172 / D1 0.183 /
+  D2 0.176 (start ~0.13; with true params ~0.39): distillation adds ~nothing over
+  hiding, mixed masking does not help in this phase. **Per-field analysis**
+  (`eval/param_analysis_maize.py`, all 2,250 maize test plants, occluded, no params;
+  `reports/param_analysis_maize.json`): the students predict the shape-defining
+  fields moderately -- error vs always guessing the training average: leaf count
+  1.4 vs 2.6 leaves (exact 31 %), stem height 6.4 vs 9.4 cm, leaf length 4.6 vs
+  6.6 cm, leaf angle 8.2 vs 11.9 deg, leaf position 0.9 vs 1.6 cm (30-48 % better);
+  wave phase, azimuth jitter, taper, wave amp/freq ~0-6 %. Overall param MAE 0.080
+  vs 0.0935 for the average (Alloy's clean-plant RGB-only distill: 0.0736). The
+  best param-conditioned model (mixed + Sinkhorn 400) at F1@10mm: true params 0.638;
+  size -> average 0.340, pose -> average 0.367, fine shape -> average 0.451, "not
+  visible" fields -> average 0.490, all -> average 0.247, none 0.211. **The two-step
+  readout HURTS**: D2's predicted params -> best model 0.300, -> D2 0.322, while D2
+  with no params is 0.370 (17.6 mm). Every scene model trusts every param field as
+  exact (even unpredictable ones cost 23 % when averaged), so approximate params
+  mislead it. Next design: condition only on the predictable shape fields (others
+  fixed to the average), train with noisy / predicted params as input, param loss on
+  those fields only, params inside the Dirichlet budget from scratch.
+  **Any-to-any parameter runs (submitted 2026-10-07, scavenger, jobs 16760726-7):**
+  `distill.visible_mode: budget` (trainer option) puts the parameters INSIDE the
+  shared Dirichlet budget on the steps where they are not hidden (`text_mask_ratio`
+  None, as pretraining; >= 1 token always visible), and `param_hide_prob: 0.5` hides
+  them fully on the other half (the real-world case, which the budget alone never
+  produces). No teacher; `student_init` is now optional. `config_maize_scene_anyparam`
+  (from scratch) and `config_maize_scene_anyparam_pre` (from Alloy's
+  `maize_4m` epoch 600), both mixed + QAL + Sinkhorn, 200 epochs, validated with NO
+  parameters. Compare with `maize_scene_mix_sink_s1` (params always visible) under
+  true / no params, and with the D-runs. Alloy's `maize_distill_all` (clean plants,
+  epoch 58; code identical to ours) is added to `eval/param_analysis_maize.py`.
+  Target identity without params comes from position (target centred, cloud cropped
+  around its stem); but scene clouds are normalised by the CLEAN target's centroid
+  and radius -- a hint a deployed model would not get (normalise by the crop).
 - **Long run for real-data testing (`configs/config_long_sorghum_mixsink.yaml`,
   `slurm/long_arm.sbatch`, job 16724098, started 2026-10-04 23:31).** Sorghum,
   mixed masking (nf_prob 0.5), QAL 0.02 squared x15 + Sinkhorn (effective
@@ -615,14 +712,49 @@ number, so it is a decision for new runs, not a patch to compare against E1-E4.
   maize (finished 2026-10-06 02:35) F1@0.01 0.256 -> 0.392, recall@0.03 0.820
   -> 0.894, precision@0.03 0.724 -> 0.814, chamfer 0.00247 -> 0.00158; sorghum
   (epoch 340 of 400 at 03:00) 0.323 -> 0.376, 0.728 -> 0.804, 0.839 -> 0.862,
-  0.00226 -> 0.00170. Precision rises with recall, so the extra epochs buy
-  both. Maize test (`reports/test_scene/maize_mixsink400.json`, job 16736554):
+  0.00226 -> 0.00168 (sorghum finished 2026-10-06 ~06:00). Precision rises
+  with recall, so the extra epochs buy both. Sorghum test
+  (`reports/test_scene/sorghum_mixsink400.json`, job 16738011): clean chamfer
+  0.00126, F1@0.01 0.409, recall@0.03 0.853, precision@0.03 0.879; occluded
+  0.00164 / 0.383 / 0.813 / 0.863; outer-third recall@0.03 0.330 -> 0.509
+  occluded. Maize test (`reports/test_scene/maize_mixsink400.json`, job 16736554):
   clean chamfer 0.00079, F1@0.01 0.503, recall@0.03 0.947, precision@0.03
   0.890; occluded 0.00146 / 0.401 / 0.901 / 0.817; better than its own epoch
-  200 on 85-96 % of test plants depending on the metric. **The baselines were
-  not continued**, so "400-epoch mixed + Sinkhorn vs 200-epoch random" mixes
-  training length with masking; continue `*_scene_s1` to 400 the same way
-  before claiming a masking gain at 400.
+  200 on 85-96 % of test plants depending on the metric. "400-epoch mixed +
+  Sinkhorn vs 200-epoch random" mixes training length with masking, so the
+  **equal-training baselines were launched 2026-10-06** (`nova`, 2 GPUs each,
+  same `INIT_CKPT` continuation from each run's own epoch 200):
+  `config_{sm,maize}_scene400.yaml` (random, QAL; jobs 16736958 sorghum /
+  16736960 maize) and `config_{sm,maize}_scene_sink400.yaml` (random + Sinkhorn
+  -- vs mixed + Sinkhorn this isolates the masking; jobs 16736959 / 16736961).
+  `eval/eval_test_scene.py` knows them as `random400` / `random_sink400`; when
+  both baselines of a species finish, a watcher (`logs/wait_400cmp.sh`) scores
+  random, random_sink, mixed_sink, random400, random_sink400 and mixed_sink400
+  in ONE invocation (tag `400`), so all six are paired. **Result (all four finished 2026-10-06 ~14:40; scored with
+  mixed_sink400 in ONE invocation per species, `reports/test_scene/{sp}_400.json`,
+  jobs 16743472 / 16743550), occluded test F1@0.01 / recall@0.03 / precision@0.03 /
+  chamfer:** sorghum random 400 0.350 / 0.744 / 0.913 / 0.00157, random + Sinkhorn
+  400 0.379 / 0.805 / 0.860 / 0.00171, mixed + Sinkhorn 400 0.383 / 0.813 / 0.863 /
+  0.00165; maize 0.308 / 0.863 / 0.869 / 0.00129, 0.346 / 0.892 / 0.794 / 0.00143,
+  0.402 / 0.904 / 0.819 / 0.00141. Mixed + Sinkhorn beats random 400 on F1 for
+  90 % (sorghum) / 79 % (maize) of plants and Sinkhorn alone does for 89 % / 64 %,
+  but the MASKING effect at 400 is maize-only: mixed + Sinkhorn vs random +
+  Sinkhorn is +16 % F1 in maize (66 % of plants) and a near tie in sorghum (+1 %,
+  57 %). Random 400 keeps the best precision and chamfer in both species, so
+  report F1 / recall / leaf-tip recall (0.390 -> 0.510 sorghum, 0.714 -> 0.800
+  maize) alongside chamfer, never chamfer alone. Every model gains a lot from
+  the extra 200 epochs (random alone 0.285 -> 0.350 sorghum, 0.136 -> 0.308 maize). Schedule detail, identical in
+  every continuation: epoch 201 trains at lr ~0 (the scheduler steps after the
+  epoch) and the restart (7.8e-5) takes effect at epoch 202. Validation F1
+  dips at epoch 220 in both species and passes its epoch-200 value by 240-260.
+  **Sorghum test numbers from SEPARATE `eval_test_scene.py` invocations were
+  not paired** (fixed 2026-10-06): the loader was unseeded and sorghum clouds
+  (~38k points) are subsampled to 8,196 in the workers, so each invocation
+  scored a different subsample and picked different example plants. Within
+  one invocation every arm shares the cached batches, so `sorghum.json`'s
+  own rows are paired; across files (`sorghum_q02sq`, `_mr*`, `_mixsink400`)
+  means are fine over 2,250 plants but per-plant win rates are approximate.
+  Maize loads every point and is unaffected. The loader is now seeded.
 - **Test-time mask-ratio sweep (jobs 16736233-4, `eval/eval_test_scene.py
   --mask-ratio`, `reports/test_scene/{sorghum,maize}_mr{0.7,0.9,0.95}.json`).**
   The 80 %-trained epoch-200 models, occluded test F1@0.01 at 70 / 80 / 90 /
@@ -638,7 +770,12 @@ number, so it is a decision for new runs, not a patch to compare against E1-E4.
   `torch.cdist`, `pc_loss_weight` 15 -- the dense `chamfer` OOMs at B=16) and
   `config_{sm,maize}_scene_sinkonly.yaml` (`loss_name: sinkhorn`: no QAL, PC
   loss = 0.5 x Sinkhorn). Random masking, so they compare against `*_scene_s1`
-  (QAL) and `*_scene_sink_s1` (QAL + Sinkhorn). When they finish: `python
+  (QAL) and `*_scene_sink_s1` (QAL + Sinkhorn). Maize finished (test, occluded, `maize_loss.json`):
+  Chamfer-only F1@0.01 0.080 / recall@0.03 0.505 / precision@0.03 0.753 / chamfer
+  0.00310 -- worst of all losses; Sinkhorn-only 0.248 / 0.858 / 0.594 / 0.00286 --
+  highest recall but the lowest precision (QAL + Sinkhorn: 0.216 / 0.781 / 0.707 /
+  0.00259). Sorghum Chamfer-only (16735518) and Sinkhorn-only (16738629) still
+  training. When they finish: `python
   eval/eval_test_scene.py --species <sp> --arms cham sinkonly --tag loss
   --no-examples`.
 - **Alloy's data (checked 2026-10-06): no occluded renders exist yet.**

@@ -20,6 +20,8 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
+import copy
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, DistributedSampler
@@ -208,6 +210,10 @@ def config_to_namespace(config):
     ns.wandb_project      = config['wandb'].get('wandb_project', 'embodied-mae-4m')
     ns.wandb_entity       = config['wandb'].get('wandb_entity', None)
     ns.wandb_name         = config['wandb'].get('wandb_name', None)
+    # Occluded-scene DISTILLATION (optional): a frozen teacher that sees the true
+    # procedural parameters, a student that mostly does not. See train_one_epoch.
+    _dist                 = config.get('distill') or None
+    ns.distill            = dict(_dist) if _dist else None
     return ns
 
 
@@ -530,7 +536,8 @@ def visualize_reconstruction_4m(model, dataloader, device, epoch, save_dir,
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
 def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75,
-                    scene=None, scene_stats=None, leaf=None):
+                    scene=None, scene_stats=None, leaf=None, teacher=None, distill=None,
+                    distill_stats=None):
     """One epoch. `scene` (a SceneConfig with prob > 0) turns a share of each
     batch into occluded scenes -- the encoder reads the scene, the loss scores
     the clean plant -- and `scene_stats`, a dict, collects their mean stats."""
@@ -539,9 +546,24 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
     m = model.module if hasattr(model, 'module') else model
     sstats, n_scene = {}, 0
 
+    rank_ = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+    dsum = {'feat': 0.0, 'cls': 0.0, 'hidden': 0.0}
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
-    for batch in pbar:
+    for bi, batch in enumerate(pbar):
         rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
+
+        # Distillation: hide the procedural parameters from the student on this
+        # step with prob param_hide_prob (the same draw on every rank), and seed
+        # the step so student and teacher get the same FPS, Dirichlet split and
+        # masks -- they then differ ONLY in whether the parameters are visible.
+        hide, step_seed = False, None
+        if distill is not None:
+            hide = random.Random(epoch * 1_000_003 + bi).random() < float(distill.get('param_hide_prob', 1.0))
+            # visible_mode 'all': parameters fully visible when not hidden (every earlier
+            # distill run); 'budget': inside the shared Dirichlet budget (as pretraining)
+            m.text_mask_ratio = 1.0 if hide else (None if distill.get('visible_mode', 'all') == 'budget' else 0.0)
+            step_seed = ((int(distill.get('seed', 0)) * 1_000_003 + epoch) * 100_003 + bi) * 64 + rank_
+            torch.manual_seed(step_seed)
 
         kw = {}
         if scene is not None:
@@ -567,8 +589,30 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
                 rgb.shape[-2], rgb.shape[-1], m.patch_size,
                 nb_point=sc['nb_point'] if 'targets' in kw else None)
 
-        loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
-                                              mask_ratio=mask_ratio, **kw)
+        use_teacher = (teacher is not None and hide
+                       and (float(distill.get('feat_weight', 1.0)) > 0 or float(distill.get('cls_weight', 0.5)) > 0))
+        if use_teacher:
+            # RNG state right before the student's forward (FPS start, Dirichlet split,
+            # mask noise); restored for the teacher so both get identical masks.
+            cpu_state = torch.get_rng_state()
+            cuda_state = torch.cuda.get_rng_state(device) if device.type == 'cuda' else None
+            loss, (lr, ld, lp, lt), _, _, (f_s, c_s) = model(
+                rgb, depth, pc, param_floats, text_valid, mask_ratio=mask_ratio,
+                return_features=True, **kw)
+            torch.set_rng_state(cpu_state)
+            if cuda_state is not None:
+                torch.cuda.set_rng_state(cuda_state, device)
+            with torch.no_grad():
+                *_, (f_t, c_t) = teacher(rgb, depth, pc, param_floats, text_valid,
+                                         mask_ratio=mask_ratio, return_features=True, **kw)
+            feat_l = ((f_s - f_t) ** 2).mean()
+            cls_l = F.mse_loss(c_s, c_t)
+            loss = loss + float(distill.get('feat_weight', 1.0)) * feat_l + float(distill.get('cls_weight', 0.5)) * cls_l
+            dsum['feat'] += feat_l.item(); dsum['cls'] += cls_l.item()
+        else:
+            loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
+                                                  mask_ratio=mask_ratio, **kw)
+        dsum['hidden'] += float(hide)
 
         optimizer.zero_grad()
         loss.backward()
@@ -592,6 +636,9 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
     n = len(dataloader)
     if scene_stats is not None and n_scene:
         scene_stats.update({k: v / n_scene for k, v in sstats.items()})
+    if distill_stats is not None and distill is not None:
+        nh = max(dsum['hidden'], 1.0)
+        distill_stats.update({'feat': dsum['feat'] / nh, 'cls': dsum['cls'] / nh, 'param_hidden': dsum['hidden'] / n})
     return tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n
 
 
@@ -880,6 +927,27 @@ def train_worker(rank, world_size, args):
     if args.seed is not None:
         torch.manual_seed(args.seed * 1000 + 1 + rank)
 
+    # Distillation: the student starts from `student_init` (unless this is a
+    # resume of its own run) and a frozen copy loaded from `teacher_checkpoint`
+    # sees the TRUE procedural parameters on every step.
+    teacher = None
+    if args.distill:
+        def _load(mdl, path, tag):
+            ck = torch.load(path, map_location='cpu', weights_only=False)
+            mdl.load_state_dict({k.replace('module.', '', 1): v for k, v in ck['model_state_dict'].items()})
+            if is_main: print(f"   {tag}: {path} (epoch {ck.get('epoch')})")
+        if args.distill.get('student_init') and not (args.resume and os.path.exists(args.resume)):
+            _load(model, args.distill['student_init'], 'student init')
+        if float(args.distill.get('feat_weight', 1.0)) > 0 or float(args.distill.get('cls_weight', 0.5)) > 0:
+            teacher = copy.deepcopy(model)
+            _load(teacher, args.distill['teacher_checkpoint'], 'teacher')
+            teacher.text_mask_ratio = 0.0        # always sees the true parameters
+            teacher.pc_sinkhorn_weight = 0.0     # its loss is never used
+            teacher.eval()
+            for p_ in teacher.parameters():
+                p_.requires_grad_(False)
+        if is_main: print(f"Distillation: {args.distill}  (teacher {'on' if teacher is not None else 'off'})")
+
     if is_main and scene_cfg is not None:
         print(f"Occluded scenes ({'train p=' + str(scene_cfg.prob) + ' + ' if scene_train else ''}"
               f"occluded val): {args.occlusion_scene}")
@@ -988,10 +1056,19 @@ def train_worker(rank, world_size, args):
             print(f"Epoch {epoch}/{args.epochs}  lr={optimizer.param_groups[0]['lr']:.6f}")
             print(f"{'='*80}")
 
-        tr_scene = {}
+        tr_scene, tr_dist = {}, {}
         tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt = train_one_epoch(
             model, train_loader, optimizer, device, epoch, mask_ratio=args.mask_ratio,
-            scene=scene_train, scene_stats=tr_scene, leaf=leaf_cfg)
+            scene=scene_train, scene_stats=tr_scene, leaf=leaf_cfg,
+            teacher=teacher, distill=args.distill, distill_stats=tr_dist)
+        for k, v in tr_dist.items():
+            history.setdefault(f'train_distill_{k}', []).append(v)
+        if args.distill:
+            # validate (and visualise / test) as in the field: NO procedural parameters
+            (model.module if hasattr(model, 'module') else model).text_mask_ratio = \
+                float(args.distill.get('val_text_mask_ratio', 1.0))
+            if is_main:
+                print("Distill — " + "  ".join(f"{k}: {v:.4f}" for k, v in tr_dist.items()))
         for k, v in zip(['train_loss','train_rgb','train_depth','train_pc','train_text'],
                         [tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt]):
             history[k].append(v)

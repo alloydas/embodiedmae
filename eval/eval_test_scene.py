@@ -58,11 +58,14 @@ ARMS = {
 EXTRA = {
     'sorghum': {'q02sq': ('sm_scene_q02sq_s1', 200), 'q02sq_sink': ('sm_scene_q02sq_sink_s1', 200),
                 'cham': ('sm_scene_cham_s1', 200), 'sinkonly': ('sm_scene_sinkonly_s1', 200),
-                'mixed_sink400': ('sm_scene_mix_sink400_s1', 400)},
+                'mixed_sink400': ('sm_scene_mix_sink400_s1', 400),
+                'random400': ('sm_scene400_s1', 400), 'random_sink400': ('sm_scene_sink400_s1', 400),
+                'noparam': ('sm_scene_noparam_s1', 200)},
     'maize': {'cham': ('maize_scene_cham_s1', 200), 'sinkonly': ('maize_scene_sinkonly_s1', 200),
-              'mixed_sink400': ('maize_scene_mix_sink400_s1', 400)},
+              'mixed_sink400': ('maize_scene_mix_sink400_s1', 400),
+              'random400': ('maize_scene400_s1', 400), 'random_sink400': ('maize_scene_sink400_s1', 400)},
 }
-SHOW_ARMS = ('random', 'mixed_sink', 'long', 'mixed_sink400')   # reconstructions kept for the examples
+SHOW_ARMS = ('random', 'mixed_sink', 'long', 'mixed_sink400', 'random400', 'random_sink400', 'random_sink', 'mixed', 'noparam')   # reconstructions kept for the examples
 MEAN = torch.tensor([0.485, 0.456, 0.406])[:, None, None]
 STD = torch.tensor([0.229, 0.224, 0.225])[:, None, None]
 PCTL = (50, 75, 90)
@@ -87,7 +90,7 @@ def build_model(species, cfg):
 
 
 @torch.no_grad()
-def scores(pred, target, r_band, chunk=512):
+def scores(pred, target, r_band, scale=None, chunk=512):
     """pc_scores per plant, plus recall@0.03 per radius band (B, 3)."""
     d_pp = []
     d_pt = torch.full(target.shape[:2], float('inf'), device=pred.device, dtype=pred.dtype)
@@ -102,11 +105,58 @@ def scores(pred, target, r_band, chunk=512):
         p = (d_pp < t * t).float().mean(1)
         r = (d_pt < t * t).float().mean(1)
         out[f'p{t}'], out[f'r{t}'], out[f'f1{t}'] = p, r, 2 * p * r / (p + r).clamp(min=1e-9)
+    # Clumping: share of predicted points with ANOTHER predicted point within
+    # 0.001 (the decoder-collapse measure in CLAUDE.md; a target cloud scores ~0.004).
+    d_self = []
+    for s in range(0, pred.shape[1], chunk):
+        d = ((pred[:, s:s + chunk, None] - pred[:, None]) ** 2).sum(-1)
+        i = torch.arange(d.shape[1], device=pred.device)
+        d[:, i, s + i] = float('inf')
+        d_self.append(d.min(dim=2).values)
+        del d
+    out['dup0.001'] = (torch.cat(d_self, dim=1) < 0.001 ** 2).float().mean(1)
     hit = (d_pt < 0.03 ** 2).float()
     for k, name in enumerate(('r0.03_inner', 'r0.03_middle', 'r0.03_outer')):
         m = (r_band == k).float()
         out[name] = (hit * m).sum(1) / m.sum(1).clamp(min=1)
+    if scale is not None:
+        # Physical units. Clouds are unit-sphere normalised per plant (centroid, max
+        # radius); scale is that radius in metres (pc_norm[:, 3], camera-frame metres),
+        # so a unit distance x scale x 1000 is millimetres -- exact, plant by plant.
+        mm = scale.to(pred.device, pred.dtype).view(-1, 1) * 1000.0
+        e_pp, e_pt = d_pp.clamp(min=0).sqrt() * mm, d_pt.clamp(min=0).sqrt() * mm
+        out['cd_mm'] = 0.5 * (e_pp.mean(1) + e_pt.mean(1))      # mean NN distance, both directions
+        for t_mm in (5, 10, 20):
+            pm, rm = (e_pp < t_mm).float().mean(1), (e_pt < t_mm).float().mean(1)
+            out[f'p{t_mm}mm'], out[f'r{t_mm}mm'] = pm, rm
+            out[f'f1{t_mm}mm'] = 2 * pm * rm / (pm + rm).clamp(min=1e-9)
+        out['radius_m'] = scale.to(pred.device, pred.dtype)
     return {k: v.cpu() for k, v in out.items()}
+
+
+def phys_params(sp, pf, tv):
+    """The target's procedural parameters in physical units (lengths in mm, angles in deg).
+    Token 0 is the plant token, tokens 1.. are leaves (text_valid marks the real ones)."""
+    import embodied_mae_4m as S4
+    import embodied_mae_4m_maize as M4
+    p = pf.detach().cpu().numpy().clip(0, 1)
+    valid = tv.detach().cpu().numpy().astype(bool)
+    leaves = p[1:][valid[1:]]
+    if sp == 'sorghum':
+        plant = p[0] * S4._PLANT_SCALE - S4._PLANT_SHIFT          # [sl, sd xyz, ps xyz, pa, pr]
+        lf = leaves[:, :7] * S4._LEAF_SCALE[:7] - S4._LEAF_SHIFT[:7]  # [sp, ln, ra, ba, wf, wp0, wp1]
+        out = {'stem_length_mm': 1000 * plant[0], 'n_leaves': len(lf),
+               'leaf_length_mm_mean': 1000 * lf[:, 1].mean() if len(lf) else 0.0,
+               'leaf_length_mm_max': 1000 * lf[:, 1].max() if len(lf) else 0.0,
+               'branch_angle_deg_mean': lf[:, 3].mean() if len(lf) else 0.0}
+    else:
+        plant = p[0][:5] * M4._PLANT_SCALE[:5] - M4._PLANT_SHIFT[:5]   # leafCount, stemRadius, stemShrink, droop, stemInternodeSum
+        lf = leaves * M4._LEAF_SCALE - M4._LEAF_SHIFT                  # distance, leafLength, leafWidth, leafAngle, ...
+        out = {'stem_height_mm': 1000 * plant[4], 'stem_radius_mm': 1000 * plant[1], 'n_leaves': int(round(plant[0])),
+               'leaf_length_mm_mean': 1000 * lf[:, 1].mean() if len(lf) else 0.0,
+               'leaf_width_mm_mean': 1000 * lf[:, 2].mean() if len(lf) else 0.0,
+               'leaf_angle_deg_mean': lf[:, 3].mean() if len(lf) else 0.0}
+    return {k: (int(v) if k == 'n_leaves' else round(float(v), 1)) for k, v in out.items()}
 
 
 def png_b64(arr):
@@ -141,7 +191,13 @@ def run_species(sp, args, device):
               deterministic_view=True, return_pose=True)
     ds = (SorghumDataset4M(base_cfg['data_root'], spline_root=base_cfg.get('spline_root'), **kw)
           if sp == 'sorghum' else MaizeDataset4M(base_cfg['data_root'], **kw))
-    dl = DataLoader(ds, batch_size=16, shuffle=False, num_workers=args.workers)
+    # Seeded loader: sorghum clouds (~38k points) are subsampled to num_points with
+    # np.random in the workers, and PyTorch seeds each worker's numpy from this
+    # generator. Without it every invocation scored a different subsample, so arms
+    # scored in SEPARATE invocations were not paired and the example plants
+    # (picked by occlusion percentile) changed. Maize loads every point (no subsample).
+    dl = DataLoader(ds, batch_size=16, shuffle=False, num_workers=args.workers,
+                    generator=torch.Generator().manual_seed(args.seed))
     batches = []
     for b in dl:
         batches.append([t.clone() if torch.is_tensor(t) else t for t in b])
@@ -161,7 +217,7 @@ def run_species(sp, args, device):
         band = torch.clamp((3 * r / r.max(dim=1, keepdim=True).values.clamp(min=1e-6)).long(), max=2)
         fg = foreground(depth)
         hid = ((fg & sc['shown']).flatten(1).sum(1) / fg.flatten(1).sum(1).clamp(min=1))
-        return rgb, depth, pc, pf, tv, sc, band, hid
+        return rgb, depth, pc, pf, tv, sc, band, hid, pn[:, 3]
 
     res, keep_pred = {}, {}
     hidden = None
@@ -180,7 +236,7 @@ def run_species(sp, args, device):
         hid_all = []
         with torch.no_grad():
             for bi in range(len(batches)):
-                rgb, depth, pc, pf, tv, sc, band, hid = inputs(bi)
+                rgb, depth, pc, pf, tv, sc, band, hid, scale = inputs(bi)
                 hid_all.append(hid.cpu())
                 torch.manual_seed(20_000 + bi)
                 _, _, (_, _, pc_clean, _), _ = m(rgb, depth, pc, pf, tv, mask_ratio=(args.mask_ratio if args.mask_ratio is not None else rc['mask_ratio']))
@@ -189,7 +245,7 @@ def run_species(sp, args, device):
                                                targets={'rgb': rgb, 'depth': depth, 'pc': pc},
                                                loss_tokens=sc['loss_tokens'])
                 for cond, pred in (('clean', pc_clean), ('occluded', pc_occ)):
-                    for k, v in scores(pred, pc, band).items():
+                    for k, v in scores(pred, pc, band, scale).items():
                         acc[cond].setdefault(k, []).append(v)
         res[arm] = {c: {k: torch.cat(v).numpy() for k, v in d.items()} for c, d in acc.items()}
         hidden = torch.cat(hid_all).numpy()
@@ -208,14 +264,24 @@ def run_species(sp, args, device):
     pool = np.where(hidden > 0)[0]
     order = pool[np.argsort(hidden[pool])]
     if not args.no_examples:
-        picks = [int(order[min(len(order) - 1, int(round(q / 100 * (len(order) - 1))))]) for q in PCTL]
+        picks = [('occlusion', q, int(order[min(len(order) - 1, int(round(q / 100 * (len(order) - 1))))])) for q in PCTL]
+        # Optional: also the plants at the 50th / 90th percentile of the F1@0.01
+        # GAIN of arm B over arm A (occluded), i.e. a typical and a large
+        # improvement -- labelled as such, never presented as typical plants.
+        if args.gain_pair and all(a in res for a in args.gain_pair):
+            a, b = args.gain_pair
+            gain = res[b]['occluded']['f10.01'] - res[a]['occluded']['f10.01']
+            g_order = np.argsort(gain)
+            picks += [('gain', q, int(g_order[min(len(g_order) - 1, int(round(q / 100 * (len(g_order) - 1))))])) for q in (50, 90)]
     rng = np.random.default_rng(0)
     examples = []
     with torch.no_grad():
-        for q, idx in zip(PCTL, picks):
+        for kind, q, idx in picks:
             bi, j = divmod(idx, 16)
-            rgb, depth, pc, pf, tv, sc, band, hid = inputs(bi)
-            preds = {}
+            rgb, depth, pc, pf, tv, sc, band, hid, scale = inputs(bi)
+            preds, covered, nn_dist = {}, {}, {}
+            sel_t = rng.choice(pc.shape[1], N_SHOW, replace=False)
+            tgt_show = pc[j][sel_t]
             for arm, (m, rc) in keep_pred.items():
                 torch.manual_seed(30_000 + bi)
                 _, _, (_, _, pc_occ, _), _ = m(sc['rgb'], sc['depth'], sc['pc'], pf, tv, mask_ratio=(args.mask_ratio if args.mask_ratio is not None else rc['mask_ratio']),
@@ -223,16 +289,21 @@ def run_species(sp, args, device):
                                                loss_tokens=sc['loss_tokens'])
                 p = pc_occ[j]
                 preds[arm] = r3(p[rng.choice(p.shape[0], N_SHOW, replace=False)].cpu())
+                # drawn target point covered by the full prediction within 0.03 (= recall@0.03's rule)
+                dmin = torch.cdist(tgt_show[None], p[None])[0].min(dim=1).values
+                covered[arm] = (dmin < 0.03).int().cpu().tolist()
+                nn_dist[arm] = np.round(dmin.cpu().numpy(), 3).tolist()
             sel_in = rng.choice(sc['pc'].shape[1], N_SHOW, replace=False)
-            sel_t = rng.choice(pc.shape[1], N_SHOW, replace=False)
             name = batches[bi][5][j] if isinstance(batches[bi][5], (list, tuple)) else str(idx)
             examples.append({
-                'name': name, 'percentile': q, 'hidden_px': round(float(hidden[idx]), 4),
+                'name': name, 'pick': kind, 'percentile': q, 'hidden_px': round(float(hidden[idx]), 4),
+                'radius_m': round(float(scale[j]), 4), 'params_phys': phys_params(sp, pf[j], tv[j]),
+                'gain_pair': list(args.gain_pair) if kind == 'gain' else None,
                 'rgb_scene': rgb_png(sc['rgb'][j]), 'rgb_target': rgb_png(rgb[j]),
                 'pc_in': r3(sc['pc'][j][sel_in].cpu()), 'pc_nb': sc['nb_point'][j][sel_in].int().cpu().tolist(),
-                'target': r3(pc[j][sel_t].cpu()), 'pred': preds,
+                'target': r3(tgt_show.cpu()), 'pred': preds, 'covered': covered, 'nn_dist': nn_dist,
                 'scores': {arm: {k: round(float(res[arm]['occluded'][k][idx]), 6)
-                                 for k in ('chamfer', 'f10.01', 'p0.03', 'r0.03')} for arm in preds},
+                                 for k in ('chamfer', 'f10.01', 'p0.03', 'r0.03', 'dup0.001', 'cd_mm', 'f110mm', 'r10mm', 'p10mm') if k in res[arm]['occluded']} for arm in preds},
             })
 
     out = {
@@ -241,7 +312,7 @@ def run_species(sp, args, device):
         'arms': [{'arm': a, 'run': r, 'epoch': e} for a, r, e in arms],
         'hidden_px': np.round(hidden, 4).tolist(),
         'means': {arm: {c: {k: float(v.mean()) for k, v in d.items()} for c, d in res[arm].items()} for arm in res},
-        'per_plant': {arm: {c: {k: np.round(d[k], 5).tolist() for k in ('chamfer', 'f10.01', 'r0.03')}
+        'per_plant': {arm: {c: {k: np.round(d[k], 5).tolist() for k in ('chamfer', 'f10.01', 'r0.03', 'cd_mm', 'f110mm', 'r10mm') if k in d}
                             for c, d in res[arm].items()} for arm in res},
         'examples': examples,
     }
@@ -268,6 +339,8 @@ def main():
     ap.add_argument('--arms', nargs='+', default=None, help='score only these arms (ARMS or EXTRA names)')
     ap.add_argument('--tag', default=None, help='output <species>_<tag>.json instead of <species>.json')
     ap.add_argument('--no-examples', action='store_true')
+    ap.add_argument('--gain-pair', nargs=2, default=None, metavar=('A', 'B'),
+                    help='also show the plants at the 50th / 90th percentile of the F1 gain of arm B over arm A')
     ap.add_argument('--mask-ratio', type=float, default=None,
                     help='test-time masking ratio (default: what each arm trained with, 0.8)')
     args = ap.parse_args()

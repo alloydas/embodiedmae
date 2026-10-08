@@ -1,0 +1,123 @@
+# D0: NO distillation (feat/cls weights 0, no teacher) -- the parameters are only hidden and
+# predicted, as plain masking would teach. Same init, masking and schedule as D2.
+# MIXED MASKING + SINKHORN -- config_maize_scene_mix.yaml (neighbour-first on half the scene
+# samples, nf_prob 0.5) plus the Sinkhorn term of config_maize_scene_sink.yaml, nothing else changed.
+# Mixed masking acts on what the encoder sees (occlusion robustness); Sinkhorn
+# acts on the loss (coverage / recall). Compare with maize_scene_mix_s1 (mixed only),
+# maize_scene_sink_s1 (Sinkhorn only) and maize_scene_s1 (neither).
+#
+#   sbatch --job-name=maize_scene_mix_sink_s1 slurm/maize_scene_arm.sbatch scene_mix_sink 1
+#
+# MIXED STRUCTURED-MASKING arm -- config_maize_scene_struct.yaml with occlusion_scene.nf_prob 0.5:
+# only half of the scene samples are masked neighbour-first, the other half
+# uniformly. The pure neighbour_first arm (maize_scene_struct_s1) lost on occluded val
+# because the encoder almost never saw a visible neighbour in training (0.9 %
+# of visible PC tokens on scene samples vs ~62 % at test, measured
+# 2026-10-03); this arm keeps that exposure on half the scene samples while
+# still practising filling in behind neighbours on the other half. Everything
+# else as config_maize_scene_struct.yaml; compare with maize_scene_s1 (uniform) and maize_scene_struct_s1.
+#
+#   sbatch --job-name=maize_scene_mix_s1 slurm/maize_scene_arm.sbatch scene_mix 1
+#
+# ---- config_maize_scene_struct.yaml as it was ----------------------------------------------------
+# MAIZE occluded-scene training, STRUCTURED-MASKING arm -- the maize twin of
+# config_sm_scene_struct.yaml. Identical to config_maize_scene.yaml except
+# mask_policy: neighbour_first: on a scene sample, image patches where a
+# neighbour shows and PC tokens whose FPS centre is a neighbour point are
+# masked FIRST, the rest of the Dirichlet budget uniformly. Validation is
+# uniform for every arm, so the two are scored on the same occluded scenes
+# under the deployable masking.
+#
+#   sbatch --job-name=maize_scene_struct_s1 slurm/maize_scene_arm.sbatch scene_struct 1
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/Maize
+  img_size: 224
+  num_points: 8192         # exact point count in pointcloud_cam.ply
+  view_sampling: true
+  view_seed: 42            # identical in both arms: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80         # over pc/rgb/depth; text is outside the budget
+  text_mask_ratio: 0.0     # params = conditioning: all 29 tokens visible
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  pc_sinkhorn_weight: 0.5     # x Sinkhorn divergence, added to the QAL term (pc_sinkhorn.py); as config_*_scene_sink.yaml
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28
+  occlusion_scene:         # config.json records every field
+    prob: 0.5              # share of training samples given neighbours
+    neighbours: 2          # one each side of a row through the target
+    # Maize plants are ~0.58x sorghum's footprint (95 % of points within 0.30 m
+    # of the stem vs 0.52 m; farthest 0.38 vs ~0.9 m), so sorghum's spacing
+    # [0.35, 0.8] / crop 0.75 hide only 4 % of a maize target. Calibrated on 64
+    # val plants (2026-10-02): spacing [0.15, 0.35] -- a real in-row maize
+    # spacing -- hides 11.7 % of the target's pixels with 65 % of the input
+    # cloud neighbour (sorghum's defaults on sorghum: 16 % / 60 %); crop 0.45
+    # keeps 99.9 % of the target. Preview: reports/scene_preview_maize_val.png.
+    spacing: [0.15, 0.35]
+    row_jitter: 0.05
+    yaw: true
+    crop_radius: 0.45
+    splat_px: 1
+    mask_policy: neighbour_first       # THE change vs config_maize_scene.yaml
+    nf_prob: 0.5           # half the scene samples neighbour-first, half uniform
+    patch_frac: 0.3
+    val_seed: 0            # same val scenes in every arm
+
+training:
+  batch_size: 16           # per GPU; the launcher runs 2 GPUs -> global 32
+  epochs: 60               # fine-tune from the 400-epoch model
+  lr: 5.0e-5
+  weight_decay: 0.05
+  warmup_epochs: 3
+  val_freq: 5
+  test_freq: 0
+  seed: null               # set per run by the launcher (--seed)
+
+checkpointing:
+  output_dir: ./outputs/maize_scene_phide_mix
+  save_freq: 5
+  resume: null
+
+visualization:
+  viz_freq: 20
+  num_viz_samples: 6
+
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_scene_phide_mix
+
+# Occluded-scene distillation (train_maize_4m.py, train_one_epoch). The teacher is
+# frozen and always sees the TRUE procedural parameters; the student starts from
+# the same weights and has the parameters hidden on param_hide_prob of the steps
+# (so it learns to predict them and to rebuild the plant without them), seeing the
+# same scene and the same mask as the teacher. Validation and test hide the
+# parameters (val_text_mask_ratio 1.0): the real-world condition.
+distill:
+  teacher_checkpoint: outputs/maize_scene_mix_sink400_s1/checkpoints/checkpoint_epoch_400.pth
+  student_init: outputs/maize_scene_mix_sink400_s1/checkpoints/checkpoint_epoch_400.pth
+  param_hide_prob: 0.75
+  feat_weight: 0.0           # token-wise MSE on decoder features (0 = no distillation)
+  cls_weight: 0.0            # MSE on the encoder CLS latent
+  val_text_mask_ratio: 1.0
+  seed: 0
