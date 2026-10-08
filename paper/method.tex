@@ -143,13 +143,17 @@ view regime.
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{fig_architecture.pdf}
-  \caption{\textbf{\CropCode{} overview.} (a)~Four token streams enter a shared
-  encoder under a Dirichlet masking budget; modality-specific decoders
-  reconstruct all streams. The parameter stream is decoded, never encoded
-  (Sec.~\ref{sec:param-stream}). (b)~A frozen teacher shown all four streams,
-  parameters included, is distilled into single-sensor students for deployment. All panels show real inputs,
-  masks and model outputs for one held-out sorghum plant; the maize model is
-  identical apart from its recipe tokens ($1{+}28$ tokens of 14 values).}
+  \caption{\textbf{\CropCode{} overview.} \emph{Training:} RGB, depth and
+  the point cloud are tokenised, masked at ratio 0.8 with a Dirichlet split of
+  the visible budget, and encoded together with a CLS token; the decoders see
+  every position, hidden ones as mask tokens, and reconstruct all four streams.
+  The recipe is a target only: its tokens are never encoded
+  (Sec.~\ref{sec:param-stream}). \emph{Distillation:} a frozen teacher shown all
+  four streams, recipe included, supervises a single-sensor student through its
+  decoder features $F$ and CLS $c$, while the student still reconstructs all
+  four streams. Images, masks and outputs are real, for one held-out sorghum
+  plant; the maize model differs only in its recipe tokens ($1{+}28$ tokens of
+  14 values).}
   \label{fig:arch}
 \end{figure*}
 

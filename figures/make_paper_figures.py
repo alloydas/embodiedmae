@@ -404,8 +404,8 @@ def teaser(S, path):
     print('wrote', path)
 
 
-# ── Figure 2: architecture ──────────────────────────────────────────────────
-def architecture(s, path):
+# ── Figure 2 (old column layout, kept for comparison: --style columns) ──────
+def architecture_columns(s, path):
     fig = plt.figure(figsize=(6.9, 5.3))
     ax = overlay(fig)
     m = s['masked']
@@ -579,18 +579,285 @@ def architecture(s, path):
     print('wrote', path)
 
 
+# ── Figure 2: architecture, EmbodiedMAE-style (arXiv 2505.10105, Fig. 1) ────
+# Rows of real images: input with the 14x14 patch grid -> masked input (dark
+# hidden patches) -> the visible patches -> tokens -> one tall encoder -> the
+# full 613-position sequence with mask tokens -> a Decoder per stream -> the
+# reconstruction.  A compact teacher/student panel on the right.
+MASK_FILL = (0.33, 0.33, 0.33)
+MASK_TOKEN = '#9aa0a6'
+
+
+def _pill(ax, x, y, w, h, text, color, fs=5.2, rot=90):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle='round,pad=0,rounding_size=0.006',
+                                lw=0, fc=color, zorder=3))
+    ax.text(x + w / 2, y + h / 2, text, rotation=rot, ha='center', va='center',
+            fontsize=fs, color='white', weight='bold', zorder=4)
+
+
+def _grid(ax, color, n=14, px=224, lw=0.25, alpha=0.75):
+    for k in range(n + 1):
+        v = k * px / n - 0.5
+        ax.axvline(v, color=color, lw=lw, alpha=alpha); ax.axhline(v, color=color, lw=lw, alpha=alpha)
+    ax.set_xlim(-0.5, px - 0.5); ax.set_ylim(px - 0.5, -0.5)
+
+
+def _depth_rgb(d, bg):
+    """viridis over the per-image min-max normalised depth (what the loss sees), white background."""
+    d = np.asarray(d, float); d = (d - d.min()) / max(d.max() - d.min(), 1e-6)
+    im = matplotlib.colormaps['viridis'](np.clip(d, 0, 1))[..., :3]
+    im[bg] = 1.0
+    return im
+
+
+def _mask_fill(img, mask, fill=MASK_FILL):
+    g = int(round(mask.shape[0] ** 0.5)); up = np.kron(mask.reshape(g, g), np.ones((224 // g, 224 // g)))
+    out = img.copy(); out[up > 0.5] = fill
+    return out
+
+
+def _composite(gt, pred, mask):
+    g = int(round(mask.shape[0] ** 0.5)); up = np.kron(mask.reshape(g, g), np.ones((224 // g, 224 // g)))
+    out = gt.copy(); out[up > 0.5] = pred[up > 0.5]
+    return out
+
+
+def _patch_stack(img, mask, fg, k=6):
+    """k VISIBLE patches of img with the most foreground, stacked vertically (16k x 16)."""
+    g = 14; vis = np.where(mask < 0.5)[0]
+    score = [fg[(i // g) * 16:(i // g + 1) * 16, (i % g) * 16:(i % g + 1) * 16].mean() for i in vis]
+    vis = [v for _, v in sorted(zip(score, vis), key=lambda t: -t[0])[:k]]
+    tiles = [img[(i // g) * 16:(i // g + 1) * 16, (i % g) * 16:(i % g + 1) * 16] for i in sorted(vis)]
+    return np.concatenate(tiles, 0) if tiles else np.zeros((16, 16, 3))
+
+
+def _token_column(ax, segments, gap=2):
+    """segments: list of (mask_vector, colour); drawn top to bottom as a (N,1) colour
+    image, visible cells in the stream colour and hidden ones grey, `gap` white rows between streams."""
+    rows = []
+    for mv, col in segments:
+        c = np.array(matplotlib.colors.to_rgb(col)); gr = np.array(matplotlib.colors.to_rgb(MASK_TOKEN))
+        rows.append(np.where(np.asarray(mv)[:, None] > 0.5, gr, c))
+        rows.append(np.ones((gap, 3)))
+    im = np.concatenate(rows[:-1], 0)[:, None, :]
+    ax.imshow(im, aspect='auto', interpolation='nearest'); ax.axis('off')
+
+
+ROW = {'rgb': 'RGB', 'depth': 'Depth', 'pc': 'Point cloud', 'text': 'Recipe'}
+NAVY = '#2b3a67'
+
+
+def architecture(s, path):
+    fig = plt.figure(figsize=(6.9, 3.4))
+    ax = overlay(fig)
+    m = s['masked']
+    rows = ['rgb', 'depth', 'pc', 'text']
+    n_vis = {k: int((m[f'm_{k}'] < 0.5).sum()) for k in rows}
+    L = {'rgb': 196, 'depth': 196, 'pc': 196, 'text': 25}
+    rgb_gt = np.clip(s['rgb'], 0, 1)
+    rgb_rec = _composite(rgb_gt, np.clip(m['rgb'], 0, 1), m['m_rgb'])
+    dep_gt = _depth_rgb(s['depth'], s['bg'])
+    dep_pred = matplotlib.colormaps['viridis'](np.clip(m['depth'], 0, 1))[..., :3]; dep_pred[s['bg']] = 1.0
+    dep_rec = _composite(dep_gt, dep_pred, m['m_depth'])
+    fg = (~s['bg']).astype(float)
+    vis_pts = pc_visible_points(s)
+    short = lambda rows: [(k.replace('leaf1 ', 'leaf '), v) for k, v in rows]   # one leaf shown: drop its index
+    rows_gt = short(recipe_rows(s['sp'], s['par'], s['tv'], (1,)))
+    rows_pred = short(recipe_rows(s['sp'], m['par'], s['tv'], (1,)))
+
+    # ---------- geometry (figure fractions) ----------
+    TOP, BOT = 0.865, 0.115
+    GAP = 0.02
+    rh = (TOP - BOT - 3 * GAP) / 4
+    ry = {r: TOP - (i + 1) * rh - i * GAP for i, r in enumerate(rows)}
+    iw = rh * 3.4 / 6.9                        # square image width
+    PW, TW, ENC_W, DEC_W = 0.019, 0.011, 0.128, 0.086
+    x = 0.03
+    X = {'inp': x}; x += iw + 0.006
+    X['p1'] = x; x += PW + 0.007
+    X['msk'] = x; x += iw + 0.008
+    X['vis'] = x; x += TW + 0.007
+    X['p2'] = x; x += PW + 0.009
+    X['tin'] = x; x += TW + 0.009
+    X['enc'] = x; x += ENC_W + 0.009
+    X['tout'] = x; x += TW + 0.009
+    X['dec'] = x; x += DEC_W + 0.009
+    X['out'] = x; LEFT_END = x + iw + 0.006
+    HY = 0.9                                   # column headers
+
+    label(ax, (X['inp'] + LEFT_END) / 2, 0.985, 'Training', fs=8, bold=True, va='top')
+    for k, t in (('inp', 'Input'), ('msk', 'Masked input'), ('out', 'Reconstruction')):
+        label(ax, X[k] + iw / 2, HY, t, fs=6, bold=True, color=GREY, va='bottom')
+    label(ax, X['dec'] + DEC_W / 2, HY, 'Decoders', fs=6, bold=True, color=GREY, va='bottom')
+    label(ax, X['tin'] + TW / 2, HY, f'{1 + sum(n_vis[r] for r in ("rgb", "depth", "pc"))}\ntokens', fs=4.2, color=GREY, va='bottom')
+    label(ax, X['tout'] + TW / 2, HY, '613\npositions', fs=4.2, color=GREY, va='bottom')
+
+    pill1 = {'rgb': 'Patchify', 'depth': 'Patchify', 'pc': 'FPS & kNN', 'text': 'Tokenise'}
+    pill2 = {'rgb': 'Linear', 'depth': 'Linear', 'pc': 'PointNet', 'text': 'Linear'}
+    head = {'rgb': 'Decoder\n16²·3 / patch', 'depth': 'Decoder\n16² / patch', 'pc': 'Decoder\n41 pts / token', 'text': 'Decoder\n9 floats / token'}
+    for r in rows:
+        y, c = ry[r], C[r]
+        ax.text(0.014, y + rh / 2, ROW[r], rotation=90, ha='center', va='center', fontsize=6, weight='bold', color=c, zorder=4)
+        for xx in (X['inp'], X['msk'], X['out']):
+            box(ax, xx, y, iw, rh, fill='white', edge=c, lw=0.9, rounding=0.004)
+        pad = 0.004
+        panels = (X['inp'] + pad, X['msk'] + pad, X['out'] + pad)
+        count = f'{n_vis[r]} / {L[r]} visible'
+        bb = dict(boxstyle='round,pad=0.25', fc='white', ec='none', alpha=0.9)
+        if r in ('rgb', 'depth'):
+            gt_, rec_, mk_ = (rgb_gt, rgb_rec, m['m_rgb']) if r == 'rgb' else (dep_gt, dep_rec, m['m_depth'])
+            for j, (xx, im_) in enumerate(zip(panels, (gt_, _mask_fill(gt_, mk_), rec_))):
+                a = img_axes(fig, xx, y + pad, iw - 2 * pad, rh - 2 * pad); a.imshow(im_); _grid(a, c)
+                if j == 1:
+                    a.text(0.96, 0.04, count, fontsize=4.0, color=c, ha='right', va='bottom', transform=a.transAxes, bbox=bb, zorder=6)
+            st = _patch_stack(gt_, mk_, fg)
+        elif r == 'pc':
+            for xx, pts in ((X['inp'], s['pc']), (X['msk'], vis_pts), (X['out'], m['pc'])):
+                show_pc(img_axes(fig, xx - 0.004, y - 0.004, iw + 0.008, rh + 0.008, projection='3d'), pts, s=0.3, lim=1.0, zoom=1.35)
+            st = None
+        else:
+            show_recipe(img_axes(fig, X['inp'] + 0.003, y + 0.003, iw - 0.006, rh - 0.016), rows_gt, fs=3.7)
+            show_recipe(img_axes(fig, X['msk'] + 0.003, y + 0.003, iw - 0.006, rh - 0.016), rows_gt, mask=[True] * len(rows_gt), fs=3.7)
+            show_recipe(img_axes(fig, X['out'] + 0.003, y + 0.003, iw - 0.006, rh - 0.016), rows_pred, fs=3.7)
+            st = None
+        if r in ('pc', 'text'):
+            ax.text(X['msk'] + iw - 0.006, y + 0.006, count, fontsize=4.0, color=c, ha='right', va='bottom', zorder=6, bbox=bb)
+        # pills, the visible-patch stack, arrows
+        _pill(ax, X['p1'], y + 0.01, PW, rh - 0.02, pill1[r], c)
+        if r != 'text':
+            _pill(ax, X['p2'], y + 0.01, PW, rh - 0.02, pill2[r], c)
+            arrow(ax, (X['p2'] + PW + 0.001, y + rh / 2), (X['tin'] - 0.001, y + rh / 2), color=c, lw=0.7)
+        if st is not None:
+            sh = (rh - 0.02) * st.shape[0] / (16 * 6)
+            a = img_axes(fig, X['vis'], y + rh / 2 - sh / 2, TW, sh); a.imshow(st, aspect='auto')
+            for sp_ in a.spines.values():
+                sp_.set_visible(True); sp_.set_edgecolor(c); sp_.set_linewidth(0.5)
+            a.set_xticks([]); a.set_yticks([])
+        elif r == 'pc':
+            a = img_axes(fig, X['vis'], y + 0.01, TW, rh - 0.02); _token_column(a, [(np.zeros(n_vis['pc']), c)])
+        else:
+            label(ax, (X['vis'] + X['tin'] + TW) / 2, y + rh / 2, 'target\nonly:\nnever\nencoded', fs=4.0, color=c, style='italic')
+        box(ax, X['dec'], y + 0.012, DEC_W, rh - 0.024, head[r], fill=c, edge=c, lw=0, fs=4.6, bold=True, color='white', rounding=0.008)
+        arrow(ax, (X['tout'] + TW + 0.001, y + rh / 2), (X['dec'] - 0.001, y + rh / 2), color=c, lw=0.7)
+        arrow(ax, (X['dec'] + DEC_W + 0.001, y + rh / 2), (X['out'] - 0.001, y + rh / 2), color=c, lw=0.7)
+
+    # encoder-input token column: CLS + the visible tokens of the three sensor streams
+    a = img_axes(fig, X['tin'], BOT, TW, TOP - BOT)
+    _token_column(a, [(np.zeros(1), '#111111')] + [(np.zeros(n_vis[r]), C[r]) for r in ('rgb', 'depth', 'pc')])
+    # encoder
+    box(ax, X['enc'], BOT, ENC_W, TOP - BOT, fill='white', edge=NAVY, lw=1.4, rounding=0.02)
+    label(ax, X['enc'] + ENC_W / 2, TOP - 0.03, 'Transformer\nEncoder', fs=7.2, bold=True, color=NAVY, va='top')
+    label(ax, X['enc'] + ENC_W / 2, TOP - 0.145, 'ViT-B, 12 blocks, d = 768\nCLS + visible tokens only', fs=4.4, color=DARK, va='top')
+    cw_ = (ENC_W - 0.028) / 3
+    for i, (im_, col) in enumerate(((rgb_gt, C['rgb']), (dep_gt, C['depth']), (None, C['pc']))):
+        xx = X['enc'] + 0.01 + i * (cw_ + 0.004); yy = BOT + 0.17
+        if im_ is None:
+            show_pc(img_axes(fig, xx - 0.004, yy - 0.012, cw_ + 0.008, cw_ * 6.9 / 3.4 + 0.024, projection='3d'), s['pc'], s=0.12, lim=1.0, zoom=1.4)
+        else:
+            a = img_axes(fig, xx, yy, cw_, cw_ * 6.9 / 3.4); a.imshow(im_)
+            for sp_ in a.spines.values():
+                sp_.set_visible(True); sp_.set_edgecolor(col); sp_.set_linewidth(0.5)
+    label(ax, X['enc'] + ENC_W / 2, BOT + 0.15, 'mask ratio 0.8;\nDirichlet(α = 1) splits the\nvisible budget across the\nthree sensor streams', fs=4.2, color=DARK, va='top')
+    arrow(ax, (X['tin'] + TW + 0.001, (TOP + BOT) / 2), (X['enc'] - 0.001, (TOP + BOT) / 2), color=NAVY, lw=0.9)
+    arrow(ax, (X['enc'] + ENC_W + 0.001, (TOP + BOT) / 2), (X['tout'] - 0.001, (TOP + BOT) / 2), color=NAVY, lw=0.9)
+    # decoder-input column: every position, hidden ones as mask tokens
+    a = img_axes(fig, X['tout'], BOT, TW, TOP - BOT)
+    _token_column(a, [(np.zeros(1), '#111111')] + [(m[f'm_{r}'], C[r]) for r in rows], gap=3)
+    # token legend
+    ly = 0.072
+    for i, (t, col) in enumerate((('CLS', '#111111'), ('RGB', C['rgb']), ('depth', C['depth']), ('point cloud', C['pc']), ('recipe', C['text']), ('mask token', MASK_TOKEN))):
+        xx = 0.03 + i * 0.072
+        ax.add_patch(Rectangle((xx, ly - 0.008), 0.012, 0.016, fc=col, ec='none', zorder=4))
+        label(ax, xx + 0.016, ly, t, fs=4.5, color=DARK, ha='left')
+    label(ax, 0.03, 0.04, 'decoders: 8 shared blocks, d = 512, then one head per stream', fs=4.5, color=GREY, ha='left')
+
+    # ---------- right: distillation ----------
+    ax.plot([LEFT_END + 0.012] * 2, [0.03, 0.97], color='#adb5bd', lw=0.8, ls=(0, (4, 3)))
+    RX0 = LEFT_END + 0.026; RW = 0.995 - RX0
+    label(ax, RX0 + RW / 2, 0.985, 'Distillation', fs=8, bold=True, va='top')
+    GAPB = 0.034
+    bw = (RW - GAPB) / 2; bx = {'T': RX0, 'S': RX0 + bw + GAPB}
+    by0, by1 = 0.22, 0.9
+    for k, title in (('T', 'Teacher (frozen)'), ('S', 'Student')):
+        box(ax, bx[k], by0, bw, by1 - by0, fill='white', edge=DARK, lw=1.1, rounding=0.015)
+        label(ax, bx[k] + bw / 2, by1 - 0.012, title, fs=6, bold=True, va='top')
+    blocks = [('Modality\nEncoders', C['depth'], 0.255, 0.085), ('Transformer\nEncoder', C['rgb'], 0.395, 0.2), ('Decoders', C['depth'], 0.665, 0.085)]
+    inner = 0.016
+    full = [(np.zeros(6), C['rgb']), (np.zeros(6), C['depth']), (np.zeros(6), C['pc']), (np.zeros(3), C['text'])]
+    for k in ('T', 'S'):
+        x0 = bx[k] + inner; w0 = bw - 2 * inner
+        for name, col, yb, hb in blocks:
+            box(ax, x0, yb, w0, hb, name, fill=col, edge=col, lw=0, fs=5.2, bold=True, color='white', rounding=0.008)
+        arrow(ax, (x0 + w0 / 2, 0.34), (x0 + w0 / 2, 0.395), color=GREY, lw=0.7, ls=(0, (2, 1.5)))
+        arrow(ax, (x0 + w0 / 2, 0.595), (x0 + w0 / 2, 0.665), color=GREY, lw=0.7, ls=(0, (2, 1.5)))
+        a = img_axes(fig, x0, 0.61, w0, 0.016)      # the full sequence entering the decoders
+        _token_strip_h(a, full if k == 'T' else [(np.zeros(6), C['rgb']), (np.ones(6), C['depth']), (np.ones(6), C['pc']), (np.ones(3), C['text'])])
+        a = img_axes(fig, x0, by0 - 0.045, w0, 0.02)  # the input
+        _token_strip_h(a, full if k == 'T' else [(np.zeros(6), C['rgb'])])
+        arrow(ax, (x0 + w0 / 2, by0 - 0.024), (x0 + w0 / 2, 0.255), color=GREY, lw=0.7, ls=(0, (2, 1.5)))
+    label(ax, bx['T'] + bw / 2, by0 - 0.05, 'all four streams,\nrecipe included', fs=4.2, color=DARK, va='top')
+    label(ax, bx['S'] + bw / 2, by0 - 0.05, 'one sensor stream\n(here RGB), rest absent', fs=4.2, color=DARK, va='top')
+    # student output: all four reconstructed
+    a = img_axes(fig, bx['S'] + inner, 0.775, bw - 2 * inner, 0.016)
+    _token_strip_h(a, full)
+    arrow(ax, (bx['S'] + bw / 2, 0.75), (bx['S'] + bw / 2, 0.775), color=GREY, lw=0.7)
+    label(ax, bx['S'] + bw / 2, 0.8, 'reconstructs all four', fs=4.3, color=DARK, va='bottom')
+    label(ax, bx['T'] + bw / 2, 0.8, 'initialises the student', fs=4.3, color=GREY, va='bottom', style='italic')
+    # matching losses
+    gx0, gx1 = bx['T'] + bw - inner, bx['S'] + inner
+    for yy, t in ((0.705, 'F'), (0.49, 'c')):
+        ax.annotate('', (gx1, yy), (gx0, yy), arrowprops=dict(arrowstyle='<->', color=DARK, lw=0.9, ls=(0, (1.5, 1.5)), shrinkA=0, shrinkB=0), zorder=5)
+        label(ax, (gx0 + gx1) / 2, yy + 0.008, t, fs=5.5, bold=True, color=DARK, va='bottom', style='italic')
+    ax.annotate('', (RX0 + 0.035, 0.092), (RX0 + 0.005, 0.092), arrowprops=dict(arrowstyle='<->', color=DARK, lw=0.9, ls=(0, (1.5, 1.5)), shrinkA=0, shrinkB=0), zorder=5)
+    label(ax, RX0 + 0.042, 0.092, 'MSE:  F = decoder features at the 417 generated\npositions (×1);  c = CLS (×0.5)', fs=4.2, color=DARK, ha='left')
+    label(ax, RX0 + RW / 2, 0.04, 'init = teacher weights; 80 % of steps distil, 20 % are plain training steps', fs=4.1, color=GREY)
+
+    label(ax, 0.5, 0.003, f'all panels: held-out sorghum plant {s["name"]} (data v2): real inputs, the sampled mask, and model outputs at epoch {s["epoch"]}; '
+          'the maize model differs only in its recipe tokens (1 + 28 tokens of 14 floats)', fs=4.3, color=GREY, va='bottom', style='italic')
+    for ext in ('pdf', 'png'):
+        fig.savefig(path.with_suffix('.' + ext), dpi=300, facecolor='white')
+    plt.close(fig)
+    print('wrote', path)
+
+
+def _token_strip_h(ax, segments, gap=1):
+    """Horizontal version of _token_column."""
+    cols = []
+    for mv, col in segments:
+        c = np.array(matplotlib.colors.to_rgb(col)); gr = np.array(matplotlib.colors.to_rgb(MASK_TOKEN))
+        cols.append(np.where(np.asarray(mv)[None, :, None] > 0.5, gr, c)[0])
+        cols.append(np.ones((gap, 3)))
+    im = np.concatenate(cols[:-1], 0)[None, :, :]
+    ax.imshow(im, aspect='auto', interpolation='nearest'); ax.axis('off')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--sorghum_ckpt', default=None); ap.add_argument('--maize_ckpt', default=None)
     ap.add_argument('--sorghum_dir', default=None, help='raw sample folder (default paper/data/Sorghum_10_04)')
     ap.add_argument('--maize_dir', default=None, help='raw sample folder (default paper/data/Maize_1_plant_0004_04)')
     ap.add_argument('--out', default=str(OUT))
+    ap.add_argument('--style', default='embodiedmae', choices=['embodiedmae', 'columns'],
+                    help='Fig. 2 layout: image-led rows like EmbodiedMAE Fig. 1 (default) or the older text-led columns')
+    ap.add_argument('--only', default=None, choices=['teaser', 'architecture'])
+    ap.add_argument('--cache', default=None, help='pickle of the loaded species dicts (skips the model forward passes)')
     args = ap.parse_args()
     out = Path(args.out); out.mkdir(exist_ok=True)
-    so = load('sorghum', args.sorghum_ckpt, args.sorghum_dir)
-    ma = load('maize', args.maize_ckpt, args.maize_dir)
-    teaser([so, ma], out / 'fig_teaser.pdf')
-    architecture(so, out / 'fig_architecture.pdf')
+    import pickle
+    if args.cache and Path(args.cache).exists():
+        so, ma = pickle.load(open(args.cache, 'rb'))
+        for s in (so, ma):                       # the species table holds lambdas: restore it by name
+            s['sp'] = dict(SPECIES[s['species']], folder=s['sp_folder'])
+    else:
+        so = load('sorghum', args.sorghum_ckpt, args.sorghum_dir)
+        ma = load('maize', args.maize_ckpt, args.maize_dir)
+        if args.cache:
+            slim = [dict(s, sp=None, sp_folder=s['sp']['folder']) for s in (so, ma)]
+            pickle.dump(slim, open(args.cache, 'wb'))
+    if args.only != 'architecture':
+        teaser([so, ma], out / 'fig_teaser.pdf')
+    if args.only != 'teaser':
+        (architecture if args.style == 'embodiedmae' else architecture_columns)(so, out / 'fig_architecture.pdf')
 
 
 if __name__ == '__main__':
