@@ -59,6 +59,50 @@ experiments have been *built*, which is durable. For live progress use
 
 ## HANDOFF — live state as of 2026-10-02 10:00 (read this first after a restart)
 
+### MAIZE on DELTA, data version 2 — state as of 2026-10-08 12:00 (code 5ee93bd)
+
+Maize now runs on NCSA Delta (`/work/hdd/bepk/adas14/embodiedmae`, data `/work/hdd/bepk/adas14/Maize`,
+launchers in `slurm/delta/`, env notes in `slurm/delta/delta_env.sh`). **Delta cannot push to
+GitHub** (no credential helper, no `gh`): commits made there wait for the user to `git push`.
+Maize data version 2 (commit 4dcfe3e, 2026-10-06): `rgba.png` composited over black + the trimmed
+spline XML (`param_schema: v2`, `embodied_mae_4m_maize.PLANT_FIELDS_V2 / LEAF_FIELDS_V2`); every
+`_d2` config sets `data.rgb_file` / `data.param_schema`, and the trainer refuses to mix versions
+in one run dir.
+
+**Done (all on gpuA100x4, 2x A100-40GB / 32 CPU / 100G, `slurm/delta/train_maize_arm.sbatch`):**
+
+| run | epochs | val loss | val chamfer | job | wall |
+|---|---|---|---|---|---|
+| `maize_4m_d2` (= E2 +params, E3 full, E4 base) | 600/600 | 0.1103 | 0.00099 | 22706793 | 34 h |
+| `maize_e2_pc_d2` / `pcrgb_d2` / `pcrgbd_d2` | 600/600 | 0.0449 / 0.1226 / 0.0810 | 0.00263 / 0.00161 / 0.00121 | 22706957-9 | 21-29 h |
+| `maize_e3_1k_d2` / `3k_d2` / `10k_d2` | 6169 / 2100 / 631 | 0.2505 / 0.1723 / 0.1081 | 0.00354 / 0.00146 / 0.00087 | 22706960-2 | 30-33 h |
+
+Last checkpoints 600 / 600 / 600 / 600 / 6168 / 2024 / 624. `test_freq: 0` in every config, so no
+test numbers in the histories: the held-out split is scored by the probe. Those seven cost ~454 of
+the allocation's GPU-hours (gpuA100x4 bills ~2.25 h per wall-hour at this shape); **432 remain**,
+so everything below went to `gpuA100x4-preempt` (half the rate; `--requeue` + the launchers'
+auto-resume cover preemption, a second `afterany` chunk covers the 48 h TIMEOUT).
+
+**Queued 2026-10-08 (user: "check from github for sorghum what experiments are there, start
+them for maize"):**
+
+| what | jobs | notes |
+|---|---|---|
+| probes + E9 of the seven runs | 22751615 (`pm_600`: 4m, e2_pc, e2_pcrgb, e2_pcrgbd), 22751616 (`pm_6168`), 22751618 (`pm_2024`), 22751619 (`pm_624`) | gpuA40x4, `submit.sh probe_maize`; `eval/linear_probe_maize.py` now reads each run's `rgb_file` / `param_schema` from its config.json |
+| `maize_e4_small_d2` | 22751638 -> 22751639 | `configs/config_maize_e4_small_d2.yaml` |
+| `maize_4m_tg_d2` / `tg40_d2` / `tg100_d2` | 22751640-1 / 22751642-3 / 22751644-5 | the maize twins of sorghum's `e2_pcrgbdt_tg*` controls: `maize_4m_d2` with `model.text_mask_ratio` 0.80 / 0.40 / 1.0. `train_maize_4m.py` gained the key (ported from the sorghum trainer; `None` is bit-identical to every earlier run; recorded in config.json and checkpoints, resume refused on a mismatch) |
+| `maize_distill_all_d2` | smoke 22751636 (1 GPU, `--max_steps 40`) -> full 22751637 (`afterok`, `--kill-on-invalid-dep=yes`) | `slurm/delta/distill_maize.sbatch`, `configs/config_maize_distill_all_d2.yaml`: teacher = student init = `maize_4m_d2` epoch 600, the v1 recipe otherwise (teacher sees all four streams at `teacher_source_mask_ratio` 0.5, 100 ep, global batch 128 = 16 x 2 x accum 4). The trainer now pins `rgb_file` / `param_schema` against the teacher's config.json and a resumed checkpoint. Self-requeues 10 min before the 48 h wall (USR1 trap) |
+
+**Not yet launched:** `maize_e4_large_d2` (config written). The large model (332 M) may not fit
+2x A100-40GB at batch 16 (sorghum's ran on 96 GB cards); job 22751542 (`memtest`, scratchpad
+script) measures the peak. If it does not fit, use `gpuA100x8` (80 GB A100s, `--gpus-per-node=2`,
+no preempt variant) or `gpuH200x8`; 8 x 4 on four 40 GB cards changes per-rank BatchNorm stats
+and is a last resort. A maize E8 supervised row (`train_supervised_maize_4m.py`, port of
+`train_supervised_4m.py`) is being built; no maize E1 (1000-epoch, batch-256, all-views pretrain)
+exists in either data version and none is planned. Then: E8 baselines on maize d2
+(`eval/baseline_probe.py`, needs `rgba.png` support for maize), `#maize` page sections.
+
+
 ### Data version 2 — the sorghum restart (2026-10-02; code b708117)
 
 The user changed the sorghum dataset and asked for every experiment to restart from the

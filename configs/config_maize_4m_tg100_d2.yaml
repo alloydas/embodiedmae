@@ -15,6 +15,16 @@
 # stays. Sorghum's tg100 still lost every learnable target to PC+RGB+depth, so
 # the target itself hurt the latent there; this is the maize replicate.
 #
+# MEASURED (2026-10-08, 200 seed-matched draws of random_masking_dirichlet at mask
+# 0.80 on the maize token lengths 196/196/196/29, mean visible tokens per sample):
+#   maize_e2_pcrgbd        rgb 39.6  depth 37.8  pc 39.6               vision 117.0
+#   maize_4m (shared)      rgb 35.2  depth 34.7  pc 37.3  text 15.7    vision 107.3  (text 54 % visible)
+#   text gate 0.80 (tg)    rgb 37.2  depth 42.3  pc 37.5  text  5.0    vision 117.0  (text 17 %)
+#   text gate 0.40 (tg40)  rgb 37.2  depth 42.3  pc 37.5  text 17.0    vision 117.0  (text 59 %)
+#   text gate 1.0 (tg100)  rgb 37.2  depth 42.3  pc 37.5  text  0.0    vision 117.0  (text 0 %)
+# So the shared budget cost the four-stream arm 8.3 % of its vision tokens; the
+# gated arms give vision exactly pcrgbd's 117.0 and only text visibility differs.
+#
 # Compare by probe at checkpoint_epoch_600.pth (eval/linear_probe_maize.py zeroes
 # the params and never shows text, so the probe input is identical to pcrgbd's),
 # never by param_* or total loss. Trained by train_maize_4m.py, which records
