@@ -83,7 +83,7 @@ mkdir -p logs
 # 9-param/24-leaf model against a tree with no *_nc_cam.ply -- dying only after
 # the queue wait and a 105,000-folder scan.
 case "${SLUG}" in
-  maize_4m|maize_4m_d2|maize_e2_*|maize_e3_*|maize_e4_*) ;;
+  maize_4m|maize_4m_d2|maize_4m_tg*|maize_e2_*|maize_e3_*|maize_e4_*) ;;
   *) echo "REFUSING: '${SLUG}' is not a maize arm; this launcher runs train_maize_4m.py."
      echo "For a sorghum arm use slurm/delta/train_arm.sbatch. Pointing this at a sorghum"
      echo "config would build a 9-param / 24-leaf ParamEmbed at 8196 points and glob"

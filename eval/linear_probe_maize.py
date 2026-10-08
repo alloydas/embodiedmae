@@ -141,6 +141,9 @@ def build_model(run_dir, ckpt_name, device):
         target_points=cfg.get('num_points', 8192),
         pc_loss_weight=cfg.get('pc_loss_weight', 1.0),
         max_leaves=cfg.get('max_leaves', MAX_LEAVES),
+        # Data version 2 runs (2026-10-06+) record param_schema v2; a v1 run's
+        # config.json has no key. The model's token layout follows the schema.
+        param_schema=cfg.get('param_schema', 'v1'),
         spline_loss_weight=cfg.get('spline_loss_weight', 5.0),
         depth_norm_type=cfg.get('depth_norm_type', 'minmax'),
         pc_loss_name=cfg.get('pc_loss_name', 'qal_loss'),
@@ -206,6 +209,10 @@ def extract_split(model, cfg, data_root, split, feature, batch_size,
         max_leaves=cfg.get('max_leaves', MAX_LEAVES),
         view_sampling=True,
         deterministic_view=True,
+        # Each run is read on the data version it trained on (rule: the probe
+        # feeds a run its own files). The params are zeroed below either way.
+        rgb_file=cfg.get('rgb_file', 'rgb.png'),
+        param_schema=cfg.get('param_schema', 'v1'),
     )
     loader = DataLoader(_RetryTransientIO(ds), batch_size=batch_size, shuffle=False,
                         num_workers=num_workers, pin_memory=True,

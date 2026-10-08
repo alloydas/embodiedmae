@@ -182,6 +182,14 @@ def config_to_namespace(c):
     _mp                   = g('data', 'max_plants', None)
     ns.max_plants         = None if _mp in (None, 0, 'null') else int(_mp)
     ns.plant_subset_seed  = int(g('data', 'plant_subset_seed', 42))
+    # Maize data version 2 (2026-10-06): rgba.png + the trimmed spline XML. The
+    # defaults are data version 1, as train_maize_4m.py. Both are pinned against
+    # the teacher run's config.json and against a resumed checkpoint: a v2 teacher
+    # distilled on v1 images (or the reverse) is a different experiment.
+    ns.rgb_file           = g('data', 'rgb_file', 'rgb.png')
+    ns.param_schema       = g('data', 'param_schema', 'v1')
+    if ns.param_schema not in ('v1', 'v2'):
+        raise SystemExit(f"data.param_schema must be v1 or v2, got {ns.param_schema!r}")
     ns.model_size         = g('model', 'model_size', 'base')
     ns.active_modalities  = _parse_modalities(g('model', 'active_modalities', None))
     ns.mask_ratio         = g('model', 'mask_ratio', 0.80)
@@ -315,6 +323,7 @@ def build_model(args, device):
         target_points=args.num_points,
         pc_loss_weight=args.pc_loss_weight,
         max_leaves=args.max_leaves,
+        param_schema=args.param_schema,
         spline_loss_weight=args.spline_loss_weight,
         depth_norm_type=args.depth_norm_type,
         pc_loss_name=args.pc_loss_name,
@@ -364,7 +373,8 @@ def load_weights_into(model, ckpt_path, device, tag, verbose=True,
 _TEACHER_MATCH_KEYS = ('model_size', 'num_points', 'max_leaves', 'img_size',
                        'active_modalities', 'pc_loss_name', 'qal_threshold',
                        'qal_alpha', 'qal_use_squared', 'pc_loss_weight',
-                       'spline_loss_weight', 'depth_norm_type', 'mask_ratio')
+                       'spline_loss_weight', 'depth_norm_type', 'mask_ratio',
+                       'rgb_file', 'param_schema')
 
 
 def check_against_source_run(args, ckpt_path):
@@ -844,7 +854,8 @@ def _pick_device(args, local_rank):
 def _make_val_loader(args):
     val_ds = MaizeDataset4M(args.data_root, img_size=args.img_size,
                             num_points=args.num_points, split='val',
-                            max_leaves=args.max_leaves)
+                            max_leaves=args.max_leaves,
+                            rgb_file=args.rgb_file, param_schema=args.param_schema)
     val_workers = min(args.num_workers, 8)
     return val_ds, DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
                               num_workers=val_workers, pin_memory=True)
@@ -859,7 +870,7 @@ def _make_val_loader(args):
 # an older checkpoint's run_meta is not checked.
 _RESUME_PINNED = (
     'species', 'global_batch', 'batch_size', 'opt_steps_per_epoch',
-    'num_points', 'max_leaves',
+    'num_points', 'max_leaves', 'rgb_file', 'param_schema',
     'epochs', 'lr', 'weight_decay', 'warmup_epochs', 'mask_ratio',
     'crossmodal_prob', 'sources', 'targets', 'source_mask_ratio',
     'feat_distill_weight', 'cls_distill_weight', 'output_distill_weight',
@@ -925,7 +936,8 @@ def train_worker(rank, world_size, args, local_rank=None):
                               num_points=args.num_points, split='train',
                               max_leaves=args.max_leaves,
                               max_plants=args.max_plants,
-                              plant_subset_seed=args.plant_subset_seed)
+                              plant_subset_seed=args.plant_subset_seed,
+                              rgb_file=args.rgb_file, param_schema=args.param_schema)
     val_ds, val_loader = _make_val_loader(args)
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
@@ -990,6 +1002,7 @@ def train_worker(rank, world_size, args, local_rank=None):
     run_meta = {
         'species': SPECIES, 'n_params': N_PARAMS, 'max_leaves': args.max_leaves,
         'n_text_tokens': 1 + args.max_leaves, 'num_points': args.num_points,
+        'rgb_file': args.rgb_file, 'param_schema': args.param_schema,
         'batch_size': args.batch_size, 'world_size': world_size,
         'accum_steps': accum, 'global_batch': global_batch,
         'micro_batches_per_epoch': n_batches, 'opt_steps_per_epoch': n_opt,

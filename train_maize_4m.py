@@ -103,7 +103,7 @@ def merge_config_with_args(config, args):
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
-                  'active_modalities'],
+                  'active_modalities', 'text_mask_ratio'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
                      'warmup_epochs', 'val_freq', 'test_freq'],
         'checkpointing': ['output_dir', 'save_freq', 'resume'],
@@ -157,6 +157,23 @@ def config_to_namespace(config):
     # model rather than merely masked. 'pc' is mandatory (it anchors the target).
     # Accepts a YAML list or a comma-separated string.
     ns.active_modalities  = _parse_modalities(config['model'].get('active_modalities'))
+    # Text-gate control (the maize twin of sorghum's e2_pcrgbdt_tg*: config_maize_4m_tg*_d2).
+    # None -> text shares one length-agnostic Dirichlet budget with pc/rgb/depth, as
+    # every maize run before 2026-10-08 (maize_4m, every E2/E3/E4 arm, and their _d2
+    # twins). A float masks text on its own at that rate and hands pc/rgb/depth the
+    # three-modality arm's visible budget (embodied_mae_4m.random_masking_dirichlet).
+    # Stored as the EFFECTIVE value because config.json dumps this namespace.
+    _tmr                  = config['model'].get('text_mask_ratio', None)
+    ns.text_mask_ratio    = None if _tmr in (None, 'null') else float(_tmr)
+    if ns.text_mask_ratio is not None:
+        # `not 0 <= x <= 1` also catches NaN/inf. The model floors to >= 1 visible
+        # token, so a percent typo (80) would train silently at 1 of 29 -- refuse it.
+        if not 0.0 <= ns.text_mask_ratio <= 1.0:
+            raise ValueError(f"text_mask_ratio must be in [0, 1], got {ns.text_mask_ratio}")
+        if ns.active_modalities is not None and 'text' not in ns.active_modalities:
+            print(f"⚠️  text_mask_ratio={ns.text_mask_ratio} ignored: text is not an "
+                  f"active modality ({','.join(ns.active_modalities)})")
+            ns.text_mask_ratio = None
     ns.batch_size         = config['training'].get('batch_size', 16)
     ns.epochs             = config['training'].get('epochs', 2400)
     ns.lr                 = config['training'].get('lr', 1.5e-4)
@@ -673,6 +690,30 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
     return (tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n), metrics
 
 
+def check_resume_text_mask_ratio(args):
+    """Refuse a resume whose checkpoint was trained under different text masking.
+
+    Ported from train_sorghum_4m.py. Called before train_worker because it rewrites
+    config.json first thing: a mismatched resume would switch the masking mid-run
+    and leave config.json describing only the last segment. The case that matters
+    is maize_4m_d2's ungated epoch-600 checkpoint loading strict into a gated
+    control arm: it resumes cleanly and is no longer a control. Checkpoints that
+    predate the key were all trained ungated, so a missing key reads as None.
+    """
+    if not (args.resume and os.path.exists(args.resume)):
+        return
+    try:            # mmap: reads the pickle, not 1.3-4 GB of tensors
+        ckpt = torch.load(args.resume, map_location='cpu', weights_only=False, mmap=True)
+    except RuntimeError:
+        ckpt = torch.load(args.resume, map_location='cpu', weights_only=False)
+    trained = ckpt.get('text_mask_ratio', None)
+    if trained != args.text_mask_ratio:
+        raise ValueError(
+            f"--resume {args.resume} was trained with text_mask_ratio={trained}, this run "
+            f"asks for {args.text_mask_ratio}. Resuming would change the masking mid-run; "
+            f"start from scratch or use a matching config.")
+
+
 def check_resume_data_version(args):
     """Refuse to continue a run directory written under the other data version.
 
@@ -781,7 +822,12 @@ def train_worker(rank, world_size, args):
         qal_threshold=args.qal_threshold,
         qal_alpha=args.qal_alpha,
         qal_use_squared=args.qal_use_squared,
+        text_mask_ratio=args.text_mask_ratio,
     ).to(device)
+    if is_main and 'text' in (args.active_modalities or ['pc', 'rgb', 'depth', 'text']):
+        print("Text masking: " + (
+            "shared Dirichlet budget" if args.text_mask_ratio is None else
+            f"independent at {args.text_mask_ratio}, outside the Dirichlet budget"))
 
     if world_size > 1:
         model = DDP(model, device_ids=[rank], output_device=rank,
@@ -805,6 +851,7 @@ def train_worker(rank, world_size, args):
                        name=args.wandb_name, config={
                            'model_size': args.model_size, 'num_points': args.num_points,
                            'mask_ratio': args.mask_ratio, 'pc_loss_weight': args.pc_loss_weight,
+                           'text_mask_ratio': args.text_mask_ratio,
                            'text_loss_weight': args.spline_loss_weight,
                            'max_leaves': args.max_leaves,
                            'batch_size': args.batch_size, 'epochs': args.epochs,
@@ -998,6 +1045,7 @@ def train_worker(rank, world_size, args):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'best_val_loss': best_val_loss, 'history': history,
+                'text_mask_ratio': args.text_mask_ratio,
                 'wandb_run_id': (wandb.run.id
                                  if args.use_wandb and WANDB_AVAILABLE
                                  and wandb.run else None),
@@ -1012,6 +1060,7 @@ def train_worker(rank, world_size, args):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'val_loss': vl, 'best_val_loss': best_val_loss, 'history': history,
+                'text_mask_ratio': args.text_mask_ratio,
                 'wandb_run_id': (wandb.run.id
                                  if args.use_wandb and WANDB_AVAILABLE
                                  and wandb.run else None),
@@ -1058,6 +1107,10 @@ def main():
                         help="E2 arm, e.g. 'pc' or 'pc,rgb' or 'pc,rgb,depth'. "
                              "Default (unset) = all four. 'pc' is mandatory.")
     parser.add_argument('--mask_ratio',         type=float, default=None)
+    parser.add_argument('--text_mask_ratio',    type=float, default=None,
+                        help='Mask text at this rate outside the Dirichlet budget '
+                             '(maize_4m_tg*). Unset = shared budget, as every '
+                             'earlier run.')
     parser.add_argument('--pc_loss_weight',     type=float, default=None)
     parser.add_argument('--depth_norm_type',    type=str,   default=None, choices=['minmax','standard'])
     parser.add_argument('--spline_loss_weight', type=float, default=None)
@@ -1110,6 +1163,7 @@ def main():
             "(14 params / 28 leaves / 8192 points) and the E2-matched schedule "
             "live in the YAML. Pass --config configs/config_maize.yaml.")
 
+    check_resume_text_mask_ratio(cfg)
     check_resume_data_version(cfg)
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))

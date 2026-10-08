@@ -1,0 +1,123 @@
+# MAIZE E2 CONTROL on DATA VERSION 2 -- the maize twin of sorghum's config_e2_pcrgbdt_tg_d2.yaml.
+# config_maize_4m_d2.yaml with ONE model key added: model.text_mask_ratio 0.80
+# (plus output_dir / wandb_name). Same 600 epochs x 329 steps at global batch 32,
+# view_seed 42, qal_loss, mask 0.80, rgba.png, param_schema v2.
+#
+# WHAT IT ISOLATES. maize_4m (all four streams) lost to maize_e2_pcrgbd on 10 of
+# 11 probe targets (data v1, probe 16669530). Two readings fit that: (1) a
+# pretraining token-budget handicap -- one length-agnostic Dirichlet budget over
+# 196+196+196+29 tokens hands the 29-token text stream a large share, so the
+# four-stream arm pretrained on FEWER vision tokens than the three-stream one;
+# (2) a genuine param-stream effect. This arm takes text out of the shared budget
+# (embodied_mae_4m.random_masking_dirichlet's text gate) so pc/rgb/depth get
+# EXACTLY maize_e2_pcrgbd_d2's visible budget, and masks text on its own at 0.80.
+# Text at 20 % visible: the sorghum tg arm's value. Two variables move against
+# maize_4m_d2 -- vision budget AND text visibility (~58 % -> 20 %); tg40 and tg100
+# sweep the second.
+#
+# Compare by probe at checkpoint_epoch_600.pth (eval/linear_probe_maize.py zeroes
+# the params and never shows text, so the probe input is identical to pcrgbd's),
+# never by param_* or total loss. Trained by train_maize_4m.py, which records
+# text_mask_ratio in config.json and every checkpoint and refuses a resume
+# trained under another value.
+#
+# MAIZE 4M pretraining on DATA VERSION 2 (2026-10-06) -- config_maize.yaml with
+# three changes and nothing else, so the schedule stays matched to E2 (600 epochs,
+# global batch 32, 197,400 steps):
+#   data.rgb_file: rgba.png    -- background-transparent RGB, composited over black
+#                                 (the same convention as sorghum's rgb_nobg.png).
+#   data.param_schema: v2      -- the trimmed spline XML; token layout is
+#                                 embodied_mae_4m_maize.PLANT_FIELDS_V2 / LEAF_FIELDS_V2.
+#                                 v1 code reads a v2 file without error and emits
+#                                 constant zeros for 10 of its slots.
+#   output_dir / wandb_name    -- maize_4m_d2, so it can never auto-resume a v1 run
+#                                 (the trainer also refuses that by config.json).
+# data_root is the Delta copy; the launcher passes --data_root anyway.
+#
+# MAIZE 4M pretraining — the maize twin of config_4m.yaml.
+#
+# Run with train_maize_4m.py, never train_sorghum_4m.py: the two pipelines are
+# separate, and the maize model is 14 params/token over 28 leaf slots against
+# sorghum's 9 over 24.
+#
+# MATCHED TO E2 ON PURPOSE. Same 600 epochs, same mask ratio, same loss, same
+# LR schedule, same global batch of 32 as configs/config_e2_pcrgbdt.yaml. Maize
+# and sorghum have identical split sizes (10,500 / 2,250 / 2,250 plants), so
+# under view_sampling an epoch is 10,500 items in both and 600 epochs is
+# ~197,000 optimizer steps in both. That is what makes a cross-species
+# comparison a comparison rather than two unrelated runs. Do not retune one
+# without the other.
+#
+# WHAT IS GENUINELY DIFFERENT FROM A SORGHUM CONFIG, and why:
+#   num_points 8192  — a maize pointcloud_cam.ply holds EXACTLY 8192 points.
+#                      Asking for 8196 pads with duplicated points, silently.
+#   max_leaves  28   — maize plants carry 4..22 leaves (mean 12.1); 28 is
+#                      headroom. Sorghum's 24 would truncate nothing today but
+#                      leaves no margin.
+#   data_root        — /work/mech-ai-scratch/alloy/Maize
+#
+# SPLIT PROVENANCE IS NOT SORGHUM'S. summary.json records seed 0 and scoring by
+# Mahalanobis distance in robustly standardised parameter space; sorghum used
+# seed 42 and its own "extremeness" enrichment. Both group by plant, so no view
+# leaks across splits, but the two test sets are NOT drawn the same way.
+
+data:
+  data_root: /work/hdd/bepk/adas14/Maize
+  img_size: 224
+  num_points: 8192         # exact point count in pointcloud_cam.ply
+  view_sampling: true      # plan 6.1 — one view per plant per epoch
+  view_seed: 42
+  rgb_file: rgba.png       # data v2: transparent background, composited over black
+  param_schema: v2         # data v2: trimmed spline XML
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  text_mask_ratio: 0.80    # THE one change vs config_maize_4m_d2.yaml
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28           # 1 plant token + 28 leaf slots = 29 text tokens
+
+training:
+  batch_size: 8            # per-GPU. GLOBAL BATCH MUST BE 32 — per-GPU x GPUs.
+                           #   4-GPU A100 node : 8 x 4 = 32  <- this value
+                           #   2-GPU Blackwell : the launcher passes --batch_size 16
+                           # Verify with: jq '.batch_size, .world_size' outputs/<run>/config.json
+  epochs: 600
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 40
+  val_freq: 25             # 24 val points over 600 epochs
+  test_freq: 0
+
+checkpointing:
+  output_dir: ./outputs/maize_4m_tg_d2
+  save_freq: 25
+  resume: null
+
+visualization:
+  viz_freq: 25
+  num_viz_samples: 6
+
+distributed:
+  world_size: 4            # ignored under torchrun, which infers it from nproc
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14          # maize XML parses in ~0.26 ms against sorghum YAML's
+                           # ~85 ms, so this loader is ~300x cheaper on the param
+                           # stream and far less dataloader-bound than sorghum.
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_4m_tg_d2
