@@ -7,7 +7,7 @@ import json
 import random
 import argparse
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -231,6 +231,8 @@ def config_to_namespace(config):
     # way. prob 0 trains clean but still adds the occluded validation pass.
     _sc                   = SceneConfig.from_dict(config['model'].get('occlusion_scene'))
     ns.occlusion_scene    = None if _sc is None else _sc.to_dict()
+    if _sc is not None and _sc.norm != 'target':
+        raise ValueError("occlusion_scene.norm: crop is wired into train_maize_4m.py only")
     if _sc is not None and _sc.prob > 0:
         if _sm is not None:
             raise ValueError("structured_mask and occlusion_scene (prob > 0) both change "
@@ -273,20 +275,37 @@ def config_to_namespace(config):
     ns.wandb_project      = config['wandb'].get('wandb_project', 'embodied-mae-4m')
     ns.wandb_entity       = config['wandb'].get('wandb_entity', None)
     ns.wandb_name         = config['wandb'].get('wandb_name', None)
+    # Any-to-any parameter hiding (the `distill` block, as in train_maize_4m.py):
+    # on a share of steps the procedural parameters are hidden entirely. Only the
+    # teacher-free form is ported -- feat_weight / cls_weight must be 0.
+    _dist                 = config.get('distill') or None
+    ns.distill            = dict(_dist) if _dist else None
+    if ns.distill and (float(ns.distill.get('feat_weight', 0.0)) > 0
+                       or float(ns.distill.get('cls_weight', 0.0)) > 0):
+        raise ValueError("distill.feat_weight / cls_weight > 0 (a teacher) is wired into "
+                         "train_maize_4m.py only; set both to 0 here")
     return ns
 
 
 # ── Distributed helpers ───────────────────────────────────────────────────────
 
+# A collective waits this long before the watchdog kills the job (default 10 min).
+# A /work stall made rank 0's FIRST batch take 18.5 min on 2026-10-11 (job 16847808),
+# so rank 1 timed out in DDP's first broadcast and the run died before step 1.
+PG_TIMEOUT = timedelta(minutes=60)
+
+
 def setup_distributed(rank, world_size, backend, url):
     if int(os.environ.get('LOCAL_RANK', -1)) >= 0:
         dist.init_process_group(backend=backend, init_method='env://',
-                                world_size=world_size, rank=rank)
+                                world_size=world_size, rank=rank,
+                                timeout=PG_TIMEOUT)
     else:
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12356'
         dist.init_process_group(backend=backend, init_method='tcp://localhost:12356',
-                                world_size=world_size, rank=rank)
+                                world_size=world_size, rank=rank,
+                                timeout=PG_TIMEOUT)
     torch.cuda.set_device(rank)
 
 
@@ -638,10 +657,16 @@ def visualize_scene_4m(model, dataloader, device, epoch, save_dir, num_samples=4
                 print(f"  [viz] no scene for a batch of {B}; skipped")
                 return []
             x_rgb, x_depth, x_pc = sc['rgb'], sc['depth'], sc['pc']
-            kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': pc},
+            kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
                   'loss_tokens': sc['loss_tokens']}
         _, _, (p_rgb, p_depth, p_pc, _), (m_rgb, m_depth, _, _) = model(
             x_rgb, x_depth, x_pc, params, valid, mask_ratio=mask_ratio, **kw)
+        if sc is not None and 'crop_norm' in sc:
+            # occlusion_scene norm 'crop': input and prediction live in the crop's
+            # frame; draw and score them in the target's, like every other arm.
+            cn = sc['crop_norm']
+            x_pc = x_pc * cn[:, None, 3:4] + cn[:, None, :3]
+            p_pc = p_pc * cn[:, None, 3:4] + cn[:, None, :3]
 
         n = min(num_samples, B)
         scores = [pc_scores(p_pc[i:i + 1], pc[i:i + 1]) for i in range(n)]
@@ -751,18 +776,30 @@ def visualize_scene_4m(model, dataloader, device, epoch, save_dir, num_samples=4
 # ── Training / evaluation loops ───────────────────────────────────────────────
 
 def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75,
-                    scene=None, scene_stats=None, leaf=None):
+                    scene=None, scene_stats=None, leaf=None, distill=None,
+                    distill_stats=None):
     """One epoch. `scene` (a SceneConfig with prob > 0) turns a share of each
     batch into occluded scenes -- the encoder reads the scene, the loss scores
-    the clean plant -- and `scene_stats`, a dict, collects their mean stats."""
+    the clean plant -- and `scene_stats`, a dict, collects their mean stats.
+    `distill` (any-to-any) hides the procedural parameters on a share of steps."""
     model.train()
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     m = model.module if hasattr(model, 'module') else model
     sstats, n_scene = {}, 0
 
+    rank_ = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+    n_hidden = 0.0
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
-    for batch in pbar:
+    for bi, batch in enumerate(pbar):
         rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
+        if distill is not None:
+            # Hide the parameters on this step with prob param_hide_prob (the same
+            # draw on every rank); otherwise 'budget' puts them in the shared
+            # Dirichlet budget (as pretraining) and 'all' leaves them fully visible.
+            hide = random.Random(epoch * 1_000_003 + bi).random() < float(distill.get('param_hide_prob', 1.0))
+            m.text_mask_ratio = 1.0 if hide else (None if distill.get('visible_mode', 'all') == 'budget' else 0.0)
+            torch.manual_seed(((int(distill.get('seed', 0)) * 1_000_003 + epoch) * 100_003 + bi) * 64 + rank_)
+            n_hidden += float(hide)
         # A 7th item is the cloud normalisation, present only when the dataset
         # was built for structured masking (return_pc_norm=True); an 8th is the
         # camera pose, for occluded scenes (return_pose=True).
@@ -815,6 +852,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
     n = len(dataloader)
     if scene_stats is not None and n_scene:
         scene_stats.update({k: v / n_scene for k, v in sstats.items()})
+    if distill_stats is not None and distill is not None:
+        distill_stats['param_hidden'] = n_hidden / n
     return tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n
 
 
@@ -1136,6 +1175,14 @@ def train_worker(rank, world_size, args):
     model = build_model_from_args(args).to(device)
     if args.seed is not None:
         torch.manual_seed(args.seed * 1000 + 1 + rank)
+    if args.distill:
+        # Any-to-any: start from `student_init` unless this resumes its own run.
+        if args.distill.get('student_init') and not (args.resume and os.path.exists(args.resume)):
+            ck = torch.load(args.distill['student_init'], map_location='cpu', weights_only=False, mmap=True)
+            model.load_state_dict({k.replace('module.', '', 1): v for k, v in ck['model_state_dict'].items()})
+            if is_main: print(f"   student init: {args.distill['student_init']} (epoch {ck.get('epoch')})")
+            del ck
+        if is_main: print(f"Any-to-any parameter hiding: {args.distill}")
     if is_main and args.structured_mask is not None:
         print(f"Structured masking (neighbour occlusion, train only): {args.structured_mask}")
     if is_main and scene_cfg is not None:
@@ -1249,10 +1296,17 @@ def train_worker(rank, world_size, args):
             print(f"Epoch {epoch}/{args.epochs}  lr={optimizer.param_groups[0]['lr']:.6f}")
             print(f"{'='*80}")
 
-        tr_scene = {}
+        tr_scene, tr_dist = {}, {}
         tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt = train_one_epoch(
             model, train_loader, optimizer, device, epoch, mask_ratio=args.mask_ratio,
-            scene=scene_train, scene_stats=tr_scene, leaf=leaf_cfg)
+            scene=scene_train, scene_stats=tr_scene, leaf=leaf_cfg,
+            distill=args.distill, distill_stats=tr_dist)
+        for k, v in tr_dist.items():
+            history.setdefault(f'train_distill_{k}', []).append(v)
+        if args.distill:
+            # validate (and visualise / test) as in the field: NO procedural parameters
+            (model.module if hasattr(model, 'module') else model).text_mask_ratio = \
+                float(args.distill.get('val_text_mask_ratio', 1.0))
         for k, v in zip(['train_loss','train_rgb','train_depth','train_pc','train_text'],
                         [tr_loss, tr_rgb, tr_depth, tr_pc, tr_txt]):
             history[k].append(v)

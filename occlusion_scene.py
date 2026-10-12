@@ -73,6 +73,7 @@ from structured_mask import (
 
 _TAN_HALF_FOV = math.tan(math.radians(RENDER_FOV_DEG) / 2)
 MASK_POLICIES = ('uniform', 'neighbour_first')
+NORMS = ('target', 'crop', 'metric')
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,25 @@ class SceneConfig:
                     leaves it out at 1.0 so older checkpoints' resume guards
                     still match.
     val_seed      : seed of the fixed validation scenes (same for every arm).
+    norm          : the frame of a scene sample's clouds. 'target' -- the clean
+                    target's own normalisation (centroid at 0, farthest point on
+                    the unit sphere), every run before 2026-10-10. That frame is
+                    a leak: the input cloud's origin and scale are the TARGET's,
+                    which a real crop does not know. 'crop' -- re-centre and
+                    re-scale the scene cloud by ITS OWN centroid and farthest
+                    point, and express the clean target in that same frame (so
+                    the model must find the target's position and size itself).
+                    Applied to scene samples only; a clean sample's own frame is
+                    already its crop frame. to_dict leaves it out at 'target'.
+                    'metric' -- centred like 'crop', but scaled by a FIXED length,
+                    `unit_m` metres per unit, instead of the crop's own radius: the
+                    cloud keeps its real size (a depth camera knows metres), so the
+                    model can use absolute size and the card's lengths. Applied to
+                    EVERY sample, clean ones included (scaled about their own
+                    centroid); batches without a scene go through metric_frame().
+    unit_m        : metres per unit for norm 'metric' (maize 0.64 = the median
+                    plant radius, so clouds stay near unit size). Omitted from
+                    to_dict when None.
 
     Validation always uses prob 1 and uniform masking, so every arm is scored on
     the same scenes under the same masking whatever it trained with.
@@ -121,6 +141,8 @@ class SceneConfig:
     patch_frac: float = 0.3
     val_seed: int = 0
     nf_prob: float = 1.0
+    norm: str = 'target'
+    unit_m: float = None
 
     @classmethod
     def from_dict(cls, cfg):
@@ -160,12 +182,20 @@ class SceneConfig:
             raise ValueError("occlusion_scene.nf_prob must be in [0, 1]")
         if float(out.nf_prob) < 1.0 and out.mask_policy != 'neighbour_first':
             raise ValueError("occlusion_scene.nf_prob only applies to mask_policy: neighbour_first")
+        if out.norm not in NORMS:
+            raise ValueError(f"occlusion_scene.norm must be one of {NORMS}")
+        if (out.norm == 'metric') != (out.unit_m is not None):
+            raise ValueError("occlusion_scene.unit_m is required by, and only used with, norm: metric")
+        if out.unit_m is not None and not float(out.unit_m) > 0:
+            raise ValueError("occlusion_scene.unit_m must be positive")
         return out
 
     def to_dict(self):
         return {f.name: (list(v) if isinstance(v := getattr(self, f.name), tuple) else v)
                 for f in fields(self)
-                if not (f.name == 'nf_prob' and float(getattr(self, f.name)) == 1.0)}
+                if not (f.name == 'nf_prob' and float(getattr(self, f.name)) == 1.0)
+                and not (f.name == 'norm' and getattr(self, f.name) == 'target')
+                and not (f.name == 'unit_m' and getattr(self, f.name) is None)}
 
     def for_validation(self):
         """Every sample occluded, uniform masking: the regime all arms share."""
@@ -330,6 +360,13 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
                        scored even when visible
       mask_flags       neighbour_first only: {'rgb', 'depth'} (B, L) and
                        'pc_points' (B, N) bool, for EmbodiedMAE4M's masking
+      target_pc        norm 'crop' / 'metric' only: (B, N, 3) the clean target in the
+                       scene cloud's own frame -- score the prediction against
+                       THIS, not `pc`
+      crop_norm        norm 'crop' / 'metric' only: (B, 4) centroid and scale of that frame
+                       in the target's frame (0, 0, 0, 1 for clean samples):
+                       target_frame = crop_frame * scale + centroid, and one
+                       crop-frame unit is pc_norm[:, 3] * scale metres
       stats            floats over the occluded samples: hidden_px (share of the
                        target's plant pixels a neighbour covers), nb_points
                        (share of the input cloud that is neighbour),
@@ -415,6 +452,19 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
             nbf = nbf & sel[:, None]
         out['mask_flags'] = {'rgb': img, 'depth': img, 'pc_points': nbf}
 
+    if cfg.norm in ('crop', 'metric'):
+        # Drawn from nothing random, so every other draw is unchanged.
+        c = torch.where(use[:, None], out['pc'].mean(1), torch.zeros_like(out['pc'][:, 0]))
+        if cfg.norm == 'crop':
+            r = (out['pc'] - c[:, None]).norm(dim=-1).max(1).values
+            r = torch.where(use, r.clamp(min=1e-6), torch.ones_like(r))
+        else:
+            # target units per metric unit, for EVERY sample (clean ones too)
+            r = float(cfg.unit_m) / pc_norm[:, 3]
+        out['pc'] = (out['pc'] - c[:, None]) / r[:, None, None]
+        out['target_pc'] = (pc - c[:, None]) / r[:, None, None]
+        out['crop_norm'] = torch.cat([c, r[:, None]], dim=1)
+
     u = use
     fg_n = tgt_fg.flatten(1).sum(1).clamp(min=1)
     out['stats'] = {
@@ -423,4 +473,17 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
         'tgt_points_kept': keep[:, :N].float().mean(1)[u].mean().item(),
         'loss_patches': loss_tok.float().sum(1)[u].mean().item(),
     }
+    if cfg.norm in ('crop', 'metric'):
+        out['stats']['crop_scale'] = out['crop_norm'][:, 3][u].mean().item()
+        out['stats']['crop_shift'] = out['crop_norm'][:, :3].norm(dim=1)[u].mean().item()
     return out
+
+
+def metric_frame(pc, pc_norm, unit_m):
+    """norm 'metric' for a batch WITHOUT a scene (clean validation, card-only steps,
+    or a batch compose() returned None for): each cloud keeps its own centroid and
+    is put in units of `unit_m` metres. Returns (pc_metric, crop_norm) with
+    target_frame = pc_metric * crop_norm[:, 3:] + crop_norm[:, :3], as compose()."""
+    r = float(unit_m) / pc_norm[:, 3]
+    cn = torch.cat([torch.zeros_like(pc_norm[:, :3]), r[:, None]], dim=1)
+    return pc / r[:, None, None], cn

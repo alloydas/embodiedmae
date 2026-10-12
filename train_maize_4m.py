@@ -14,7 +14,7 @@ import json
 import random
 import argparse
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -48,7 +48,7 @@ from embodied_mae_4m_maize import (
 )
 from embodied_mae import earth_movers_distance
 from maize_dataset_4m import MaizeDataset4M
-from occlusion_scene import SceneConfig, compose as compose_scene
+from occlusion_scene import SceneConfig, compose as compose_scene, metric_frame
 from leaf_mask import LeafMaskConfig, mask_weights as leaf_mask_weights
 # Species-agnostic pieces shared with the sorghum trainer: the point-cloud
 # scorer (chunked chamfer + F1/precision/recall), the history-alignment helper
@@ -182,6 +182,9 @@ def config_to_namespace(config):
     # masked more often than its stem. Training only; validation stays uniform.
     _lm                   = LeafMaskConfig.from_dict(config['model'].get('leaf_mask'))
     ns.leaf_mask          = None if _lm is None else _lm.to_dict()
+    if _lm is not None and _sc is not None and _sc.norm != 'target':
+        raise ValueError("leaf_mask reads the input cloud in the target's frame; "
+                         "it cannot combine with occlusion_scene.norm: crop")
     if _lm is not None and _sc is not None and _sc.prob > 0 and _sc.mask_policy != 'uniform':
         raise ValueError("leaf_mask needs occlusion_scene.mask_policy: uniform -- "
                          "both would set the masking")
@@ -219,15 +222,23 @@ def config_to_namespace(config):
 
 # ── Distributed helpers ───────────────────────────────────────────────────────
 
+# A collective waits this long before the watchdog kills the job (default 10 min).
+# A /work stall made rank 0's FIRST batch take 18.5 min on 2026-10-11 (job 16847808),
+# so rank 1 timed out in DDP's first broadcast and the run died before step 1.
+PG_TIMEOUT = timedelta(minutes=60)
+
+
 def setup_distributed(rank, world_size, backend, url):
     if int(os.environ.get('LOCAL_RANK', -1)) >= 0:
         dist.init_process_group(backend=backend, init_method='env://',
-                                world_size=world_size, rank=rank)
+                                world_size=world_size, rank=rank,
+                                timeout=PG_TIMEOUT)
     else:
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12356'
         dist.init_process_group(backend=backend, init_method='tcp://localhost:12356',
-                                world_size=world_size, rank=rank)
+                                world_size=world_size, rank=rank,
+                                timeout=PG_TIMEOUT)
     torch.cuda.set_device(rank)
 
 
@@ -547,7 +558,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
     sstats, n_scene = {}, 0
 
     rank_ = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
-    dsum = {'feat': 0.0, 'cls': 0.0, 'hidden': 0.0}
+    dsum = {'feat': 0.0, 'cls': 0.0, 'hidden': 0.0, 'card_only': 0.0}
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
     for bi, batch in enumerate(pbar):
         rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
@@ -556,9 +567,15 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
         # step with prob param_hide_prob (the same draw on every rank), and seed
         # the step so student and teacher get the same FPS, Dirichlet split and
         # masks -- they then differ ONLY in whether the parameters are visible.
-        hide, step_seed = False, None
+        hide, step_seed, card_only = False, None, False
         if distill is not None:
-            hide = random.Random(epoch * 1_000_003 + bi).random() < float(distill.get('param_hide_prob', 1.0))
+            # card_only_prob: on this share of steps the model sees ONLY the
+            # procedural parameters (every rgb / depth / pc token hidden) and
+            # rebuilds the clean plant from them -- card -> plant, which Dirichlet
+            # masking never asks for (it keeps >= 1 token of every stream). Its own
+            # draw, so the hide schedule of the other steps is unchanged.
+            card_only = random.Random((epoch * 1_000_003 + bi) * 7 + 3).random() < float(distill.get('card_only_prob', 0.0))
+            hide = (not card_only) and random.Random(epoch * 1_000_003 + bi).random() < float(distill.get('param_hide_prob', 1.0))
             # visible_mode 'all': parameters fully visible when not hidden (every earlier
             # distill run); 'budget': inside the shared Dirichlet budget (as pretraining)
             m.text_mask_ratio = 1.0 if hide else (None if distill.get('visible_mode', 'all') == 'budget' else 0.0)
@@ -566,20 +583,30 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
             torch.manual_seed(step_seed)
 
         kw = {}
-        if scene is not None:
+        metric = scene is not None and scene.norm == 'metric'
+        if card_only:
+            # No scene: nothing but the card is visible, and the target is the clean plant.
+            if metric:
+                pc = metric_frame(pc, batch[6].to(device), scene.unit_m)[0]
+            loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
+                                                  visible={'text'}, source_mask_ratio=0.0)
+        elif scene is not None:
             # batch[6:9] = pc_norm, cam2world, near_far (MaizeDataset4M return_pose)
             sc = compose_scene(rgb, depth, pc, batch[6].to(device), batch[7].to(device),
                                scene, patch_size=m.patch_size,
                                near_far=batch[8].to(device))
             if sc is not None:
-                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': pc},
+                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
                       'loss_tokens': sc['loss_tokens'],
                       'mask_flags': sc.get('mask_flags')}
                 rgb, depth, pc = sc['rgb'], sc['depth'], sc['pc']
                 for k, v in sc['stats'].items():
                     sstats[k] = sstats.get(k, 0.0) + v
                 n_scene += 1
-        if leaf is not None:
+            elif metric:
+                # no scene in this batch: still metres, about each plant's own centroid
+                pc = metric_frame(pc, batch[6].to(device), scene.unit_m)[0]
+        if leaf is not None and not card_only:
             # Weights from the TARGET's geometry: its clean cloud for the image
             # patches, the (possibly scene) input cloud for the PC tokens, with
             # neighbour points left at weight 1. batch[6:8] = pc_norm, cam2world.
@@ -591,7 +618,9 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
 
         use_teacher = (teacher is not None and hide
                        and (float(distill.get('feat_weight', 1.0)) > 0 or float(distill.get('cls_weight', 0.5)) > 0))
-        if use_teacher:
+        if card_only:
+            pass                                  # forward done above
+        elif use_teacher:
             # RNG state right before the student's forward (FPS start, Dirichlet split,
             # mask noise); restored for the teacher so both get identical masks.
             cpu_state = torch.get_rng_state()
@@ -613,6 +642,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
             loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
                                                   mask_ratio=mask_ratio, **kw)
         dsum['hidden'] += float(hide)
+        dsum['card_only'] += float(card_only)
 
         optimizer.zero_grad()
         loss.backward()
@@ -639,12 +669,14 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
     if distill_stats is not None and distill is not None:
         nh = max(dsum['hidden'], 1.0)
         distill_stats.update({'feat': dsum['feat'] / nh, 'cls': dsum['cls'] / nh, 'param_hidden': dsum['hidden'] / n})
+        if float(distill.get('card_only_prob', 0.0)) > 0:
+            distill_stats['card_only'] = dsum['card_only'] / n
     return tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n
 
 
 @torch.no_grad()
 def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
-             distributed=False, scene=None, scene_seed=0, oracle=False):
+             distributed=False, scene=None, scene_seed=0, oracle=False, metric_unit=None):
     """Validation / test pass. With `scene` (a SceneConfig) every batch is first
     turned into occluded scenes -- scene.for_validation(): all samples, uniform
     masking -- from a CPU generator seeded by (scene_seed, batch index), so
@@ -672,7 +704,7 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
     for bi, batch in enumerate(tqdm(dataloader, desc=desc)):
         rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
 
-        x_rgb, x_depth, x_pc, kw = rgb, depth, pc, {}
+        x_rgb, x_depth, x_pc, kw, crop_norm = rgb, depth, pc, {}, None
         if scene is not None:
             sc = compose_scene(
                 rgb, depth, pc, batch[6].to(device), batch[7].to(device), scene,
@@ -680,13 +712,22 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
                 generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi))
             if sc is not None:
                 x_rgb, x_depth, x_pc = sc['rgb'], sc['depth'], sc['pc']
-                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': pc},
+                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
                       'loss_tokens': sc['loss_tokens']}
+                crop_norm = sc.get('crop_norm')
                 if oracle:
                     kw['mask_flags'] = sc['mask_flags']
                 tot_hidden += sc['stats']['hidden_px']
                 tot_nbpts  += sc['stats']['nb_points']
                 n_scene    += 1
+        if metric_unit is None and scene is not None and scene.norm == 'metric':
+            metric_unit = scene.unit_m          # a batch compose() left without a scene
+        if metric_unit is not None and crop_norm is None:
+            # occlusion_scene norm 'metric', batch without a scene (the clean pass):
+            # the model reads and predicts metres; scored back in the target's frame.
+            if len(batch) <= 6:
+                raise ValueError("metric_unit needs the loader built with return_pose=True")
+            x_pc, crop_norm = metric_frame(pc, batch[6].to(device), metric_unit)
 
         loss, (lr, ld, lp, lt), \
             (pred_rgb_p, pred_depth_p, pred_pc, pred_params), \
@@ -695,6 +736,11 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
                 **kw
         )
         del x_rgb, x_depth, x_pc, kw
+        if crop_norm is not None:
+            # norm 'crop': predicted in the crop's frame; scored in the target's,
+            # so the PC metrics stay comparable with every other arm. (`loss`
+            # and `pc_loss` are in the crop frame and are not.)
+            pred_pc = pred_pc * crop_norm[:, None, 3:4] + crop_norm[:, None, :3]
 
         tot       += loss.item()
         tot_rgb   += lr.item()
@@ -864,6 +910,8 @@ def train_worker(rank, world_size, args):
     # block is present (so a clean control arm is scored on the same scenes).
     scene_cfg   = SceneConfig.from_dict(args.occlusion_scene)
     scene_train = scene_cfg if scene_cfg is not None and scene_cfg.prob > 0 else None
+    # occlusion_scene norm 'metric': clean batches are put in metres too
+    metric_unit = scene_cfg.unit_m if scene_cfg is not None and scene_cfg.norm == 'metric' else None
     leaf_cfg    = LeafMaskConfig.from_dict(getattr(args, 'leaf_mask', None))
     train_ds = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='train',
@@ -1088,7 +1136,8 @@ def train_worker(rank, world_size, args):
             compute_emd = (epoch == args.epochs)
             (vl, vr, vd, vp, vt), vm = evaluate(
                 model, val_loader, device, compute_emd=compute_emd,
-                mask_ratio=args.mask_ratio, distributed=(world_size > 1))
+                mask_ratio=args.mask_ratio, distributed=(world_size > 1),
+                metric_unit=metric_unit)
             for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text'],
                             [vl, vr, vd, vp, vt]):
                 history[k].append(v)
@@ -1170,7 +1219,8 @@ def train_worker(rank, world_size, args):
             # keep DDP in lockstep; only rank 0 logs the result.
             (tl, tr_, td_, tp_, tt_), tmet = evaluate(
                 model, test_loader, device, compute_emd=compute_emd_test,
-                mask_ratio=args.mask_ratio, distributed=(world_size > 1))
+                mask_ratio=args.mask_ratio, distributed=(world_size > 1),
+                metric_unit=metric_unit)
             if is_main:
                 history['test_epoch'].append(epoch)
                 for k, v in zip(

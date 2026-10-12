@@ -47,8 +47,8 @@ experiments have been *built*, which is durable. For live progress use
 | E3 | data scaling | **sorghum done; maize running** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize (Nova, jobs 16576132-4, `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`): `maize_e3_1k` ✅ 6169/6169 (2026-09-24); `maize_e3_10k` running; `maize_e3_3k` preempted at 1017/2100 and requeued (auto-resumes). Full-data point is `maize_4m` epoch 600 |
 | E4 | model scaling | **sorghum done; maize running** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize (Nova, jobs 16576135-6, same launcher): `maize_e4_small` ✅ 600/600 (2026-09-24); `maize_e4_large` running. The base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00) |
 | E5 | view regime | **not built** | — |
-| E6 | masking / noise | **owned here; occluded-scene masking built and run** | Yongyun since 2026-10-02. Random vs structured (`neighbour_first`) vs mixed masking on occluded scenes, both species, val + test: mixed wins, pure structured loses. Read "Yongyun's occlusion work" below |
-| E7 | loss study | **owned here; partly run** | Yongyun since 2026-10-02. QAL 0.01, QAL 0.02 squared and QAL + Sinkhorn done (+ Sinkhorn wins on F1 / recall); Chamfer-only and Sinkhorn-only arms running (jobs 16735518-21). The full QAL grid is deferred. Switches: `model.loss_name` (chamfer / chamfer_cdist / qal_loss / sinkhorn), `qal_threshold`, `qal_alpha`, `qal_use_squared`, `pc_loss_weight`, `pc_sinkhorn_weight` — read "E6 and E7" below before sweeping them |
+| E6 | masking / noise | **owned here; occluded-scene masking built and run** | Yongyun since 2026-10-02. Random vs structured (`neighbour_first`) vs mixed masking on occluded scenes, both species, val + test: mixed wins, pure structured loses. No-card (any-to-any parameter) models built 2026-10-07 to 10-12. Read the two "Yongyun's ... summary for Alloy" sections below |
+| E7 | loss study | **owned here; run** | Yongyun since 2026-10-02. QAL 0.01, QAL 0.02 squared, QAL + Sinkhorn, Chamfer-only and Sinkhorn-only all done in both species (`reports/test_scene/{sp}_loss.json`); QAL + Sinkhorn has the best F1 / recall (sorghum occluded test F1@0.01: QAL 0.285, Chamfer 0.297, Sinkhorn-only 0.176, QAL + Sinkhorn 0.311; maize Chamfer-only is the worst, 0.080). The full QAL grid is deferred. Switches: `model.loss_name` (chamfer / chamfer_cdist / qal_loss / sinkhorn), `qal_threshold`, `qal_alpha`, `qal_use_squared`, `pc_loss_weight`, `pc_sinkhorn_weight` — read "E6 and E7" below before sweeping them |
 | E8 | baselines | **not built** | — |
 | E9 | latent analysis | **built, E2 arms done** | `eval/latent_analysis.py`; all four E2 arms on val. E3/E4 arms and train/test splits not run |
 | E10 | real-data OOD | **partial** | `OOD_EVAL_rgb2pc.md` and the `eval_rgb2pc_*.py` scripts |
@@ -330,11 +330,60 @@ the masking itself (patchify, FPS 196 x kNN 32, neighbour labels, Dirichlet
 budget, the three policies, checked against the model's own masking) is in
 `/work/mech-ai-scratch/yongyun/masking/` (`masking_steps.py`, README).
 
-**Running / next (2026-10-06):** Chamfer-only and
-Sinkhorn-only arms (16735518-21); the equal-training 400-epoch baselines,
-random and random + Sinkhorn in both species (16736958-61), so the 400-epoch
-row above can be compared fairly. Not started: seed 2, training at 90 %
-masking, and training on Alloy's renders once they exist.
+**Status 2026-10-12:** everything listed above has finished (the Chamfer-only /
+Sinkhorn-only loss arms and the equal-training 400-epoch baselines are written up
+in the long section below). Not started: seed 2, training at 90 % masking, and
+training on Alloy's renders (still none as of 2026-10-11).
+
+### Yongyun's no-card (predicted-parameter) work, 2026-10-07 to 2026-10-12 — summary for Alloy
+
+**Why.** Real plants have no procedural parameters ("card"), and every scene model
+above needs it: the best card-given model (mixed + Sinkhorn 400) falls from maize
+occluded-test F1@10mm 0.638 to 0.211 when the card is taken away.
+
+**What works: any-to-any parameters.** Start from the clean pretrain (`maize_4m`
+epoch 600 / sorghum E1 epoch 1000), train on the occluded scenes with mixed masking +
+QAL + Sinkhorn, and on half the steps hide the card completely (the model predicts
+it), on the other half put it inside the Dirichlet budget with RGB / depth / PC. No
+teacher. Validation and test run WITHOUT the card. Configs
+`configs/config_{maize,sm}_scene_anyparam_pre{,400}.yaml` (trainer `distill:` block,
+`visible_mode: budget`, `param_hide_prob: 0.5`). Occluded test, all 2,250 plants,
+`eval/pc_generation.py`, F1@10mm / mean error:
+
+| model | maize | sorghum |
+|---|---|---|
+| card-given best (mixed + Sinkhorn 400), WITH the true card | 0.638 / 10.7 mm | 0.384 / 18.7 mm |
+| card-given best, card removed | 0.211 | -- |
+| trained with no card stream at all | -- | 0.216 / 26.3 mm (200 ep), 0.277 / 24.1 mm (600 ep) |
+| distillation student D2 (teacher sees the card), no card | 0.372 / 17.5 mm | -- |
+| **any-to-any 200 ep, no card** | **0.431 / 15.6 mm** | **0.287 / 23.8 mm** |
+| any-to-any 400 ep, no card | 0.457 / 14.8 mm | pending (job 16851640) |
+| any-to-any, its own predicted card fed back | 0.465 (400 ep) | 0.182 (200 ep: HURTS) |
+| any-to-any, true card | 0.501 (400 ep) | 0.354 (200 ep) |
+
+Any-to-any is the best no-card model in both species, and the card is only needed in
+training. Its card prediction is also the best of any model (maize: leaf count +-1.06,
+stem height +-5.4 cm, leaf length +-4.1 cm, leaf angle +-7.1 deg).
+
+**What did not work, and why (each measured):**
+- Distillation from a teacher that sees the card: ~no gain over just hiding the card.
+- Feeding the predicted card back: +0.01 in maize, -0.10 in sorghum (sorghum's leaf
+  tokens carry roll angles it cannot predict but trusts; untested guess).
+- Card-only generation (card in, plant out): F1@10mm ~0.10 even from the TRUE card, and
+  adding card-only training steps does not fix it -- the target cloud is in the CAMERA
+  frame and the card carries no viewpoint (a plant's 10 views differ by up to ~180 deg).
+  Needs a canonical (world, stem-up) target or a camera-pose input.
+- Training longer: 200 -> 400 epochs adds +0.026 (maize); val levels off while the
+  card-given model kept climbing, so the gap is the card's information, not training.
+- **Frame leak (affects EVERY scene number in this file):** scene clouds are normalised
+  by the CLEAN target's centroid and radius. Normalised by the crop instead, maize no-card
+  F1@10mm drops 0.431 -> 0.262; keeping metric scale does not help (0.265); a centre
+  check says the leak is mostly the target's POSITION. Comparisons between arms stay
+  fair (all share the frame), absolute numbers are optimistic. Proposed deployable fix,
+  not run: origin at the target's stem base (crop centre + ground plane).
+
+Details, job IDs and every intermediate number: the "Occluded-scene DISTILLATION" and
+"Three follow-ups" paragraphs in the long section below.
 
 ### Occluded-scene training (structured-masking follow-up, built 2026-10-01)
 
@@ -680,6 +729,132 @@ number, so it is a decision for new runs, not a patch to compare against E1-E4.
   Target identity without params comes from position (target centred, cloud cropped
   around its stem); but scene clouds are normalised by the CLEAN target's centroid
   and radius -- a hint a deployed model would not get (normalise by the crop).
+  **Result, any-to-any from maize_4m (`maize_scene_anyparam_pre_s1`, epoch 200, maize
+  occluded TEST, `reports/param_analysis_maize.json`):** no params F1@10mm **0.431**
+  (15.6 mm) vs D2 0.372 (17.5 mm): the best no-parameter model. Its own predicted
+  params fed back (all visible) **0.442** (15.5 mm) -- the two-step loop HELPS it
+  slightly, where it hurt D2 (0.372 -> 0.322); with true params in the budget 0.475;
+  its predicted params -> the param-conditioned best model 0.349. Best param
+  prediction of any model: leaf count 1.06 leaves (exact 46 %), stem height 5.4 cm,
+  leaf length 4.1 cm, leaf angle 7.1 deg (39-59 % better than the average guess).
+  Gap left: 0.44 vs 0.639 with the true card. Next: sweep the share of
+  fully-hidden-parameter steps (25 / 75 / 100 % vs 50 %), the scratch twin
+  (`maize_scene_anyparam_s1`, still training), then sorghum.
+  **Card-only generation (`eval/pc_generation.py`, `reports/pc_generation_maize.json`; `--species sorghum` for sorghum):**
+  E given ONLY a recipe card (every photo / depth / cloud token hidden, `visible={'text'}`)
+  builds a poor plant: F1@10mm 0.103 from its predicted card, 0.100 from the TRUE card
+  (51 mm average miss) -- E never trained on card-only rounds, and the true card does
+  no better than the guessed one, so the card alone is not driving the shape. With the
+  scene: no card 0.431, + its predicted card 0.442, + true card in budget 0.475. A
+  "card -> plant" generator needs card-only rounds in training (Alloy-style
+  single-source steps with the card as the source), or the procedural generator itself.
+  **Three follow-ups (submitted 2026-10-10, scavenger, jobs 16841036-8, 200 epochs, seed 1;
+  smoke-tested on CPU first, `logs/dv/smoke_new_arms.py`):**
+  (1) `sm_scene_anyparam_pre_s1` -- the sorghum twin of `maize_scene_anyparam_pre`, started
+  from E1 (`4m_pretrain_15k_v2_depthfix_qal` epoch 1000, not `e2_pcrgbdt`: the strongest
+  sorghum model, so the start is NOT the maize run's 197k-step budget). `train_sorghum_4m.py`
+  now reads the `distill` block too, teacher-free only (feat / cls weight > 0 raises).
+  (2) `maize_scene_anyparam_card_s1` -- `distill.card_only_prob: 0.25`: a quarter of the
+  steps show ONLY the parameters (`visible={'text'}`, clean input, clean target), the rest
+  split hidden / in-budget as before (37.5 % each). Its own RNG draw, so the hide schedule of
+  the other steps is unchanged. Every weight still gets a gradient on a card-only step
+  (checked), so DDP's `find_unused_parameters=False` holds. Judge with
+  `eval/pc_generation.py --run maize_scene_anyparam_card_s1 --out reports/pc_generation_maize_card.json`.
+  (3) `maize_scene_anyparam_crop_s1` -- `occlusion_scene.norm: crop` (new `SceneConfig`
+  field, omitted from `to_dict` at its default 'target'): a scene cloud is re-centred and
+  re-scaled by ITS OWN centroid and farthest point, and the clean target is expressed in that
+  frame (`compose` returns `target_pc` and `crop_norm`), removing the clean-target
+  normalisation hint. Measured on maize train scenes: crop scale 0.93-1.23x the target's
+  radius (mean 1.12), centroid shift ~0.11 radii. `evaluate()` and `visualize_scene_4m` map
+  predictions back to the target frame, so its `val_occ_*` PC metrics compare with every
+  other arm (its `val_loss` / `val_pc` do not). Maize trainer only (the sorghum trainer
+  raises on `norm: crop`), and refuses `leaf_mask` with it.
+  **Results (occluded TEST, all 2,250 plants, `eval/pc_generation.py`, F1@10mm / mean error):**
+  sorghum any-to-any (`reports/pc_generation_sorghum.json`) no card **0.287 / 23.8 mm** --
+  better than both no-parameter sorghum models (`sm_scene_noparam_s1` 200 ep 0.216 / 26.3 mm,
+  `long_sorghum_mixsink_s1` 600 ep 0.277 / 24.1 mm) and 0.036 short of the card-given mixed +
+  Sinkhorn at the same 200 epochs (0.323); with the true card in the budget 0.354 / 20.1 mm,
+  ABOVE that card-given model (E1's start). Its own predicted card fed back HURTS in sorghum
+  (0.182 / 33.8 mm), unlike maize (0.431 -> 0.442); untested guess: sorghum's leaf tokens
+  carry roll angles the model cannot predict but trusts as exact. Card only 0.04 (never
+  trained). Maize crop frame (`pc_generation_maize_crop.json`): no card 0.262 / 19.8 mm vs
+  0.431 / 15.6 mm in the target frame, and the true card barely helps (0.271 vs 0.475) --
+  the card's sizes are in metres and a crop-frame cloud carries no metric scale, so the
+  model cannot use them. Clean val was unchanged (0.253 vs 0.261 at epoch 120), so the drop
+  is the leak removed. Next to try: give the model the crop's metric scale (a depth camera
+  has it). The "no card, true centre + size" row (centroid + RMS-radius alignment to the
+  target) is NOT a usable oracle: it hurts sorghum (0.287 -> 0.210), because a prediction
+  with missing parts has the wrong centroid / RMS. Ignore it.
+  Maize card-only steps (`pc_generation_maize_card.json`, vs `maize_scene_anyparam_pre_s1`
+  re-scored in `pc_generation_maize_pre.json`, which reproduces the earlier numbers exactly):
+  scene tasks barely change (no card 0.414 vs 0.431, true card 0.460 vs 0.475); card only
+  goes from 51 mm to **33 mm** error and precision@10mm 0.09 -> 0.22, but recall@10mm FALLS
+  0.14 -> 0.07 (F1@10mm 0.073 vs 0.100), and the TRUE card is still no better than the
+  predicted one (0.073 vs 0.071). It learned an average plant, not card -> plant. Why,
+  checked: the target cloud is in the CAMERA frame and a plant's 10 views differ widely
+  (plant_0004: camera azimuth 12, 154, 143, -148, -166, -99, ... deg; elevation -58 to
+  +70 deg), and the card carries no viewpoint -- so from the card alone the plant's
+  orientation in the target frame is unknowable and the best the model can do is a
+  view-averaged blob. Card -> plant needs the target in a canonical (world, stem-up) frame,
+  or the camera pose as an input token.
+  **Metric-scale follow-up (submitted 2026-10-11, job 16844455, scavenger):**
+  `maize_scene_anyparam_metric_s1` = the crop run with `occlusion_scene.norm: metric`,
+  `unit_m: 0.64` -- the scene cloud is still centred on its own centroid (target position
+  not given) but keeps its real size in units of 0.64 m (the median maize radius) instead of
+  being shrunk to unit radius, so the target's size and the card's metre-valued lengths are
+  usable; a depth camera has metric scale, so this is information a real crop has. EVERY
+  sample is in metres, clean ones about their own centroid (`occlusion_scene.metric_frame`,
+  used by the maize trainer for batches without a scene, card-only steps and the clean val
+  pass via `evaluate(..., metric_unit=)`). PC metrics are mapped back to the target frame as
+  for 'crop'. The clean 5-row figure (`visualize_reconstruction_4m`) is still fed the
+  target-frame cloud, so its PC panel is off-distribution for this run. Smoke
+  (`logs/dv/smoke_metric.py`): round trip 1e-7, the target's radius in metres is recovered
+  exactly from the frame. `logs/wait_metric_eval.sh` scores it with `eval/pc_generation.py`
+  when it finishes (`reports/pc_generation_maize_metric.json`). Expectation: recovers part
+  of the crop run's drop (size no longer ambiguous), not all (position still inferred).
+  **That expectation was wrong (val, epoch 180):** occluded F1@0.01 0.107 metric vs 0.105
+  crop vs 0.201 target frame; clean 0.276 vs 0.289 vs 0.296. Giving the size back changes
+  nothing, so what the target frame leaked was mainly the target's POSITION (its centroid at
+  the origin). `eval/pc_generation.py` now also scores "no card, true centre" (the
+  prediction shifted onto the target's centroid, no rescaling) to test that; pre and crop
+  were re-scored with it (jobs 16847695-6). If position is the gap, the deployable fix is an
+  origin at the target's stem base (where it was cropped + the ground plane), not its centroid.
+  **Centre check, occluded test F1@10mm (no card -> shifted onto the true centroid):** target
+  frame 0.431 -> 0.335, crop 0.262 -> 0.302. The shift itself costs ~0.1 on a model that
+  already knows the position (a prediction with clumps / missing tips has a biased centroid),
+  so read it as a comparison under the SAME alignment: the target-frame vs crop gap shrinks
+  from 0.169 to 0.033. Most of the crop drop is the target's position, as suspected.
+  **Metric run on test (`reports/pc_generation_maize_metric.json`, epoch 200):** no card
+  0.265 / 19.8 mm (crop 0.262), true card 0.279 (crop 0.271), centre-shifted 0.304 (crop
+  0.302). Metric scale is a wash on test too, and even with metre-consistent units the card
+  barely helps -- it carries sizes, not where the target sits in the crop.
+  **Any-to-any continued to 400 epochs (submitted 2026-10-11, scavenger, jobs 16847807 maize /
+  16847808 sorghum):** `configs/config_{maize,sm}_scene_anyparam_pre400.yaml`, the 200-epoch
+  any-to-any runs continued from their own epoch 200 through `INIT_CKPT` (cosine warm restart,
+  as the `*_mix_sink400` runs), TARGET frame (not crop / metric), so directly comparable with
+  the card-given mixed + Sinkhorn 400. Goal set with Yongyun: the no-card reconstruction
+  approaching what that model reaches WITH the card (occluded test F1@10mm 0.638 maize /
+  0.384 sorghum; at 200 the no-card any-to-any is 0.431 / 0.287). If still rising and short
+  at 400, continue to 600 the same way. `logs/wait_anyparam400_eval.sh` scores epoch 400 with
+  `eval/pc_generation.py --epoch 400` -> `reports/pc_generation_{maize,sorghum}_400.json`.
+  **Maize result (finished 2026-10-12 07:05; test, `reports/pc_generation_maize_400.json`):**
+  no card F1@10mm 0.457 / 14.8 mm (epoch 200: 0.431 / 15.6 mm), own predicted card fed back
+  0.465, true card in the budget 0.501 / 13.7 mm; the card-given mixed + Sinkhorn 400 WITH
+  the card is 0.638 / 10.7 mm. Val occluded F1@0.01 0.203 -> 0.222 over the extra 200 epochs,
+  against 0.256 -> 0.392 for the card-given model: the no-card model levels off, so the gap is
+  the information the card carries about hidden parts, not training length.
+  The first sorghum job (16847808) died before step 1: a `/work` stall made rank 0's first
+  batch take 18.5 min, rank 1 hit the 10-min NCCL watchdog in DDP's first broadcast. Both
+  trainers now pass `timeout=PG_TIMEOUT` (60 min) to `init_process_group`; resubmitted as
+  job 16851640 (no checkpoints of its own yet, so `INIT_CKPT` applies again).
+  **Alloy's data, checked 2026-10-11: still no occluded renders.** New since 10-06 only
+  `shorgum_data/new_data_50K/Sorghum_15K_subset` (2026-10-08; the same 105k / 22.5k / 22.5k
+  folders, dated 2026-07-08 -- a copy, not new renders) and paper / figure scripts in
+  `alloy/embodiedmae`. His per-view visibility masks for sorghum clouds (which points a
+  camera sees; 1 view 48.8 %, 3 views 78.3 %; `outputs/_pcview_masks/`, 2026-09-30) are the
+  "partial cloud as a depth camera sees it" item from the list above, sorghum train / test only.
+  Eval bug fixed on the way: the inner helper `run()` shadowed the run name, so the first
+  two eval jobs (16843926 / 16843944) crashed while writing the JSON, after scoring.
 - **Long run for real-data testing (`configs/config_long_sorghum_mixsink.yaml`,
   `slurm/long_arm.sbatch`, job 16724098, started 2026-10-04 23:31).** Sorghum,
   mixed masking (nf_prob 0.5), QAL 0.02 squared x15 + Sinkhorn (effective
