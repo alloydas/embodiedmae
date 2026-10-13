@@ -122,6 +122,21 @@ it never exits 0 by itself because `--max_steps` only shortens epochs, so it is 
 gate) and the full run **22870325** (no dependency; `outputs/maize_distill_all_d2`). Untracked
 `eval/pc_fscore_*.py` + `slurm/delta/pc_fscore_maize.sbatch` (2026-10-07) were never run or committed.
 
+**2026-10-13 10:40: MAIZE E1 launched (user: "Start the E1", "submit it").** Job **22870827**
+(`gpuA100x4-preempt`, 4x A100-40GB, 64 CPU, 240G, 48 h, self-requeueing via USR1, `--requeue`):
+`slurm/delta/pretrain_maize_e1.sbatch` -> `configs/config_maize_4m_pretrain_15k_d2.yaml` ->
+`outputs/maize_4m_pretrain_15k_d2`. The maize twin of the sorghum E1 d2: 1000 epochs over all
+105,000 views (`view_sampling: false`), global batch 256 = 16/GPU x 4 GPUs x accum 4 (the 40 GB
+cards cannot take sorghum's 32/GPU, so per-rank BatchNorm sees 16), lr 6e-4, warmup 20, mask 0.80,
+qal_loss, save_freq 5 pruned to the newest 3 + every 100th, 411 steps/epoch = 411,000 steps.
+`train_maize_4m.py` gained `training.accum_steps` / `--accum_steps` and `checkpointing.keep_last`
+/ `keep_every` (verbatim ports from the sorghum trainer; default = the old code path).
+**Budget warning:** at ~100-130 items/s (loader-bound) an epoch is ~14-17 min, so ~240-280 h of
+wall on 4 GPUs; the preempt partition bills ~2.25 SU per wall-hour at this shape, i.e. ~550-630
+SU against a balance of 431 SU that the six other pending jobs also draw on. E1 cannot finish on
+the current allocation; it will stop (job fails on a zero balance) around epoch 600-700 unless
+the allocation is topped up. The checkpoints up to that point remain usable.
+
 ### Data version 2 — the sorghum restart (2026-10-02; code b708117)
 
 The user changed the sorghum dataset and asked for every experiment to restart from the
