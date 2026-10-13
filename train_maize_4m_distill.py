@@ -705,6 +705,13 @@ def evaluate_crossmodal(student, loader, device, sources, target=None, max_batch
 
 
 def run_val(student, loader, device, args):
+    # The val chamfer allocates (B, N, N, 3) = 12 GiB at batch 16 x 8192 points.
+    # After ~20 epochs of training the caching allocator on a 40 GB A100 held
+    # 13.6 GiB reserved-but-unallocated and the allocation OOMed with 11 GiB
+    # free (Delta smoke 22751636, epoch-20 val). Releasing the cached blocks
+    # first changes no number; train_maize_4m.py does the same before val/test.
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     with fixed_rng(args.eval_seed, device):
         return evaluate_crossmodal(student, loader, device, args.sources,
                                    args.targets, max_batches=args.val_max_batches)

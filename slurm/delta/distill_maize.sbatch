@@ -79,6 +79,9 @@ set -u
 export WANDB_MODE="${WANDB_MODE:-online}"
 export WANDB__SERVICE_WAIT="${WANDB__SERVICE_WAIT:-600}"
 export OMP_NUM_THREADS=4
+# 40 GB cards: the val chamfer needs one 12 GiB block; expandable segments keep
+# the training allocator from fragmenting the card so that block cannot be found.
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 export NCCL_DEBUG=WARN
 export PYTHONUNBUFFERED=1
 

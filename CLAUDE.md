@@ -103,6 +103,25 @@ exists in either data version and none is planned. Then: E8 baselines on maize d
 (`eval/baseline_probe.py`, needs `rgba.png` support for maize), `#maize` page sections.
 
 
+**2026-10-13 09:50 (status check).** The four probe/E9 jobs finished 2026-10-09
+(`reports/probe_pm_{600,6168,2024,624}_227516*.csv`, `reports/e9_pm_*_227516*/`). On d2 the
+parameter stream no longer hurts maize: `maize_4m_d2` vs `maize_e2_pcrgbd_d2` val R² height
+0.635 vs 0.633, leaf angle 0.919 vs 0.926, stem radius 0.743 vs 0.760, curl 0.304 vs 0.236 (v1 had
+the +params arm losing 10 of 11). PC-only is far behind (height 0.171). E3 d2 is not monotone:
+height 1k / 3k / 10k / full = 0.393 / 0.524 / 0.427 / 0.635; stem radius 0.593 / 0.624 / 0.717 /
+0.743 (unexplained; paired CIs not yet run). **None of the six preempt training jobs
+(22751638/40/42/44, 22752738, 22752834 and their `afterany` chunks) has started in five days**:
+priority 2765, 177 jobs pending on `gpuA100x4-preempt`, 0 running there, every node PLANNED or
+allocated. The distillation smoke 22751636 was preempted twice, then OOMed at its epoch-20
+validation (the 12 GiB chamfer block against 13.6 GiB reserved-but-unallocated), which killed
+the gated full job 22751637. Fix: `run_val` in `train_maize_4m_distill.py` now calls
+`torch.cuda.empty_cache()` first, and the Delta launcher sets
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`. Resubmitted: smoke **22870323** (1 GPU, 40 min,
+resumes `outputs/_smoke_maize_distill_d2` at epoch 18, so it reaches the epoch-20 val in minutes;
+it never exits 0 by itself because `--max_steps` only shortens epochs, so it is a test, not a
+gate) and the full run **22870325** (no dependency; `outputs/maize_distill_all_d2`). Untracked
+`eval/pc_fscore_*.py` + `slurm/delta/pc_fscore_maize.sbatch` (2026-10-07) were never run or committed.
+
 ### Data version 2 — the sorghum restart (2026-10-02; code b708117)
 
 The user changed the sorghum dataset and asked for every experiment to restart from the
