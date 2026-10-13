@@ -1,5 +1,9 @@
 """Paper figures: the teaser (Fig. 1) and the architecture diagram (Fig. 2).
 
+Since 2026-10-13 the teaser is built by figures/make_teaser.py (same data, the
+EmbodiedMAE-style layout, PDF/PNG and draw.io from one scene); the `teaser()`
+here is the older text-led layout.  Fig. 2's draw.io twin is make_arch_drawio.py.
+
 Both are drawn from REAL data and REAL model outputs on one held-out val plant,
 following the house style (show the modality, not a label; one colour for the
 point cloud at every stage).  Writes paper/fig_teaser.{pdf,png} and
