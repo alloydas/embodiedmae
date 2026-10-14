@@ -7,8 +7,13 @@
 % ran on the first release of the sorghum set (grey-background RGB, waviness leaf fields) and
 % is being re-run on the final one (background-free, brightened RGB; per-leaf width); the
 % four re-run arms finished so far reproduce the modality ordering (Chamfer 5.00 / 1.85 / 2.53
-% x 1e-3 for PC / PC+RGB+D / PC+RGB+D+params). Maize E2 and E3 are on the final maize set;
-% maize E4, E8 and the pose rows are on its first release.
+% x 1e-3 for PC / PC+RGB+D / PC+RGB+D+params). Maize E2, E3 and E9 are on the final maize set
+% (Delta runs maize_*_d2, probes reports/probe_pm_{600,6168,2024,624}_2275161*.csv, paired CIs
+% reports/maize_e2_delta_d2_22751615.csv, maize_e2_depth_delta_d2_22751615.csv,
+% maize_e3_delta_d2_2275161x.csv, maize_e3_3k_vs_10k_delta_d2_2275161x.csv, 2026-10-14);
+% maize E4, E8, the pose rows and the distillation are on its first release, their final-set
+% twins (maize_e4_{small,large}_d2, maize_e8_supervised_d2, maize_distill_all_d2) and the maize
+% headline model (maize_4m_pretrain_15k_d2, the sorghum E1 schedule with QAL+Sinkhorn) are queued.
 
 \section{Experiments}
 \label{sec:results}
@@ -27,7 +32,9 @@ headline model and everything derived from it (the teacher, the distilled
 students, the single-sensor generation numbers and the E1 rows of the
 partial-cloud study) are reported on the final release. \todo{The E1-derived
 numbers in this draft are still from the Chamfer-only v1 headline run; replace
-them with the v2 Sinkhorn E1 and its distillation when they finish.} Phenotype readout follows Sec.~\ref{sec:field}: ridge
+them with the v2 Sinkhorn E1 and its distillation when they finish.} A maize
+headline model on the same schedule and loss is queued
+(\texttt{maize\_4m\_pretrain\_15k\_d2}). Phenotype readout follows Sec.~\ref{sec:field}: ridge
 regression on the frozen CLS token, the parameter tensor zeroed, one
 deterministic view per plant, reported as $R^2$ on the extreme-enriched
 held-out plants (2{,}250 val, 2{,}250 test; val unless stated) with paired
@@ -74,7 +81,8 @@ exposes eleven largely independent traits (Sec.~\ref{sec:data}).
   parameter stream as an \emph{input} modality inside the shared masking
   budget. Probe $R^2$ on held-out plants; branch and roll are the two sorghum
   leaf-angle definitions, leaf len is the per-plant mean leaf length. Test
-  values are within 0.03 of val on every cell.}
+  values are within 0.03 of val on every sorghum cell and within 0.05 on
+  every maize cell.}
   \label{tab:e2}
 \end{table}
 
@@ -385,13 +393,17 @@ $0.035$.
 % reports/e9_pr_600_16592054/e9_latent_summary_val.csv, reports/e9_pr_tg100_600_16686383/, reports/e9_pm_600_22751615/
 There is no genotype in either generator: every plant is one draw from one
 continuous distribution, so a clustered latent would be a defect, not a
-finding. The frozen CLS space is a continuum (best silhouette $0.17$ to $0.23$
+finding. The frozen CLS space is a continuum (best silhouette $0.15$ to $0.24$
 at $k{=}2$ with adjusted Rand index $\approx 0$ against shape deciles, t-SNE
-trustworthiness $0.95$ to $0.98$) of low effective dimension (participation
-ratio $4.4$ to $6.3$ of 768 on sorghum, $6.7$ to $10.3$ on maize; 14 to 19
-principal components for 90\,\% of the variance once RGB is present). Its
-leading direction is the plant's size: the first principal component correlates
-with leaf count at $|r| = 0.73$ to $0.94$ in the sorghum arms. The parameter
+trustworthiness $0.95$ to $0.99$) of low effective dimension (participation
+ratio $4.4$ to $6.3$ of 768 on sorghum, $6.7$ to $11.3$ on maize; 14 to 15
+principal components for 90\,\% of the variance once RGB is present on
+sorghum, 18 to 19 on maize). On sorghum its leading direction is the plant's
+size: the first principal component correlates with leaf count at $|r| = 0.73$
+to $0.94$. On maize no single component carries a trait: the best single-component
+correlation with leaf count is $|r| \le 0.17$ in every arm, although the ridge
+probe reads leaf count at $R^2 = 0.91$ from the same features, so the maize traits
+are spread over many directions rather than carried by one. The parameter
 stream shapes this geometry in the direction the probe already showed: the
 gated arms are the least size-aligned ($|r|$ $0.48$ and $0.34$) and the most
 isotropic (participation ratio $8.5$ and $14.3$), and the target-only arm is
