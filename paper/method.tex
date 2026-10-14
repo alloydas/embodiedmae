@@ -147,8 +147,8 @@ view regime.
   the point cloud are tokenised, masked at ratio 0.8 with a Dirichlet split of
   the visible budget, and encoded together with a CLS token; the decoders see
   every position, hidden ones as mask tokens, and reconstruct all four streams.
-  The recipe is a target only: its tokens are never encoded
-  (Sec.~\ref{sec:param-stream}). \emph{Distillation:} a frozen teacher shown all
+  The recipe is masked with the other streams and is both an encoder input
+  and a decoder target; Sec.~\ref{sec:param-stream} ablates its role. \emph{Distillation:} a frozen teacher shown all
   four streams, recipe included, supervises a single-sensor student through its
   decoder features $F$ and CLS $c$, while the student still reconstructs all
   four streams. Images, masks and outputs are real, for one held-out sorghum
@@ -193,9 +193,10 @@ which makes the vision masks of a four-stream model bit-identical to its
 three-stream sibling under the same seed. Left in the shared budget instead,
 the short parameter stream is $\sim$59\,\% visible at $\rho{=}0.80$ while the
 vision streams fall from 20\,\% to 18\,\%, a confound our control arms remove
-(Sec.~\ref{sec:param-stream}). \CropCode{} uses $\rho_\theta{=}1$: the
-parameters are reconstructed by the decoder at every step and never seen by
-the encoder.
+(Sec.~\ref{sec:param-stream}). The gated ratio is used only by those control
+arms: the headline model keeps the parameter stream in the shared Dirichlet
+budget, so the encoder sees $\sim$58\,\% of its tokens on average. At
+deployment the parameters are never an input.
 
 \paragraph{Objective and schedule.}
 The loss sums per-stream terms over the hidden positions: per-patch-normalized
@@ -253,7 +254,7 @@ before distilling from it.
 The \emph{student} starts from the teacher's weights and trains for 100 epochs
 (AdamW, lr $10^{-4}$, cosine, global batch 128) on two step types chosen by a
 seeded coin. With probability 0.8 a \emph{single-sensor step}: one source
-$s\in\{\mathrm{rgb},\mathrm{d},\mathrm{pc}\}$, cycled deterministically, is the
+$s\in\{\mathrm{rgb},\mathrm{d},\mathrm{pc},\theta\}$, cycled deterministically, is the
 only stream to reach the encoder, optionally with half its own tokens hidden as
 a regularizer, and the loss is
 $\sum_m\ell_m+\lambda_F\,\overline{\|F^S_j-F^T_j\|^2}_{j\notin s}+\lambda_c\|c^S-c^T\|^2$
@@ -261,7 +262,9 @@ with $\lambda_F{=}1$, $\lambda_c{=}0.5$: ground-truth reconstruction of all
 streams including $\theta$, plus feature matching on the positions the student
 must \emph{generate}---for an RGB source, the depth, cloud and parameter
 positions, where the teacher's features were computed with the parameters in
-view. The student never receives parameter tokens. With probability 0.2 an ordinary masked step from
+view. The student does see parameter tokens in training: as the source on one
+single-source step in four, and inside the four-stream mask of the ordinary
+steps. With probability 0.2 an ordinary masked step from
 Sec.~\ref{sec:pretrain}; one such step in five is what keeps the non-target
 heads alive (a depth head collapsed by $7\times$ within ten epochs without it
 and recovered in one epoch with it). Specialists restrict the source list and,

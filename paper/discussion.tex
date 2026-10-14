@@ -21,11 +21,14 @@ reading consistent with modality competition and negative transfer is that a
 privileged stream lets the encoder route a trait through tokens it will not
 have at test time, and the reconstruction pressure of a per-leaf target then
 pulls the latent toward the plant's size, the direction its first principal
-component already carries. The practical rule is the one we adopted: a
-generative modality belongs in the data and in the targets, never in the
-encoder. We expect it to transfer to any multimodal model with access to a
-program, a CAD sketch, or a simulator state, and the gated ratio
-$\rho_\theta$ is a one-line way to test it.
+component already carries. The practical rule the ablations support is that a
+generative modality belongs in the data and in the targets rather than in the
+encoder. Our headline model does not yet follow it: it was pretrained, and its
+teacher distilled, with the parameters as an encoder input, so its frozen
+representation is the one the four-stream arm measures, and a headline run at
+$\rho_\theta{=}1$ is the direct test. We expect the rule to transfer to any
+multimodal model with access to a program, a CAD sketch, or a simulator state,
+and the gated ratio $\rho_\theta$ is a one-line way to test it.
 
 \paragraph{Which metric decides.}
 Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on

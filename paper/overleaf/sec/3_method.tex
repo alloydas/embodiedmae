@@ -21,8 +21,9 @@ observations. An overview of the framework is shown in Fig.~\ref{fig:arch}.
   \includegraphics[width=\linewidth]{Figures/fig_architecture.pdf}
   \caption{\textbf{\method{} overview.} (a) Four token streams enter a
   shared encoder under a Dirichlet masking budget; modality-specific
-  decoders reconstruct all streams. The parameter stream is decoded,
-  never encoded (Sec.~\ref{sec:exp-params}). (b) The full-modality
+  decoders reconstruct all streams. During pretraining the parameter
+  stream is both masked input and decoder target; its role is ablated in
+  Sec.~\ref{sec:exp-params}. (b) The full-modality
   teacher is distilled into single-sensor students for deployment.}
   \label{fig:arch}
 \end{figure*}
@@ -246,9 +247,8 @@ released}}
 %   min per-modality ratio 0.25 — every subset becomes a training task.
 % - Losses: MSE (RGB, depth), Chamfer/QAL (PC), param regression loss;
 %   per-head weights \todo{values}.
-% - KEY DESIGN RULE (forward-ref the ablation): the parameter stream is a
-%   DECODER TARGET ONLY in the final model; Sec.~\ref{sec:exp-params}
-%   shows every variant that lets the encoder see parameters is worse.
+% - As run: the headline model and teacher encode the parameter stream
+%   (shared Dirichlet budget); Sec.~\ref{sec:exp-params} ablates this.
 \todo{2-3 paragraphs}
 
 \paragraph{Token representations and architecture.}
@@ -275,31 +275,40 @@ and an MLP predicts the procedural parameters.
 more than $K$ leaves.}
 
 \paragraph{Modality masking.}
-We use a total sensor mask ratio of $\rho=0.80$, giving a visible budget
+We use a total mask ratio of $\rho=0.80$ over all four streams, giving a
+visible budget
 \begin{equation}
-  V=\left\lfloor(1-\rho)\sum_{m\in\mathcal{M}}L_m\right\rfloor=117.
+  V=\left\lfloor(1-\rho)\sum_{m\in\mathcal{M}}L_m\right\rfloor,
   \label{eq:visible-budget}
 \end{equation}
-At each training step, a sample from $\mathrm{Dirichlet}(\mathbf{1})$ allocates
-this budget across the three sensor streams. Integer allocations preserve the
-exact budget, retain at least one token per stream, and mask at least 25\% of
-each stream. Token counts are shared across a batch, while visible positions
-are sampled independently for each example. Parameter visibility is controlled
-by a separate mask ratio $\rho_\theta$:
+which is 122 tokens for sorghum ($L=613$) and 123 for maize ($L=617$). At
+each training step, a sample from $\mathrm{Dirichlet}(\mathbf{1})$ allocates
+this budget across the four streams, the parameter stream included. Integer
+allocations preserve the exact budget, retain at least one token per stream,
+and mask at least 25\% of each stream. Token counts are shared across a batch,
+while visible positions are sampled independently for each example. The
+procedural parameters are therefore both an encoder input and a decoder
+target in the headline model: because the parameter stream is short, it is on
+average $\sim$58\% visible, while the three sensor streams together keep about
+107 of their 588 tokens.
+
+For the controlled ablations of Sec.~\ref{sec:param-stream}, the parameter
+stream can instead be taken out of the shared budget and masked at its own
+ratio $\rho_\theta$:
 \begin{equation}
  V_\theta=
  \begin{cases}
   0, & \rho_\theta=1,\\
   \max\!\left(1,\left\lfloor(1+K)(1-\rho_\theta)\right\rfloor\right),
-    & 0\leq\rho_\theta<1.
+    & 0\leq\rho_\theta<1,
  \end{cases}
  \label{eq:parameter-visibility}
 \end{equation}
-This separation keeps the sensor masks identical across matched three- and
-four-stream experiments under the same seed. The target-only configuration
-uses $\rho_\theta=1$, so procedural parameters supervise reconstruction without
-entering the encoder. We compare this configuration with parameter-input and
-sensor-only alternatives in Sec.~\ref{sec:param-stream}.
+with the Dirichlet budget then allocated over the three sensor streams alone
+($V=117$). This keeps the sensor masks identical across matched three- and
+four-stream arms under the same seed. $\rho_\theta=1$ makes the parameters a
+reconstruction target only, never an encoder input. Parameters are never an
+input at deployment, where only sensor streams are available.
 % Original shared-budget diagnostic: about 59% parameter visibility versus
 % 18% sensor visibility, compared with 20% in the sensor-only allocation.
 % Keep this empirical finding in the token-budget ablation.
@@ -373,18 +382,19 @@ Pretraining retains visible tokens from every sensor stream. Consequently,
 single-sensor inference introduces a missing-modality configuration that the
 encoder has not encountered during this stage. We address this gap through
 teacher--student distillation~\cite{hinton2015distillation}. The teacher is
-initialized from the pretrained checkpoint with the lowest validation loss
-and remains frozen. It receives RGB, depth, point clouds, and privileged
-procedural parameters. The supplied sorghum configuration exposes all tokens;
-for maize, we retain half the tokens from each stream to avoid the
-reconstruction degradation observed with fully visible input. We assess the
+the pretrained four-stream model, frozen: for sorghum the checkpoint with the
+lowest validation loss (epoch 960 of 1{,}000), for maize the final epoch-600
+checkpoint. It receives RGB, depth, point clouds, and the procedural
+parameters, the same four streams it was pretrained on, so the parameters act
+as privileged information that the students will not have. For sorghum every
+token of every stream is visible to the teacher; for maize we retain half the
+tokens of each stream to avoid the reconstruction degradation observed with
+fully visible input. We assess the
 teacher's reconstruction quality under the selected mask before distillation.
 The teacher provides a CLS representation $c^T\in\R^{768}$ and final normalized
 decoder features $F^T\in\R^{L\times512}$, where $L=613$ for sorghum and 617
 for maize. The fixed decoder layout gives a direct correspondence between
 teacher and student features at every output position.
-\todo{Confirm the teacher checkpoint and parameter-input training history:
-a target-only encoder has not learned to consume visible parameter tokens.}
 % Original teacher diagnostics for experiments/supplement:
 % Sorghum Chamfer: 4.8e-4 fully visible vs. 3.5e-4 at 50% visibility.
 % Maize Chamfer: 0.05--0.09 fully visible vs. approximately 0.001 masked.
@@ -393,8 +403,9 @@ The student is initialized from the teacher and optimized for 100 epochs with
 AdamW, a learning rate of $10^{-4}$, cosine decay, and global batch size 128.
 At each step, a seeded random draw selects single-sensor training with
 probability 0.8 or ordinary masked pretraining with probability 0.2. In a
-single-sensor step, the source $s\in\mathcal{M}$ is cycled deterministically,
-and only its tokens enter the encoder; optionally, half these tokens are also
+single-source step, the source $s$ is cycled deterministically over all four
+streams (RGB, depth, point cloud, and parameters), and only its tokens enter
+the encoder; optionally, half these tokens are also
 masked for regularization. The objective combines ground-truth reconstruction
 with decoder- and encoder-level feature matching:
 \begin{equation}
@@ -410,12 +421,15 @@ where $\mathcal{J}_{\neg s}$ contains the decoder positions belonging to
 non-source streams, including the procedural parameters. We use
 $\lambda_F=1$ and $\lambda_c=0.5$. Thus, the teacher's privileged information
 supervises the outputs that the student must infer from the available sensor.
-The student never receives procedural parameters as input, including on
-ordinary masked steps. Interleaved pretraining steps maintain reconstruction
-across modalities. Specialists restrict the source modalities and, optionally,
-the reconstruction targets, whereas the generalist cycles across all three
-sensor sources. We evaluate each source without source-token masking and
-compare against the initialization using the same evaluation routine.
+The student does see parameter tokens during training: on the
+parameter-source steps, which train it to regenerate the plant from its
+program alone, and on the interleaved ordinary masked steps, which use the
+four-stream pretraining mask and maintain reconstruction across modalities.
+Specialists restrict the source modalities and, optionally, the
+reconstruction targets, whereas the generalist cycles across all four
+sources. At deployment only a sensor source is available; we evaluate each
+source alone, without source-token masking, and compare against the
+initialization using the same evaluation routine.
 \todo{Specify the reconstruction masks/reductions on single-sensor steps,
 particularly whether fully visible source patches contribute to the loss.}
 % Original diagnostics: without interleaved pretraining, depth-head error
@@ -423,17 +437,12 @@ particularly whether fully visible source patches contribute to the loss.}
 % restoring these steps. Some sources gain early while others regress; retain
 % source-wise epoch-zero comparisons in the experimental analysis.
 
-% - Teacher: converged model with ALL VISION streams visible (RGB +
-%   depth + PC) and parameters as OUTPUT ONLY. The teacher never
-%   observes ground-truth parameters; this forecloses the label-leakage
-%   objection (a teacher that reads the parameters it teaches students
-%   to predict).
-% - A parameter-visible teacher is retained strictly as a
-%   PRIVILEGED-INFORMATION ABLATION (Sec.~\ref{sec:exp-params}).
-% - Students: one per deployment sensor (RGB-only, depth-only, PC-only),
-%   warm-started, distilled on teacher's completed outputs + GT;
-%   100 epochs. \todo{rerun distillation from the vision-complete
-%   teacher; current 15K numbers used the four-stream teacher}
+% - As run: the teacher is the four-stream model and SEES the parameters
+%   (privileged information); the generalist student cycles rgb / depth /
+%   pc / text sources and its interleaved masked steps include parameter
+%   tokens. Deployment and evaluation feed one sensor source only.
+%   (Sorghum d2: teacher = 4m_pretrain_15k_d2_sink, checkpoint to be fixed
+%   when E1 finishes.)
 % - Objective: \todo{exact distillation loss}.
 % - Close: distillation is what turns a pretraining artifact into a
 %   deployable any-sensor system (quantified in Tab.~\ref{tab:main}).

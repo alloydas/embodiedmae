@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit 545a23a).
+% Synced from the embodiedmae repo (paper/results.tex, commit b6466f1).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -14,8 +14,9 @@ the variable; arms that change the number of training plants keep the step
 budget by changing their epoch count (Sec.~\ref{sec:method-pretrain}). The headline
 model differs in schedule (1{,}000 epochs over all ten views at global batch
 256) and in its point-cloud loss, which adds the Sinkhorn term of
-Sec.~\ref{sec:method-pretrain}; the teacher and every student of
-Sec.~\ref{sec:res-distill} descend from it. \todo{The headline-derived numbers
+Sec.~\ref{sec:method-pretrain}. Like the four-stream ablation arm, it takes the
+parameter stream as an encoder input under the shared masking budget; the
+teacher and every student of Sec.~\ref{sec:res-distill} descend from it. \todo{The headline-derived numbers
 in this draft are from the first-release, Chamfer-only headline run; the
 final-release Sinkhorn run and its distillation replace them.} A maize
 headline model on the same schedule and loss is queued.
@@ -242,7 +243,9 @@ is complete even where the cloud is not.}
     $\theta$ only & -- & -- & 16.6 & 6.34 & & -- & -- & 32.6 & 11.8 \\
     RGB+D       &  &  &  &  & &  &  &  &  \\
     RGB+PC      &  &  &  &  & &  &  &  &  \\
-    all three   &  &  & 0.48 & 0.35 & &  &  &  &  \\
+    all three   &  &  &  &  & &  &  &  &  \\
+    \midrule
+    teacher, all four$^\S$ & \multicolumn{2}{c}{} & \multicolumn{2}{c}{0.48 / 0.35} & &  &  &  &  \\
     \midrule
     mean generation loss & \multicolumn{4}{c}{$0.344 \to 0.278\ (-19.1\,\%)$} & & \multicolumn{4}{c}{$0.374 \to 0.296\ (-20.7\,\%)$} \\
     \bottomrule
@@ -250,8 +253,11 @@ is complete even where the cloud is not.}
   \caption{\textbf{Any-subset results before and after distillation.} Each row:
   that input alone, the others absent, generating the rest (val). Before = the
   pretrained model used zero-shot (the student's warm start, epoch 0); after =
-  the distilled generalist. The teacher never sees the parameters at inference
-  and the student never receives them (Sec.~\ref{sec:distill}). $\theta$ MAE on
+  the distilled generalist. The teacher sees all four streams, the parameters
+  included; the student is trained on all four sources, and each row feeds it
+  that source alone (Sec.~\ref{sec:distill}). $^\S$The frozen sorghum teacher
+  with every token of all four streams visible / with 50\,\% of each stream
+  visible; not a before/after pair. $\theta$ MAE on
   hidden real leaf tokens. $^\ddagger$the collapse of an unmasked cloud
   (Sec.~\ref{sec:distill}); maize is the first-release student stopped at
   epoch 55. \todo{Two-stream rows; final-release students for both species.}}
@@ -388,10 +394,13 @@ size, $-0.07$ on roll and $-0.10$ on leaf length. The two traits the leaf
 tokens spell out per leaf lose most, which is consistent with the encoder
 routing them through tokens that will not exist in the field, and the
 target-only result says the reconstruction pressure alone does part of the
-damage. This is the evidence behind $\rho_\theta{=}1$ in
-Sec.~\ref{sec:method-pretrain}: the recipe is decoded from the sensor streams and never
-encoded, while Sec.~\ref{sec:res-distill} shows that supervising it as a
-target is what makes the generalist beat the parameter specialist.
+damage. The headline model and its teacher were nevertheless trained with the
+parameters in the encoder's shared budget (Sec.~\ref{sec:method-pretrain}), as in the
+four-stream arm of Tab.~\ref{tab:e2}; the ablations predict that its frozen
+representation is weaker than a three-stream or $\rho_\theta{=}1$ model would
+give, which we have not tested at the headline scale. Supervising the
+parameters as a target is, in turn, what makes the generalist beat the
+parameter specialist (Sec.~\ref{sec:res-distill}).
 
 \subsection{What the metrics disagree about}
 \label{sec:res-metrics}\label{sec:exp-metrics}
