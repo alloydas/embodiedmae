@@ -273,6 +273,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   were re-pointed `afterany` behind them as fallbacks (they resume from the newest checkpoint if
   the nova job dies or times out, and exit at once if it finished). A nova job that pends for days
   blocks its fallback: to swap, hold the nova job and clear the scavenger job's dependency.
+  **Old-loss E1 killed (user, 2026-10-14: "kill e1_pretrain_d2"):** 16907868 and 16907817 cancelled;
+  `outputs/4m_pretrain_15k_d2` stays on disk at epoch 716 (old loss). Only the Sinkhorn run is live:
+  nova 16907869 with scavenger fallback 16907818.
   The maize trainer was not touched (its model subclasses `EmbodiedMAE4M`, default weight 0).
 - **`e2_pc_d2` moved to the front of its chain (2026-10-07 09:10, user: "move e2_pc to nova").**
   Its scavenger chunks kept being preempted within minutes (stuck at 257 since 10-06). Nova job
