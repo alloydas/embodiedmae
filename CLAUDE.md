@@ -256,9 +256,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   ~10:02, gain 1.85, PNG tag `brighten_gain`; the still-running `_d2` arms switched inputs
   mid-run at that moment, the finished arms never saw it). The old E1 `4m_pretrain_15k_d2`
   reached epoch 716/1000 (old loss, mixed brightness) and CONTINUES alongside the new run (user,
-  2026-10-14: "keep d2 with old loss and start E1 with new loss"): jobs 16740746 (nova) and
-  16696027 (scavenger fallback) were held briefly and released. Both E1 runs want 2 nova GPUs
-  under the 17-GPU cap, so they queue on Priority / AssocGrpGRES and start as labmates free GPUs.
+  2026-10-14: "keep d2 with old loss and start E1 with new loss"): job 16740746 (nova) was held
+  briefly and released; the 8x A100 scavenger fallback 16696027 was CANCELLED at the user's request
+  ("there is one 8gpu job in scavenger drop it"). Both E1 runs want 2 nova GPUs under the 17-GPU
+  cap, so they queue on Priority / AssocGrpGRES and start as labmates free GPUs.
   The maize trainer was not touched (its model subclasses `EmbodiedMAE4M`, default weight 0).
 - **`e2_pc_d2` moved to the front of its chain (2026-10-07 09:10, user: "move e2_pc to nova").**
   Its scavenger chunks kept being preempted within minutes (stuck at 257 since 10-06). Nova job
