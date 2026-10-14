@@ -279,6 +279,13 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   cancelled; **16907818** (scavenger, 2x A100 80 GB, 40 CPU, 200G, `NUM_WORKERS=18`, 2-day limit,
   `--time-min 4h`, requeue + USR1 trap, `--save_freq 2`) is the only E1 job, dependency cleared.
   The loss passed a 1-GPU A100 smoke (16907096: 0.48 s/step at batch 16, 22.4 GiB peak).
+  **Either GPU type (user: "in scavenger rtx 6000 pro are free right why are you not requesting?"):**
+  three scavenger probes for 1 RTX PRO 6000 (2-min `hostname`, `--deadline`) expired unstarted on
+  2026-10-14 (nova CPU jobs + arabeh's 4-GPU nova jobs occupy both Blackwell nodes; nova is
+  OverSubscribe=NO, so a tier-0 scavenger job cannot co-locate). 16907818 was therefore updated in
+  place to `TresPerNode=gres/gpu:2` + `Features=(a100&NVLINK)|rtxpro6000`: it takes 2 RTX PRO 6000
+  as soon as scavenger can place them, or 2 A100 80 GB (NVLINK excludes the 40 GB `a100-pcie`
+  nodes, which cannot hold batch 32). Its env has `NUM_WORKERS=18` / 40 CPU either way.
   The maize trainer was not touched (its model subclasses `EmbodiedMAE4M`, default weight 0).
 - **`e2_pc_d2` moved to the front of its chain (2026-10-07 09:10, user: "move e2_pc to nova").**
   Its scavenger chunks kept being preempted within minutes (stuck at 257 since 10-06). Nova job
