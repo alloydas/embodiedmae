@@ -264,8 +264,15 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   from scratch), each 2x A100 80 GB, 40 CPU, 200G, `NUM_WORKERS=18`, 2-day limit with
   `--time-min 4h`, `--requeue` + the USR1 requeue trap, `--save_freq 2`. Expect ~25-30 min/epoch
   (36 loader workers; E1 reads all 105k views per epoch), about 2x slower than nova's 2x RTX PRO 6000.
-  To put one back on nova: the same sbatch line with `--partition=nova --account=mech-ai --qos=normal
-  --gres=gpu:rtx_pro_6000:2 --cpus-per-task=128 --mem=480G` and `NUM_WORKERS=60`.
+  Then (user: "use rtx 6000 pro they are free"): sinfo showed 4 idle RTX PRO 6000 on each Blackwell
+  node, but two probes (`--deadline=now+3min`, `hostname`) expired unstarted: scavenger 1-GPU
+  (nova CPU + arabeh's 4-GPU jobs sit on both nodes; nova is OverSubscribe=NO) and nova 1-GPU
+  (Priority: the idle GPUs are backfill-planned for others; mech-ai at 16/17). So both runs are
+  QUEUED FOR THE RTX PRO 6000 ON NOVA, **16907868** (old loss) and **16907869** (Sinkhorn), 2x
+  rtx_pro_6000 / 128 CPU / 480G / `NUM_WORKERS=60`, and the scavenger A100 jobs 16907817 / 16907818
+  were re-pointed `afterany` behind them as fallbacks (they resume from the newest checkpoint if
+  the nova job dies or times out, and exit at once if it finished). A nova job that pends for days
+  blocks its fallback: to swap, hold the nova job and clear the scavenger job's dependency.
   The maize trainer was not touched (its model subclasses `EmbodiedMAE4M`, default weight 0).
 - **`e2_pc_d2` moved to the front of its chain (2026-10-07 09:10, user: "move e2_pc to nova").**
   Its scavenger chunks kept being preempted within minutes (stuck at 257 since 10-06). Nova job
