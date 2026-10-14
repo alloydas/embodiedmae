@@ -21,9 +21,13 @@ is the variable; arms that change the number of training plants keep the step
 budget by changing their epoch count (Sec.~\ref{sec:pretrain}). The headline
 sorghum model (E1) differs in schedule, 1{,}000 epochs over all ten views at
 global batch 256, and in its point-cloud loss, which adds the Sinkhorn term of
-Sec.~\ref{sec:pretrain}; the E1 numbers below are from the earlier
-Chamfer-only headline run, and its Sinkhorn re-run is in training.
-\todo{Replace with the Sinkhorn E1 when it finishes.} Phenotype readout follows Sec.~\ref{sec:field}: ridge
+Sec.~\ref{sec:pretrain}. Data policy: the ablation arms (E2--E4, controls,
+E8, partial clouds, E9) are reported on the first sorghum release; the
+headline model and everything derived from it (the teacher, the distilled
+students, the single-sensor generation numbers and the E1 rows of the
+partial-cloud study) are reported on the final release. \todo{The E1-derived
+numbers in this draft are still from the Chamfer-only v1 headline run; replace
+them with the v2 Sinkhorn E1 and its distillation when they finish.} Phenotype readout follows Sec.~\ref{sec:field}: ridge
 regression on the frozen CLS token, the parameter tensor zeroed, one
 deterministic view per plant, reported as $R^2$ on the extreme-enriched
 held-out plants (2{,}250 val, 2{,}250 test; val unless stated) with paired
@@ -291,14 +295,15 @@ decide whether to report it.}
     PC+RGB         & 0.978 & 0.968 & 0.951 & 0.978 & 0.690 & $-0.06$ & 2.42 & 3.59 & 11.3 \\
     PC+RGB+D       & 0.980 & 0.973 & 0.963 & 0.980 & 0.764 & 0.316 & 1.65 & 2.97 & 11.0 \\
     four streams   & 0.965 & 0.956 & 0.948 & 0.965 & 0.779 & 0.753 & 2.43 & 3.67 & 11.2 \\
-    E1 (1k ep)     & 0.983 & 0.977 & 0.964 & 0.983 & 0.670 & $-0.27$ & 1.31 & 2.74 & 10.2 \\
+    E1 (1k ep)$^\dagger$ & 0.983 & 0.977 & 0.964 & 0.983 & 0.670 & $-0.27$ & 1.31 & 2.74 & 10.2 \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Partial clouds (sorghum, test).} Every model trained on
   complete clouds; at evaluation the cloud is cut to the points visible from
   camera 0, or from cameras 0--2, by ray-casting against the mesh. Matched: the
   probe refit per condition. Transferred: the full-cloud probe applied as is.
-  Chamfer against the complete cloud, masked regime, val.}
+  Chamfer against the complete cloud, masked regime, val. $^\dagger$v1
+  headline run; to be replaced by the v2 Sinkhorn E1.}
   \label{tab:views}
 \end{table}
 
@@ -341,8 +346,10 @@ rather than hallucinating the hidden half.
   \end{tabular}
   \caption{\textbf{Single-source generation before and after distillation.}
   Each row: that stream alone, the other three absent, generating the rest.
-  Before = the pretrained model (sorghum E1 at 1{,}000 epochs; maize four-stream
-  arm at 600) used zero-shot; after = the distilled student. Parameter MAE on
+  Before = the pretrained model (sorghum E1 at 1{,}000 epochs, v1 run; maize
+  four-stream arm at 600) used zero-shot; after = the distilled student.
+  \todo{Both halves move to v2: sorghum from the Sinkhorn E1 and its
+  distillation, maize from \texttt{maize\_distill\_all\_d2}.} Parameter MAE on
   the normalized $[0,1]$ fields of hidden real leaf tokens. The maize
   before-row for the point cloud is inflated by the collapse of an unmasked
   cloud (Sec.~\ref{sec:distill}).}

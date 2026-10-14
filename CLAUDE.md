@@ -293,8 +293,17 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   dependency cleared; the next scavenger chunk 16690568 now waits `afterany:16696287`. No guard job
   (the user does not want watchers): if 16696287 pends for long on `AssocGrpGRES`, fall back by
   hand by holding it and clearing 16690568's dependency.
+- **DATA POLICY FOR THE PAPER (user, 2026-10-14: "for E1 run and dependent of E1 should be run on
+  v2"):** the ablations (E2-E4, controls, E8, partial clouds, E9) are reported on sorghum v1 (the
+  only probed programme) until the v2 twins are probed; E1 and EVERYTHING DERIVED FROM IT must be
+  v2: the teacher = `4m_pretrain_15k_d2_sink` (Sinkhorn, job 16907818), the distillation
+  (`config_4m_distill_15k_all_d2.yaml`, to create, warm start from its epoch-1000 checkpoint, with
+  `pc_sinkhorn_*` set as in the E1 config), the single-sensor students and the quant generation
+  numbers (`reports/quant_*`), the E1 row of the partial-cloud study (`eval/pc_view_eval.py`), and
+  the paper figures (`figures/make_paper_figures.py` sorghum checkpoint). `paper/results.tex`
+  marks the v1 E1-derived numbers with \todo until then.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
-  start from `outputs/4m_pretrain_15k_d2/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
+  start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
   E9, the E8 baselines (RGB ones re-extract on the new images automatically), partial clouds.
 - **Maize runs cancelled at the user's request (2026-10-01 17:48):** `distill_maize` 16684364 at
