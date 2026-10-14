@@ -1,0 +1,109 @@
+% =========================================================================
+% CVPR 2027 draft — "Any Sensor In, Procedural Plant Out"
+% -------------------------------------------------------------------------
+% TEMPLATE NOTE: drafted under article.cls so it compiles anywhere.
+% For submission, switch to the official CVPR 2027 kit:
+%   \documentclass[10pt,twocolumn,letterpaper]{article} + \usepackage{cvpr}
+% and replace \bibliographystyle{unsrtnat} with ieee_fullname.
+% -------------------------------------------------------------------------
+% NUMBERS: all quantitative results below are from the 15K-plant
+% Sorghum/Maize studies (progress review, Oct 1 2026). Refresh every
+% \oldnum{} value from the 10K--100K reruns before submission.
+% =========================================================================
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+%%%%%%%%% PAPER TYPE  - PLEASE UPDATE FOR FINAL VERSION
+% \usepackage{cvpr}              % To produce the CAMERA-READY version
+\usepackage[review]{cvpr}      % To produce the REVIEW version
+% \usepackage[pagenumbers]{cvpr} % To force page numbers, e.g. for an arXiv version
+
+% Import additional packages in the preamble file, before hyperref
+\input{preamble}
+
+% It is strongly recommended to use hyperref, especially for the review version.
+% hyperref with option pagebackref eases the reviewers' job.
+% Please disable hyperref *only* if you encounter grave issues, 
+% e.g. with the file validation for the camera-ready version.
+%
+% If you comment hyperref and then uncomment it, you should delete *.aux before re-running LaTeX.
+% (Or just hit 'q' on the first LaTeX run, let it finish, and you should be clear).
+\definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
+\usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
+
+% ---- draft machinery (delete before submission) -------------------------
+% \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\oldnum}[1]{\textcolor{purple}{#1}} % number from 15K study; refresh
+% ---- method name: placeholder. Candidates: CropCode, PhytoCode, FieldCode,
+%      Canopy2Code. Decide with co-authors. ------------------------------
+\newcommand{\method}{\textsc{CropCode}}
+% ---- dataset name: placeholder. Candidates: FieldProc, ProcField3D,
+%      CropForge, SlenderField. Named datasets get cited; decide early. --
+\newcommand{\dataset}{\textsc{FieldProc}}
+\newcommand{\cmark}{\checkmark}
+\newcommand{\xmark}{$\times$}
+\providecommand{\CropCode}{\textsc{CropCode}}
+\providecommand{\FieldProc}{\textsc{FieldProc}}
+\providecommand{\todo}[1]{\textcolor{red}{#1}}
+\providecommand{\R}{\mathbb{R}}
+
+
+%%%%%%%%% PAPER ID  - PLEASE UPDATE
+\def\paperID{*****} % *** Enter the Paper ID here
+\def\confName{CVPR}
+\def\confYear{2027}
+
+\usepackage{xcolor}
+% \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+
+% ---- Title. Alternative (direction #4, maximal sobriety):
+\title{Procedural Reconstruction of Slender Plants from Any Field Modality}
+%\title{Any Sensor In, Procedural Plant Out:\\Occlusion-Robust Reconstruction of Slender Crops in the Field}
+
+% CVPR is double blind — authors commented out for submission.
+% \author{Anonymous CVPR 2027 submission}
+\author{\todo{author block (ISU + Purdue); anonymize for submission}}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\input{sec/0_abstract}    
+\input{sec/1_intro}
+\input{sec/2_related}
+\input{sec/3_method}
+\input{sec/4_experiments}
+\input{sec/5_discussion}
+\input{sec/6_conclution}
+
+% =========================================================================
+
+
+% =========================================================================
+
+% =========================================================================
+% PAGE BUDGET (8 pages + refs, CVPR):
+%   Intro+teaser 1.75 · Related 0.75 · Method 2.0 (arch fig + data fig)
+%   Experiments 2.75 (T1-T4, F4-F6) · Discussion 0.5 · Conclusion 0.25
+% =========================================================================
+
+
+% =========================================================================
+
+% =========================================================================
+
+
+% =========================================================================
+\bibliographystyle{ieeenat_fullname} % switch to ieee_fullname for CVPR kit
+\bibliography{CVPR}
+
+% =========================================================================
+\appendix
+\clearpage
+% WARNING: do not forget to delete the supplementary pages from your submission 
+\input{sec/X_suppl}
+% =========================================================================
+
+
+\end{document}

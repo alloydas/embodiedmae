@@ -1,0 +1,187 @@
+% =========================================================================
+\section{Experiments}
+\label{sec:experiments}
+
+% The experiments follow three regimes of increasing observation
+% difficulty (same task, same model throughout):
+%   Regime I   — isolated plant, single clean view
+%   Regime II  — morphological complexity, viewpoint, self-occlusion
+%   Regime III — neighbor occlusion in realistic rows
+% This progression is the narrative; the task formulation (any subset ->
+% procedural representation) is unchanged.
+
+\subsection{Setup}
+\label{sec:exp-setup}
+% - PER-TRAIT metrics, never one pooled MAE: leaf count exact / ±1
+%   accuracy; height and leaf length/width relative error; branching and
+%   insertion angles MAE in degrees; azimuth circular MAE; droop/curl/
+%   twist normalized angular error. Every trait compared against three
+%   trivial baselines: dataset mean, plant mean, position-only predictor;
+%   traits that fail to beat them are MARKED, not averaged in.
+% - Geometry: Chamfer AND density-aware CD \citep{wu2021dcd} AND
+%   F-score@tau (slender-aware); coverage@threshold.
+% - Representation: frozen-probe R^2 (ridge on frozen CLS, train-fit
+%   standardizer).
+% - Baselines: completion (AdaPoinTr \citep{yu2023adapointr}, EINet
+%   \citep{cai2024einet}) + our param head on their output (two-stage);
+%   Demeter/Ghrer \citep{demeter2025,ghrer2025paramplants} where
+%   adaptable; staged VLM pipeline \citep{hadadi2026vlmmaize} (isolated
+%   plants only); frozen encoders + supervised-from-scratch.
+% - Species roles (per generator statistics): MAIZE carries the
+%   independent-trait recovery claims; SORGHUM is cross-species
+%   replication (its height/leaf-count/biomass are one generative
+%   variable and are never presented as three findings).
+% - Implementation: \todo{114M encoder; 197,400-step budget}.
+\todo{compact setup prose; implementation details to supplement}
+
+\subsection{Regime I: single-view reconstruction of isolated plants}
+\label{sec:exp-regime1}
+% The clean headline: can one RGB observation of an isolated plant
+% constrain an editable procedural model? Evidence in hand: zero-shot
+% maize generation from one photograph at ~1.5x the masked-
+% reconstruction error, before any distillation.
+\begin{table}[h]\centering\small
+\begin{tabular}{lccccc}
+\toprule
+Input & Leaf cnt & Height & Leaf params & F-score & Chamfer \\
+ & (acc$\pm$1) & (rel.\ err) & (mean skill) & $\uparrow$ & $\downarrow$ \\
+\midrule
+RGB (1 view)      & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+RGB (3 views)     & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+Depth (1 view)    & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+PC (1 view)       & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+RGB+D+PC          & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+\midrule
+Two-stage (completion$\to$fit) & \todo{} & \todo{} & \todo{} &
+\todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Regime I (isolated plants, maize).} Single-view inputs
+against the multi-view and multimodal upper bounds; one amortized model
+against two-stage completion-then-fit. Distilled students throughout;
+before/after distillation appears in Tab.~\ref{tab:main}.
+\todo{fill; sorghum replication to supplement}}
+\label{tab:regime1}
+\end{table}
+% ---- FIG 3 (qualitative, full width): input photograph -> predicted
+% parameters -> re-rendered plant vs GT, including ONE EDIT demo (change
+% leaf angle, re-render) proving the output is genuinely procedural.
+\todo{Fig 3 qualitative + edit demo + 2-3 sentences of interpretation}
+
+\subsection{Regime II: morphological complexity, viewpoint,
+self-occlusion}
+\label{sec:exp-regime2}
+% - Complexity sweep: leaf count 3 -> 15(+) on the x-axis (generator
+%   already spans 3-22); curves per view configuration; y = per-trait
+%   error / F-score. THE question: when does single-view procedural
+%   inversion become ambiguous?
+% - Camera study with EVIDENCE-BASED axes (not generic 0/45/90 azimuth):
+%   (a) ELEVATION ladder — sorghum shows difficulty is set by elevation
+%   (U-curve, best side-on); (b) azimuth RELATIVE TO THE LEAF PLANE for
+%   distichous maize (the axis the pose forensics exposed). Multi-view
+%   fusion as approximate upper bound; a small camera schematic figure.
+% - View-consistency metric: ten predictions of one plant's parameters;
+%   report normalized across-view std alongside accuracy. State
+%   explicitly that STABLE IS NOT RIGHT (zero-skill fields are stable
+%   at the dataset mean; distillation makes skilled fields both more
+%   accurate and more stable, App.~\ref{app:ablations}).
+% ---- FIG 4: complexity sweep (x = leaf count, curves = view configs).
+\todo{Fig 4 + camera schematic + prose}
+
+\subsection{Regime III: neighbor occlusion in realistic rows}
+\label{sec:exp-occlusion}
+% - PAIRED design: every evaluation plant rendered twice — isolated, and
+%   inserted into a row with neighbors — identical morphology, only
+%   observation difficulty changes. Report the occlusion-induced
+%   increase in each per-trait error directly.
+% - Row spacing swept continuously (\todo{0.15-0.70 m}); occlusion
+%   severity REPORTED CONTINUOUSLY, not as a binary: visible pixel
+%   fraction, visible 3D-point fraction, neighbor-point contamination
+%   inside the crop region, fraction of leaves partially/fully hidden.
+% - FIG 5: per-trait error and F-score vs visible fraction; ours vs
+%   AdaPoinTr/EINet two-stage (completion baselines hallucinate neighbor
+%   geometry into the target; procedural output degrades gracefully).
+% - Which traits survive occlusion, which become ambiguous; per-leaf
+%   analysis (lowest, most-occluded leaves fail first).
+\todo{Fig 5 + paired-occlusion table + prose}
+
+\subsection{Any-subset inference and distillation}
+\label{sec:exp-main}
+% Full subset grid + the distillation axis (kept in the main paper: the
+% +19.1%/-43.8% numbers carry the deployment claim).
+\begin{table}[h]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+Input & \multicolumn{2}{c}{Param err $\downarrow$} &
+\multicolumn{2}{c}{Geometry $\downarrow$} \\
+ & before & after distill & before & after \\
+\midrule
+RGB only        & \todo{} & \todo{} & \todo{} & \todo{} \\
+Depth only      & \todo{} & \todo{} & \todo{} & \todo{} \\
+PC only         & \oldnum{0.062} & \oldnum{0.035} & \todo{} & \todo{} \\
+RGB+D           & \todo{} & \todo{} & \todo{} & \todo{} \\
+RGB+PC          & \todo{} & \todo{} & \todo{} & \todo{} \\
+All three       & \todo{} & \todo{} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\caption{\textbf{Any-subset results, before and after distillation from
+the vision-complete teacher} (RGB+D+PC; the teacher never observes
+parameters, Sec.~\ref{sec:method-distill}). Distillation concentrates
+its gains on the weakest sources. \todo{fill; both species}}
+\label{tab:main}
+\end{table}
+
+\subsection{Where the parameter stream belongs}
+\label{sec:exp-params}
+% Precise claim (not the slogan): procedural parameters are valuable
+% prediction targets, but treating them as an auxiliary representation-
+% learning modality does not improve, and can degrade, the sensor
+% representation.
+% - E2 table (4 arms) with probe R^2 columns BESIDE chamfer.
+% - One sentence each: token-budget control arms (budget restored, gap
+%   persists, dose-dependent); parameters-as-target-only (still below
+%   PC+RGB+D).
+% - The parameter-INPUT teacher appears here as the privileged-
+%   information ablation (Sec.~\ref{sec:method-distill}).
+% - Mechanism sentence, hedged \citep{peng2022ogm,yu2020pcgrad}.
+% Full grid -> App.~\ref{app:ablations}.
+\todo{Table (E2 + probe) + prose}
+
+\subsection{What the metrics disagree about}
+\label{sec:exp-metrics}
+% - Modality ranking by Chamfer vs by probe (depth: -32% vs ~0).
+% - FIG 6: a reconstruction with good Chamfer that misses a blade, vs one
+%   with worse Chamfer that recovers structure (the slender-blindness
+%   exhibit); plus scaling curves (chamfer keeps paying, probe saturates
+%   at ~3K plants).
+% - Decision rule: parameter recovery is PRIMARY for the inverse-
+%   procedural task; geometry metrics are complementary (re-render
+%   fidelity). Probe decides modality questions.
+\todo{Fig 6 + prose}
+
+\subsection{Real-world validation}
+\label{sec:exp-real}
+% - PRIMARY: real field scans. Isolated real plants: ours (each input
+%   subset) vs the staged VLM pipeline \citep{hadadi2026vlmmaize}
+%   (accuracy parity question + speed/cost: pipeline ~600 s + \$1.30 per
+%   plant; ours \todo{ms}). Occluded real rows: ours only — the pipeline
+%   cannot run there. Zero-shot and fine-tuned rows.
+% - SUPPLEMENT: targeted greenhouse study with matched acquisition
+%   (strobe/short-exposure imaging if adopted — see Sec.~
+%   \ref{sec:method-data} background note), manually measured traits
+%   (leaf count, height, representative lengths/widths, insertion
+%   angles), a small high-quality-scan subset. Synthetic-only training
+%   -> real RGB -> recovered traits.
+% - TABLE: accuracy + seconds/plant + $/plant. FIG 7: real examples
+%   including an occluded row.
+\todo{Table + Fig 7 + prose}
+
+\subsection{Representation quality and parsimony}
+\label{sec:exp-repr}
+% - Frozen-encoder table (ours vs EmbodiedMAE-B/Point-MAE/DINOv2/
+%   MultiMAE/supervised) — fusion, not a better PC encoder, is the edge;
+%   camera-pose forensics one-liner (gravity-only: 5/9).
+% - Compression: bytes/plant procedural vs Draco/G-PCC/3DAC
+%   \citep{fang2022threedac} at matched geometry + what codecs CANNOT do
+%   (edit, simulate, read traits). TALKING POINT: ~3 orders of magnitude.
+\todo{Table 5 + Table 6 + prose}

@@ -1,0 +1,37 @@
+\begin{abstract}
+Editable, biologically interpretable 3D models of field-grown crops
+support high-throughput phenotyping, \emph{in silico} breeding trials,
+and agronomic digital twins, but recovering such models from field
+sensor data remains difficult: plant organs are slender, neighboring
+plants occlude one another, and a field campaign rarely yields more than
+a single photograph, a noisy depth frame, or a partial point cloud per
+plant.
+% (fix 2: vision hook — delete the next sentence if unwanted)
+Slender geometry under occlusion is a regime in which learned 3D
+completion and Chamfer-based evaluation both fail. In this work, we
+present \method{}, a multimodal
+masked-autoencoder framework that recovers the complete procedural
+representation of a plant, the generator parameters encoding leaf
+count, insertion heights, blade angles, and surface geometry, from any
+subset of RGB, depth, and point-cloud input in a single forward pass.
+The model is pretrained on \todo{10K--100K} procedurally generated maize
+and sorghum plants rendered with physically simulated row occlusion, and
+a full-modality teacher is then distilled into single-sensor students.
+Distillation improves cross-modal generation by \oldnum{19\%} on average
+and parameter recovery from a point cloud alone by \oldnum{44\%}.
+Controlled ablations, replicated across both species, show that the
+procedural parameters are valuable prediction targets but do not help
+as a pretraining modality: exposing them to the encoder degrades
+phenotype recovery on every target we measure. We further show that Chamfer distance and linear probes on
+the frozen representation rank input modalities differently on slender
+geometry, and we adopt the probe as the deciding metric. On real field
+scans with independently reconstructed ground truth, \method{}
+\todo{matches/approaches} the accuracy of a staged annotation pipeline
+and reduces the cost of procedural reconstruction from hours of manual
+specification, or minutes of pipeline computation, to milliseconds per
+plant. We release \dataset{}, the \todo{N}-plant, two-species benchmark
+behind these experiments, which pairs multimodal field captures under
+simulated row occlusion with exact procedural ground truth. These
+results establish a practical route from fragmentary field sensing to
+simulation-ready 3D crop field assets at the acre scale.
+\end{abstract}

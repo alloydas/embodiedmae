@@ -1,0 +1,82 @@
+\section{Related Work}
+\label{sec:related}
+% Compressed from Appendix A. One paragraph per thread; each opens with
+% the claim, closes with the differentiation.
+
+\paragraph{Recovering procedural plants.}
+Inverse procedural modeling has a long history for woody plants:
+parameters of tree generators have been recovered by stochastic
+search~\citep{stava2014ipmtrees}, by Markov chain Monte Carlo
+inference~\citep{talton2011metropolis}, and by inferring L-systems
+directly from point clouds~\citep{guo2020ipmlsys,latentlsys2023}. These
+methods optimize or infer per instance. Recent systems address crops
+specifically. Demeter learns a parametric morphology model from soybean
+point clouds~\citep{demeter2025}, Ghrer et al.\ infer grammar-style
+plant representations from 3D scans~\citep{ghrer2025paramplants},
+CropCraft fits a procedural crop model by Bayesian optimization against
+multi-view imagery~\citep{cropcraft2026}, and a recent staged pipeline
+reconstructs procedural maize from terrestrial laser scans through
+vision-language-model annotation and differentiable NURBS
+refinement~\citep{hadadi2026vlmmaize,nurbsdiff2022}. Each of these
+methods presupposes a single rich observation, a clean and complete
+point cloud or a multi-view capture of an isolated plant, and none
+addresses missing modalities or inter-plant occlusion.
+
+\paragraph{Programs from observations.}
+Outside agriculture, decoding parametric programs from observations is
+an established pattern: neural shape programs~\citep{shapeprograms2019},
+diffusion-based inverse procedural content generation from a single
+image~\citep{zhao2025dipcg}, text-conditioned CAD
+generation~\citep{text2cad2024}, and cadrille, which maps images, point
+clouds, or text to executable CAD models~\citep{kolodiazhnyi2025cadrille}.
+These systems operate on rigid objects observed cleanly and in
+isolation. Our setting differs in the geometry (deformable, slender
+organs), in the input (noisy, occluded field sensors), and in a design
+question that none of them raises: whether the program parameters
+should be visible to the encoder at all.
+
+\paragraph{Completion and slender geometry.}
+Learned point cloud completion has progressed from folding-based
+decoders~\citep{yuan2018pcn} to geometry-aware
+transformers~\citep{yu2021pointr,yu2023adapointr,cai2024einet}, trained
+on benchmarks of compact, largely convex objects that contain no
+slender-under-occlusion category. Completion of thin plant organs under
+occlusion has emerged recently~\citep{lee2026occ}, and reconstruction
+of thin structures from clean multi-view data is an active
+topic~\citep{curvegaussian2025,qi2026rethinking}, but in both lines the
+output is unstructured geometry rather than an editable model. Chamfer
+distance, the standard completion metric, is insensitive to thin sheets
+and can be reduced by collapsing predictions onto bulk
+structure~\citep{wu2021dcd,song2026structural,lin2023infocd}; we therefore
+evaluate with trait probes alongside geometric metrics
+(Sec.~\ref{sec:exp-metrics}).
+
+\paragraph{Multimodal masked pretraining.}
+Masked autoencoding~\citep{he2022mae} extends to multiple modalities in
+MultiMAE~\citep{bachmann2022multimae}, to any-to-any generation over
+tokenized modalities in 4M~\citep{mizrahi2023fourm,bachmann2024fourm21},
+to point clouds in Point-MAE~\citep{pang2022pointmae}, and to combined
+RGB, depth, and point cloud inputs in EmbodiedMAE, from which our
+architecture derives~\citep{dong2025embodiedmae}. Robustness to missing
+modalities is a recognized concern~\citep{wang2024robustmissing}, and
+distillation from multi-sensor teachers to single-sensor students is
+established for discriminative tasks~\citep{hinton2015distillation}. We
+extend this machinery in two ways: we add a structured generative
+modality, encoded with continuous number tokens~\citep{golkar2023xval},
+and we distill a generative full-modality teacher for structured
+parameter regression.
+
+\paragraph{Learning from procedural data.}
+Pretraining on purely synthetic data is viable, from abstract
+fractals~\citep{kataoka2020fractaldb} to procedurally generated
+scenes~\citep{raistrick2023infinigen,greff2022kubric}, with domain
+randomization bridging the gap to real
+data~\citep{tobin2017domainrand} and with the value of synthetic data
+known to depend on the downstream task~\citep{fan2023intriguing}. Our
+setting is the favorable case for this strategy: the procedural
+generator defines the output representation, spans the morphology of
+the target crop, and is paired with real field evaluation
+data~\citep{maizefield3d2025}. Our results add one caveat to the
+recipe: the generator's parameters belong in the data and in the
+targets, and should be withheld from the encoder
+(Sec.~\ref{sec:exp-params}).

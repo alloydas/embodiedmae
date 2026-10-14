@@ -1,0 +1,24 @@
+\section{Discussion and Limitations}
+\label{sec:discussion}
+% Talking points (1-2 sentences each):
+% - Why parameters-as-input fails: shortcut/modality competition —
+%   the stream containing the answer suppresses learning in the streams
+%   that must supply it at test time \citep{peng2022ogm,yu2020pcgrad}.
+%   Hypothesis status, not proven mechanism (calibrated language).
+% - The generator bounds the morphology: plants outside FloraForge's
+%   span (disease, lodging, damage) project onto the nearest program —
+%   detect-and-flag is future work.
+% - Scope: two monocots, one growth stage (post-tassel), BTx99-centred
+%   maize phenotype; dicots and growth-stage generalization open.
+% - Honest failures: tassel droop below zero for every encoder tested;
+%   waviness fields at zero skill (report as representation limits).
+% - Ambiguity under severe occlusion: when the visible fraction drops
+%   far enough the posterior over parameters is genuinely multimodal; a
+%   point estimate hides this. Report where predictions regress to the
+%   prior; distribution-valued outputs are future work.
+% - Camera assumptions: what the model needs to know about the camera
+%   (intrinsics, gravity) and what it does not (plant azimuth); tie to
+%   the pose forensics.
+% - Beyond plants: any domain with a generator + slender geometry +
+%   occlusion (vines, root systems, coral, cabling) inherits the recipe.
+\todo{5 short paragraphs}

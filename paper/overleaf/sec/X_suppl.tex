@@ -1,0 +1,251 @@
+\clearpage
+\setcounter{page}{1}
+\maketitlesupplementary
+
+
+\section{Detailed Literature Review}
+\label{app:litreview}
+
+This appendix expands the compressed related-work discussion of
+Section~\ref{sec:related} into the five bodies of work the paper builds
+on or departs from.
+
+\subsection{Procedural plant models and inverse procedural modeling}
+Procedural modeling of plants begins with
+L-systems~\citep{prusin1990abop} and matured into generators whose
+parameters are organ-level, biologically meaningful
+quantities~\citep{floraforge2026,hadadi2025procedural}. Inverting such
+models, that is, recovering their parameters from observations, has a
+long history for woody species: Stava et al.\ fit tree parameters by stochastic
+search~\citep{stava2014ipmtrees}, Talton et al.\ formulated procedural
+inversion as MCMC inference~\citep{talton2011metropolis}, and Guo et al.\
+inferred L-systems directly from point clouds~\citep{guo2020ipmlsys},
+with neural variants following~\citep{latentlsys2023}. These methods
+optimize or infer per instance; amortized, feed-forward inversion of a
+plant generator from field-degraded input is the gap this paper fills.
+The closest amortized precedents sit outside agriculture: shape-program
+induction~\citep{shapeprograms2019}, diffusion-based inverse procedural
+content generation from a single image~\citep{zhao2025dipcg}, and
+cadrille, which maps images, point clouds, or text to executable CAD
+programs~\citep{kolodiazhnyi2025cadrille,text2cad2024}. All operate on
+rigid, isolated, clean-input objects; none confronts deformable slender
+organs, inter-plant occlusion, or real-sensor noise, and none studies
+whether the program parameters should participate in the encoder.
+
+\subsection{Learned parametric recovery of crop plants}
+Two 2025 systems recover parametric plants directly from scans. Demeter
+learns a morphology model (topology, articulation, PCA shape) from real
+soybean point clouds~\citep{demeter2025}; Ghrer et al.\ infer
+grammar-style parameterized plants from 3D scans~\citep{ghrer2025paramplants}.
+Both take a single, reasonably complete point cloud as input and neither
+addresses missing modalities or row occlusion. CropCraft recovers crop
+structure by Bayesian optimization of a procedural model against
+multi-view NeRF depth~\citep{cropcraft2026}; the approach is accurate
+but per-scene and slow. A staged pipeline annotates terrestrial
+laser scans with a vision-language model and fits a NURBS procedural
+descriptor by differentiable refinement~\citep{hadadi2026vlmmaize,
+hadadi2025procmaize,nurbsdiff2022}; it handles isolated, occlusion-free
+plants at ${\sim}10$ minutes each and serves in this paper as both the
+occlusion-free baseline and the source of real-data procedural ground
+truth. Tree-D Fusion reconstructs simulation-ready urban trees from
+street imagery via diffusion priors~\citep{lee2024treedfusion}, but its
+envelope-then-branch pipeline targets woody silhouettes, a different
+geometry class from thin cereal blades.
+
+\subsection{Point-cloud completion and slender structures}
+Learned completion runs from PCN~\citep{yuan2018pcn} through
+transformer approaches~\citep{yu2021pointr,yu2023adapointr} to recent
+extrapolation--interpolation designs~\citep{cai2024einet}, trained and
+evaluated on benchmarks of compact rigid objects. Neither
+PCN's eight categories nor ShapeNet-55/34 contains a
+slender-under-occlusion class, and completion systems assume the missing
+geometry is self-occluded surface, absent competing clutter from
+\emph{other} objects inside the crop region. Plant-specific completion
+is emerging, with amodal segmentation plus completion for occluded
+plants~\citep{lee2026occ}, but it outputs geometry rather than
+structure or parameters. Curve-aware and thin-structure reconstruction
+\citep{curvegaussian2025,qi2026rethinking} shows growing awareness of the
+slender regime, on which the standard metric itself fails: Chamfer
+distance under-weights thin sheets~\citep{wu2021dcd}, a failure now
+documented analytically~\citep{song2026structural} and addressed by density-aware
+and information-theoretic variants~\citep{wu2021dcd,lin2023infocd}. We
+take the further step of pairing geometric metrics against frozen-latent
+phenotype probes and show they can rank modalities oppositely.
+
+\subsection{3D plant phenotyping}
+Organ-level 3D phenotyping datasets, including Pheno4D's labeled maize
+and tomato sequences~\citep{schunck2021pheno4d},
+Crops3D~\citep{crops3d2024}, and field-scale maize scans with procedural
+fits~\citep{maizefield3d2025}, anchor trait extraction from point
+clouds~\citep{qi2017pointnet,qi2017pointnetpp}. Radiance-field capture is
+increasingly practical in field conditions~\citep{arshad2024nerf_field}.
+No existing dataset, however, combines real field capture, slender
+organs, inter-plant row occlusion, and procedural ground truth; our
+benchmark is designed to close exactly that conjunction.
+
+\subsection{Multimodal masked pretraining and distillation}
+Masked autoencoding~\citep{he2022mae} extends naturally to multiple
+modalities: MultiMAE over RGB, depth, and semantics~\citep{bachmann2022multimae};
+4M and 4M-21 to any-to-any generation over tokenized
+modalities~\citep{mizrahi2023fourm,bachmann2024fourm21}; Point-MAE to
+geometry~\citep{pang2022pointmae}; and EmbodiedMAE, our architectural
+ancestor, to RGB, depth, and point clouds for robot
+manipulation~\citep{dong2025embodiedmae}. Missing-modality robustness is
+an active concern~\citep{wang2024robustmissing}, and cross-modal
+distillation from multi-sensor teachers to single-sensor students is
+established for discriminative tasks; we distill a \emph{generative}
+full-modality teacher for structured-parameter regression, and encode
+continuous parameters with xVal-style number
+tokens~\citep{golkar2023xval}. Our finding that a privileged parameter
+stream suppresses representation quality connects to modality
+competition~\citep{peng2022ogm} and gradient
+conflict~\citep{yu2020pcgrad,chen2018gradnorm}, which supply candidate
+mechanisms; no prior work, to our knowledge, documents the effect for
+generator parameters in multimodal pretraining.
+
+\subsection{Synthetic-data pretraining and sim-to-real}
+Pretraining without natural data is viable, from abstract
+fractals~\citep{kataoka2020fractaldb} to procedural
+worlds~\citep{raistrick2023infinigen,greff2022kubric}, and domain
+randomization bridges the reality gap~\citep{tobin2017domainrand}, with
+synthetic value known to be task-dependent~\citep{fan2023intriguing} and
+self-consumption a documented risk~\citep{alemohammad2023mad}. Our
+setting is the favorable case: the deployment target \emph{is} the
+generator's parameterization, the generator spans the morphology of the
+crop, and real-field evaluation closes the loop.
+
+% =========================================================================
+\section{Detailed Ablation Studies}
+\label{app:ablations}
+
+All numbers in this appendix are from the 15K-plant studies
+(\oldnum{purple} throughout); every table will be refreshed from the
+10K--100K reruns. Protocol: every arm trains at a matched budget of
+\oldnum{197{,}400} optimizer steps, global batch 32; representation
+quality is a ridge probe on the frozen CLS token, one fixed view per
+plant, identical target vectors across arms; generation quality is
+validation Chamfer / parameter MAE at the matched checkpoint.
+
+\subsection{Modality value-add (E2)}
+Four pretraining arms differ only in which token streams exist.
+\begin{table}[h]\centering\small
+\begin{tabular}{lcc}
+\toprule
+Arm & PC Chamfer $\downarrow$ & vs.\ PC-only \\
+\midrule
+PC only                  & \oldnum{0.00495}  & ---            \\
+PC + RGB                 & \oldnum{0.00250}  & \oldnum{$-49.5\%$} \\
+PC + RGB + depth         & \oldnum{0.00171}  & \oldnum{$-65.6\%$} \\
+PC + RGB + depth + params& \oldnum{0.00248}  & \oldnum{$-50.0\%$} \\
+\bottomrule
+\end{tabular}
+\caption{Sorghum E2: adding the parameter stream to the encoder returns
+Chamfer to the PC+RGB level, surrendering the depth gain. The frozen
+probe agrees: the four-modality arm is worse on all eight sorghum
+phenotype targets and \oldnum{7 of 11} maize targets.
+\todo{add maize table + probe $R^2$ columns + CIs}}
+\label{tab:e2}
+\end{table}
+
+\subsection{Token-budget control arms}
+The four-stream arm shows each vision stream fewer visible tokens, a
+mechanical confound. Control arms restore RGB/depth/PC to exactly the
+three-modality arm's \oldnum{117} visible vision tokens, varying only
+parameter-text visibility. With the budget restored the gap persists
+(height probe \oldnum{0.958} vs.\ \oldnum{0.981}; roll \oldnum{0.764}
+vs.\ \oldnum{0.806}), and visibility is dose-dependent: at 60\% text
+visible, every skilled target worsens further. The effect is real, and
+the budget explanation is excluded. \todo{full control-arm table with
+bootstrap CIs}
+
+\subsection{Parameters as a target only}
+Masking parameter text at 100\% (never an input; reconstructed only by
+the decoder) still loses to omitting the stream entirely: size targets
+\oldnum{$-0.010$ to $-0.012$} $R^2$, roll \oldnum{$-0.069/-0.077$}
+(val/test), mean leaf length \oldnum{$-0.102/-0.097$}, CIs clear of zero.
+The latent analysis locates the damage: the target-only arm's latent is
+the most size-dominated of its cohort (PC1 $=$ size at $|r|{=}$
+\oldnum{0.95}, effective rank \oldnum{4.6}). The reconstruction pressure
+itself, under the encoder's capacity, is what costs structure.
+\todo{reconcile with matched-LR pc2text control when it lands}
+
+\subsection{Data and model scaling at fixed compute}
+\begin{table}[h]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{Sorghum} & \multicolumn{2}{c}{Maize} \\
+Train plants & Chamfer & Param acc@.05 & Chamfer & Probe moves? \\
+\midrule
+1{,}000  & \oldnum{0.00299} & \oldnum{0.608} & \oldnum{0.00292$^{*}$} & --- \\
+3{,}000  & \oldnum{0.00258} & \oldnum{0.775} & \oldnum{$-34\%$} & yes \\
+10{,}000 & \oldnum{0.00241} & \oldnum{0.811} & \oldnum{$-34\%$} & $\le$ noise \\
+\bottomrule
+\end{tabular}
+\caption{Fixed 197{,}400-step budget. Near-duplicate 10{,}000 vs.\
+10{,}500 arms give the run-to-run noise floor (\oldnum{$\sim$3\%}
+Chamfer, \oldnum{0.02} $R^2$). Chamfer keeps paying for data; the probe
+saturates by $\sim$3{,}000 plants in both species. More data buys
+geometry, and stops buying linearly decodable phenotype.
+$^{*}$maize small-data arms actively overfit (best at 29\% of schedule,
++79\% by the end). \todo{refresh at 100K; add model-scaling row (25M
+$\to$ 114M $=-17.1\%$; 114M $\to$ 332M $\approx$ 0: base is the knee)}}
+\label{tab:scaling}
+\end{table}
+
+\subsection{Distillation, per source modality}
+Distilling the full-modal teacher into the warm-started student improves
+the mean generation metric \oldnum{19.1\%}, concentrated where the
+student was weakest: conditioning on PC alone \oldnum{$-27.5\%$} (its
+Chamfer \oldnum{$-56.6\%$}), on parameters alone Chamfer
+\oldnum{$-61.9\%$}; RGB and depth, already strong, gain
+\oldnum{$\sim$11\%}. PC$\rightarrow$params MAE falls \oldnum{43.8\%}
+(\oldnum{0.0617} $\to$ \oldnum{0.0347}), and distilling all four targets
+beats distilling the parameter head alone (\oldnum{$-43.8\%$} vs.\
+\oldnum{$-36.9\%$}); the other heads act as auxiliary supervision.
+Distillation moves the whole view-difficulty curve down without
+flattening it (\oldnum{9/10} views improve; best-to-worst ratio
+unchanged), so view robustness needs a different lever.
+\todo{LR caveat: specialist ran at 3e-5 vs.\ 1e-4; matched-LR control
+pending. Per-trait recovery tables (PC vs.\ RGB conditioning,
+position-only baseline) to follow from reruns.}
+
+\subsection{View invariance without labels}
+Ten views of one plant share one parameter ground truth, so the spread
+of ten predictions is a label-free view-invariance measure. Distillation
+roughly halves error \emph{and} view spread on the fields with skill
+(starting point \oldnum{$-59\%$}, branching angle \oldnum{$-60\%$});
+zero-skill fields instead grow \emph{more} view-dependent; the head
+starts tracking image noise. ``Stable'' and ``right'' are separate
+axes: several fields move less than 0.3 of their spread across views
+while remaining worse than predicting the plant mean.
+
+\subsection{Frozen-encoder baselines and camera-pose forensics}
+Against four public frozen encoders under one probe
+(EmbodiedMAE-B~\citep{dong2025embodiedmae},
+Point-MAE~\citep{pang2022pointmae}, DINOv2~\citep{oquab2024dinov2},
+MultiMAE~\citep{bachmann2022multimae}) plus a supervised-from-scratch
+network, our three-modality arm wins every learnable sorghum target
+(roll +\oldnum{0.078}, mean leaf length +\oldnum{0.104} over the
+strongest baseline) and the margin comes from fusing RGB with geometry:
+off-the-shelf Point-MAE beats our PC-only arm, and the four-modality
+reference arm falls below EmbodiedMAE-B on size targets; this is the
+parameter-input effect seen from outside. Supplying Point-MAE with each
+view's full camera pose hands it the generator's fixed plant azimuth, a
+canonicalization no field rig knows; restricted to gravity alone (what a
+calibrated rig knows), our pose-free model wins \oldnum{5} of 9 decided
+targets. Tassel droop stays below zero for every encoder of this design and
+remains an open limitation. \todo{full tables, both species, with CIs}
+
+\subsection{Latent structure (E9)}
+The latents are continua, as they should be for a single-generator
+population (silhouette $\le$ \oldnum{0.24}; k-means at chance against
+leaf-count deciles); the question is factor alignment. Sorghum latents
+occupy \oldnum{4--7} effective dimensions, maize \oldnum{7--17},
+consistent with maize's more independent generative factors. The
+dominant principal component is \emph{never} the phenotype
+(\oldnum{$\sim$30\%} of variance unexplained by any trait), and linear
+decodability dissociates from local embedding structure: roll angle reads
+at $R^2$ \oldnum{0.806} from a latent where it is barely locally
+organized. t-SNE smoothness is the wrong instrument for representation
+claims on continuous generators; probes are the right one.
+\todo{E9 figures; PC1 identity remains open}
