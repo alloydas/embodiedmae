@@ -302,6 +302,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   numbers (`reports/quant_*`), the E1 row of the partial-cloud study (`eval/pc_view_eval.py`), and
   the paper figures (`figures/make_paper_figures.py` sorghum checkpoint). `paper/results.tex`
   marks the v1 E1-derived numbers with \todo until then.
+- **Paper files (2026-10-14):** `paper/method.tex` (Sec. 3), `paper/results.tex` (Sec. 4, restructured to
+  the draft PDF's outline: Setup / Regime I / Regime II / Regime III / any-subset + distillation / parameter
+  stream / metrics / real-world / representation) and `paper/discussion.tex` (Secs. 5-6). Regime III and
+  real-world (E10) are \todo placeholders; Regime I's leaf-count / height / F-score / 3-view / two-stage
+  cells are empty. Distillation "before" = the epoch-0 warm start (`logs/evalwarm_12085946.out`), NOT
+  epoch 1 of the history (that understates the gain: 19.1 % vs 5.9 %). Figures: `paper/fig_metrics.pdf`
+  (`figures/make_metric_fig.py`, Chamfer vs probe over 12 sorghum arms) and `paper/fig_view_elevation.png`
+  (copy of `vis_gallery/view_elevation_effect.png`). The user's main .tex / .bib are not in the repo.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
