@@ -1,24 +1,78 @@
+% Synced from the embodiedmae repo (paper/discussion.tex, commit 545a23a).
+% Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Discussion and Limitations}
 \label{sec:discussion}
-% Talking points (1-2 sentences each):
-% - Why parameters-as-input fails: shortcut/modality competition —
-%   the stream containing the answer suppresses learning in the streams
-%   that must supply it at test time \citep{peng2022ogm,yu2020pcgrad}.
-%   Hypothesis status, not proven mechanism (calibrated language).
-% - The generator bounds the morphology: plants outside FloraForge's
-%   span (disease, lodging, damage) project onto the nearest program —
-%   detect-and-flag is future work.
-% - Scope: two monocots, one growth stage (post-tassel), BTx99-centred
-%   maize phenotype; dicots and growth-stage generalization open.
-% - Honest failures: tassel droop below zero for every encoder tested;
-%   waviness fields at zero skill (report as representation limits).
-% - Ambiguity under severe occlusion: when the visible fraction drops
-%   far enough the posterior over parameters is genuinely multimodal; a
-%   point estimate hides this. Report where predictions regress to the
-%   prior; distribution-valued outputs are future work.
-% - Camera assumptions: what the model needs to know about the camera
-%   (intrinsics, gravity) and what it does not (plant azimuth); tie to
-%   the pose forensics.
-% - Beyond plants: any domain with a generator + slender geometry +
-%   occlusion (vines, root systems, coral, cabling) inherits the recipe.
-\todo{5 short paragraphs}
+
+\paragraph{Why a stream that holds the answer hurts.}
+The parameter stream is the only input that states the phenotype verbatim, and
+it is the one input the field never provides. Every arm that let the encoder
+see it learned a worse sensor representation, and the loss grew with how often
+it was visible (Tab.~\ref{tab:control}); even as a pure decoder target it cost
+roll and leaf length, the two traits the leaf tokens spell out per leaf. The
+reading consistent with modality competition and negative transfer is that a
+privileged stream lets the encoder route a trait through tokens it will not
+have at test time, and the reconstruction pressure of a per-leaf target then
+pulls the latent toward the plant's size, the direction its first principal
+component already carries. The practical rule is the one we adopted: a
+generative modality belongs in the data and in the targets, never in the
+encoder. We expect it to transfer to any multimodal model with access to a
+program, a CAD sketch, or a simulator state, and the gated ratio
+$\rho_\theta$ is a one-line way to test it.
+
+\paragraph{Which metric decides.}
+Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on
+the decisions a designer has to make (Fig.~\ref{fig:metrics}): depth, more
+training plants, and the parameter stream each move Chamfer by tens of percent
+and the probe by nothing, while a half-visible cloud moves Chamfer fivefold and
+the probe by $0.03$. On slender geometry the two measure different things,
+surface proximity and recovered structure, and we let the probe decide and
+report Chamfer as the decoder's surface error. The probe has its own costs: it
+needs labels and a held-out split, its $R^2$ is comparable between models on
+one split but is not a portable absolute (our held-out plants are
+extreme-enriched), and sorghum's four named traits collapse to two generator
+variables, which is why maize is the species on which the claims about
+independent traits rest. Training-side, the Sinkhorn term is our response to
+Chamfer's blindness to a missing blade; its ablation is pending
+(\todo{E7}).
+
+\paragraph{From complete clouds to a camera.}
+Everything was pretrained on complete clouds of isolated plants, and
+Sec.~\ref{sec:regime2} shows what that leaves out. The information survives a
+single camera's view, but the latent moves with coverage, so a readout
+calibrated on complete scans is wrong on partial ones and must be refit; the
+decoder reproduces what it is given and does not hallucinate the hidden half;
+and viewpoint, not morphology, sets the difficulty of inverting a photograph.
+The recipe is the output that tolerates this best: ten photographs of one plant
+move its recovered insertion heights by a tenth of their spread, and a
+re-rendered recipe is complete even where the cloud is not. The row-occluded
+regime and the real scans (Secs.~\ref{sec:regime3} and \ref{sec:res-field})
+are the two evaluations this paper still owes, and the one-camera transfer gap
+is our stated prediction for the sim-to-real penalty before they land. A
+generator also carries regularities nobody intended, such as the fixed leaf
+azimuth that handed a pose-aware baseline a canonical orientation; benchmark
+users should expect more of these.
+
+\paragraph{What distillation does and does not buy.}
+A full-modality teacher improves every single-sensor student and concentrates
+the gain on the weakest sources and the hardest plants
+(Tab.~\ref{tab:anysubset}, Fig.~\ref{fig:views}B), and supervising all four
+targets beats a parameter specialist at parameter regression. It does not make
+the model view-robust: the elevation curve moves down and keeps its shape, so
+view robustness needs a different lever, most plausibly views as an explicit
+augmentation axis during pretraining. It also showed that a field nothing can
+predict is not free: the three waviness parameters of the first sorghum release
+stayed at zero skill and grew more view-dependent under distillation, and the
+final generator drops them. A parameterization meant to be regressed should be
+pruned to what its sensors can determine.
+
+\paragraph{Scope and compute.}
+The ablations use one seed per arm; the run-to-run floor comes from a single
+near-duplicate pair (3\,\% Chamfer, $0.004$ $R^2$), and the maize scaling
+results are within it. Two generators and two species-specific models are
+studied, and the 1{,}000-epoch headline model is trained once per species.
+The procedural prior that makes inversion tractable also bounds it: a plant
+the generator cannot express cannot be recovered, and an organ class the
+generator renders without variation (tassel droop in maize is below zero for
+every encoder of this design) is a limit of the data as much as of the model.
+Row occlusion, real scans, and the \FieldProc{} release at 10K--100K plants
+remain \todo{in progress}.

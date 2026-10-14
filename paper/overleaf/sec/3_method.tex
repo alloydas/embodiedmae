@@ -333,19 +333,41 @@ $w(r)=\sigma(a(r-\tau))$. We set $a=100$ and $\tau=0.01$, reducing the
 weight of small residuals relative to larger reconstruction errors.
 % The original formula used N in both directions. Set-specific cardinalities
 % above clarify the mean reduction when prediction and target sizes differ.
-\todo{Confirm this reduction and whether coordinates are in meters before
-interpreting $\tau$ as a one-centimeter threshold.}
+Both directions are averaged over their own set and then over the batch.
+Clouds are centred on their centroid and scaled so the farthest point lies on
+the unit sphere, so $\tau$ is relative to the plant: one percent of its radius,
+about 7\,mm on a 1.4\,m plant.
+Nearest-neighbour losses let many predicted points share one target point at
+no cost, so the folding head can collapse a token's points into a clump and
+still score well. The headline model therefore adds an optimal-transport term
+that matches the two clouds as distributions, the debiased Sinkhorn
+divergence~\cite{feydy2019sinkhorn},
+\begin{equation}
+  \ell_{\mathrm{pc}}^{\star}=\ell_{\mathrm{pc}}
+  +0.5\,S_{\varepsilon}\!\left(\hat P_{1024},P_{1024}\right),
+  \label{eq:point-loss-sinkhorn}
+\end{equation}
+with $p{=}2$ and blur $\varepsilon{=}0.02$ in the unit-sphere frame, computed
+between random 1{,}024-point subsets of prediction and target that are redrawn
+at every step. The term rewards coverage of the whole cloud directly, and the
+subsets keep its cost matrix at $B\times1024^2$. The ablation arms of
+Sec.~\ref{sec:experiments} were trained with Eq.~\eqref{eq:point-loss} alone;
+the Sinkhorn term enters the headline model and the distillation.
+\todo{Report the ablation of this term (E7).}
 We train with AdamW, $\beta=(0.9,0.95)$, weight decay 0.05, linear warm-up,
 cosine learning-rate decay, and gradient clipping at 1.0. The main schedule
 uses 1,000 epochs and a global batch size of 256. Ablations instead use a
 fixed budget of 197,400 optimizer steps at global batch size 32 to prevent
 larger datasets from receiving more updates merely through equal-epoch
-training. \todo{Specify the main learning rate, warm-up length, and whether
-its epochs visit all views or sample one view per plant.}
+training. The main schedule visits all ten views of every training plant in
+each epoch, with a peak learning rate of $6\times10^{-4}$ and a 20-epoch
+warm-up. Ablations sample one view per plant per epoch, with a peak learning
+rate of $1.5\times10^{-4}$ and a warm-up of 40 epochs at the full-data scale
+(scaled with the epoch count when the number of plants changes).
 
 
 \subsection{A full-modality teacher, single-sensor students}
-\label{sec:distill}
+\label{sec:distill}\label{sec:method-distill}
 
 Pretraining retains visible tokens from every sensor stream. Consequently,
 single-sensor inference introduces a missing-modality configuration that the

@@ -82,7 +82,7 @@ intervals are in the supplement.
 % outputs/4m_distill_15k_all/training_history.json (val, epoch 100),
 % outputs/maize_distill_all/training_history.json (val, epoch 55);
 % skill: reports/PROGRESS_REVIEW_2026-09-18.md sec. 1b (8 plants, 142 leaf tokens)
-\begin{table}[t]
+\begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.2pt}
   \begin{tabular}{l cc c cc}
@@ -118,7 +118,7 @@ intervals are in the supplement.
   the 3-view and two-stage rows from the \FieldProc{} evaluation script; maize
   numbers are from the 55-epoch first-release student.}}
   \label{tab:regime1}
-\end{table}
+\end{table*}
 
 Table~\ref{tab:regime1} is the deployment case the title promises: one
 photograph, one depth frame or one cloud of an isolated plant, and the model
@@ -182,7 +182,7 @@ and its branching angles by $0.12$, and distillation halves their error
 not free to carry.
 
 % reports/pcview_16676994_{coverage,recon,probe,bootstrap}.csv (sorghum, first release)
-\begin{table}[t]
+\begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.4pt}
   \begin{tabular}{l ccc ccc ccc}
@@ -206,7 +206,7 @@ not free to carry.
   full-cloud probe applied as is. Chamfer against the complete cloud, masked
   regime, val. $^\dagger$first-release headline run.}
   \label{tab:views}
-\end{table}
+\end{table*}
 
 \paragraph{Self-occlusion.}
 Training clouds are complete; a rig's are not. Table~\ref{tab:views} scores
@@ -261,7 +261,7 @@ is complete even where the cloud is not.}
 % after: outputs/4m_distill_15k_all/training_history.json val[-1] (epoch 100);
 % maize: outputs/maize_distill_all/{warmstart_eval.json, training_history.json} (epoch 0 / 55, first release);
 % specialist: outputs/4m_distill_15k_pc2text/training_history.json
-\begin{table}[t]
+\begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.6pt}
   \begin{tabular}{l cc cc c cc cc}
@@ -291,7 +291,7 @@ is complete even where the cloud is not.}
   (Sec.~\ref{sec:distill}); maize is the first-release student stopped at
   epoch 55. \todo{Two-stream rows; final-release students for both species.}}
   \label{tab:anysubset}
-\end{table}
+\end{table*}
 
 The pretrained model already generates across modalities without any
 single-sensor training: in sorghum a photograph alone yields the cloud at
@@ -362,7 +362,7 @@ $10^{-4}$; the matched-LR specialist is queued}).
 % reports/control_delta_vs_tg_16686383.csv
 \begin{table}[t]
   \centering\scriptsize
-  \setlength{\tabcolsep}{3.5pt}
+  \setlength{\tabcolsep}{3.2pt}
   \begin{tabular}{l cc c cccc}
     \toprule
     & vision & $\theta$ & Chamfer & \multicolumn{4}{c}{$R^2$ (val)} \\
@@ -493,7 +493,7 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
 
 % reports/probe_e8_base_{sorghum,maize}_*.csv, probe_pr_mean600_16614173.csv, probe_pm_mean600_16614174.csv,
 % probe_e8_score_16676974_*.csv, e8_supervised_delta_16676974.csv; mean pooling for every model
-\begin{table}[t]
+\begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{2.6pt}
   \begin{tabular}{l ccc cc c cccc}
@@ -521,11 +521,11 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
   and PC+RGB+D rows use the CLS token. \todo{maize mean-pooled rows and a maize
   supervised row.}}
   \label{tab:e8}
-\end{table}
+\end{table*}
 
 % reports/probe_pr_{6168,2024,624,600}_*.csv, outputs/e3_*,e4_*/training_history.json;
 % maize: reports/probe_pm_{6168,2024,624}_2275161*.csv (E3, final data), probe_pm_600L_16592061.csv (E4, first release)
-\begin{table}[t]
+\begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.0pt}
   \begin{tabular}{l r c ccc c c ccc}
@@ -553,7 +553,7 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
   Maize E3 is on the final maize release and E4 on the first, so the maize base
   row is not the E3 full-data row.}
   \label{tab:scaling}
-\end{table}
+\end{table*}
 
 \paragraph{Against published encoders.}
 Table~\ref{tab:e8} reads four public checkpoints and a supervised network
