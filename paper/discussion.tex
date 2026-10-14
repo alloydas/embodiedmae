@@ -93,9 +93,9 @@ remain \todo{in progress}.
 
 \CropCode{} recovers a complete, editable procedural plant from whichever
 sensor a field campaign produced, in one forward pass, by letting the generator
-supply both the training data and the output representation. Its design
-rests on two findings that we expect to outlast the application: the
-generator's parameters are valuable targets and harmful inputs, and on slender
+supply both the training data and the output representation. Two findings
+from its ablations should outlast the application: the generator's parameters
+are valuable targets but harmful encoder inputs, and on slender
 geometry a downstream probe, not Chamfer distance, is the metric that decides
 what a modality is worth. The remaining distance to the field is measured, not
 guessed: a single camera's partial view costs a refit readout and a known
