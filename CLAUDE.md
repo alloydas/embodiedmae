@@ -137,6 +137,24 @@ SU against a balance of 431 SU that the six other pending jobs also draw on. E1 
 the current allocation; it will stop (job fails on a zero balance) around epoch 600-700 unless
 the allocation is topped up. The checkpoints up to that point remain usable.
 
+**2026-10-14 10:30: E1 and the distillation switched to QAL + Sinkhorn (user: "in the yongyun
+branch he used new loss we have to update E1 and distill with new loss").** Ported from
+`origin/yongyun` (E7 winner there: QAL 0.01 + 0.5 x debiased Sinkhorn, geomloss, 1024-point
+subsets, blur 0.02): `pc_sinkhorn.py` verbatim; `embodied_mae_4m.py` gained `pc_sinkhorn_weight /
+_points / _blur` (0 = every earlier run, geomloss never imported) and the `chamfer_cdist` /
+`sinkhorn` loss names; `train_maize_4m.py` and `train_maize_4m_distill.py` read `model.pc_sinkhorn_*`
+and pass them to the student (the teacher's weight is forced to 0; the keys are pinned on resume
+and recorded in config.json). `configs/config_maize_4m_pretrain_15k_d2.yaml` and
+`config_maize_distill_all_d2.yaml` set 0.5 / 1024 / 0.02 with `pc_loss_weight` 1.0 (= the branch's
+effective weight). **geomloss 0.3.1 was pip-installed into the `det` env on Delta** (not in
+environment.yml). The pending jobs 22870827 (E1) / 22870325 (distill) / 22870323 (distill smoke)
+read the trainer and config at start, so they run the new loss without resubmission; the old
+`outputs/_smoke_maize_distill_d2` was deleted so the smoke starts fresh. GPU smokes on gpuA40x4
+(the regular partition, starts in minutes-hours): **22897176** (E1 path: 1 epoch, 64 plants,
+`outputs/_smoke_maize_e1_d2`) and **22897183** (distill, 25 min, never exits 0 by itself).
+Check both logs before trusting the queued runs. Structured / mixed masking (E6) was NOT ported:
+it is for occluded scenes, not the clean pretrain. The sorghum E1 (Nova) is untouched from here.
+
 ### Data version 2 — the sorghum restart (2026-10-02; code b708117)
 
 The user changed the sorghum dataset and asked for every experiment to restart from the

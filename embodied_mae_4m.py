@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from pc_sinkhorn import sinkhorn_pc_loss
 from embodied_mae import (
     PatchEmbed,
     PointCloudEmbed,
@@ -350,6 +351,9 @@ class EmbodiedMAE4M(nn.Module):
         qal_threshold:       float = 0.01,
         qal_alpha:           float = 100.0,
         qal_use_squared:     bool  = False,
+        pc_sinkhorn_weight:  float = 0.0,
+        pc_sinkhorn_points:  int   = 2048,
+        pc_sinkhorn_blur:    float = 0.01,
         active_modalities=None,
         text_mask_ratio=None,
     ):
@@ -405,10 +409,15 @@ class EmbodiedMAE4M(nn.Module):
         self.pc_loss_weight     = pc_loss_weight
         self.spline_loss_weight = spline_loss_weight
         self.depth_norm_type    = depth_norm_type
-        if pc_loss_name not in {'chamfer', 'qal_loss'}:
+        # 'chamfer_cdist': chamfer_distance's formula through torch.cdist;
+        # 'sinkhorn': no nearest-neighbour term, the Sinkhorn term alone.
+        # (Both ported from the yongyun branch, 2026-10-14, with pc_sinkhorn_*.)
+        if pc_loss_name not in {'chamfer', 'chamfer_cdist', 'qal_loss', 'sinkhorn'}:
             raise ValueError(
                 f"Unsupported point-cloud loss {pc_loss_name!r}; "
-                "expected 'chamfer' or 'qal_loss'")
+                "expected 'chamfer', 'chamfer_cdist', 'qal_loss' or 'sinkhorn'")
+        if pc_loss_name == 'sinkhorn' and not pc_sinkhorn_weight > 0:
+            raise ValueError("pc_loss_name 'sinkhorn' needs pc_sinkhorn_weight > 0")
         if qal_threshold < 0:
             raise ValueError("qal_threshold must be non-negative")
         if qal_alpha <= 0:
@@ -417,6 +426,14 @@ class EmbodiedMAE4M(nn.Module):
         self.qal_threshold      = qal_threshold
         self.qal_alpha          = qal_alpha
         self.qal_use_squared    = qal_use_squared
+        # Optional Sinkhorn term added to the PC loss (pc_sinkhorn.py); 0 = off,
+        # which is every run before 2026-10-14 and never imports geomloss.
+        if pc_sinkhorn_weight < 0 or pc_sinkhorn_points < 2 or pc_sinkhorn_blur <= 0:
+            raise ValueError('pc_sinkhorn_weight >= 0, pc_sinkhorn_points >= 2 and '
+                             'pc_sinkhorn_blur > 0 are required')
+        self.pc_sinkhorn_weight = float(pc_sinkhorn_weight)
+        self.pc_sinkhorn_points = int(pc_sinkhorn_points)
+        self.pc_sinkhorn_blur   = float(pc_sinkhorn_blur)
         self.target_points      = target_points
         self.points_per_token   = target_points // num_pc_tokens
 
@@ -937,8 +954,17 @@ class EmbodiedMAE4M(nn.Module):
                 alpha=self.qal_alpha,
                 use_squared=self.qal_use_squared,
             )
+        elif self.pc_loss_name == 'chamfer_cdist':
+            d = torch.cdist(pred_pc, pc) ** 2
+            loss_pc = d.min(dim=2).values.mean() + d.min(dim=1).values.mean()
+            del d
+        elif self.pc_loss_name == 'sinkhorn':
+            loss_pc = pred_pc.new_zeros(())
         else:
             loss_pc = chamfer_distance(pred_pc, pc)
+        if self.pc_sinkhorn_weight > 0:
+            loss_pc = loss_pc + self.pc_sinkhorn_weight * sinkhorn_pc_loss(
+                pred_pc, pc, n_points=self.pc_sinkhorn_points, blur=self.pc_sinkhorn_blur)
 
         if 'text' in act:
             # Smooth-L1 (Huber) on normalised float params. All targets and

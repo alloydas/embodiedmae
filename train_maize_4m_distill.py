@@ -203,6 +203,12 @@ def config_to_namespace(c):
     ns.qal_threshold      = g('model', 'qal_threshold', 0.01)
     ns.qal_alpha          = g('model', 'qal_alpha', 100.0)
     ns.qal_use_squared    = g('model', 'qal_use_squared', False)
+    # QAL + Sinkhorn (yongyun branch): added to the STUDENT's reconstruction loss.
+    # Not in _TEACHER_MATCH_KEYS on purpose: the teacher's loss is never used, and
+    # the point is to distil with a loss the teacher did not train under.
+    ns.pc_sinkhorn_weight = float(g('model', 'pc_sinkhorn_weight', 0.0) or 0.0)
+    ns.pc_sinkhorn_points = int(g('model', 'pc_sinkhorn_points', 2048))
+    ns.pc_sinkhorn_blur   = float(g('model', 'pc_sinkhorn_blur', 0.01))
     ns.batch_size         = g('training', 'batch_size', 16)
     ns.epochs             = g('training', 'epochs', 100)
     ns.lr                 = g('training', 'lr', 1.0e-4)
@@ -330,6 +336,9 @@ def build_model(args, device):
         qal_threshold=args.qal_threshold,
         qal_alpha=args.qal_alpha,
         qal_use_squared=args.qal_use_squared,
+        pc_sinkhorn_weight=args.pc_sinkhorn_weight,
+        pc_sinkhorn_points=args.pc_sinkhorn_points,
+        pc_sinkhorn_blur=args.pc_sinkhorn_blur,
     ).to(device)
 
 
@@ -876,6 +885,7 @@ def _make_val_loader(args):
 # and the before -> after pairing from the val subset and seed. A key missing from
 # an older checkpoint's run_meta is not checked.
 _RESUME_PINNED = (
+    'pc_sinkhorn_weight', 'pc_sinkhorn_points', 'pc_sinkhorn_blur',
     'species', 'global_batch', 'batch_size', 'opt_steps_per_epoch',
     'num_points', 'max_leaves', 'rgb_file', 'param_schema',
     'epochs', 'lr', 'weight_decay', 'warmup_epochs', 'mask_ratio',
@@ -968,6 +978,7 @@ def train_worker(rank, world_size, args, local_rank=None):
     # ── Teacher (frozen, full-modal) ──────────────────────────────────────────
     if is_main: print("\n🧊 Building frozen TEACHER…")
     teacher = build_model(args, device)
+    teacher.pc_sinkhorn_weight = 0.0     # its loss is never used; skip the geomloss call
     teacher_epoch = load_weights_into(teacher, args.teacher_checkpoint, device,
                                       'teacher', verbose=is_main,
                                       expect_epoch=args.expect_init_epoch)
@@ -1021,6 +1032,9 @@ def train_worker(rank, world_size, args, local_rank=None):
         'crossmodal_prob': args.crossmodal_prob, 'sources': list(args.sources),
         'targets': list(args.targets), 'source_mask_ratio': args.source_mask_ratio,
         'feat_distill_weight': args.feat_distill_weight,
+        'pc_sinkhorn_weight': args.pc_sinkhorn_weight,
+        'pc_sinkhorn_points': args.pc_sinkhorn_points,
+        'pc_sinkhorn_blur': args.pc_sinkhorn_blur,
         'cls_distill_weight': args.cls_distill_weight,
         'output_distill_weight': args.output_distill_weight,
         'distill_masked_only': args.distill_masked_only,

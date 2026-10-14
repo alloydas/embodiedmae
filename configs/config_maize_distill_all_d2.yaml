@@ -68,6 +68,15 @@ model:
   qal_threshold: 0.01
   qal_alpha: 100.0
   qal_use_squared: false
+  # QAL + Sinkhorn: the yongyun branch's E7 winner (2026-10-14, user: "update E1 and
+  # distill with new loss"). Adds weight x the debiased Sinkhorn divergence (geomloss,
+  # p=2, blur 0.02 in unit-sphere units, random 1024-point subsets) to the QAL term;
+  # pc_loss_weight 1.0 multiplies the sum, so 0.5 is the effective weight, as in
+  # the branch's config_{sm,maize}_scene_mix_sink.yaml. It rewards coverage: QAL
+  # alone lets the folding head clump points (branch CLAUDE.md, E7).
+  pc_sinkhorn_weight: 0.5
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
   pc_loss_weight: 1.0
   depth_norm_type: minmax
   spline_loss_weight: 5.0
