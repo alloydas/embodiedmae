@@ -14,7 +14,7 @@
 % Citation keys used here -> reference numbers in the draft PDF:
 %   he2022mae [21]  bachmann2022multimae [3]  mizrahi2023fourm [31]
 %   pang2022pointmae [33]  dong2025embodiedmae [10]  golkar2023xval [14]
-%   hinton2015distill [22]  wu2021dcd [47]  song2026chamfer [42]
+%   hinton2015distill [22]  wu2021dcd [47]  song2026chamfer [42]  feydy2019sinkhorn [new: Feydy et al., AISTATS 2019, geomloss]
 %   hadadi2025vlm [17]  kimara2025maizefield3d [25]  hadadi2026floraforge [20]
 %   tobin2017domainrand [46]  qi2017pointnet [36]
 % ---------------------------------------------------------------------------
@@ -206,13 +206,24 @@ $\ell_{\mathrm{pc}}=\frac1N\sum_i\sigma(a(d_i-\tau))\,d_i+\frac1N\sum_j\sigma(a(
 with $d_i,e_j$ the Euclidean nearest-neighbour distances in each direction and
 a sigmoid gate ($\tau{=}0.01$, $a{=}100$) that spends gradient on residuals
 above a centimetre rather than on points already on the bulk
-surface~\cite{wu2021dcd,song2026chamfer}. AdamW ($\beta{=}(0.9,0.95)$, weight
+surface~\cite{wu2021dcd,song2026chamfer}. Nearest-neighbour losses let many
+predicted points share one target point at no cost, so the folding head can
+collapse a token's points into a clump and still score well. The headline
+model therefore adds an optimal-transport term that matches the two clouds as
+distributions: the debiased Sinkhorn divergence~\cite{feydy2019sinkhorn}
+($p{=}2$, blur $0.02$ in the unit-sphere frame) between random 1{,}024-point
+subsets of prediction and target, redrawn every step, with weight $0.5$. The
+term rewards coverage of the whole cloud directly, and the subsets keep its
+cost matrix at $B\times1024^2$. \todo{Report the ablation of this term from
+E7.} AdamW ($\beta{=}(0.9,0.95)$, weight
 decay 0.05), linear warm-up then cosine decay, gradient clipping at 1.0. The
 headline model trains for 1{,}000 epochs over all views at global batch 256;
 ablation arms are matched in \emph{optimizer steps} (197{,}400 at global batch
 32), not epochs, because under one-view-per-plant sampling an epoch is the
 plant count and equal epochs would hand a 10k-plant arm ten times the updates
-of a 1k arm.
+of a 1k arm. The ablation arms in Sec.~\ref{sec:results} were trained with the
+quality-aware Chamfer alone; the Sinkhorn term enters the headline model and
+the distillation.
 
 \subsection{A full-modality teacher, single-sensor students}
 \label{sec:distill}

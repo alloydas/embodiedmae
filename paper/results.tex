@@ -19,8 +19,11 @@ All ablations share one budget of 197{,}400 optimizer steps at global batch 32
 view-sampling seed, and the base ViT (114\,M parameters) unless the model size
 is the variable; arms that change the number of training plants keep the step
 budget by changing their epoch count (Sec.~\ref{sec:pretrain}). The headline
-sorghum model (E1) differs only in schedule: 1{,}000 epochs over all ten views
-at global batch 256. Phenotype readout follows Sec.~\ref{sec:field}: ridge
+sorghum model (E1) differs in schedule, 1{,}000 epochs over all ten views at
+global batch 256, and in its point-cloud loss, which adds the Sinkhorn term of
+Sec.~\ref{sec:pretrain}; the E1 numbers below are from the earlier
+Chamfer-only headline run, and its Sinkhorn re-run is in training.
+\todo{Replace with the Sinkhorn E1 when it finishes.} Phenotype readout follows Sec.~\ref{sec:field}: ridge
 regression on the frozen CLS token, the parameter tensor zeroed, one
 deterministic view per plant, reported as $R^2$ on the extreme-enriched
 held-out plants (2{,}250 val, 2{,}250 test; val unless stated) with paired
