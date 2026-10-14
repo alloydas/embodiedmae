@@ -154,7 +154,7 @@ read the trainer and config at start, so they run the new loss without resubmiss
 `outputs/_smoke_maize_distill_d2` was deleted so the smoke starts fresh. GPU smokes on gpuA40x4
 (the regular partition, starts in minutes-hours): **22897176** (E1 path: 1 epoch, 64 plants,
 `outputs/_smoke_maize_e1_d2`) and **22897183** (distill, 25 min, never exits 0 by itself).
-Check both logs before trusting the queued runs. Structured / mixed masking (E6) was NOT ported:
+Check both logs before trusting the queued runs. **2026-10-14 11:05 (user: "move E1 to gpuA100x4"): 22870827 moved in place to `gpuA100x4` (`scontrol update ... partition=gpuA100x4`); Reason went Priority -> Resources (it needs a whole 4-GPU node). Full rate there: ~2.25 SU/wall-hour, ~1100-1260 SU for 1000 epochs against 431 SU, so it runs out around epoch 350-400 unless the allocation is topped up; the eight preempt jobs stay where they were.** Structured / mixed masking (E6) was NOT ported:
 it is for occluded scenes, not the clean pretrain. The sorghum E1 (Nova) is untouched from here.
 
 ### Data version 2 — the sorghum restart (2026-10-02; code b708117)
