@@ -311,7 +311,8 @@ def build(s, path):
     text(d, *B(RX0, 0.028, RW, 0.024), 'init = teacher weights; 80 % of steps distil, 20 % are plain training steps', size=4.1, color=GREY)
     text(d, *B(0.02, 0.0, 0.96, 0.022),
          f'all panels: held-out sorghum plant {s["name"]} (data v2): real inputs, the sampled mask, and model outputs at epoch {s["epoch"]}; '
-         'the maize model differs only in its recipe tokens (1 + 28 tokens of 14 floats)', size=4.3, color=GREY, italic=True)
+         'RGB shown at the current (brightened) gain, the model ran at the gain it was trained on; the maize model differs only in its recipe tokens (1 + 28 of 14 floats)',
+         size=4.1, color=GREY, italic=True)
 
     path.write_text(d.xml())
     print('wrote', path, f'{path.stat().st_size / 1e6:.1f} MB,', len(d.cells), 'cells')

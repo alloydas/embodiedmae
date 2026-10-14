@@ -93,8 +93,9 @@ def build(S):
 
     zs = ', '.join(f"{s['sp']['title'].lower()} {'zero-shot (pretrained arm)' if s['sp']['zero_shot'] else 'distilled'}" for s in S)
     sc.text(0.02, 0.004, 0.96, 0.03,
-            f"held-out {S[0]['name']} and {S[1]['name']} (raw files in paper/data); right: real outputs, {zs}; no ground truth shown",
-            size=4.6, color=GREY, italic=True, valign='bottom')
+            f"held-out {S[0]['name']} and {S[1]['name']} (raw files in paper/data); right: real outputs, {zs}; no ground truth shown. "
+            "RGB shown as the current renders (brightened sorghum, background-free maize); each model ran on the render it was trained on",
+            size=4.3, color=GREY, italic=True, valign='bottom')
     return sc
 
 

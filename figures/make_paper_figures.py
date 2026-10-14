@@ -65,7 +65,7 @@ def _maize1_gt(folder):
 SPECIES = {
     'sorghum': dict(
         title='Sorghum', folder=str(REPO / 'paper/data/Sorghum_10_04'), num_points=8196,
-        rgb_file='rgb_nobg.png', pc_glob='*_nc_cam.ply',
+        rgb_file='rgb_nobg.png', pc_glob='*_nc_cam.ply', model_undo_brighten=True,
         model=lambda: sorghum_model.embodied_mae_4m_base(target_points=8196),
         ckpt=str(REPO / 'outputs/e2_pcrgbdt_d2/checkpoints/checkpoint_epoch_600.pth'),
         n_leaf_tokens=24,
@@ -75,7 +75,7 @@ SPECIES = {
         zero_shot=True),
     'maize': dict(
         title='Maize', folder=str(REPO / 'paper/data/Maize_1_plant_0004_04'), num_points=8192,
-        rgb_file='rgb.png', pc_glob='pointcloud_cam.ply',
+        rgb_file='rgba.png', model_rgb_file='rgb.png', pc_glob='pointcloud_cam.ply',
         model=lambda: maize_model.embodied_mae_4m_maize_base(target_points=8192),
         ckpt=str(REPO / 'outputs/maize_distill_all/checkpoints/checkpoint_epoch_58.pth'),
         n_leaf_tokens=28, n_params=14,
@@ -230,13 +230,26 @@ def load_folder(sp):
     centred, unit sphere; recipe tokens from the spline file when the folder
     carries the model's schema, else zeros with a validity mask."""
     folder = Path(sp['folder'])
-    im = Image.open(folder / sp['rgb_file'])
-    if im.mode == 'RGBA':
-        a = np.asarray(im).astype(np.float32) / 255.0
-        rgb8 = (a[..., :3] * a[..., 3:4] * 255).round().astype(np.uint8)
-        im = Image.fromarray(rgb8)
-    im = im.convert('RGB').resize((224, 224), Image.BILINEAR)
-    rgb = torch.from_numpy(np.asarray(im).astype(np.float32) / 255.0).permute(2, 0, 1)
+
+    def read_rgb(name, undo_gain=False):
+        """-> (3,224,224) float in [0,1], RGBA composited over black.  undo_gain divides
+        out a brighten_gain PNG tag (shorgum_data brighten.py: linear, alpha untouched)."""
+        im = Image.open(folder / name)
+        gain = float(im.text.get('brighten_gain', 1.0)) if undo_gain else 1.0
+        a = np.asarray(im.convert('RGBA')).astype(np.float32) / 255.0
+        rgb = a[..., :3] / gain * a[..., 3:4]
+        im = Image.fromarray((rgb * 255).round().clip(0, 255).astype(np.uint8)).resize((224, 224), Image.BILINEAR)
+        return torch.from_numpy(np.asarray(im).astype(np.float32) / 255.0).permute(2, 0, 1), gain
+
+    # What the figure SHOWS is the current render (sp['rgb_file']); what the MODEL gets is the
+    # render it was trained on: sorghum's un-brightened image (the dataset was brightened in
+    # place on 2026-10-13, after e2_pcrgbdt_d2 trained), maize's grey-background rgb.png.
+    rgb_show, gain = read_rgb(sp['rgb_file'])
+    rgb, _ = read_rgb(sp.get('model_rgb_file', sp['rgb_file']), undo_gain=sp.get('model_undo_brighten', False))
+    if sp.get('model_undo_brighten'):
+        _, gain = read_rgb(sp['rgb_file'], undo_gain=True)
+    else:
+        gain = 1.0
     mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1); std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
     rgb = (rgb - mean) / std
 
@@ -263,13 +276,13 @@ def load_folder(sp):
         gt_xml = _maize1_gt(folder)
         n_params = sp['n_params']
         par = torch.zeros(1 + K, n_params); tv = torch.zeros(1 + K); tv[:1 + min(K, gt_xml[1])] = 1.0
-    return rgb, depth, pc, par, tv, gt_xml
+    return rgb, depth, pc, par, tv, gt_xml, rgb_show, gain
 
 
 def load(species, ckpt=None, folder=None):
     sp = dict(SPECIES[species]); sp['folder'] = folder or sp['folder']
     torch.manual_seed(0); np.random.seed(0)
-    rgb, depth, pc, par, tv, gt_xml = load_folder(sp)
+    rgb, depth, pc, par, tv, gt_xml, rgb_show, gain = load_folder(sp)
     name = Path(sp['folder']).name
     print(species, 'sample', name)
 
@@ -284,7 +297,7 @@ def load(species, ckpt=None, folder=None):
     b = [t.unsqueeze(0) for t in (rgb, depth, pc, par, tv)]
     mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1); std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
     out = {'species': species, 'sp': sp, 'name': name, 'epoch': ck.get('epoch'), 'gt_xml': gt_xml,
-           'rgb': (rgb * std + mean).permute(1, 2, 0).numpy(), 'depth': depth[0].numpy(),
+           'rgb': rgb_show.permute(1, 2, 0).numpy(), 'rgb_gain': gain, 'depth': depth[0].numpy(),
            'pc': pc.numpy(), 'par': par, 'tv': tv.numpy()}
     out['bg'] = out['depth'] < 1e-3
 
@@ -301,7 +314,7 @@ def load(species, ckpt=None, folder=None):
         out['masked'] = dict(
             m_rgb=mr[0].numpy(), m_depth=md[0].numpy(), m_pc=mp[0].numpy(), m_text=mt[0].numpy(),
             members=members,
-            rgb=(unpatchify(_unnorm_pix(model, pr, b[0]), 16, 3, 224)[0] * std + mean).permute(1, 2, 0).numpy(),
+            rgb=((unpatchify(_unnorm_pix(model, pr, b[0]), 16, 3, 224)[0] * std + mean) * gain).permute(1, 2, 0).numpy(),
             depth=unpatchify(pd, 16, 1, 224)[0, 0].numpy(), pc=pp[0].numpy(), par=pt[0])
         # (b) single-sensor: RGB alone generates the other three
         torch.manual_seed(2)
@@ -817,7 +830,8 @@ def architecture(s, path):
     label(ax, RX0 + RW / 2, 0.04, 'init = teacher weights; 80 % of steps distil, 20 % are plain training steps', fs=4.1, color=GREY)
 
     label(ax, 0.5, 0.003, f'all panels: held-out sorghum plant {s["name"]} (data v2): real inputs, the sampled mask, and model outputs at epoch {s["epoch"]}; '
-          'the maize model differs only in its recipe tokens (1 + 28 tokens of 14 floats)', fs=4.3, color=GREY, va='bottom', style='italic')
+          'RGB shown at the current (brightened) gain, the model ran at the gain it was trained on; the maize model differs only in its recipe tokens (1 + 28 of 14 floats)',
+          fs=4.1, color=GREY, va='bottom', style='italic')
     for ext in ('pdf', 'png'):
         fig.savefig(path.with_suffix('.' + ext), dpi=300, facecolor='white')
     plt.close(fig)
