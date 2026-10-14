@@ -98,19 +98,24 @@ cues (shading, leaf overlap, texture) that place organs on the stem.
 \textbf{Depth is a reconstruction win and a phenotype wash.} Depth lowers the
 sorghum Chamfer from $2.50$ to $1.71$ ($-32\,\%$) and maize from $1.61$ to
 $1.21$, but moves the sorghum probe by at most $+0.01$ on size targets and
-$+0.09$ on leaf length; on maize the paired comparison gives depth two wins
-(stem radius, tassel droop) and four losses (leaf count, droop, twist, width),
-none larger than $0.07$. Depth tells the decoder where surfaces are; it does
-not tell the encoder more about the plant.
+$+0.09$ on leaf length; on maize (final release, paired over plants,
+2{,}000 resamples) depth wins no trait and loses three on both splits: tassel
+droop ($-0.10$ to $-0.12$), curl ($-0.06$ to $-0.10$) and twist ($-0.03$);
+the other eight are ties within $0.015$. Depth tells the decoder where
+surfaces are; it does not tell the encoder more about the plant.
 
 \textbf{The parameter stream, used as an input, does not help.} On sorghum
 the four-stream arm loses to PC+RGB+D on every learnable target, on val and
 test alike: size targets $-0.015$ to $-0.017$, roll $-0.013$, leaf length
 $-0.082$ (all six intervals exclude zero), and its Chamfer gives back exactly
 what depth gained ($2.50$ vs $1.71$). On the first maize release the same arm
-lost 10 of 11 targets to PC+RGB+D; on the final release it is a tie (height
-$0.635$ vs $0.633$, leaf angle $0.919$ vs $0.926$, stem radius $0.743$ vs
-$0.760$) while winning the Chamfer ($0.99$ vs $1.21$). Either way the stream
+lost 10 of 11 targets to PC+RGB+D; on the final release the paired
+comparison is a draw: PC+RGB+D wins droop ($+0.04$ to $+0.07$) and loses curl
+($-0.04$ to $-0.07$) and twist ($-0.035$), and the eight remaining traits are
+ties within $0.02$ (height $0.635$ vs $0.633$, leaf angle $0.919$ vs $0.926$,
+stem radius $0.743$ vs $0.760$), while the four-stream arm wins the Chamfer
+($0.99$ vs $1.21$). Against PC+RGB the four-stream arm loses droop ($-0.05$)
+and tassel droop ($-0.13$) and ties the rest. Either way the stream
 that encodes the answer verbatim at training time is not the stream that
 makes the frozen feature better at deployment, where it is absent.
 
@@ -206,9 +211,14 @@ Chamfer and $+0.02$ to $+0.03$ on every probe target, and large adds nothing
 to Chamfer ($2.53$ vs $2.50$) and $+0.01$ to the probe. Maize is noisier. Its
 Chamfer falls fourfold from 1{,}000 to 10{,}000 plants, but the probe is not
 monotone in plants (height $0.39 / 0.52 / 0.43 / 0.64$) and the three model
-sizes are within $0.05$ of each other on every trait; a single seed per arm
-does not resolve it. \todo{Paired CIs over the maize E3 arms; a second seed of
-\texttt{e3\_10k}.}
+sizes are within $0.05$ of each other on every trait. The paired bootstrap
+says the dip is not sampling noise: every reduced arm loses to the full-data
+arm on 10 of 11 traits on both splits (twist ties), by $0.03$ to $0.24$, and
+the 3{,}000-plant arm beats the 10{,}000-plant arm on height ($+0.10$), leaf
+length ($+0.10$) and leaf count ($+0.04$) while losing stem radius ($-0.10$),
+each interval excluding zero on val and test. With one seed per arm the
+remaining candidate is run-to-run variance of the arm itself. \todo{A second
+seed of \texttt{maize\_e3\_10k\_d2}.}
 
 \subsection{Baselines}
 \label{sec:res-e8}
