@@ -309,7 +309,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   cells are empty. Distillation "before" = the epoch-0 warm start (`logs/evalwarm_12085946.out`), NOT
   epoch 1 of the history (that understates the gain: 19.1 % vs 5.9 %). Figures: `paper/fig_metrics.pdf`
   (`figures/make_metric_fig.py`, Chamfer vs probe over 12 sorghum arms) and `paper/fig_view_elevation.png`
-  (copy of `vis_gallery/view_elevation_effect.png`). The user's main .tex / .bib are not in the repo.
+  (copy of `vis_gallery/view_elevation_effect.png`). **The Overleaf project is `paper/overleaf/`** (imported
+  2026-10-14 from the user's zip; `main.tex`, `sec/*.tex`, `CVPR.bib`). Its Secs. 4-6 are GENERATED from
+  `paper/results.tex` / `discussion.tex` by `python paper/sync_overleaf.py` (cite-key map, label aliases): edit
+  the repo drafts, re-sync, `latexmk -pdf main.tex`. Secs. 0-3 and the supplement are edited in place.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
