@@ -62,8 +62,10 @@ experiments have been *built*, which is durable. For live progress use
 ### MAIZE on DELTA, data version 2 — state as of 2026-10-08 12:00 (code 5ee93bd)
 
 Maize now runs on NCSA Delta (`/work/hdd/bepk/adas14/embodiedmae`, data `/work/hdd/bepk/adas14/Maize`,
-launchers in `slurm/delta/`, env notes in `slurm/delta/delta_env.sh`). **Delta cannot push to
-GitHub** (no credential helper, no `gh`): commits made there wait for the user to `git push`.
+launchers in `slurm/delta/`, env notes in `slurm/delta/delta_env.sh`). **Delta pushes to GitHub
+over SSH since 2026-10-14**: a write-enabled deploy key (`~/.ssh/id_ed25519_github_embodiedmae`,
+`~/.ssh/config` Host github.com) and `origin` = `git@github.com:alloydas/embodiedmae.git`. There is
+still no `gh` there.
 Maize data version 2 (commit 4dcfe3e, 2026-10-06): `rgba.png` composited over black + the trimmed
 spline XML (`param_schema: v2`, `embodied_mae_4m_maize.PLANT_FIELDS_V2 / LEAF_FIELDS_V2`); every
 `_d2` config sets `data.rgb_file` / `data.param_schema`, and the trainer refuses to mix versions
