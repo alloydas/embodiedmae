@@ -94,6 +94,7 @@ def merge_config_with_args(config, args):
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
+                  'pc_sinkhorn_weight', 'pc_sinkhorn_points', 'pc_sinkhorn_blur',
                   'active_modalities', 'text_mask_ratio'],
         'training': ['batch_size', 'epochs', 'lr', 'weight_decay',
                      'warmup_epochs', 'val_freq', 'test_freq', 'accum_steps'],
@@ -140,6 +141,10 @@ def config_to_namespace(config):
     ns.qal_threshold      = config['model'].get('qal_threshold', 0.01)
     ns.qal_alpha          = config['model'].get('qal_alpha', 100.0)
     ns.qal_use_squared    = config['model'].get('qal_use_squared', False)
+    # Sinkhorn term added to the PC loss (pc_sinkhorn.py, yongyun branch); 0 = off.
+    ns.pc_sinkhorn_weight = config['model'].get('pc_sinkhorn_weight', 0.0)
+    ns.pc_sinkhorn_points = config['model'].get('pc_sinkhorn_points', 2048)
+    ns.pc_sinkhorn_blur   = config['model'].get('pc_sinkhorn_blur', 0.01)
     # E2 modality value-add. None -> all four streams (the headline model).
     # A subset names which token streams exist AT ALL: an inactive modality has
     # no embedder, no decoder head and no loss term, so it is absent from the
@@ -742,6 +747,9 @@ def build_model_from_args(args):
         qal_threshold=args.qal_threshold,
         qal_alpha=args.qal_alpha,
         qal_use_squared=args.qal_use_squared,
+        pc_sinkhorn_weight=args.pc_sinkhorn_weight,
+        pc_sinkhorn_points=args.pc_sinkhorn_points,
+        pc_sinkhorn_blur=args.pc_sinkhorn_blur,
         text_mask_ratio=args.text_mask_ratio,
     )
 

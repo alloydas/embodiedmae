@@ -59,7 +59,9 @@ mkdir -p logs
 source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh
 conda activate /work/mech-ai-scratch/alloy/.conda/envs/det_cu128
 
-CONFIG=configs/config_4m_pretrain15k_d2.yaml
+# E1_CONFIG overrides the config (e.g. configs/config_4m_pretrain15k_d2_sink.yaml, the
+# Sinkhorn-loss restart of 2026-10-14); the output dir comes from the config.
+CONFIG="${E1_CONFIG:-configs/config_4m_pretrain15k_d2.yaml}"
 OUT_DIR=$(python -c "import yaml,sys; print(yaml.safe_load(open(sys.argv[1]))['checkpointing']['output_dir'])" "${CONFIG}")
 CKPT_DIR="${OUT_DIR}/checkpoints"
 NUM_WORKERS="${NUM_WORKERS:-21}"

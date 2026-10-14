@@ -241,6 +241,23 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   Expected ~12 min/epoch (GPU ceiling ~74 samples/s/GPU), ~8 days for the rest, if the loader
   keeps up. 16696027 (8x A100 scavenger, old spooled script, accum 1) now waits `afterany:16740746`
   as the fallback: it resumes at 1000 and exits if E1 finished.
+- **E1 RESTARTED FROM SCRATCH WITH THE SINKHORN LOSS (2026-10-14, user: "in yongyun branch he
+  added a new loss, update that loss and start training from the beginning for E1 sorghum").**
+  Ported from `origin/yongyun` (commit 5f13ee7 there) into main: `pc_sinkhorn.py` and the
+  `model.pc_sinkhorn_weight / _points / _blur` keys in `embodied_mae_4m.py` + `train_sorghum_4m.py`
+  (weight 0 = every earlier run, bit-identical; also loss names `chamfer_cdist`, `sinkhorn`).
+  NOT ported: the branch's structured / neighbour-occlusion masking, scene configs and evals.
+  `geomloss` 0.3.1 was pip-installed into `det` and `det_cu128` (the term imports it lazily).
+  New run **`4m_pretrain_15k_d2_sink`** = `configs/config_4m_pretrain15k_d2_sink.yaml`: the E1 d2
+  recipe + Sinkhorn weight 0.5 / 1024 points / blur 0.02 (the branch's standard, pc_loss_weight 1,
+  unsquared QAL). Job **16907077** (nova, 2x RTX PRO 6000, 128 CPU, 480G, `NUM_WORKERS=60`,
+  `--save_freq 2`, USR1 requeue; launcher takes `E1_CONFIG=<yaml>`). It trains on the BRIGHTENED
+  `rgb_nobg.png` throughout (the dataset was brightened in place by the user's job on 2026-10-13
+  ~10:02, gain 1.85, PNG tag `brighten_gain`; the still-running `_d2` arms switched inputs
+  mid-run at that moment, the finished arms never saw it). The old E1 `4m_pretrain_15k_d2`
+  reached epoch 716/1000 (old loss, mixed brightness) and is superseded: its jobs 16740746 (nova)
+  and 16696027 (scavenger fallback) are HELD, not cancelled (`scontrol release <id>` to revive).
+  The maize trainer was not touched (its model subclasses `EmbodiedMAE4M`, default weight 0).
 - **`e2_pc_d2` moved to the front of its chain (2026-10-07 09:10, user: "move e2_pc to nova").**
   Its scavenger chunks kept being preempted within minutes (stuck at 257 since 10-06). Nova job
   16696287 (2x RTX PRO 6000, 80 CPU, 2-day limit, `--time-min` 4 h, USR1 requeue) had its
