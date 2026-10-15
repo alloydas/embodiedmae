@@ -366,6 +366,19 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   e2_pcrgbdt_d2`, the pair bootstrap against `e2_pcrgbdt_d2`, and ideally a probe per held-out VIEW
   (not built: `eval/linear_probe.py` scores view 0 only; add a `--probe-view k` to see how a regime
   generalises across elevation).
+- **2026-10-15 11:40: SINKHORN E1 MOVED TO NOVA, 4x RTX PRO 6000, 4 DAYS (user: "try 4 gpu and long time
+  in Nova for E1 requeueing other jobs", "Make it long for 4 days").** 16907818 (scavenger, 2x A100) was
+  `scontrol requeue`d at epoch 25 (checkpoint_epoch_24 is the resume point), reshaped in place, then
+  CANCELLED because a user cannot raise a job's TimeLimit (2 d) and nova allows 31 d. Replacement
+  **16929801**: `E1_CONFIG=configs/config_4m_pretrain15k_d2_sink.yaml NUM_WORKERS=18 sbatch --gres=gpu:rtx_pro_6000:4
+  --cpus-per-task=80 --mem=280G --time=4-00:00:00 --time-min=04:00:00 --signal=B:USR1@600 --requeue
+  slurm/pretrain_15k_d2.sbatch` (nova / mech-ai / normal; accum = 8/4 = 2, global batch 256 unchanged;
+  the launcher passes `--save_freq 2` and auto-resumes). It first pended on AssocGrpGRES (13 of 17 in use),
+  so the E5 arms were requeued/held to make room: **16929383 / 16929384 / 16929385 are HELD (JobHeldUser)**;
+  `scontrol release 16929383 16929384 16929385` once E1 is running and the cap allows (E1 4 + evals;
+  E5 needs 2 each). At 11:45 E1 showed Reason=None with nova26-gpu-2 planned. Expected pace on 4x RTX PRO
+  6000: ~6-8 min/epoch if the loader (72 workers) keeps up -> ~4-5 days for the remaining 975 epochs,
+  i.e. it will need one USR1 self-requeue past the 4-day wall. Old-loss E1 outputs stay at epoch 716.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
