@@ -379,6 +379,21 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   E5 needs 2 each). At 11:45 E1 showed Reason=None with nova26-gpu-2 planned. Expected pace on 4x RTX PRO
   6000: ~6-8 min/epoch if the loader (72 workers) keeps up -> ~4-5 days for the remaining 975 epochs,
   i.e. it will need one USR1 self-requeue past the 4-day wall. Old-loss E1 outputs stay at epoch 716.
+- **2026-10-15 11:55: EVERYTHING EXCEPT E1 CANCELLED (user: "cancel all other jobs except 16929801 I will
+  ask you to requeue").** Cancelled: the gain-matched v2 evaluation 16928968 `pr_600_d2` (was 21 min in),
+  16928972 `pr_mean600_d2`, 16928973 `e8_score_d2`, 16928974 `e8_base_sorghum_d2`, 16928975 `pcview_d2`
+  (16928969/70/71, the E3 probes, had already COMPLETED: `reports/probe_pr_{6168,2024,624}_d2_1692896*.csv`
+  + E9 dirs), and the three E5 arms 16929383/4/5 (no checkpoint yet: they restart from scratch). Partial
+  feature caches (`outputs/_probe_cache/*__g1.npz`) survive and are reused. **Resubmit on request, exact
+  lines (nova; add `--partition=scavenger --account=mech-ai-scavenger --requeue` instead for scavenger):**
+  `CKPT=checkpoints/checkpoint_epoch_600.pth E9_SPLITS="val test" sbatch --job-name=pr_600_d2 slurm/linear_probe.sbatch e2_pc_d2 e2_pcrgb_d2 e2_pcrgbd_d2 e2_pcrgbdt_d2 e2_pcrgbdt_tg_d2 e2_pcrgbdt_tg40_d2 e2_pcrgbdt_tg100_d2 e4_small_d2 e4_large_d2`;
+  `FEATURE=mean CKPT=checkpoints/checkpoint_epoch_600.pth sbatch --job-name=pr_mean600_d2 slurm/linear_probe.sbatch e2_pc_d2 e2_pcrgbd_d2 e2_pcrgbdt_d2`;
+  `RUN=e8_supervised_d2 E8_CONFIG=configs/config_e8_supervised_d2.yaml sbatch --job-name=e8_score_d2 slurm/e8_supervised_score.sbatch`;
+  `sbatch --job-name=e8_base_sorghum_d2 slurm/baseline_probe.sbatch sorghum`;
+  `sbatch --job-name=pcview_d2 slurm/pc_view_eval.sbatch e2_pc_d2 e2_pcrgb_d2 e2_pcrgbd_d2 e2_pcrgbdt_d2`;
+  E5: `for s in e5_horizon_d2 e5_topdown_d2 e5_single_d2; do sbatch --job-name=$s --partition=nova --account=mech-ai --qos=normal --gres=gpu:a100:2 --cpus-per-task=32 --mem=160G --time=2-00:00:00 slurm/scale_arm_blackwell.sbatch $s --num_workers 14; done`
+  (the linear_probe / e8 / pcview launchers default to nova or scavenger per their headers; the E5 line
+  above is nova). Only **16929801** (Sinkhorn E1, 4x RTX PRO 6000, 4 d) is live.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
