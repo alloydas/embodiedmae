@@ -394,6 +394,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   E5: `for s in e5_horizon_d2 e5_topdown_d2 e5_single_d2; do sbatch --job-name=$s --partition=nova --account=mech-ai --qos=normal --gres=gpu:a100:2 --cpus-per-task=32 --mem=160G --time=2-00:00:00 slurm/scale_arm_blackwell.sbatch $s --num_workers 14; done`
   (the linear_probe / e8 / pcview launchers default to nova or scavenger per their headers; the E5 line
   above is nova). Only **16929801** (Sinkhorn E1, 4x RTX PRO 6000, 4 d) is live.
+  **Resubmitted 2026-10-15 10:35 (user: "requeue rest of the jobs"), all on nova / mech-ai:** 16930422
+  `pr_600_d2`, 16930423 `pr_mean600_d2`, 16930424 `e8_score_d2`, 16930425 `e8_base_sorghum_d2`, 16930426
+  `pcview_d2`, and the E5 arms 16930427 `e5_horizon_d2`, 16930428 `e5_topdown_d2`, 16930429 `e5_single_d2`
+  (2x A100 each). The E3 probes were not resubmitted: they completed before the cancel.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
