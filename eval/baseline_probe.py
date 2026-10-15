@@ -260,7 +260,8 @@ def extract_split(mod, model, sp, data_root, split, features, batch_size,
         max_leaves=sp.max_leaves,
         view_sampling=True,        # both flags required: deterministic_view
         deterministic_view=True,   # alone is a silent no-op
-        **({'rgb_file': sp.rgb_file, 'rgb_gain': sp.rgb_gain} if sp.name == 'sorghum' else {}),
+        **({'rgb_file': sp.rgb_file, 'rgb_gain': sp.rgb_gain} if sp.name == 'sorghum'
+           else {'rgb_file': sp.rgb_file}),
         # max_plants is deliberately NOT passed: it draws a random TRAIN
         # subset for E3; the cap below is a prefix, for testing only.
     )
@@ -351,6 +352,8 @@ def rgb_tag(mod, args):
     """
     if 'rgb' not in mod.INPUTS or args.rgb_file == 'rgb.png':
         return ''
+    if args.rgb_gain is None:       # maize: no brightening, the tag is the file's stem (rgba)
+        return Path(args.rgb_file).stem
     # `_g<gain>` since 2026-10-15: caches extracted on the brightened files (no suffix,
     # 2026-10-14) are never served for the gain-matched images.
     return f'{Path(args.rgb_file).stem}_g{args.rgb_gain:g}'
@@ -693,6 +696,11 @@ def main():
                     help='assert this file extracts bitwise what the probe does, then exit')
     ap.add_argument('--ckpt', default='best_model.pth',
                     help='checkpoint inside RUN, for --check-parity only')
+    ap.add_argument('--rgb-file', default=None,
+                    help="maize only: the RGB file the adapters that read RGB are served, "
+                         "rgb.png (data v1, default) or rgba.png (data v2, 2026-10-06; "
+                         "composited over black, caches tagged __rgba). Sorghum is fixed "
+                         "by sorghum_dataset.RGB_FILE")
     args = ap.parse_args()
     args.feature = list(dict.fromkeys(args.feature))      # dedupe, keep order
 
@@ -712,6 +720,12 @@ def main():
     sp = get_species(args.species)
     args.data_root = args.data_root or sp.data_root
     args.cache_dir = args.cache_dir or str(sp.cache_dir)
+    if args.rgb_file is not None:
+        if sp.name != 'maize':
+            ap.error('--rgb-file is for maize; sorghum reads sorghum_dataset.RGB_FILE')
+        if args.rgb_file not in ('rgb.png', 'rgba.png'):
+            ap.error(f'--rgb-file must be rgb.png or rgba.png, got {args.rgb_file!r}')
+        sp = dataclasses.replace(sp, rgb_file=args.rgb_file)
     args.rgb_file = sp.rgb_file
     args.rgb_gain = sp.rgb_gain
     args.split_set = [s.strip() for s in args.split_set.split(',') if s.strip()]

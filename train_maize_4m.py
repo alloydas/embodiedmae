@@ -44,7 +44,7 @@ from embodied_mae_4m_maize import (
     N_PARAMS,
 )
 from embodied_mae import chamfer_distance, earth_movers_distance
-from maize_dataset_4m import MaizeDataset4M
+from maize_dataset_4m import MaizeDataset4M, parse_train_views
 
 
 # ── Config helpers ────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points',
                  'view_sampling', 'view_seed', 'max_plants',
-                 'plant_subset_seed', 'rgb_file', 'param_schema'],
+                 'plant_subset_seed', 'rgb_file', 'param_schema', 'train_views'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
@@ -141,6 +141,11 @@ def config_to_namespace(config):
     # config.json carries neither key. See check_resume_data_version.
     ns.rgb_file           = config['data'].get('rgb_file', 'rgb.png')
     ns.param_schema       = config['data'].get('param_schema', 'v1')
+    # E5 view regime (maize form, 2026-10-15): None = every view (every run before
+    # then), a list of view indices, or 'top:k' / 'horizon:k' / 'bottom:k' ranked per
+    # plant by camera elevation. Stored canonical (parse_train_views) because
+    # config.json dumps this namespace and a resume is checked against it.
+    ns.train_views        = parse_train_views(config['data'].get('train_views', None))
     ns.model_size         = config['model'].get('model_size', 'base')
     ns.mask_ratio         = config['model'].get('mask_ratio', 0.15)
     ns.pc_loss_weight     = config['model'].get('pc_loss_weight', 10.0)
@@ -778,6 +783,24 @@ def check_resume_text_mask_ratio(args):
             f"start from scratch or use a matching config.")
 
 
+def check_resume_train_views(args):
+    """Refuse to continue a run directory written under a different view regime.
+
+    An E5 arm's only difference from maize_4m_d2 is data.train_views, and the
+    checkpoints are otherwise interchangeable: a resume into the wrong directory
+    would switch the augmentation pool mid-run and leave config.json describing
+    only the last segment. A config.json without the key is an all-views run.
+    """
+    prev = Path(args.output_dir) / 'config.json'
+    if not prev.exists():
+        return
+    was = parse_train_views(json.loads(prev.read_text()).get('train_views', None))
+    if was != args.train_views:
+        raise SystemExit(f"{prev} records train_views={was!r} but this run uses "
+                         f"train_views={args.train_views!r}: refusing to change the view "
+                         f"regime of a run directory")
+
+
 def check_resume_data_version(args):
     """Refuse to continue a run directory written under the other data version.
 
@@ -834,7 +857,8 @@ def train_worker(rank, world_size, args):
                                  max_plants=args.max_plants,
                                  plant_subset_seed=args.plant_subset_seed,
                                  rgb_file=args.rgb_file,
-                                 param_schema=args.param_schema)
+                                 param_schema=args.param_schema,
+                                 train_views=args.train_views)   # E5; train split only
     val_ds   = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
@@ -1173,6 +1197,9 @@ def main():
                         help='RGB image per view folder: rgb.png (data v1) or rgba.png (v2)')
     parser.add_argument('--param_schema',       type=str,   default=None, choices=['v1', 'v2'],
                         help='spline XML layout: v1 (full generator XML) or v2 (trimmed, 2026-10-06)')
+    parser.add_argument('--train_views',        type=str,   default=None,
+                        help="E5 view regime: view indices ('4,5') or a per-plant elevation "
+                             "rank ('top:2', 'horizon:2', 'bottom:2'); default every view")
     parser.add_argument('--model_size',         type=str,   default=None, choices=['small','base','large'])
     parser.add_argument('--active_modalities',  type=str,   default=None,
                         help="E2 arm, e.g. 'pc' or 'pc,rgb' or 'pc,rgb,depth'. "
@@ -1241,6 +1268,7 @@ def main():
 
     check_resume_text_mask_ratio(cfg)
     check_resume_data_version(cfg)
+    check_resume_train_views(cfg)
 
     local_rank = int(os.environ.get('LOCAL_RANK', -1))
     if local_rank >= 0:

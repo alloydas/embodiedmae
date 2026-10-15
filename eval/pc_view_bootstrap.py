@@ -1,4 +1,7 @@
 """Paired bootstrap CIs for the 1-view / 3-view probe drops (eval/pc_view_eval.py).
+With --species maize it reads eval/pc_view_eval_maize.py's caches instead, where the
+anchor condition is the training regime (1view) and the deltas say what 3 and 10
+fused cameras add; the column is then delta_vs_1view.
 
 Refits the matched probe exactly as pc_view_eval.py does (ridge on the cached CLS
 features, train-only standardiser, alpha by 5-fold CV), keeps the per-plant val and
@@ -28,8 +31,14 @@ def _import_file(modname, path):
     spec.loader.exec_module(mod)
     return mod
 
-PV = _import_file('pc_view_eval', REPO / 'eval' / 'pc_view_eval.py')
-LP = PV.LP
+PV = LP = None        # set in main() from --species
+
+
+def _load_species(species):
+    global PV, LP
+    name = 'pc_view_eval' if species == 'sorghum' else 'pc_view_eval_maize'
+    PV = _import_file(name, REPO / 'eval' / f'{name}.py')
+    LP = PV.LP
 
 
 def fit_predict(Xtr, ytr, evals, alphas):
@@ -55,19 +64,30 @@ def r2_rows(y, P, idx):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--species', choices=('sorghum', 'maize'), default='sorghum')
     ap.add_argument('--runs', nargs='+', required=True)
-    ap.add_argument('--data-root', default=PV.PM.DATA_ROOT)
-    ap.add_argument('--cache-dir', default=str(REPO / 'outputs' / '_probe_cache_pcview'))
+    ap.add_argument('--data-root', default=None, help="default: the species' data root")
+    ap.add_argument('--cache-dir', default=None, help="default: the species' pcview cache")
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--alphas', type=float, nargs='+', default=[0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0])
     ap.add_argument('--n-boot', type=int, default=2000)
     ap.add_argument('--targets', nargs='+', default=None, help='probe target names (default: all)')
     ap.add_argument('--out', default=None)
+    ap.add_argument('--limit', type=int, default=None,
+                    help='read the caches of a --limit N smoke run (cache_path\'s key)')
     args = ap.parse_args()
-    args.limit = None                                         # cache_path's key
+    _load_species(args.species)
+    if args.species == 'sorghum':
+        args.data_root = args.data_root or PV.PM.DATA_ROOT
+        args.cache_dir = args.cache_dir or str(REPO / 'outputs' / '_probe_cache_pcview')
+    else:
+        args.data_root = args.data_root or PV.DATA_ROOT
+        args.cache_dir = args.cache_dir or str(PV.CACHE_DIR)
+    anchor = getattr(PV, 'ANCHOR', 'full')                    # sorghum: full; maize: 1view
 
     tgt = LP.load_targets(args.data_root)
-    conds = list(PV.CONDITIONS)                               # full, 3view, 1view
+    conds = list(PV.CONDITIONS)
+    a_idx = conds.index(anchor)
     rng = np.random.default_rng(12345)
     rows = []
     for spec in args.runs:
@@ -92,20 +112,21 @@ def main():
                 point = r2_rows(ys, P, np.arange(n)[None])[0]
                 boot = r2_rows(ys, P, idx)
                 for j, c in enumerate(conds):
-                    d = boot[:, j] - boot[:, 0]
+                    d = boot[:, j] - boot[:, a_idx]
                     rows.append({'run': run, 'ckpt': ckpt, 'target': name, 'split': s,
                                  'condition': c, 'n': n, 'r2': point[j],
-                                 'delta_vs_full': point[j] - point[0],
-                                 'delta_lo': np.percentile(d, 2.5) if j else 0.0,
-                                 'delta_hi': np.percentile(d, 97.5) if j else 0.0})
+                                 f'delta_vs_{anchor}': point[j] - point[a_idx],
+                                 'delta_lo': np.percentile(d, 2.5) if j != a_idx else 0.0,
+                                 'delta_hi': np.percentile(d, 97.5) if j != a_idx else 0.0})
             print(f'  {run:34s} {name:16s} done', flush=True)
     df = pd.DataFrame(rows)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(args.out, index=False)
         print(f'📄 {args.out}')
-    show = df[df.condition != 'full'].copy()
-    show['ci'] = show.apply(lambda r: f"{r.delta_vs_full:+.3f} [{r.delta_lo:+.3f},{r.delta_hi:+.3f}]", axis=1)
+    show = df[df.condition != anchor].copy()
+    dcol = f'delta_vs_{anchor}'
+    show['ci'] = show.apply(lambda r: f"{r[dcol]:+.3f} [{r.delta_lo:+.3f},{r.delta_hi:+.3f}]", axis=1)
     pd.set_option('display.width', 250)
     print(show.pivot_table(index=['run', 'condition'], columns=['split', 'target'], values='ci',
                            aggfunc='first').to_string())

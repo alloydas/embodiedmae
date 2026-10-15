@@ -31,7 +31,13 @@ Verified format facts (measured over the complete 2,250-plant test split):
   normalises per plant by its own near/far.
 * **pointcloud_cam.ply** — binary LE double, no normals, **exactly 8,192
   points** (sorghum has ~38k). `num_points` therefore defaults to 8192: asking
-  for more would silently pad with duplicates.
+  for more would silently pad with duplicates. **It is what its own camera sees,
+  not the whole plant** (tools/check_maize_cloud_views.py, 2026-10-15, 20 val
+  plants: 2 % of a cloud's points are hidden from the camera that made it, 25 %
+  from another view's camera, and the depth image back-projects to within 1 mm
+  of the cloud). Sorghum's `_nc_cam.ply` is the complete plant in the camera's
+  frame; a maize model trains on single-camera clouds, and the ten views of a
+  plant are ten different clouds (eval/pc_view_eval_maize.py fuses them).
 * **`<split>/_params.json`** exists per split but is not read here; the
   per-folder XML is the source of truth and is byte-identical across a plant's
   ten view folders.
@@ -46,6 +52,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import random
 from pathlib import Path
@@ -108,6 +115,57 @@ def _write_index_cache(load_dir, tag, entries):
     os.replace(tmp, p)          # atomic: a reader never sees a half-written index
 
 
+VIEW_TABLE_DEFAULT = Path(__file__).resolve().parent / 'data_split' / 'maize_view_elevation.csv.gz'
+_VIEW_RANKS = ('top', 'horizon', 'bottom')
+
+
+def parse_train_views(spec):
+    """Canonical train_views: None, a sorted list of view indices, or '<rank>:<k>'.
+
+    Accepts what a YAML or a CLI hands over: None / 'null', a list of ints, a comma
+    string of ints ('4,5'), or a rank spec 'top:2' / 'horizon:2' / 'bottom:1'. The
+    canonical form is what config.json records and what a resume is checked against.
+    """
+    if spec is None:
+        return None
+    if isinstance(spec, str):
+        t = spec.strip()
+        if t in ('', 'null', 'None'):
+            return None
+        if ':' in t:
+            rank, _, k = t.partition(':')
+            rank = rank.strip().lower()
+            if rank not in _VIEW_RANKS or not k.strip().isdigit() or int(k) < 1:
+                raise ValueError(f"train_views {spec!r}: expected '<top|horizon|bottom>:<k>' with k >= 1")
+            return f'{rank}:{int(k)}'
+        spec = [int(x) for x in t.replace(',', ' ').split()]
+    views = sorted({int(v) for v in spec})
+    if not views:
+        raise ValueError('train_views must name at least one view')
+    if not all(0 <= v <= 9 for v in views):
+        raise ValueError(f'train_views must be view indices 0-9, got {views}')
+    return views
+
+
+def load_view_table(path, split):
+    """{plant: [(view, sin_elev), ...]} for one split, from tools/maize_view_elevation.py's CSV."""
+    import csv
+    import gzip
+    p = Path(path or os.environ.get('MAIZE_VIEW_TABLE') or VIEW_TABLE_DEFAULT)
+    if not p.exists():
+        raise FileNotFoundError(f'{p}: the maize view-elevation table is missing; build it with '
+                                f'python tools/maize_view_elevation.py --data-root <Maize root>')
+    opener = gzip.open if p.suffix == '.gz' else open
+    table = {}
+    with opener(p, 'rt', newline='') as fh:
+        for r in csv.DictReader(fh):
+            if r['split'] == split:
+                table.setdefault(r['plant'], []).append((int(r['view']), float(r['sin_elev'])))
+    if not table:
+        raise ValueError(f'{p}: no rows for split {split!r}')
+    return table
+
+
 class MaizeDataset4M(Dataset):
     """Maize 4M samples.
 
@@ -120,7 +178,8 @@ class MaizeDataset4M(Dataset):
     def __init__(self, data_root, img_size=224, num_points=8192, split=None,
                  max_leaves=MAX_LEAVES, view_sampling=False, view_seed=0,
                  deterministic_view=False, max_plants=None, plant_subset_seed=42,
-                 rgb_file='rgb.png', param_schema=None):
+                 rgb_file='rgb.png', param_schema=None, train_views=None,
+                 view_table=None):
         # Data version 2 (2026-10-06) adds rgba.png -- straight alpha, background
         # transparent -- and a trimmed spline XML (embodied_mae_4m_maize,
         # PLANT_FIELDS_V2). A d2 run passes rgb_file='rgba.png',
@@ -136,6 +195,27 @@ class MaizeDataset4M(Dataset):
         self.deterministic_view = deterministic_view
         self._view_seed = int(view_seed)
         self._epoch = 0
+        # ── View regime (CVPR plan E5), the maize form ──────────────────────
+        # Sorghum restricts the per-epoch draw to a band of VIEW INDICES because
+        # its ten renders are an elevation ladder. Maize's are not: each index
+        # spans elevations of -85..+81 deg with a random azimuth (measured over
+        # the train split, tools/maize_view_elevation.py), so the band is chosen
+        # per PLANT from the real camera. train_views is one of
+        #   None            every view (every run before 2026-10-15)
+        #   [i, j, ...]     view indices, as sorghum (e.g. [0]: view 0 only, the
+        #                   view val/test are scored on)
+        #   'top:k'         the k views whose camera sits highest above the plant
+        #   'horizon:k'     the k views nearest the horizon
+        #   'bottom:k'      the k views furthest below it
+        # ranked by sin(elevation) from data_split/maize_view_elevation.csv.gz
+        # (view_table / $MAIZE_VIEW_TABLE override the path). Every plant keeps
+        # exactly k views, so the plant set, the steps per epoch and the schedule
+        # are those of the unrestricted arm; only the augmentation pool shrinks.
+        # Train split only: val/test stay on view 0 (deterministic_view).
+        self.train_views = parse_train_views(train_views)
+        self._view_table = view_table
+        if self.train_views is not None and not self.view_sampling:
+            raise ValueError('train_views needs view_sampling=True (one drawn view per plant)')
 
         self.load_dir = self.data_root / split if split else self.data_root
         print(f"Loading data from: {self.load_dir}")
@@ -227,10 +307,59 @@ class MaizeDataset4M(Dataset):
         # is NOT plant i — always carry the parsed id, never the row index.
         self.plant_ids = sorted(groups)
         self.plant_views = [sorted(groups[k]) for k in self.plant_ids]
-        counts = sorted({len(v) for v in self.plant_views})
         tag = '  [deterministic: view 0]' if self.deterministic_view else ''
+        if self.train_views is not None:
+            self.plant_views, elev = self._restrict_views(groups)
+            tag += (f"  [E5 view regime: {self.train_views!r}; realised elevation "
+                    f"median {np.median(elev):+.1f} deg, p10 {np.percentile(elev, 10):+.1f}, "
+                    f"p90 {np.percentile(elev, 90):+.1f}]")
+        counts = sorted({len(v) for v in self.plant_views})
         print(f"🎥 view sampling: {len(self.plant_ids)} plants, {counts} views each "
               f"-> epoch is {len(self.plant_ids)} items, not {len(self.samples)}{tag}")
+
+    def _restrict_views(self, groups):
+        """Per plant, the sample indices train_views keeps, and their elevations (deg)."""
+        def view_of(i):
+            return int(self.samples[i].name.rsplit('_', 1)[1])
+        if isinstance(self.train_views, list):
+            keep = set(self.train_views)
+            table = None
+        else:
+            rank, k = self.train_views.split(':')
+            k = int(k)
+            table = load_view_table(self._view_table, self.load_dir.name)
+        out, elev = [], []
+        for pid in self.plant_ids:
+            idx = sorted(groups[pid])
+            if table is None:
+                sel = [i for i in idx if view_of(i) in keep]
+            else:
+                rows = table.get(pid)
+                if rows is None or len(rows) != len(idx):
+                    raise ValueError(f'{pid}: {0 if rows is None else len(rows)} rows in the view '
+                                     f'table for {len(idx)} view folders; rebuild it with '
+                                     f'tools/maize_view_elevation.py')
+                by_view = {view_of(i): i for i in idx}
+                key = {'top': lambda r: -r[1], 'bottom': lambda r: r[1],
+                       'horizon': lambda r: abs(r[1])}[rank]
+                chosen = sorted(rows, key=key)[:k]
+                sel = sorted(by_view[v] for v, _ in chosen)
+                elev.extend(math.degrees(math.asin(max(-1.0, min(1.0, s)))) for _, s in chosen)
+            if not sel:
+                raise ValueError(f'train_views={self.train_views!r}: {pid} has none of these views')
+            out.append(sel)
+        if table is None:
+            table_all = None
+            try:
+                table_all = load_view_table(self._view_table, self.load_dir.name)
+            except (FileNotFoundError, ValueError):
+                pass                # the table is a report here, not a dependency
+            if table_all is not None:
+                for pid, sel in zip(self.plant_ids, out):
+                    s_of = dict(table_all[pid])
+                    elev.extend(math.degrees(math.asin(max(-1.0, min(1.0, s_of[view_of(i)]))))
+                                for i in sel if view_of(i) in s_of)
+        return out, (np.asarray(elev) if elev else np.asarray([float('nan')]))
 
     def set_epoch(self, epoch: int):
         """Re-draw which view each plant contributes. Inert when deterministic."""

@@ -89,7 +89,7 @@ def load(args, run, feature, split):
         # An RGB adapter's cache for the 2026-10-01 images is named with the image's
         # stem (baseline_probe.rgb_tag); a PC-only adapter has one cache whatever the
         # images. Never fall back from one image version to the other.
-        tagged = sorted(f.parent.glob(f'{f.stem}__rgb_*.npz'))
+        tagged = sorted(f.parent.glob(f'{f.stem}__rgb*.npz'))      # __rgb_nobg_g1, __rgba
         if args.rgb_tag is None and tagged:
             raise SystemExit(f'{run}: caches exist for more than one image file '
                              f'({f.name} and {[t.name for t in tagged]}): pass --rgb-tag')
@@ -115,7 +115,8 @@ def main():
     ap.add_argument('--targets', nargs='+', default=None, help='probe target names (default: all)')
     ap.add_argument('--rgb-tag', default=None,
                     help="for base: runs, which image file's cache to read when an RGB adapter "
-                         "has several: 'rgb_nobg' (images since 2026-10-01) or 'legacy' (rgb.png)")
+                         "has several: sorghum 'rgb_nobg_g1' (gain-matched images since "
+                         "2026-10-15), maize 'rgba' (data v2), or 'legacy' (rgb.png)")
     ap.add_argument('--out', default=None)
     args = ap.parse_args()
     global LP

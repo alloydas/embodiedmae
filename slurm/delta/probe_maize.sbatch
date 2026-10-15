@@ -93,6 +93,7 @@ python slurm/delta/check_split_index.py maize "${MAIZE_ROOT}"
 echo "JobID : ${SLURM_JOB_ID:-none}"
 echo "Node  : $(hostname)"
 echo "Ckpt  : ${CKPT}"
+echo "Feat  : ${FEATURE}"
 echo "Runs  : $*"
 echo "Date  : $(date)"
 echo "Git   : $(git rev-parse HEAD 2>/dev/null || echo 'not a git checkout')"
@@ -114,8 +115,11 @@ TAG="${SLURM_JOB_NAME:-probe_maize}_${SLURM_JOB_ID:-manual}"
 CPUS="${SLURM_CPUS_PER_TASK:-$(nproc)}"
 NW=$((CPUS > 1 ? CPUS - 1 : 1))
 CACHE="${PROBE_CACHE_DIR_MAIZE:-outputs/_probe_cache_maize}"
+# FEATURE=mean gives the mean-pooled rows (the E8 pooling every baseline has), as
+# slurm/linear_probe.sbatch does for sorghum; the cache name carries the feature.
+FEATURE="${FEATURE:-cls}"
 COMMON=(--ckpt "${CKPT}" --data-root "${MAIZE_ROOT}" --cache-dir "${CACHE}"
-        --feature cls --seed 0 --repeats 1)
+        --feature "${FEATURE}" --seed 0 --repeats 1)
 
 # train FIRST: the maize probe fits on the first split of --split-set.
 python eval/linear_probe_maize.py --runs "$@" "${COMMON[@]}" \
@@ -128,7 +132,7 @@ E9_FAILED=()
 for split in ${E9_SPLITS:-val train test}; do
   cold=()
   for run in "$@"; do
-    c="${CACHE}/maize_${run}__${ck}__${split}__cls__seed0__rep1.npz"
+    c="${CACHE}/maize_${run}__${ck}__${split}__${FEATURE}__seed0__rep1.npz"
     [ -f "${c}" ] || cold+=("${c}")
   done
   if [ "${#cold[@]}" -gt 0 ]; then
