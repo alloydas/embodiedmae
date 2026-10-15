@@ -345,7 +345,7 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   figure script's undo path (max |diff| 0.016 after ImageNet normalisation, rounding + resize).
   Resubmitted (scavenger, same shapes): **16928968** `pr_600_d2`, **16928969/70/71** `pr_{6168,2024,624}_d2`,
   **16928972** `pr_mean600_d2`, **16928973** `e8_score_d2`, **16928974** `e8_base_sorghum_d2`,
-  **16928975** `pcview_d2`. Numbers from the stale set, for the record (val R2 height / roll, brightened
+  **16928975** `pcview_d2`; moved in place to nova at 10:45 (user: "mech-ai is free right now"). Numbers from the stale set, for the record (val R2 height / roll, brightened
   inputs): PC+RGB+D 0.977 / 0.778, +params 0.953 / 0.745, small 0.963 / 0.815, base 0.953, large 0.941
   / 0.699 (the E4 inversion is the kind of artefact to expect from the mismatch). Sinkhorn E1: restarted
   00:04 on nova22-gpu-3 (2x A100), epoch 23 at 09:30 = ~26 min/epoch (~17 days for 1000 if never
