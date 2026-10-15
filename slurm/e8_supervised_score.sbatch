@@ -38,7 +38,10 @@ set -euo pipefail
 cd /work/mech-ai-scratch/alloy/embodiedmae
 mkdir -p logs reports
 
-RUN=e8_supervised
+# RUN / E8_CONFIG: override for the data-version-2 twin:
+#   RUN=e8_supervised_d2 E8_CONFIG=configs/config_e8_supervised_d2.yaml sbatch slurm/e8_supervised_score.sbatch
+RUN="${RUN:-e8_supervised}"
+E8_CONFIG="${E8_CONFIG:-configs/config_e8_supervised.yaml}"
 CKPT=checkpoints/checkpoint_epoch_600.pth
 if [ ! -f "outputs/${RUN}/${CKPT}" ]; then
   echo "outputs/${RUN}/${CKPT} does not exist: training has not reached epoch 600." >&2
@@ -65,7 +68,7 @@ echo "Env   : ${CONDA_ENV}"
 echo "Ckpt  : outputs/${RUN}/${CKPT}"
 echo "Date  : $(date)"
 
-python train_supervised_4m.py --config configs/config_e8_supervised.yaml --score_head \
+python train_supervised_4m.py --config "${E8_CONFIG}" --score_head \
   --score_ckpt "${CKPT}" --score_out "reports/probe_${TAG}_head.csv"
 
 python eval/linear_probe.py --runs "${RUN}" --ckpt "${CKPT}" \

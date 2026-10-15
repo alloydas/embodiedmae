@@ -313,6 +313,21 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   2026-10-14 from the user's zip; `main.tex`, `sec/*.tex`, `CVPR.bib`). Its Secs. 4-6 are GENERATED from
   `paper/results.tex` / `discussion.tex` by `python paper/sync_overleaf.py` (cite-key map, label aliases): edit
   the repo drafts, re-sync, `latexmk -pdf main.tex`. Secs. 0-3 and the supplement are edited in place.
+- **SORGHUM v2 EVALUATION LAUNCHED (2026-10-14 ~20:10).** All 13 `_d2` ablation arms are complete
+  (E2 x4 at 600, tg/tg40/tg100 at 600, e3 at 6168/2024/624, e4 small/large at 600, e8_supervised_d2 at
+  600; `config.json` records `rgb_file: rgb_nobg.png` in each). Scavenger, 1 GPU each, `--requeue`,
+  caches resume: **16921549** `pr_600_d2` (probe + E9 val/test of the seven E2/control arms and the two
+  E4 arms at epoch 600), **16921550/1/2** `pr_{6168,2024,624}_d2` (e3_1k/3k/10k), **16921553**
+  `pr_mean600_d2` (mean-pooled rows for E8 of pc / pcrgbd / pcrgbdt), **16921554** `e8_score_d2`
+  (`slurm/e8_supervised_score.sbatch` now takes `RUN=` / `E8_CONFIG=`), **16921555**
+  `e8_base_sorghum_d2` (`baseline_probe.sbatch sorghum`: RGB baselines re-extract on rgb_nobg, the
+  images are the BRIGHTENED ones since 10-13), **16921556** `pcview_d2` (1 vs 3 cameras, the four
+  E2 d2 arms; the E1 row waits for the Sinkhorn run). Outputs: `reports/probe_<name>_<jobid>.csv`,
+  `reports/e9_<name>_<jobid>/`, `reports/pcview_<jobid>_*.csv`. Then: paired CIs
+  (`eval/probe_pair_bootstrap.py`, `--rgb-tag rgb_nobg` for the E8 RGB caches), swap the v1 numbers
+  in `paper/results.tex` for v2, refresh the ledger artifact.
+  The Sinkhorn E1 (16907818) ran 17:55-19:45 on nova22-gpu-2 (2x A100): epochs 1-2 in ~96 min
+  (cold cache; checkpoint_epoch_2 saved), preempted at 19:45, requeued, pending again on Priority.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
