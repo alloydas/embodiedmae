@@ -50,7 +50,7 @@ experiments have been *built*, which is durable. For live progress use
 | E2 | modality value-add | **done, both species** | sorghum: all four arms 600/600, results in `reports/RESULTS_DECK_2026-09-20.md`; control arms `e2_pcrgbdt_tg` / `tg40` / `tg100` done and probed (tg100 = text as target only, probe 16686383, 2026-10-01: still below PC+RGB+depth on every learnable target). maize: all four arms ✅ 600/600 and probed (2026-09-30, `reports/probe_pm_e2_600_16669530.csv`): PC+RGB(+D) beat `maize_4m` on 10/11 — see the handoff section below. Partial-cloud (1 vs 3 cameras) evaluation of the sorghum arms ✅ (2026-09-30) |
 | E3 | data scaling | **done, both species** | sorghum: all three arms, `e3_1k` finished 2026-09-21 11:22 at 6169/6169. maize (Nova, jobs 16576132-4, `sbatch --job-name=maize_e3_1k slurm/scale_arm_maize.sbatch maize_e3_1k`): `maize_e3_1k` ✅ 6169/6169 (2026-09-24), `maize_e3_10k` ✅ 631/631 (2026-09-24), `maize_e3_3k` ✅ 2100/2100 (2026-09-25; last checkpoint 2024). Full-data point is `maize_4m` epoch 600. Probed + E9: `reports/probe_p{r,m}_{6168,2024,624}_*` |
 | E4 | model scaling | **done, both species** | sorghum: `e4_small` ✅ `e4_large` ✅ (600/600, finished 2026-09-21 21:41). maize (Nova, jobs 16576135-6, same launcher): `maize_e4_small` ✅ 600/600 (2026-09-24), `maize_e4_large` ✅ 600/600 (2026-09-25). The base point is `maize_4m` epoch 600 ✅ (finished 2026-09-23 23:00). Probed + E9: `reports/probe_p{r,m}_600*_*` |
-| E5 | view regime | **not built** | — |
+| E5 | view regime | **built 2026-10-15, three arms training** | `data.train_views` (SorghumDataset4M) restricts each plant's per-epoch draw to a band of the ten-view elevation ladder; arms `e5_topdown_d2` (views 0-1), `e5_horizon_d2` (4-5, the tractor-height proxy), `e5_single_d2` (view 0), reference = `e2_pcrgbdt_d2` (all ten). Same 197,400 steps. No separately rendered tractor-pass camera set exists (plan 6.2) |
 | E6 | masking / noise | **owned elsewhere** | a collaborator is running this — not work for this repo |
 | E7 | loss study | **owned elsewhere** | same; `model.loss_name` (chamfer / qal_loss) is the switch they need |
 | E8 | baselines | **done (supervised row sorghum only)** | `eval/baseline_probe.py` + `eval/baselines/*`: EmbodiedMAE-B, MultiMAE-B, DINOv2 ViT-B/14, Point-MAE, Point-MAE + camera pose, random init, both species, `reports/probe_e8_*`. Supervised-from-scratch row (`train_supervised_4m.py`, `outputs/e8_supervised`) ✅ 600/600 (2026-09-30), scored in `reports/probe_e8_score_16676974_*`, paired deltas in `reports/e8_supervised_delta_16676974.csv` (`eval/probe_pair_bootstrap.py`). Maize camera-pose rows (2026-10-01): gravity-only (`*_gravity`, 16686506) and full pose (`*_upright`, 16684794), CIs in `reports/maize_{gravity,upright}_delta_*.csv`; arm pretrained on levelled clouds `maize_e2_pcrgbd_levelled` training (chain 16687759-64) |
@@ -350,6 +350,22 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   / 0.699 (the E4 inversion is the kind of artefact to expect from the mismatch). Sinkhorn E1: restarted
   00:04 on nova22-gpu-3 (2x A100), epoch 23 at 09:30 = ~26 min/epoch (~17 days for 1000 if never
   preempted); val chamfer at epoch 20 is 4.94e-3 against the old-loss run's 4.82e-3 at the same epoch.
+- **E5 VIEW REGIME LAUNCHED (2026-10-15 ~11:15, user: "write the code for E5 view regime").** The plan's
+  two camera sets (6.2: random hemisphere vs a tractor-height pass) were never rendered; the ten views
+  on disk are an exact elevation ladder (sin elev = 0.9 - 0.2 i: view 0 looks 64 deg down, 4-5 are within
+  6 deg of the horizon, 9 looks 64 deg up), so E5 is built as a restriction of the TRAIN draw to a band:
+  `data.train_views` (YAML list or comma string; `--train_views`), threaded to the train dataset only,
+  recorded in config.json, refused without view_sampling or if a plant has none of the views. Arms =
+  `configs/config_e5_{topdown,horizon,single}_d2.yaml` (views 0-1 / 4-5 / 0; everything else byte-equal
+  to `config_e2_pcrgbdt_d2.yaml`, so the reference is the four-stream d2 arm and every arm runs 197,400
+  steps; val/test stay on view 0). CPU-tested: draws stay inside the band over 40 epochs, plant set
+  unchanged. Jobs (nova, mech-ai, 2x A100 / 32 CPU / 160G / 2 days, `scale_arm_blackwell.sbatch <slug>
+  --num_workers 14`, auto-resume): see the squeue names `e5_*_d2`. Expect ~24 h each (the d2 arms did
+  ~2.1-2.7 min/epoch on this shape). When done: `CKPT=checkpoints/checkpoint_epoch_600.pth
+  E9_SPLITS="val test" sbatch slurm/linear_probe.sbatch e5_topdown_d2 e5_horizon_d2 e5_single_d2
+  e2_pcrgbdt_d2`, the pair bootstrap against `e2_pcrgbdt_d2`, and ideally a probe per held-out VIEW
+  (not built: `eval/linear_probe.py` scores view 0 only; add a `--probe-view k` to see how a regime
+  generalises across elevation).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

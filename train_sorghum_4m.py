@@ -90,7 +90,7 @@ def merge_config_with_args(config, args):
     mapping = {
         'data': ['data_root', 'img_size', 'num_points',
                  'view_sampling', 'view_seed', 'max_plants',
-                 'plant_subset_seed', 'rgb_file'],
+                 'plant_subset_seed', 'rgb_file', 'train_views'],
         'model': ['model_size', 'mask_ratio', 'pc_loss_weight',
                   'depth_norm_type', 'spline_loss_weight', 'max_leaves',
                   'loss_name', 'qal_threshold', 'qal_alpha', 'qal_use_squared',
@@ -129,6 +129,15 @@ def config_to_namespace(config):
     _mp                   = config['data'].get('max_plants', None)
     ns.max_plants         = None if _mp in (None, 0, 'null') else int(_mp)
     ns.plant_subset_seed  = int(config['data'].get('plant_subset_seed', 42))
+    # E5 view regime: the view indices the TRAIN draw is restricted to (a YAML list
+    # or a comma string); None = all ten views, every run before 2026-10-15.
+    # Recorded in config.json; see SorghumDataset4M.train_views.
+    _tv                   = config['data'].get('train_views', None)
+    if isinstance(_tv, str):
+        _tv = [int(x) for x in _tv.replace(',', ' ').split()] if _tv.strip() not in ('', 'null', 'None') else None
+    ns.train_views        = None if _tv is None else sorted({int(v) for v in _tv})
+    if ns.train_views is not None and not all(0 <= v <= 9 for v in ns.train_views):
+        raise ValueError(f"train_views must be view indices 0-9, got {ns.train_views}")
     ns.model_size         = config['model'].get('model_size', 'base')
     ns.mask_ratio         = config['model'].get('mask_ratio', 0.15)
     ns.pc_loss_weight     = config['model'].get('pc_loss_weight', 10.0)
@@ -902,7 +911,8 @@ def train_worker(rank, world_size, args):
                                  view_sampling=vs, view_seed=args.view_seed,
                                  max_plants=args.max_plants,
                                  plant_subset_seed=args.plant_subset_seed,
-                                 rgb_file=args.rgb_file)
+                                 rgb_file=args.rgb_file,
+                                 train_views=args.train_views)   # E5; train split only
     # The gain the images carry NOW (sorghum_dataset.read_brighten_gain): recorded so
     # the probes serve this run the images it trained on after a later in-place
     # brightening. A run that predates the key trained at 1.0 (every run before
@@ -1220,6 +1230,9 @@ def main():
     parser.add_argument('--view_seed',          type=int,   default=None)
     parser.add_argument('--rgb_file',           type=str,   default=None,
                         help=f'RGB image per sample folder (default {RGB_FILE})')
+    parser.add_argument('--train_views',        type=str,   default=None,
+                        help='E5 view regime: comma-separated view indices the train '
+                             'draw is restricted to (e.g. "4,5"); default all ten')
     parser.add_argument('--max_plants',         type=int,   default=None,
                         help='E3: cap the TRAIN split at N plants (nested subsets)')
     parser.add_argument('--plant_subset_seed',  type=int,   default=None)

@@ -25,7 +25,8 @@ class SorghumDataset4M(SorghumDataset):
     def __init__(self, data_root, img_size=224, num_points=8196, split=None,
                  max_leaves=24, view_sampling=False, view_seed=0,
                  deterministic_view=False, max_plants=None,
-                 plant_subset_seed=42, rgb_file=RGB_FILE, rgb_gain=None):
+                 plant_subset_seed=42, rgb_file=RGB_FILE, rgb_gain=None,
+                 train_views=None):
         super().__init__(data_root, img_size=img_size,
                          num_points=num_points, split=split, rgb_file=rgb_file,
                          rgb_gain=rgb_gain)
@@ -104,19 +105,43 @@ class SorghumDataset4M(SorghumDataset):
         self._epoch             = 0
         self.plant_views        = None
         self.plant_ids          = None
+        # ── View regime (CVPR plan E5) ───────────────────────────────────
+        # train_views restricts the per-epoch draw to these view indices (the
+        # <view> suffix of each folder). The ten renders are an elevation ladder,
+        # sin(elev) = 0.9 - 0.2 x index (view 0 looks 64 deg down, 4-5 sit within
+        # 6 deg of the horizon, 9 looks 64 deg up), so a regime is a contiguous
+        # band of it: a tractor-height pass is views 4-5, a top-down rig 0-1, the
+        # full hemisphere None. Plants and steps per epoch are unchanged, so an
+        # E5 arm runs the same 197,400 steps as the E2/E3/E4 arms; only the
+        # augmentation pool shrinks. Pass it for the TRAIN split only: val/test
+        # stay on view 0 (deterministic_view) so every regime is scored alike.
+        self.train_views = None if train_views is None else sorted({int(v) for v in train_views})
+        if self.train_views is not None and not self.train_views:
+            raise ValueError('train_views must name at least one view')
+        if self.train_views is not None and not self.view_sampling:
+            raise ValueError('train_views needs view_sampling=True (one drawn view per plant)')
         if self.view_sampling:
             groups = {}
+            keep = None if self.train_views is None else set(self.train_views)
             for i, folder in enumerate(self.samples):
-                # Sorghum_10001_07 -> Sorghum_10001
-                plant = folder.name.rsplit('_', 1)[0]
+                # Sorghum_10001_07 -> Sorghum_10001, view 7
+                plant, view = folder.name.rsplit('_', 1)
+                if keep is not None and int(view) not in keep:
+                    continue
                 groups.setdefault(plant, []).append(i)
+            if keep is not None:
+                n_plants = len({f.name.rsplit('_', 1)[0] for f in self.samples})
+                if len(groups) != n_plants:
+                    raise ValueError(f'train_views={self.train_views}: {n_plants - len(groups)} '
+                                     f'of {n_plants} plants have none of these views')
             self.plant_ids   = sorted(groups)
             self.plant_views = [groups[pid] for pid in self.plant_ids]
             n_v = {len(v) for v in self.plant_views}
             print(f"🎥 view sampling: {len(self.plant_views)} plants, "
                   f"{sorted(n_v)} views each -> epoch is "
                   f"{len(self.plant_views)} items, not {len(self.samples)}"
-                  + ("  [deterministic: view 0]" if self.deterministic_view else ""))
+                  + ("  [deterministic: view 0]" if self.deterministic_view else "")
+                  + (f"  [E5 view regime: views {self.train_views}]" if keep is not None else ""))
 
     def set_epoch(self, epoch):
         """Advance the view draw. No-op unless view_sampling is on."""
