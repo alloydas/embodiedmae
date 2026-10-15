@@ -1,0 +1,102 @@
+# ANY-TO-ANY, SORGHUM, DEPLOYABLE INPUTS (from E1, 4m_pretrain_15k_v2_depthfix_qal epoch 1000).
+# As config_sm_scene_anyparam_pre.yaml (occluded test F1@10mm 0.287 with no parameters) with
+# every input hint a real RGB-D camera does not give removed (checked 2026-10-15):
+#   * norm: stem -- the cloud's origin is the target's stem base in metres, not the CLEAN
+#     target's centroid and radius (that frame told the model where the plant is and how big).
+#   * visible_only -- sorghum's *_nc_cam.ply is the COMPLETE plant: 32-65 % of a view's points
+#     are surfaces the camera cannot see. Now the input holds only what the camera sees (and
+#     drops target points behind neighbours); the model must complete the rest.
+#   * origin_jitter_m 0.015 -- the stem base is off by N(0, 1.5 cm) per axis in training, as a
+#     real stem estimate would be; validation keeps it exact, eval/depth_reliance.py tests
+#     1 / 2 / 5 cm errors.
+# Sorghum depth already uses fixed planes (0.025 / 50 m), so no depth_planes is needed. The
+# camera is aimed near the plant from ~2.5 m whatever its size -- a mild hint, kept.
+# This is the candidate model for the real sorghum RGB-D data.
+#
+#   sbatch --job-name=sm_scene_anyparam_deploy_jit_s1 slurm/sm_arm.sbatch scene_anyparam_deploy_jit 1
+#
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  # The view folders' *_spline.yml were rewritten 2026-09-30 (no waviness);
+  # these are the untouched originals every earlier run's params came from.
+  spline_root: /work/mech-ai-scratch/alloy/shorgum_data/SorghumData
+  img_size: 224
+  num_points: 8196
+  view_sampling: true
+  view_seed: 42            # identical in both arms: same views, same order
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80         # over pc/rgb/depth; text is outside the budget
+  text_mask_ratio: null      # parameters inside the Dirichlet budget (see distill.visible_mode)
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  pc_sinkhorn_weight: 0.5     # x Sinkhorn divergence, added to the QAL term (pc_sinkhorn.py); as config_*_scene_sink.yaml
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+  occlusion_scene:         # defaults spelled out; config.json records them all
+    prob: 0.5              # share of training samples given neighbours
+    neighbours: 2          # one each side of a row through the target
+    spacing: [0.35, 0.8]   # stem-to-stem, metres (leaves reach ~0.5 m)
+    row_jitter: 0.1        # metres off the row line
+    yaw: true
+    crop_radius: 0.75      # cloud cut to this cylinder around the target stem
+    splat_px: 1
+    mask_policy: neighbour_first   # THE change vs config_sm_scene.yaml
+    nf_prob: 0.5           # half the scene samples neighbour-first, half uniform
+    patch_frac: 0.3
+    val_seed: 0            # same val scenes in every arm
+    norm: stem             # origin at the TARGET's stem base (world origin), metres / unit_m
+    unit_m: 1.0            # metres per unit: the median sorghum plant radius (1.00 m)
+    visible_only: true     # input cloud = what the camera sees; the target stays the complete plant
+    origin_jitter_m: 0.015  # training only: N(0, 0.015^2) m per axis error on the stem base
+
+training:
+  batch_size: 16           # per GPU; the launcher runs 2 GPUs -> global 32
+  epochs: 200
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 13
+  val_freq: 20             # 10 val points, each clean + occluded
+  test_freq: 0
+  seed: null               # set per run by the launcher (--seed)
+
+checkpointing:
+  output_dir: ./outputs/sm_scene_anyparam_deploy_jit
+  save_freq: 20
+  resume: null
+
+visualization:
+  viz_freq: 20             # = val_freq: clean + occluded-scene figures to W&B (visualizations/, scene_visualizations/)
+  num_viz_samples: 6
+
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: sm_scene_anyparam_deploy_jit
+
+distill:
+  student_init: /work/mech-ai-scratch/alloy/embodiedmae/outputs/4m_pretrain_15k_v2_depthfix_qal/checkpoints/checkpoint_epoch_1000.pth
+  param_hide_prob: 0.5
+  visible_mode: budget
+  feat_weight: 0.0
+  cls_weight: 0.0
+  val_text_mask_ratio: 1.0
+  seed: 0

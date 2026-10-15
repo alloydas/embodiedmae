@@ -60,6 +60,7 @@ from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 
 from embodied_mae_4m_maize import MAX_LEAVES, load_spline_params
+from occlusion_scene import point_visibility
 
 PC_FILENAME = 'pointcloud_cam.ply'
 INDEX_CACHE_VERSION = 1
@@ -128,9 +129,26 @@ class MaizeDataset4M(Dataset):
     def __init__(self, data_root, img_size=224, num_points=8192, split=None,
                  max_leaves=MAX_LEAVES, view_sampling=False, view_seed=0,
                  deterministic_view=False, max_plants=None, plant_subset_seed=42,
-                 return_pc_norm=False, return_pose=False):
+                 return_pc_norm=False, return_pose=False, return_visibility=False,
+                 depth_planes=None, visibility_tol=0.01):
         self.data_root = Path(data_root)
         self.return_pose = bool(return_pose)
+        # return_visibility: a 10th item, (num_points,) bool -- which cloud points this
+        # view's camera sees, tested against the full-resolution depth render
+        # (occlusion_scene.point_visibility, `visibility_tol` metres). Needs the pose.
+        # depth_planes: (near, far) metres. Re-encode every depth.png with these FIXED
+        # planes instead of the renderer's per-plant ones, which are centred on the
+        # clean plant's centre and span ~3.3x its radius -- i.e. hand the model the
+        # target's position and size. Re-encoded at full resolution, before the resize;
+        # near_far (9th item) then returns these planes. None = the renderer's (every
+        # run before 2026-10-15).
+        self.return_visibility = bool(return_visibility)
+        self.depth_planes = None if depth_planes is None else (float(depth_planes[0]), float(depth_planes[1]))
+        self.visibility_tol = float(visibility_tol)
+        if self.return_visibility and not self.return_pose:
+            raise ValueError("return_visibility needs return_pose=True (the camera's depth planes)")
+        if self.depth_planes is not None and not 0 < self.depth_planes[0] < self.depth_planes[1]:
+            raise ValueError(f"depth_planes must be 0 < near < far, got {depth_planes}")
         self.return_pc_norm = bool(return_pc_norm) or self.return_pose
         self.img_size = img_size
         self.num_points = num_points
@@ -254,8 +272,13 @@ class MaizeDataset4M(Dataset):
 
     # ── modality loaders (copies, not imports — see the module docstring) ─────
 
-    def load_depth(self, depth_path):
-        """Big-endian packed RGBA uint32 -> float32 (1, img_size, img_size)."""
+    def load_depth(self, depth_path, near_far=None):
+        """Big-endian packed RGBA uint32 -> float32 (1, img_size, img_size).
+
+        With near_far (the renderer's planes, metres): keeps the full-resolution
+        z-distance in self._last_z_full (+inf on background) for return_visibility,
+        and re-encodes with self.depth_planes when set. One __getitem__ at a time per
+        worker, so reading it right after this call is safe (as _last_pc_norm)."""
         with Image.open(depth_path) as image:
             arr = np.asarray(image)
         if arr.ndim == 3:
@@ -272,6 +295,15 @@ class MaizeDataset4M(Dataset):
                 arr = arr.astype(np.float32)
         else:
             raise ValueError(f"Unsupported depth image shape: {arr.shape}")
+        if near_far is not None and (self.return_visibility or self.depth_planes is not None):
+            near, far = float(near_far[0]), float(near_far[1])
+            fg = arr > 0
+            z = near + arr.astype(np.float64) * (far - near)
+            if self.return_visibility:
+                self._last_z_full = np.where(fg, z, np.inf).astype(np.float32)
+            if self.depth_planes is not None:
+                n0, f0 = self.depth_planes
+                arr = np.where(fg, np.clip((z - n0) / (f0 - n0), 1e-6, 1.0), 0.0).astype(np.float32)
         depth = torch.from_numpy(np.ascontiguousarray(arr)).unsqueeze(0)
         return TF.resize(depth, [self.img_size, self.img_size],
                          interpolation=InterpolationMode.BILINEAR, antialias=True)
@@ -305,7 +337,12 @@ class MaizeDataset4M(Dataset):
         folder = self.samples[idx]
 
         rgb = self.rgb_transform(Image.open(folder / 'rgb.png').convert('RGB'))
-        depth = self.load_depth(folder / 'depth.png')
+        pose = None
+        if self.return_pose:
+            with open(folder / 'camera_pose.json') as fh:
+                pose = json.load(fh)
+        depth = self.load_depth(folder / 'depth.png',
+                                None if pose is None else (pose['near'], pose['far']))
         pc = torch.from_numpy(self.load_pointcloud(folder / PC_FILENAME))
 
         cached = self._xml_names.get(folder.name)
@@ -315,10 +352,14 @@ class MaizeDataset4M(Dataset):
         if self.return_pc_norm:
             pc_norm = torch.from_numpy(self._last_pc_norm.copy())
             if self.return_pose:
-                with open(folder / 'camera_pose.json') as fh:
-                    pose = json.load(fh)
                 cam2world = torch.tensor(pose['cameraToWorld'], dtype=torch.float32).view(4, 4)
-                near_far = torch.tensor([pose['near'], pose['far']], dtype=torch.float32)
+                planes = self.depth_planes if self.depth_planes is not None else (pose['near'], pose['far'])
+                near_far = torch.tensor(planes, dtype=torch.float32)
+                if self.return_visibility:
+                    p_cam = pc * pc_norm[3] + pc_norm[:3]
+                    vis = point_visibility(p_cam, torch.from_numpy(self._last_z_full), self.visibility_tol)
+                    return (rgb, depth, pc, param_floats, text_valid, folder.name, pc_norm,
+                            cam2world, near_far, vis)
                 return (rgb, depth, pc, param_floats, text_valid, folder.name, pc_norm,
                         cam2world, near_far)
             return rgb, depth, pc, param_floats, text_valid, folder.name, pc_norm

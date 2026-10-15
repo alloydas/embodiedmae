@@ -42,7 +42,7 @@ from embodied_mae_4m import (
 from embodied_mae import earth_movers_distance
 from sorghum_dataset_4m import SorghumDataset4M
 from structured_mask import NeighbourMaskConfig, foreground
-from occlusion_scene import SceneConfig, compose as compose_scene
+from occlusion_scene import SceneConfig, compose as compose_scene, no_scene_frame, visible_input
 from leaf_mask import LeafMaskConfig, mask_weights as leaf_mask_weights
 
 
@@ -231,8 +231,11 @@ def config_to_namespace(config):
     # way. prob 0 trains clean but still adds the occluded validation pass.
     _sc                   = SceneConfig.from_dict(config['model'].get('occlusion_scene'))
     ns.occlusion_scene    = None if _sc is None else _sc.to_dict()
-    if _sc is not None and _sc.norm != 'target':
-        raise ValueError("occlusion_scene.norm: crop is wired into train_maize_4m.py only")
+    if _sc is not None and _sc.norm not in ('target', 'stem'):
+        raise ValueError("occlusion_scene.norm: crop / metric are wired into train_maize_4m.py only")
+    if _sc is not None and _sc.visible_only and _sc.prob == 0:
+        raise ValueError("occlusion_scene.visible_only is wired through the scene path; "
+                         "prob 0 (clean training) would train on complete clouds")
     if _sc is not None and _sc.prob > 0:
         if _sm is not None:
             raise ValueError("structured_mask and occlusion_scene (prob > 0) both change "
@@ -244,6 +247,9 @@ def config_to_namespace(config):
     if _lm is not None:
         if _sm is not None:
             raise ValueError("leaf_mask and structured_mask both set the masking; use one")
+        if _sc is not None and (_sc.norm != 'target' or _sc.visible_only):
+            raise ValueError("leaf_mask reads the complete input cloud in the target's frame; "
+                             "it cannot combine with occlusion_scene.norm: stem or visible_only")
         if _sc is not None and _sc.prob > 0 and _sc.mask_policy != 'uniform':
             raise ValueError("leaf_mask needs occlusion_scene.mask_policy: uniform -- "
                              "both would set the masking")
@@ -652,7 +658,8 @@ def visualize_scene_4m(model, dataloader, device, epoch, save_dir, num_samples=4
             sc = compose_scene(rgb, depth, pc, batch[6].to(device), batch[7].to(device),
                                scene.for_validation(), patch_size=m.patch_size,
                                generator=torch.Generator().manual_seed(seed),
-                               near_far=batch[8].to(device) if len(batch) > 8 else None)
+                               near_far=batch[8].to(device) if len(batch) > 8 else None,
+                               vis=batch[9].to(device) if len(batch) > 9 else None)
             if sc is None:
                 print(f"  [viz] no scene for a batch of {B}; skipped")
                 return []
@@ -808,15 +815,24 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
         kw = {}
         if scene is not None:
             sc = compose_scene(rgb, depth, pc, pc_norm, batch[7].to(device), scene,
-                               patch_size=m.patch_size)
+                               patch_size=m.patch_size,
+                               vis=batch[9].to(device) if len(batch) > 9 else None)
             if sc is not None:
-                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': pc},
+                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
                       'loss_tokens': sc['loss_tokens'],
                       'mask_flags': sc.get('mask_flags')}
                 rgb, depth, pc = sc['rgb'], sc['depth'], sc['pc']
                 for k, v in sc['stats'].items():
                     sstats[k] = sstats.get(k, 0.0) + v
                 n_scene += 1
+            else:
+                if scene.norm == 'stem':
+                    # no scene in this batch: the scene samples' frame (stem base, metres)
+                    pc = no_scene_frame(pc, pc_norm, batch[7].to(device), scene)[0]
+                if scene.visible_only:
+                    # input = what the camera sees; scored against the complete plant
+                    kw = {'targets': {'pc': pc}}
+                    pc = visible_input(pc, batch[9].to(device))
         if leaf is not None:
             # Weights from the TARGET's geometry: its clean cloud for the image
             # patches, the (possibly scene) input cloud for the PC tokens, with
@@ -859,14 +875,19 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
 
 @torch.no_grad()
 def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
-             distributed=False, scene=None, scene_seed=0, oracle=False):
+             distributed=False, scene=None, scene_seed=0, oracle=False, frame=None,
+             visible=False):
     """Validation / test pass. With `scene` (a SceneConfig) every batch is first
     turned into occluded scenes -- scene.for_validation(): all samples, uniform
     masking -- from a CPU generator seeded by (scene_seed, batch index), so
     every arm is scored on the same scenes. All metrics stay against the CLEAN
     plant, and two more report how occluded the scenes were (occ_*). The loader
-    must be built with return_pose=True."""
+    must be built with return_pose=True. `frame` (occlusion_scene norm 'stem'):
+    a batch without a scene is read and predicted in that frame and scored back in
+    the target's. `visible` (visible_only, implied by such a `scene`): a batch
+    without a scene is fed only the points its camera sees (return_visibility)."""
     model.eval()
+    visible = bool(visible) or (scene is not None and scene.visible_only)
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     tot_rgb_mse = tot_depth_mse = tot_chamfer = tot_emd = 0.0
     tot_param_mse = tot_param_mae = tot_param_mae_masked = tot_param_acc05 = 0.0
@@ -887,21 +908,33 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
     for bi, batch in enumerate(tqdm(dataloader, desc=desc)):
         rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
 
-        x_rgb, x_depth, x_pc, kw = rgb, depth, pc, {}
+        x_rgb, x_depth, x_pc, kw, crop_norm = rgb, depth, pc, {}, None
         if scene is not None:
             sc = compose_scene(
                 rgb, depth, pc, batch[6].to(device), batch[7].to(device), scene,
                 patch_size=m.patch_size,
-                generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi))
+                generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi),
+                vis=batch[9].to(device) if len(batch) > 9 else None)
             if sc is not None:
                 x_rgb, x_depth, x_pc = sc['rgb'], sc['depth'], sc['pc']
-                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': pc},
+                kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
                       'loss_tokens': sc['loss_tokens']}
+                crop_norm = sc.get('crop_norm')
                 if oracle:
                     kw['mask_flags'] = sc['mask_flags']
                 tot_hidden += sc['stats']['hidden_px']
                 tot_nbpts  += sc['stats']['nb_points']
                 n_scene    += 1
+        if frame is None and scene is not None and scene.norm == 'stem':
+            frame = scene                      # a batch compose() left without a scene
+        if frame is not None and crop_norm is None:
+            x_pc, crop_norm = no_scene_frame(pc, batch[6].to(device), batch[7].to(device), frame)
+        if visible and 'targets' not in kw:
+            if len(batch) <= 9:
+                raise ValueError("visible needs the loader built with return_visibility=True")
+            kw = {**kw, 'targets': {'pc': x_pc}}
+            x_pc = visible_input(x_pc, batch[9].to(device),
+                                 generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi))
 
         loss, (lr, ld, lp, lt), \
             (pred_rgb_p, pred_depth_p, pred_pc, pred_params), \
@@ -910,6 +943,9 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
                 **kw
         )
         del x_rgb, x_depth, x_pc, kw
+        if crop_norm is not None:
+            # norm 'stem': predicted in the stem frame, scored in the target's
+            pred_pc = pred_pc * crop_norm[:, None, 3:4] + crop_norm[:, None, :3]
 
         tot       += loss.item()
         tot_rgb   += lr.item()
@@ -1129,6 +1165,9 @@ def train_worker(rank, world_size, args):
     # block is present (so a clean control arm is scored on the same scenes).
     scene_cfg   = SceneConfig.from_dict(args.occlusion_scene)
     scene_train = scene_cfg if scene_cfg is not None and scene_cfg.prob > 0 else None
+    # norm 'stem': clean batches are put in that frame too (exact origin when scoring)
+    frame_cfg   = scene_cfg.for_validation() if scene_cfg is not None and scene_cfg.norm == 'stem' else None
+    vis_on      = scene_cfg is not None and scene_cfg.visible_only
     leaf_cfg    = LeafMaskConfig.from_dict(getattr(args, 'leaf_mask', None))
     train_ds = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='train',
@@ -1138,17 +1177,21 @@ def train_worker(rank, world_size, args):
                                  plant_subset_seed=args.plant_subset_seed,
                                  return_pc_norm=args.structured_mask is not None,
                                  return_pose=scene_train is not None or leaf_cfg is not None,
+                                 return_visibility=vis_on,
                                  spline_root=args.spline_root)
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, deterministic_view=True,
                                  return_pose=scene_cfg is not None,
+                                 return_visibility=vis_on,
                                  spline_root=args.spline_root)
     test_ds  = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='test',
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, deterministic_view=True,
+                                 return_pose=vis_on or frame_cfg is not None,
+                                 return_visibility=vis_on,
                                  spline_root=args.spline_root)
 
     if world_size > 1:
@@ -1326,7 +1369,8 @@ def train_worker(rank, world_size, args):
             compute_emd = (epoch == args.epochs)
             (vl, vr, vd, vp, vt), vm = evaluate(
                 model, val_loader, device, compute_emd=compute_emd,
-                mask_ratio=args.mask_ratio, distributed=(world_size > 1))
+                mask_ratio=args.mask_ratio, distributed=(world_size > 1),
+                frame=frame_cfg, visible=vis_on)
             for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text'],
                             [vl, vr, vd, vp, vt]):
                 history[k].append(v)
@@ -1409,7 +1453,8 @@ def train_worker(rank, world_size, args):
             # keep DDP in lockstep; only rank 0 logs the result.
             (tl, tr_, td_, tp_, tt_), tmet = evaluate(
                 model, test_loader, device, compute_emd=compute_emd_test,
-                mask_ratio=args.mask_ratio, distributed=(world_size > 1))
+                mask_ratio=args.mask_ratio, distributed=(world_size > 1),
+                frame=frame_cfg, visible=vis_on)
             if is_main:
                 history['test_epoch'].append(epoch)
                 for k, v in zip(

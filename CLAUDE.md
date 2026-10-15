@@ -357,9 +357,9 @@ teacher. Validation and test run WITHOUT the card. Configs
 | trained with no card stream at all | -- | 0.216 / 26.3 mm (200 ep), 0.277 / 24.1 mm (600 ep) |
 | distillation student D2 (teacher sees the card), no card | 0.372 / 17.5 mm | -- |
 | **any-to-any 200 ep, no card** | **0.431 / 15.6 mm** | **0.287 / 23.8 mm** |
-| any-to-any 400 ep, no card | 0.457 / 14.8 mm | pending (job 16851640) |
-| any-to-any, its own predicted card fed back | 0.465 (400 ep) | 0.182 (200 ep: HURTS) |
-| any-to-any, true card | 0.501 (400 ep) | 0.354 (200 ep) |
+| any-to-any 400 ep, no card | 0.457 / 14.8 mm | 0.294 / 23.3 mm |
+| any-to-any, its own predicted card fed back | 0.465 (400 ep) | 0.187 (400 ep: HURTS) |
+| any-to-any, true card | 0.501 (400 ep) | 0.362 (400 ep) |
 
 Any-to-any is the best no-card model in both species, and the card is only needed in
 training. Its card prediction is also the best of any model (maize: leaf count +-1.06,
@@ -373,8 +373,9 @@ stem height +-5.4 cm, leaf length +-4.1 cm, leaf angle +-7.1 deg).
   adding card-only training steps does not fix it -- the target cloud is in the CAMERA
   frame and the card carries no viewpoint (a plant's 10 views differ by up to ~180 deg).
   Needs a canonical (world, stem-up) target or a camera-pose input.
-- Training longer: 200 -> 400 epochs adds +0.026 (maize); val levels off while the
-  card-given model kept climbing, so the gap is the card's information, not training.
+- Training longer: 200 -> 400 epochs adds +0.026 (maize) / +0.007 (sorghum); val levels
+  off while the card-given model kept climbing, so the gap is the card's information,
+  not training.
 - **Frame leak (affects EVERY scene number in this file):** scene clouds are normalised
   by the CLEAN target's centroid and radius. Normalised by the crop instead, maize no-card
   F1@10mm drops 0.431 -> 0.262; keeping metric scale does not help (0.265); a centre
@@ -384,6 +385,112 @@ stem height +-5.4 cm, leaf length +-4.1 cm, leaf angle +-7.1 deg).
 
 Details, job IDs and every intermediate number: the "Occluded-scene DISTILLATION" and
 "Three follow-ups" paragraphs in the long section below.
+
+**Leak-free runs (submitted 2026-10-14, scavenger):** (1) `maize_scene_anyparam_stem_s1`
+(job 16907927, `configs/config_maize_scene_anyparam_stem.yaml`): new `occlusion_scene.norm:
+stem` -- origin at the TARGET's stem base (the world origin; `occlusion_scene.stem_origin`),
+real size in metres / `unit_m` 0.64, for every sample (clean ones via `no_scene_frame`, which
+replaced the trainer's `metric_frame` calls; `evaluate(..., frame=)` replaced `metric_unit=`).
+The only change against the metric run (test 0.265) is the origin. Smoke
+(`logs/dv/smoke_stem.py`): round trips 1e-7, the frame origin maps to world (0, 0, 0) to
+2e-7. The pretrained start is poor in this frame before training (clean val F1@0.01 0.015;
+the plant sits ~0.76 units above the origin, while pretraining centred it). (2)
+`maize_scene_anyparam_metric400_s1` (job 16907928): the leak-free metric run continued 200 ->
+400 (cosine restart) -- does more training close the gap without the leak? Both are scored by
+`logs/wait_noleak_eval.sh` -> `reports/pc_generation_maize_{stem,metric400}.json`.
+**Both finished 2026-10-15 ~01:20, but the watcher had died first and submitted nothing** (it
+is a plain background shell loop: it does not survive the session that started it). The test
+evals were submitted by hand, jobs 16924659 (stem, epoch 200) / 16924660 (metric400, epoch 400).
+Val, occluded, F1@0.01 / recall@0.03 / precision@0.03 (all scored back in the target frame):
+stem 200 **0.248** / 0.716 / 0.727 -- above the LEAKY target-frame any-to-any at 200 (0.203 /
+0.788 / 0.692) and at 400 (0.222), still rising (0.233 at 160); metric 400 0.119 / 0.732 / 0.526
+(metric 200: 0.108), so more training does not close the metric run's gap. The stem origin
+recovers the position the leak gave, and more, on F1 and precision, but recall@0.03 is lower;
+clean F1@0.01 0.312 vs 0.300. The stem base here is exact (world origin from
+`camera_pose.json`), so it is still an oracle until it is estimated from the crop + ground plane.
+**"Leak-free" means the CLOUD's frame only -- two other hints remain in every arm (checked
+2026-10-15).** The stem frame's cloud input reduces exactly to (p_cam - stem_cam) / 0.64; nothing of
+the target's centroid or radius survives. But: (1) **maize images are framed on the clean target**:
+on 150 val views every camera points at `plantCenter` exactly (0.0000 off axis), from 3.0-3.8x the
+plant's radius (r = 0.88 with radius), and the depth near/far planes are centred on `plantCenter`
+(it decodes to exactly 0.5) with span ~3.3x the radius. So RGB and depth give the target's centre
+and extent, hidden parts included. Sorghum is far milder: fixed planes, camera 2.4-2.7 m whatever
+the size (r = 0.40), aimed at the plant within ~1.6 deg (median). (2) **The scene cloud keeps
+points the camera cannot see** (`compose`: `pts = cat([pc, nb_norm])`). How much differs by
+species, measured by projecting each cloud into its own full-res depth render: **maize's
+`pointcloud_cam.ply` is already a camera-view cloud** (0 % of points behind the render, every
+view checked), so in maize only the target points behind a NEIGHBOUR leak (~18 % of the target);
+**sorghum's `*_nc_cam.ply` is the complete plant** (32-65 % of a view's points hidden, median
+~53 %), so every sorghum input -- clean or scene -- hands the model surfaces it cannot see.
+Fixes built the same day: `data.depth_planes`, `occlusion_scene.visible_only`, `origin_jitter_m`
+(see "Deployable-input arms" below). The RGB framing is not fixed (random shift / zoom, or
+Alloy's renders).
+**Test, occluded, no card (`reports/pc_generation_maize_{stem,metric400}.json`):** stem 200
+F1@10mm **0.432** / 16.2 mm (the leaky target frame at 200: 0.431 / 15.6 mm), true card 0.523
+(leaky: 0.475); metric 400 0.284 / 19.0 mm (metric 200: 0.265). The stem origin recovers all of
+what the cloud-frame leak gave.
+**How much the maize DEPTH hint is worth (`eval/depth_reliance.py`, `slurm/depth_reliance.sbatch`,
+`reports/depth_reliance_maize_{stem,metric400,pre400}.json`, occluded test, no card, F1@10mm).**
+Same scenes / seeds as pc_generation (its 'trained masking' row reproduces 'no card'). Stem 200:
+as trained 0.434; depth re-encoded with fixed planes 0.75 / 4.0 m (out of distribution for the
+model, so an upper bound) 0.412; depth REMOVED at a matched 117-token budget 0.459 vs 0.460 with
+it -- the stem model does not use depth beyond RGB + cloud, so its numbers are not inflated by
+the hint. Metric 400 (crop-centroid origin, no position in the cloud): 0.285 -> 0.212 with fixed
+planes, depth removed 0.267 vs 0.293 -- without a position anchor the model reads position off
+the depth encoding. **The deployability problem is the stem origin instead**: moved 1 / 2 / 5 cm
+in a random direction, the stem model falls 0.434 -> 0.397 / 0.276 / 0.109 (worse on 72 / 88 /
+97 % of plants). A real stem estimate must be within ~1 cm, or the model trained to tolerate
+error (`origin_jitter_m`). Leaky target-frame any-to-any 400: depth removed 0.469 vs 0.470 -- the
+same: no maize scene model with a position anchor uses depth.
+
+**Deployable-input arms (built and launched 2026-10-15, scavenger, 200 epochs, seed 1).** Three
+opt-in switches, all off by default (every earlier config resolves exactly as before -- the stem
+config's `to_dict` gained no keys, checked):
+- `data.depth_planes: [near, far]` (maize only; `MaizeDataset4M(depth_planes=)`): depth.png
+  decoded to metres with the renderer's per-plant planes and re-encoded with these FIXED ones at
+  full resolution, before the resize; `near_far` (9th item) then returns them. Exact on fully
+  covered pixels (4.8e-7 m). Mixed plant / background pixels differ, as they must.
+- `occlusion_scene.visible_only` (+ `visible_tol` 0.02 m): the INPUT cloud holds only points the
+  target's camera sees. The datasets' `return_visibility=True` adds a 10th item `vis`, each
+  point projected into its own FULL-RES depth render (`occlusion_scene.point_visibility`, 1 cm,
+  3 x 3 max); `compose(vis=)` drops target points behind a neighbour and neighbour points behind
+  the target / each other / outside the image (224 px z-buffers); clean samples and batches
+  without a scene go through `visible_input()`. The target stays the complete plant. Measured:
+  maize keeps ~82 % of the target in a scene (100 % clean), neighbour share 0.64 -> 0.59;
+  sorghum keeps ~48 % (own view ~57 %). SorghumDataset4M re-reads depth.png at full res (the
+  shared 3M base loader is untouched) and returns its fixed planes as a 9th item so `vis` is
+  index 9 in both species.
+- `occlusion_scene.origin_jitter_m` (norm stem, training only; `for_validation()` zeroes it, and
+  both trainers' clean-pass `frame` is now `scene_cfg.for_validation()`): N(0, s^2) m per axis
+  added to the stem origin, drawn last so every other draw is unchanged.
+`train_sorghum_4m.py` now supports `norm: stem` (crop / metric still maize-only) and all three
+switches. Smoke: `logs/dv/smoke_deploy{,_sorghum}.py` via `logs/dv/smoke_deploy.sbatch` (job
+16930725: both species train, evaluate clean + occluded, and draw). **Run smoke tests on a GPU
+node**: on the login node the maize one was killed silently, and a CPU-only run cannot catch a
+CPU-generator-on-CUDA bug (it did not; the GPU run did).
+Arms: `maize_scene_anyparam_deploy_s1` (job 16930843: stem + fixed planes 0.75 / 4.0 +
+visible_only, exact origin), `maize_scene_anyparam_deploy_jit_s1` (16930844: + origin_jitter
+0.015), `sm_scene_anyparam_deploy_jit_s1` (16930845: sorghum stem, unit_m 1.0, visible_only,
+jitter 0.015, from E1 -- the candidate model for the real sorghum data). Maize evals are queued as
+Slurm `afterok` dependencies (pc_generation 16930846 / 16930848, depth_reliance 16930847 /
+16930849 -> `reports/{pc_generation,depth_reliance}_maize_deploy{,_jit}.json`), so they fire
+without a watcher shell. Compare deploy vs stem (0.432) for the cost of the input fixes, and
+deploy_jit vs deploy under 'origin off N cm' for the robustness.
+
+**3D views (2026-10-14).** `export/export_recon_3d.py` (`logs/dv/recon3d.sbatch`) picks three
+occluded test plants per species from the per-plant scores in `reports/test_scene/<sp>_mm.json`
+(typical, clear win at the 85th-percentile gain, and the median plant among those random
+400 wins), rebuilds their exact scenes and masks, and dumps random 400, mixed + Sinkhorn 400
+and the any-to-any 400 model (no parameters) in WORLD coordinates with per-point distances
+both ways -> `reports/recon_3d.json`. Shown on the update page
+https://claude.ai/artifact/9JrtZwfEkNFrHExdfZm2EH (maize only so far). Maize reproduces the
+report's per-plant F1 (2 of 3 plants exactly, one within 0.05). **Sorghum does not** (same
+plants, same scene: hidden fraction identical and the cloud subsample identical -- checked,
+`logs/dv/subsample_check.py`) yet every model scores lower in the export, e.g. random 0.231 vs
+0.360 F1@10mm. The report ran on an RTX PRO 6000 (`nova26-gpu-2`), the export on an A100;
+re-run on an RTX PRO 6000 is job 16906899 (`reports/recon_3d_sorghum_rtx.json`). If it matches,
+sorghum predictions depend on the GPU generation -- check before comparing sorghum numbers
+produced on different GPUs.
 
 ### Occluded-scene training (structured-masking follow-up, built 2026-10-01)
 
@@ -843,6 +950,9 @@ number, so it is a decision for new runs, not a patch to compare against E1-E4.
   the card is 0.638 / 10.7 mm. Val occluded F1@0.01 0.203 -> 0.222 over the extra 200 epochs,
   against 0.256 -> 0.392 for the card-given model: the no-card model levels off, so the gap is
   the information the card carries about hidden parts, not training length.
+  **Sorghum result (finished 2026-10-12 10:52; `reports/pc_generation_sorghum_400.json`):** no
+  card 0.294 / 23.3 mm (epoch 200: 0.287 / 23.8 mm), true card 0.362 / 19.7 mm, own predicted
+  card fed back still hurts (0.187); val occluded F1@0.01 0.286 -> 0.294 over the extra 200.
   The first sorghum job (16847808) died before step 1: a `/work` stall made rank 0's first
   batch take 18.5 min, rank 1 hit the 10-min NCCL watchdog in DDP's first broadcast. Both
   trainers now pass `timeout=PG_TIMEOUT` (60 min) to `init_process_group`; resubmitted as

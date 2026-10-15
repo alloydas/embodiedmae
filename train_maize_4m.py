@@ -48,7 +48,7 @@ from embodied_mae_4m_maize import (
 )
 from embodied_mae import earth_movers_distance
 from maize_dataset_4m import MaizeDataset4M
-from occlusion_scene import SceneConfig, compose as compose_scene, metric_frame
+from occlusion_scene import SceneConfig, compose as compose_scene, no_scene_frame, visible_input
 from leaf_mask import LeafMaskConfig, mask_weights as leaf_mask_weights
 # Species-agnostic pieces shared with the sorghum trainer: the point-cloud
 # scorer (chunked chamfer + F1/precision/recall), the history-alignment helper
@@ -143,6 +143,11 @@ def config_to_namespace(config):
     _mp                   = config['data'].get('max_plants', None)
     ns.max_plants         = None if _mp in (None, 0, 'null') else int(_mp)
     ns.plant_subset_seed  = int(config['data'].get('plant_subset_seed', 42))
+    # Re-encode depth.png with FIXED near / far planes (metres) instead of the
+    # renderer's per-plant ones, which give away the clean plant's centre and size
+    # (MaizeDataset4M depth_planes). None -> the renderer's, every run before 2026-10-15.
+    _dp                   = config['data'].get('depth_planes', None)
+    ns.depth_planes       = None if _dp in (None, 'null') else [float(_dp[0]), float(_dp[1])]
     ns.model_size         = config['model'].get('model_size', 'base')
     ns.mask_ratio         = config['model'].get('mask_ratio', 0.15)
     ns.pc_loss_weight     = config['model'].get('pc_loss_weight', 10.0)
@@ -185,6 +190,12 @@ def config_to_namespace(config):
     if _lm is not None and _sc is not None and _sc.norm != 'target':
         raise ValueError("leaf_mask reads the input cloud in the target's frame; "
                          "it cannot combine with occlusion_scene.norm: crop")
+    if _lm is not None and _sc is not None and _sc.visible_only:
+        raise ValueError("leaf_mask reads the complete input cloud; it cannot combine "
+                         "with occlusion_scene.visible_only")
+    if _sc is not None and _sc.visible_only and _sc.prob == 0:
+        raise ValueError("occlusion_scene.visible_only is wired through the scene path; "
+                         "prob 0 (clean training) would train on complete clouds")
     if _lm is not None and _sc is not None and _sc.prob > 0 and _sc.mask_policy != 'uniform':
         raise ValueError("leaf_mask needs occlusion_scene.mask_policy: uniform -- "
                          "both would set the masking")
@@ -583,18 +594,19 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
             torch.manual_seed(step_seed)
 
         kw = {}
-        metric = scene is not None and scene.norm == 'metric'
+        reframe = scene is not None and scene.norm in ('metric', 'stem')
         if card_only:
             # No scene: nothing but the card is visible, and the target is the clean plant.
-            if metric:
-                pc = metric_frame(pc, batch[6].to(device), scene.unit_m)[0]
+            if reframe:
+                pc = no_scene_frame(pc, batch[6].to(device), batch[7].to(device), scene)[0]
             loss, (lr, ld, lp, lt), _, _ = model(rgb, depth, pc, param_floats, text_valid,
                                                   visible={'text'}, source_mask_ratio=0.0)
         elif scene is not None:
             # batch[6:9] = pc_norm, cam2world, near_far (MaizeDataset4M return_pose)
             sc = compose_scene(rgb, depth, pc, batch[6].to(device), batch[7].to(device),
                                scene, patch_size=m.patch_size,
-                               near_far=batch[8].to(device))
+                               near_far=batch[8].to(device),
+                               vis=batch[9].to(device) if len(batch) > 9 else None)
             if sc is not None:
                 kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
                       'loss_tokens': sc['loss_tokens'],
@@ -603,9 +615,15 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
                 for k, v in sc['stats'].items():
                     sstats[k] = sstats.get(k, 0.0) + v
                 n_scene += 1
-            elif metric:
-                # no scene in this batch: still metres, about each plant's own centroid
-                pc = metric_frame(pc, batch[6].to(device), scene.unit_m)[0]
+            else:
+                if reframe:
+                    # no scene in this batch: the same frame as the scene samples (metres;
+                    # about the plant's own centroid for 'metric', its stem base for 'stem')
+                    pc = no_scene_frame(pc, batch[6].to(device), batch[7].to(device), scene)[0]
+                if scene.visible_only:
+                    # input = what the camera sees; scored against the complete plant
+                    kw = {'targets': {'pc': pc}}
+                    pc = visible_input(pc, batch[9].to(device))
         if leaf is not None and not card_only:
             # Weights from the TARGET's geometry: its clean cloud for the image
             # patches, the (possibly scene) input cloud for the PC tokens, with
@@ -676,14 +694,18 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
 
 @torch.no_grad()
 def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
-             distributed=False, scene=None, scene_seed=0, oracle=False, metric_unit=None):
+             distributed=False, scene=None, scene_seed=0, oracle=False, frame=None,
+             visible=False):
     """Validation / test pass. With `scene` (a SceneConfig) every batch is first
     turned into occluded scenes -- scene.for_validation(): all samples, uniform
     masking -- from a CPU generator seeded by (scene_seed, batch index), so
     every arm is scored on the same scenes. All metrics stay against the CLEAN
     plant, and two more report how occluded the scenes were (occ_*). The loader
-    must be built with return_pose=True."""
+    must be built with return_pose=True. `visible` (occlusion_scene.visible_only,
+    implied by such a `scene`): a batch without a scene is also fed only the points
+    its camera sees (the loader's return_visibility) and scored against all of them."""
     model.eval()
+    visible = bool(visible) or (scene is not None and scene.visible_only)
     tot = tot_rgb = tot_depth = tot_pc = tot_txt = 0.0
     tot_rgb_mse = tot_depth_mse = tot_chamfer = tot_emd = 0.0
     tot_param_mse = tot_param_mae = tot_param_mae_masked = tot_param_acc05 = 0.0
@@ -709,7 +731,8 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
             sc = compose_scene(
                 rgb, depth, pc, batch[6].to(device), batch[7].to(device), scene,
                 patch_size=m.patch_size, near_far=batch[8].to(device),
-                generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi))
+                generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi),
+                vis=batch[9].to(device) if len(batch) > 9 else None)
             if sc is not None:
                 x_rgb, x_depth, x_pc = sc['rgb'], sc['depth'], sc['pc']
                 kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
@@ -720,14 +743,20 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
                 tot_hidden += sc['stats']['hidden_px']
                 tot_nbpts  += sc['stats']['nb_points']
                 n_scene    += 1
-        if metric_unit is None and scene is not None and scene.norm == 'metric':
-            metric_unit = scene.unit_m          # a batch compose() left without a scene
-        if metric_unit is not None and crop_norm is None:
-            # occlusion_scene norm 'metric', batch without a scene (the clean pass):
-            # the model reads and predicts metres; scored back in the target's frame.
-            if len(batch) <= 6:
-                raise ValueError("metric_unit needs the loader built with return_pose=True")
-            x_pc, crop_norm = metric_frame(pc, batch[6].to(device), metric_unit)
+        if frame is None and scene is not None and scene.norm in ('metric', 'stem'):
+            frame = scene                      # a batch compose() left without a scene
+        if frame is not None and crop_norm is None:
+            # occlusion_scene norm 'metric' / 'stem', batch without a scene (the clean
+            # pass): the model reads and predicts in that frame; scored back in the target's.
+            if len(batch) <= 7:
+                raise ValueError("frame needs the loader built with return_pose=True")
+            x_pc, crop_norm = no_scene_frame(pc, batch[6].to(device), batch[7].to(device), frame)
+        if visible and 'targets' not in kw:
+            if len(batch) <= 9:
+                raise ValueError("visible needs the loader built with return_visibility=True")
+            kw = {**kw, 'targets': {'pc': x_pc}}
+            x_pc = visible_input(x_pc, batch[9].to(device),
+                                 generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi))
 
         loss, (lr, ld, lp, lt), \
             (pred_rgb_p, pred_depth_p, pred_pc, pred_params), \
@@ -910,8 +939,11 @@ def train_worker(rank, world_size, args):
     # block is present (so a clean control arm is scored on the same scenes).
     scene_cfg   = SceneConfig.from_dict(args.occlusion_scene)
     scene_train = scene_cfg if scene_cfg is not None and scene_cfg.prob > 0 else None
-    # occlusion_scene norm 'metric': clean batches are put in metres too
-    metric_unit = scene_cfg.unit_m if scene_cfg is not None and scene_cfg.norm == 'metric' else None
+    # occlusion_scene norm 'metric' / 'stem': clean batches are put in that frame too
+    # (for_validation: an exact stem origin, no origin_jitter_m, when scoring)
+    frame_cfg = (scene_cfg.for_validation()
+                 if scene_cfg is not None and scene_cfg.norm in ('metric', 'stem') else None)
+    vis_on    = scene_cfg is not None and scene_cfg.visible_only
     leaf_cfg    = LeafMaskConfig.from_dict(getattr(args, 'leaf_mask', None))
     train_ds = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='train',
@@ -919,16 +951,23 @@ def train_worker(rank, world_size, args):
                                  view_sampling=vs, view_seed=args.view_seed,
                                  max_plants=args.max_plants,
                                  plant_subset_seed=args.plant_subset_seed,
-                                 return_pose=scene_train is not None or leaf_cfg is not None)
+                                 return_pose=scene_train is not None or leaf_cfg is not None,
+                                 return_visibility=vis_on,
+                                 depth_planes=getattr(args, 'depth_planes', None))
     val_ds   = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, deterministic_view=True,
-                                 return_pose=scene_cfg is not None)
+                                 return_pose=scene_cfg is not None,
+                                 return_visibility=vis_on,
+                                 depth_planes=getattr(args, 'depth_planes', None))
     test_ds  = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='test',
                                  max_leaves=args.max_leaves,
-                                 view_sampling=vs, deterministic_view=True)
+                                 view_sampling=vs, deterministic_view=True,
+                                 return_pose=vis_on or frame_cfg is not None,
+                                 return_visibility=vis_on,
+                                 depth_planes=getattr(args, 'depth_planes', None))
 
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
@@ -1137,7 +1176,7 @@ def train_worker(rank, world_size, args):
             (vl, vr, vd, vp, vt), vm = evaluate(
                 model, val_loader, device, compute_emd=compute_emd,
                 mask_ratio=args.mask_ratio, distributed=(world_size > 1),
-                metric_unit=metric_unit)
+                frame=frame_cfg, visible=vis_on)
             for k, v in zip(['val_loss','val_rgb','val_depth','val_pc','val_text'],
                             [vl, vr, vd, vp, vt]):
                 history[k].append(v)
@@ -1220,7 +1259,7 @@ def train_worker(rank, world_size, args):
             (tl, tr_, td_, tp_, tt_), tmet = evaluate(
                 model, test_loader, device, compute_emd=compute_emd_test,
                 mask_ratio=args.mask_ratio, distributed=(world_size > 1),
-                metric_unit=metric_unit)
+                frame=frame_cfg, visible=vis_on)
             if is_main:
                 history['test_epoch'].append(epoch)
                 for k, v in zip(

@@ -39,7 +39,7 @@ import embodied_mae_4m as S4
 import embodied_mae_4m_maize as M4
 from maize_dataset_4m import MaizeDataset4M
 from sorghum_dataset_4m import SorghumDataset4M
-from occlusion_scene import SceneConfig, compose, to_world
+from occlusion_scene import SceneConfig, compose, to_world, no_scene_frame
 
 RUN, EP = 'maize_scene_anyparam_pre_s1', 200    # defaults; see --run / --epoch
 CONDS = ['no card', 'scene + predicted card', 'scene + true card', 'predicted card only', 'true card only',
@@ -69,11 +69,12 @@ def main():
     L = int(rc['max_leaves'])
     if sp == 'maize':
         ds = MaizeDataset4M(rc['data_root'], img_size=rc['img_size'], num_points=rc['num_points'], split='test', max_leaves=L,
-                            view_sampling=rc['view_sampling'], deterministic_view=True, return_pose=True)
+                            view_sampling=rc['view_sampling'], deterministic_view=True, return_pose=True,
+                            return_visibility=scene.visible_only, depth_planes=rc.get('depth_planes'))
     else:
         ds = SorghumDataset4M(rc['data_root'], img_size=rc['img_size'], num_points=rc['num_points'], split='test', max_leaves=L,
                               view_sampling=rc['view_sampling'], deterministic_view=True, return_pose=True,
-                              spline_root=rc.get('spline_root'))
+                              spline_root=rc.get('spline_root'), return_visibility=scene.visible_only)
     dl = DataLoader(ds, batch_size=16, shuffle=False, num_workers=8, generator=torch.Generator().manual_seed(0))
     acc = {c: {} for c in CONDS}
     examples = {}
@@ -83,18 +84,22 @@ def main():
         names = list(b[5])
         pn, c2w = b[6].to(dev), b[7].to(dev)
         nf = b[8].to(dev) if sp == 'maize' else None      # sorghum: fixed render planes
-        sc = compose(rgb, depth, pc, pn, c2w, scene, patch_size=16, near_far=nf, generator=torch.Generator().manual_seed(bi))
+        sc = compose(rgb, depth, pc, pn, c2w, scene, patch_size=16, near_far=nf, generator=torch.Generator().manual_seed(bi),
+                     vis=b[9].to(dev) if len(b) > 9 else None)
         _, world = to_world(pc, pn, c2w)
         r = torch.hypot(world[..., 0], world[..., 2])
         band = torch.clamp((3 * r / r.max(dim=1, keepdim=True).values.clamp(min=1e-6)).long(), max=2)
         x = (sc['rgb'], sc['depth'], sc['pc'])
         kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)}, 'loss_tokens': sc['loss_tokens']}
-        cn = sc.get('crop_norm')       # norm 'crop' / 'metric' runs: back to the target's frame for scoring
+        cn = sc.get('crop_norm')       # norm 'crop' / 'metric' / 'stem': back to the target's frame for scoring
         back = (lambda q: q) if cn is None else (lambda q: q * cn[:, None, 3:4] + cn[:, None, :3])
-        # card only sees no scene; a norm 'metric' run then predicts in metres about the
-        # plant's own centroid (as its clean training samples), so undo only the scale
-        back_card = ((lambda q: q) if scene.norm != 'metric'
-                     else (lambda q: q * (float(scene.unit_m) / pn[:, 3])[:, None, None]))
+        # card only sees no scene, so a 'metric' / 'stem' run predicts in the frame its clean
+        # training samples used (own centroid / stem base, metres): undo that frame
+        if scene.norm in ('metric', 'stem'):
+            cn_c = no_scene_frame(pc, pn, c2w, scene)[1]
+            back_card = lambda q: q * cn_c[:, None, 3:4] + cn_c[:, None, :3]
+        else:
+            back_card = lambda q: q
 
         # pass 1: predict the card from the scene, no card given
         m.text_mask_ratio = 1.0

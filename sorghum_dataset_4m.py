@@ -16,6 +16,13 @@ Each sample returns:
                   return_pose=True (which implies return_pc_norm): the view's
                   camera_pose.json cameraToWorld. Occluded-scene training needs
                   it to stand neighbouring plants on the target's ground.
+    near_far, vis : only with return_visibility=True (needs return_pose): the
+                  renderer's FIXED depth planes (RENDER_NEAR, RENDER_FAR -- a 9th
+                  item so `vis` sits at index 9 as in MaizeDataset4M) and (num_points,)
+                  bool, which cloud points this view's camera sees. *_nc_cam.ply is
+                  the COMPLETE plant (32-65 % of a view's points are hidden, measured
+                  2026-10-15), unlike maize's camera-view cloud. Tested against the
+                  full-resolution depth render (occlusion_scene.point_visibility).
 
 Spline params: on 2026-09-30 Alloy's alloy/shorgum_data/add_leaf_width.py
 rewrote every *_spline.yml copy in Sorghum_15K in place (per-leaf `width` added,
@@ -30,11 +37,15 @@ import os
 import random
 import re
 
+import numpy as np
 import torch
+from PIL import Image
 from sorghum_dataset import (
     SorghumDataset, _read_index_cache, _write_index_cache,
 )
 from embodied_mae_4m import load_spline_params
+from occlusion_scene import point_visibility
+from structured_mask import RENDER_FAR, RENDER_NEAR
 
 
 def is_rewritten_spline(text):
@@ -49,11 +60,16 @@ class SorghumDataset4M(SorghumDataset):
                  max_leaves=24, view_sampling=False, view_seed=0,
                  deterministic_view=False, max_plants=None,
                  plant_subset_seed=42, return_pc_norm=False,
-                 return_pose=False, spline_root=None):
+                 return_pose=False, spline_root=None, return_visibility=False,
+                 visibility_tol=0.01):
         super().__init__(data_root, img_size=img_size,
                          num_points=num_points, split=split)
         self.max_leaves = max_leaves
         self.return_pose = bool(return_pose)
+        self.return_visibility = bool(return_visibility)
+        self.visibility_tol = float(visibility_tol)
+        if self.return_visibility and not self.return_pose:
+            raise ValueError("return_visibility needs return_pose=True")
         self.return_pc_norm = bool(return_pc_norm) or self.return_pose
 
         # Same caching treatment as the base index: one glob per folder over 105k
@@ -223,10 +239,28 @@ class SorghumDataset4M(SorghumDataset):
                 with open(folder / 'camera_pose.json') as fh:
                     c2w = json.load(fh)['cameraToWorld']
                 cam2world = torch.tensor(c2w, dtype=torch.float32).view(4, 4)
+                if self.return_visibility:
+                    vis = point_visibility(pc * pc_norm[3] + pc_norm[:3],
+                                           self._depth_full_metres(folder / 'depth.png'),
+                                           self.visibility_tol)
+                    near_far = torch.tensor([RENDER_NEAR, RENDER_FAR], dtype=torch.float32)
+                    return (rgb, depth, pc, param_floats, text_valid, name, pc_norm,
+                            cam2world, near_far, vis)
                 return (rgb, depth, pc, param_floats, text_valid, name, pc_norm,
                         cam2world)
             return rgb, depth, pc, param_floats, text_valid, name, pc_norm
         return rgb, depth, pc, param_floats, text_valid, name
+
+    @staticmethod
+    def _depth_full_metres(path):
+        """depth.png at FULL resolution as z-distance in metres, +inf on background
+        (the same big-endian packed RGBA as SorghumDataset.load_depth, fixed planes)."""
+        with Image.open(path) as image:
+            rgba = np.asarray(image).astype(np.float64)
+        d = (rgba[..., 0] * 256.0 ** 3 + rgba[..., 1] * 256.0 ** 2
+             + rgba[..., 2] * 256.0 + rgba[..., 3]) / float(256 ** 4 - 1)
+        z = RENDER_NEAR + d * (RENDER_FAR - RENDER_NEAR)
+        return torch.from_numpy(np.where(d > 0, z, np.inf).astype(np.float32))
 
 
 if __name__ == '__main__':

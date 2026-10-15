@@ -60,10 +60,17 @@ EXTRA = {
                 'cham': ('sm_scene_cham_s1', 200), 'sinkonly': ('sm_scene_sinkonly_s1', 200),
                 'mixed_sink400': ('sm_scene_mix_sink400_s1', 400),
                 'random400': ('sm_scene400_s1', 400), 'random_sink400': ('sm_scene_sink400_s1', 400),
-                'noparam': ('sm_scene_noparam_s1', 200)},
+                'noparam': ('sm_scene_noparam_s1', 200),
+                # seed 2 of the E6/E7 headline arms (launched 2026-10-15): score with the seed-1
+                # arms in ONE invocation, e.g. --arms random random_s2 random_sink random_sink_s2
+                # mixed_sink mixed_sink_s2 --tag seeds, so every row is paired
+                'random_s2': ('sm_scene_s2', 200), 'random_sink_s2': ('sm_scene_sink_s2', 200),
+                'mixed_sink_s2': ('sm_scene_mix_sink_s2', 200)},
     'maize': {'cham': ('maize_scene_cham_s1', 200), 'sinkonly': ('maize_scene_sinkonly_s1', 200),
               'mixed_sink400': ('maize_scene_mix_sink400_s1', 400),
-              'random400': ('maize_scene400_s1', 400), 'random_sink400': ('maize_scene_sink400_s1', 400)},
+              'random400': ('maize_scene400_s1', 400), 'random_sink400': ('maize_scene_sink400_s1', 400),
+              'random_s2': ('maize_scene_s2', 200), 'random_sink_s2': ('maize_scene_sink_s2', 200),
+              'mixed_sink_s2': ('maize_scene_mix_sink_s2', 200)},
 }
 SHOW_ARMS = ('random', 'mixed_sink', 'long', 'mixed_sink400', 'random400', 'random_sink400', 'random_sink', 'mixed', 'noparam')   # reconstructions kept for the examples
 MEAN = torch.tensor([0.485, 0.456, 0.406])[:, None, None]

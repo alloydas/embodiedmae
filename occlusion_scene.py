@@ -56,7 +56,7 @@ Known differences from a rendered scene, all acceptable for training:
     scale), as in eval/eval_occlusion.py -- prediction and target must share a
     frame. A deployed model would normalise by the crop instead.
   * the cloud is the complete scene surface, like every cloud this repo trains
-    on, not what one camera sees.
+    on, not what one camera sees -- unless visible_only (2026-10-15).
 
 The only images are the 224 x 224 network inputs; nothing here touches disk.
 """
@@ -73,7 +73,7 @@ from structured_mask import (
 
 _TAN_HALF_FOV = math.tan(math.radians(RENDER_FOV_DEG) / 2)
 MASK_POLICIES = ('uniform', 'neighbour_first')
-NORMS = ('target', 'crop', 'metric')
+NORMS = ('target', 'crop', 'metric', 'stem')
 
 
 @dataclass(frozen=True)
@@ -123,9 +123,33 @@ class SceneConfig:
                     model can use absolute size and the card's lengths. Applied to
                     EVERY sample, clean ones included (scaled about their own
                     centroid); batches without a scene go through metric_frame().
-    unit_m        : metres per unit for norm 'metric' (maize 0.64 = the median
+                    'stem' -- metres / unit_m like 'metric', but the origin is the
+                    TARGET's STEM BASE (the world origin, where capture.py stands
+                    every plant) instead of a centroid, for every sample. It says
+                    which plant to rebuild ("the one standing here") without its
+                    centroid or extent; a real system gets it from a stem detector
+                    or a click plus the depth camera's ground plane. Batches without
+                    a scene go through no_scene_frame().
+    unit_m        : metres per unit for norm 'metric' / 'stem' (maize 0.64 = the median
                     plant radius, so clouds stay near unit size). Omitted from
                     to_dict when None.
+    visible_only  : the INPUT cloud holds only what the target's camera sees, as a
+                    depth camera would: target points visible in their own render
+                    (the dataset's per-point `vis`, tested against the full-resolution
+                    depth, return_visibility=True) and not behind a neighbour, and
+                    neighbour points not behind the target or another neighbour and
+                    inside the image. Clean samples get their visible points too
+                    (visible_input()). The TARGET stays the complete clean plant.
+                    False = the complete cloud, every run before 2026-10-15 -- which
+                    hands the model surfaces the images show hidden.
+    visible_tol   : visible_only: metres a point may lie behind the z-buffer of the
+                    224 px scene (neighbour occlusion) and still count as seen.
+    origin_jitter_m : norm 'stem', TRAINING only: per-axis std (metres) of a random
+                    error added to the stem-base origin of every sample, so the model
+                    cannot rely on an exact stem position (a real stem estimate is
+                    off by centimetres; eval/depth_reliance.py measures the cost).
+                    The target moves with the frame, so the model must place the
+                    plant from the input itself. for_validation() sets it to 0.
 
     Validation always uses prob 1 and uniform masking, so every arm is scored on
     the same scenes under the same masking whatever it trained with.
@@ -143,6 +167,9 @@ class SceneConfig:
     nf_prob: float = 1.0
     norm: str = 'target'
     unit_m: float = None
+    visible_only: bool = False
+    visible_tol: float = 0.02
+    origin_jitter_m: float = 0.0
 
     @classmethod
     def from_dict(cls, cfg):
@@ -184,10 +211,16 @@ class SceneConfig:
             raise ValueError("occlusion_scene.nf_prob only applies to mask_policy: neighbour_first")
         if out.norm not in NORMS:
             raise ValueError(f"occlusion_scene.norm must be one of {NORMS}")
-        if (out.norm == 'metric') != (out.unit_m is not None):
-            raise ValueError("occlusion_scene.unit_m is required by, and only used with, norm: metric")
+        if (out.norm in ('metric', 'stem')) != (out.unit_m is not None):
+            raise ValueError("occlusion_scene.unit_m is required by, and only used with, norm: metric / stem")
         if out.unit_m is not None and not float(out.unit_m) > 0:
             raise ValueError("occlusion_scene.unit_m must be positive")
+        if not float(out.visible_tol) > 0:
+            raise ValueError("occlusion_scene.visible_tol must be positive")
+        if float(out.origin_jitter_m) < 0:
+            raise ValueError("occlusion_scene.origin_jitter_m must be >= 0")
+        if float(out.origin_jitter_m) > 0 and out.norm != 'stem':
+            raise ValueError("occlusion_scene.origin_jitter_m only applies to norm: stem")
         return out
 
     def to_dict(self):
@@ -195,11 +228,15 @@ class SceneConfig:
                 for f in fields(self)
                 if not (f.name == 'nf_prob' and float(getattr(self, f.name)) == 1.0)
                 and not (f.name == 'norm' and getattr(self, f.name) == 'target')
-                and not (f.name == 'unit_m' and getattr(self, f.name) is None)}
+                and not (f.name == 'unit_m' and getattr(self, f.name) is None)
+                and not (f.name == 'visible_only' and not getattr(self, f.name))
+                and not (f.name == 'visible_tol' and float(getattr(self, f.name)) == 0.02)
+                and not (f.name == 'origin_jitter_m' and float(getattr(self, f.name)) == 0.0)}
 
     def for_validation(self):
-        """Every sample occluded, uniform masking: the regime all arms share."""
-        return replace(self, prob=1.0, mask_policy='uniform')
+        """Every sample occluded, uniform masking, exact stem origin: the regime all
+        arms share."""
+        return replace(self, prob=1.0, mask_policy='uniform', origin_jitter_m=0.0)
 
 
 # ── Random draws ──────────────────────────────────────────────────────────────
@@ -335,7 +372,7 @@ def resample(points, keep, n_out, generator=None):
 # ── The scene ─────────────────────────────────────────────────────────────────
 
 def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=None,
-            near_far=None):
+            near_far=None, vis=None):
     """Turn a batch of clean single plants into occluded scenes, or None.
 
     rgb, depth, pc, pc_norm, cam2world : the dataset's tensors for B samples
@@ -349,6 +386,10 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
         TARGET's encoding. Field of view is 40 degrees in both renderers.
     generator : a CPU torch.Generator for a fixed scene set (validation), or
         None for the global RNGs (training).
+    vis : (B, N) bool, cfg.visible_only only: which of each target's points its
+        own camera sees (the dataset's return_visibility). Then EVERY sample's
+        input cloud is its visible part (clean samples included, so they are no
+        longer bit for bit their clean tensors).
 
     Returns a dict:
       rgb, depth, pc   the scene inputs; samples without neighbours are their
@@ -432,8 +473,22 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
         w_all = torch.cat([world, nbw], dim=1)
         inside = torch.hypot(w_all[..., 0], w_all[..., 2]) <= float(cfg.crop_radius)
         keep = keep & (inside | ~use[:, None])
+    if cfg.visible_only:
+        if vis is None:
+            raise ValueError("occlusion_scene.visible_only needs the dataset's per-point "
+                             "visibility (return_visibility=True) passed as vis=")
+        # z-buffers of the 224 px scene. 3 x 3 max so a point at a silhouette edge, or
+        # under an antialiased edge pixel of the target's render, counts as seen.
+        zt = torch.where(tgt_fg, tgt_z, torch.full_like(tgt_z, torch.inf))
+        z_nb = F.max_pool2d(nb_z, 3, 1, 1)
+        z_all = F.max_pool2d(torch.minimum(zt, nb_z), 3, 1, 1)
+        vis_t = vis.to(dev).bool() & seen_in(cam, z_nb, float(cfg.visible_tol))
+        vis_n = seen_in(nb_cam, z_all, float(cfg.visible_tol))
+        keep = keep & torch.cat([vis_t, vis_n], dim=1)
     pc_scene, idx = resample(pts, keep, N, dgen)
-    pc_in = torch.where(use[:, None, None], pc_scene, pc)
+    # visible_only: a clean sample's resample is its own visible points (no neighbour
+    # is on, so vis_t = vis), which is its input too
+    pc_in = pc_scene if cfg.visible_only else torch.where(use[:, None, None], pc_scene, pc)
     nb_point = (idx >= N) & use[:, None]
 
     shown_frac = F.avg_pool2d(shown.float(), patch_size).flatten(1)
@@ -452,9 +507,15 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
             nbf = nbf & sel[:, None]
         out['mask_flags'] = {'rgb': img, 'depth': img, 'pc_points': nbf}
 
-    if cfg.norm in ('crop', 'metric'):
-        # Drawn from nothing random, so every other draw is unchanged.
-        c = torch.where(use[:, None], out['pc'].mean(1), torch.zeros_like(out['pc'][:, 0]))
+    if cfg.norm in ('crop', 'metric', 'stem'):
+        # Drawn from nothing random (origin_jitter_m aside, drawn last), so every
+        # other draw is unchanged.
+        if cfg.norm == 'stem':
+            c = stem_origin(pc_norm, cam2world)
+            if float(cfg.origin_jitter_m) > 0:
+                c = c + origin_error(B, cfg, pc_norm, generator)
+        else:
+            c = torch.where(use[:, None], out['pc'].mean(1), torch.zeros_like(out['pc'][:, 0]))
         if cfg.norm == 'crop':
             r = (out['pc'] - c[:, None]).norm(dim=-1).max(1).values
             r = torch.where(use, r.clamp(min=1e-6), torch.ones_like(r))
@@ -473,7 +534,7 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
         'tgt_points_kept': keep[:, :N].float().mean(1)[u].mean().item(),
         'loss_patches': loss_tok.float().sum(1)[u].mean().item(),
     }
-    if cfg.norm in ('crop', 'metric'):
+    if cfg.norm in ('crop', 'metric', 'stem'):
         out['stats']['crop_scale'] = out['crop_norm'][:, 3][u].mean().item()
         out['stats']['crop_shift'] = out['crop_norm'][:, :3].norm(dim=1)[u].mean().item()
     return out
@@ -487,3 +548,65 @@ def metric_frame(pc, pc_norm, unit_m):
     r = float(unit_m) / pc_norm[:, 3]
     cn = torch.cat([torch.zeros_like(pc_norm[:, :3]), r[:, None]], dim=1)
     return pc / r[:, None, None], cn
+
+
+def stem_origin(pc_norm, cam2world):
+    """The target's stem base -- the world origin -- in each sample's normalised
+    camera frame (the frame the dataset's clouds are in): (B, 3)."""
+    zero = torch.zeros(cam2world.shape[0], 1, 3, device=cam2world.device, dtype=cam2world.dtype)
+    cam = world_to_camera(zero, cam2world)[:, 0]
+    return (cam - pc_norm[:, :3]) / pc_norm[:, 3:4]
+
+
+def no_scene_frame(pc, pc_norm, cam2world, cfg, generator=None):
+    """norm 'metric' / 'stem' for a batch WITHOUT a scene (clean validation, card-only
+    steps, a batch compose() returned None for). Returns (pc_framed, crop_norm) with
+    target_frame = pc_framed * crop_norm[:, 3:] + crop_norm[:, :3], as compose()."""
+    if cfg.norm == 'metric':
+        return metric_frame(pc, pc_norm, cfg.unit_m)
+    if cfg.norm != 'stem':
+        raise ValueError(f"no_scene_frame: norm {cfg.norm!r} keeps the target frame")
+    c = stem_origin(pc_norm, cam2world)
+    if float(cfg.origin_jitter_m) > 0:
+        c = c + origin_error(pc.shape[0], cfg, pc_norm, generator)
+    r = float(cfg.unit_m) / pc_norm[:, 3]
+    return (pc - c[:, None]) / r[:, None, None], torch.cat([c, r[:, None]], dim=1)
+
+
+def origin_error(B, cfg, pc_norm, generator=None):
+    """norm 'stem' training: a random stem-base error, N(0, origin_jitter_m^2) metres
+    per axis (isotropic, so the frame it is drawn in does not matter), in the
+    target's normalised units -- (B, 3), to add to stem_origin()."""
+    e = torch.randn(B, 3, generator=generator).to(pc_norm.device) * float(cfg.origin_jitter_m)
+    return e / pc_norm[:, 3:4]
+
+
+def seen_in(p_cam, zimg, tol):
+    """(B, M) bool: the point is inside the image and at most `tol` metres behind
+    the z-buffer `zimg` (B, 1, H, W) at its pixel (+inf where nothing is drawn)."""
+    B, _, H, W = zimg.shape
+    row, col, z = camera_pixels(p_cam, H, W)
+    inside = (row >= 0) & (row < H) & (col >= 0) & (col < W) & (z > RENDER_NEAR)
+    flat = (row.clamp(0, H - 1) * W + col.clamp(0, W - 1)).long()
+    return inside & (z <= zimg.flatten(1).gather(1, flat) + tol)
+
+
+def point_visibility(p_cam, z_full, tol=0.01):
+    """For the datasets (return_visibility): which points of ONE sample's cloud its
+    own camera sees. p_cam (N, 3) camera-frame metres; z_full (H, W) the render's
+    z-distance in metres at FULL resolution (1024 px: no antialiasing, ~2 mm per
+    pixel), +inf on background. Seen = no more than `tol` behind the farthest
+    surface in the point's 3 x 3 pixel neighbourhood. Returns (N,) bool."""
+    return seen_in(p_cam[None], F.max_pool2d(z_full[None, None], 3, 1, 1), tol)[0]
+
+
+def visible_input(pc, vis, generator=None):
+    """visible_only, a batch WITHOUT a scene: each sample's INPUT is its visible
+    points resampled to N (repeats when fewer survive), in pc's own frame. Score
+    the prediction against the complete `pc`. `generator` is a CPU generator (or None),
+    turned into one on pc's device the way compose() does."""
+    dgen = None
+    if generator is not None:
+        dgen = torch.Generator(device=pc.device).manual_seed(
+            int(torch.randint(2 ** 62, (1,), generator=generator)))
+    return resample(pc, vis.to(pc.device).bool(), pc.shape[1], dgen)[0]
