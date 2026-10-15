@@ -261,8 +261,11 @@ def extract_split(model, cfg, data_root, split, feature, batch_size,
         # max_plants is deliberately NOT passed -- a capped probe set would
         # score arms on different yardsticks.
         # The images the run trained on: runs from before 2026-10-01 have no
-        # rgb_file in config.json and read rgb.png (grey background).
+        # rgb_file in config.json and read rgb.png (grey background), and the
+        # brighten gain they trained at (rgb_nobg.png was brightened in place on
+        # 2026-10-13; see run_rgb_gain), undone or applied per file.
         rgb_file=cfg.get('rgb_file', 'rgb.png'),
+        rgb_gain=run_rgb_gain(cfg),
     )
     loader = DataLoader(
         _RetryTransientIO(ds), batch_size=batch_size, shuffle=False, num_workers=num_workers,
@@ -317,12 +320,28 @@ def extract_split(model, cfg, data_root, split, feature, batch_size,
     return np.asarray(plants, dtype=np.int64), np.concatenate(feats, axis=0)
 
 
+def run_rgb_gain(cfg):
+    """The brighten_gain a run trained at: config.json's rgb_brighten_gain (recorded by
+    the trainers since 2026-10-15), else 1.0: every run that predates the key finished
+    before the 2026-10-13 in-place brightening (rgb.png never carried a gain)."""
+    return float(cfg.get('rgb_brighten_gain', 1.0))
+
+
+def cache_stem(run, ckpt, split, feature, seed, repeats, cfg):
+    """Feature-cache file name. Runs reading a brightenable file (rgb_file other than
+    rgb.png) carry the gain the images were served at, so caches extracted on the
+    wrong brightness are never served and the data-v1 names stay unchanged."""
+    stem = f'{run}__{Path(ckpt).stem}__{split}__{feature}__seed{seed}__rep{repeats}'
+    if cfg.get('rgb_file', 'rgb.png') != 'rgb.png':
+        stem += f'__g{run_rgb_gain(cfg):g}'
+    return stem + '.npz'
+
+
 def cached_features(model, cfg, args, run, split):
     """Extract once, reuse for every target and every alpha sweep."""
     cache = Path(args.cache_dir)
     cache.mkdir(parents=True, exist_ok=True)
-    stem = (f'{run}__{Path(args.ckpt).stem}__{split}__{args.feature}'
-            f'__seed{args.seed}__rep{args.repeats}.npz')
+    stem = cache_stem(run, args.ckpt, split, args.feature, args.seed, args.repeats, cfg)
     path = cache / stem
     if path.exists() and not args.refresh:
         z = np.load(path)

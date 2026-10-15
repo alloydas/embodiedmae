@@ -344,9 +344,9 @@ def main():
         slug = Path(run_dir).name
         print(f'\n=== {slug} · {args.split} ===')
 
-        cache = Path(args.cache_dir) / (
-            f'{slug}__{Path(args.ckpt).stem}__{args.split}__{args.feature}'
-            f'__seed{args.seed}__rep{args.repeats}.npz')
+        run_cfg = json.loads((Path(run_dir) / 'config.json').read_text())
+        cache = Path(args.cache_dir) / LP.cache_stem(
+            slug, args.ckpt, args.split, args.feature, args.seed, args.repeats, run_cfg)
         if cache.exists() and not args.refresh:
             z = np.load(cache)
             plants, X = z['plants'], z['feats']

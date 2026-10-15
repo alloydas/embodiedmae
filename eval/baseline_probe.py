@@ -181,6 +181,7 @@ class Species:
     cache_dir: Path
     active_col: bool       # sorghum rows carry `active`; maize rows do not
     rgb_file: str = 'rgb.png'   # the RGB image the dataset reads per sample folder
+    rgb_gain: float = None      # the brighten gain it is served at (sorghum: the arms' 1.0)
 
 
 def get_species(name):
@@ -198,8 +199,10 @@ def get_species(name):
             plant_dtype=np.int64,
             data_root=P.DATA_ROOT, cache_dir=REPO / 'outputs' / '_probe_cache',
             active_col=True,
-            # rgb_nobg.png since 2026-10-01; caches of RGB adapters are keyed by it
-            rgb_file=RGB_FILE)
+            # rgb_nobg.png since 2026-10-01; caches of RGB adapters are keyed by it.
+            # Served at gain 1.0, the brightness every ablation arm trained on (the
+            # files were brightened in place on 2026-10-13); see sorghum_dataset.
+            rgb_file=RGB_FILE, rgb_gain=1.0)
     if name == 'maize':
         import linear_probe_maize as P
         return Species(
@@ -257,7 +260,7 @@ def extract_split(mod, model, sp, data_root, split, features, batch_size,
         max_leaves=sp.max_leaves,
         view_sampling=True,        # both flags required: deterministic_view
         deterministic_view=True,   # alone is a silent no-op
-        **({'rgb_file': sp.rgb_file} if sp.name == 'sorghum' else {}),
+        **({'rgb_file': sp.rgb_file, 'rgb_gain': sp.rgb_gain} if sp.name == 'sorghum' else {}),
         # max_plants is deliberately NOT passed: it draws a random TRAIN
         # subset for E3; the cap below is a prefix, for testing only.
     )
@@ -348,7 +351,9 @@ def rgb_tag(mod, args):
     """
     if 'rgb' not in mod.INPUTS or args.rgb_file == 'rgb.png':
         return ''
-    return Path(args.rgb_file).stem
+    # `_g<gain>` since 2026-10-15: caches extracted on the brightened files (no suffix,
+    # 2026-10-14) are never served for the gain-matched images.
+    return f'{Path(args.rgb_file).stem}_g{args.rgb_gain:g}'
 
 
 def cache_path(args, mod, split, feature):
@@ -373,6 +378,7 @@ def cache_settings(mod, args):
     s = {'source': mod.SOURCE, 'code': B.code_fingerprint(mod)}
     if rgb_tag(mod, args):
         s['rgb_file'] = args.rgb_file
+        s['rgb_gain'] = args.rgb_gain
     if 'pc' in mod.INPUTS:
         s.update(batch_size=args.batch_size, num_workers=args.num_workers)
     return s
@@ -707,6 +713,7 @@ def main():
     args.data_root = args.data_root or sp.data_root
     args.cache_dir = args.cache_dir or str(sp.cache_dir)
     args.rgb_file = sp.rgb_file
+    args.rgb_gain = sp.rgb_gain
     args.split_set = [s.strip() for s in args.split_set.split(',') if s.strip()]
     if sp.name == 'sorghum' and args.split_set != ['train', 'val', 'test']:
         ap.error('sorghum --split-set must be train,val,test: linear_probe.py fits on '

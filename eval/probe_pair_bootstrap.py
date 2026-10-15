@@ -18,6 +18,7 @@ plants. Delta is a over b, with a 95 % percentile CI from --n-boot resamples. Th
 runs' caches must list the same plants in the same order (asserted). No GPU; the
 caches must already exist (eval/linear_probe.py writes them).
 """
+import json
 import sys
 from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
@@ -78,6 +79,12 @@ def load(args, run, feature, split):
     else:
         stem = f'{args.prefix}{run}__{Path(args.ckpt).stem}__{split}__{feature}'
     f = Path(args.cache_dir) / f'{stem}__seed{args.seed}__rep{args.repeats}.npz'
+    if not run.startswith('base:') and args.species == 'sorghum':
+        # linear_probe.cache_stem: runs on a brightenable image file carry the gain
+        # they were served at (config.json rgb_brighten_gain, 1.0 when unrecorded).
+        cfg = json.loads((REPO / 'outputs' / run / 'config.json').read_text())
+        if cfg.get('rgb_file', 'rgb.png') != 'rgb.png':
+            f = f.with_name(f'{f.stem}__g{float(cfg.get("rgb_brighten_gain", 1.0)):g}.npz')
     if run.startswith('base:') and base_reads_rgb(run[5:]):
         # An RGB adapter's cache for the 2026-10-01 images is named with the image's
         # stem (baseline_probe.rgb_tag); a PC-only adapter has one cache whatever the

@@ -328,6 +328,28 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   in `paper/results.tex` for v2, refresh the ledger artifact.
   The Sinkhorn E1 (16907818) ran 17:55-19:45 on nova22-gpu-2 (2x A100): epochs 1-2 in ~96 min
   (cold cache; checkpoint_epoch_2 saved), preempted at 19:45, requeued, pending again on Priority.
+- **2026-10-15 10:30: THE FIRST v2 EVALUATION WAS CONFOUNDED AND IS BEING RE-RUN.** All eight
+  jobs above completed overnight (reports moved to `reports/_stale_brightened_2026-10-14/`, caches to
+  `outputs/_probe_cache{,_pcview}/_stale_brightened_2026-10-14/`), but the sorghum `rgb_nobg.png` files
+  were brightened IN PLACE on 10-13 10:02 (x1.85, PNG tag `brighten_gain`) AFTER every `_d2` ablation arm
+  had finished training (last one, e3_1k_d2, 10-13 02:22), and no loader undid the gain: every RGB-using
+  arm, the supervised row, the RGB baselines and the partial-cloud study were probed on images 1.85x
+  brighter than they trained on (PC-only rows unaffected). Fix (commit below): `SorghumDataset(rgb_gain=)`
+  rescales the colour channels by `rgb_gain / <file tag>` (`read_brighten_gain`, `disk_rgb_gain`);
+  both trainers record `rgb_brighten_gain` in config.json (the Sinkhorn E1's was hand-set to 1.85: it
+  trains on the brightened files; `linear_probe.run_rgb_gain` reads the key, 1.0 when absent = every
+  earlier run); `linear_probe.cache_stem` appends `__g<gain>` for runs on a brightenable file (v1 names
+  unchanged), used by E9 and `probe_pair_bootstrap`; `pc_view_eval` pins (rgb_file, gain) per pass and
+  tags its caches; `baseline_probe` serves the sorghum baselines at gain 1.0 with cache tag
+  `rgb_nobg_g1` (pass `--rgb-tag rgb_nobg_g1` to the pair bootstrap). Verified on CPU against the
+  figure script's undo path (max |diff| 0.016 after ImageNet normalisation, rounding + resize).
+  Resubmitted (scavenger, same shapes): **16928968** `pr_600_d2`, **16928969/70/71** `pr_{6168,2024,624}_d2`,
+  **16928972** `pr_mean600_d2`, **16928973** `e8_score_d2`, **16928974** `e8_base_sorghum_d2`,
+  **16928975** `pcview_d2`. Numbers from the stale set, for the record (val R2 height / roll, brightened
+  inputs): PC+RGB+D 0.977 / 0.778, +params 0.953 / 0.745, small 0.963 / 0.815, base 0.953, large 0.941
+  / 0.699 (the E4 inversion is the kind of artefact to expect from the mismatch). Sinkhorn E1: restarted
+  00:04 on nova22-gpu-3 (2x A100), epoch 23 at 09:30 = ~26 min/epoch (~17 days for 1000 if never
+  preempted); val chamfer at epoch 20 is 4.94e-3 against the old-loss run's 4.82e-3 at the same epoch.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

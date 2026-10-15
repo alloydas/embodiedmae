@@ -41,6 +41,24 @@ INDEX_CACHE_VERSION = 1
 RGB_FILE = 'rgb_nobg.png'
 
 
+def read_brighten_gain(path):
+    """The `brighten_gain` PNG text tag, 1.0 if absent.
+
+    The sorghum rgb_nobg.png files were brightened IN PLACE on 2026-10-13 ~10:02
+    (RGB x 1.85, clipped at 255, alpha untouched) and tagged with the gain. Every
+    run finished before then trained on gain 1.0; runs started after train on 1.85.
+    """
+    with Image.open(path) as im:
+        return float(getattr(im, 'text', {}).get('brighten_gain', 1.0))
+
+
+def _rescale_rgb(im, factor):
+    """Multiply the colour channels of a PIL image by `factor` (alpha untouched, clipped)."""
+    a = np.asarray(im).astype(np.float32)
+    a[..., :3] = np.clip(a[..., :3] * factor, 0.0, 255.0)
+    return Image.fromarray(np.round(a).astype(np.uint8), im.mode)
+
+
 def _index_cache_dir():
     return Path(os.environ.get(
         'SORGHUM_INDEX_CACHE',
@@ -137,7 +155,7 @@ class SorghumDataset(Dataset):
         val_dataset = SorghumDataset(data_root='./data', split='val')
     """
     def __init__(self, data_root, img_size=224, num_points=10000, split=None,
-                 rgb_file=RGB_FILE):
+                 rgb_file=RGB_FILE, rgb_gain=None):
         """
         Args:
             data_root: Path to data directory
@@ -145,11 +163,18 @@ class SorghumDataset(Dataset):
             num_points: Number of points in point cloud
             split: Optional split name ('train' or 'val'). If provided, will look for data_root/split/
             rgb_file: RGB image in each sample folder (see RGB_FILE)
+            rgb_gain: the `brighten_gain` the images should be served at (see
+                read_brighten_gain). None (training default) serves the files as they
+                are on disk. Evaluation passes the gain a run TRAINED at, so a model
+                from before the 2026-10-13 brightening is fed the images it saw: the
+                colour channels are rescaled by rgb_gain / <file tag> when they differ
+                (clipped highlights cannot be undone; at 1.85 that is a few pixels).
         """
         self.data_root = Path(data_root)
         self.img_size = img_size
         self.num_points = num_points
         self.rgb_file = rgb_file
+        self.rgb_gain = None if rgb_gain is None else float(rgb_gain)
         
         # Determine the folder to load from
         if split is not None:
@@ -269,10 +294,20 @@ class SorghumDataset(Dataset):
         the silhouette by up to 2 px. An RGB file (rgb.png) is read as before.
         """
         with Image.open(Path(folder) / self.rgb_file) as im:
+            if self.rgb_gain is not None:
+                g = float(getattr(im, 'text', {}).get('brighten_gain', 1.0))
+                if abs(g - self.rgb_gain) > 1e-6:
+                    im = _rescale_rgb(im, self.rgb_gain / g)
             if im.mode == 'RGBA':
                 im = Image.alpha_composite(Image.new('RGBA', im.size, (0, 0, 0, 255)), im)
             rgb = im.convert('RGB')
         return self.rgb_transform(rgb)
+
+    def disk_rgb_gain(self):
+        """The `brighten_gain` tag of this split's first sample (1.0 if untagged): the
+        gain a run started now trains at. Trainers record it in config.json as
+        `rgb_brighten_gain` so evaluation can serve the same images later."""
+        return read_brighten_gain(Path(self.samples[0]) / self.rgb_file)
 
     def load_depth(self, depth_path):
         """Load depth without collapsing packed RGBA values to luminance.

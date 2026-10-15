@@ -903,6 +903,14 @@ def train_worker(rank, world_size, args):
                                  max_plants=args.max_plants,
                                  plant_subset_seed=args.plant_subset_seed,
                                  rgb_file=args.rgb_file)
+    # The gain the images carry NOW (sorghum_dataset.read_brighten_gain): recorded so
+    # the probes serve this run the images it trained on after a later in-place
+    # brightening. A run that predates the key trained at 1.0 (every run before
+    # 2026-10-13 10:02).
+    args.rgb_brighten_gain = train_ds.disk_rgb_gain()
+    if is_main:
+        _atomic_json(vars(args), output_dir / 'config.json')
+        print(f"RGB file {args.rgb_file} at brighten_gain {args.rgb_brighten_gain:g}")
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,

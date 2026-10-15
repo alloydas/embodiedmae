@@ -95,11 +95,11 @@ class PCViewSet(Dataset):
     """View 00 of every plant, with its cloud under each CONDITION."""
 
     def __init__(self, data_root, split, masks, num_points, img_size, max_leaves, seed,
-                 limit=None, rgb_file='rgb.png'):
+                 limit=None, rgb_file='rgb.png', rgb_gain=None):
         self.base = SorghumDataset4M(data_root, img_size=img_size, num_points=num_points,
                                      split=split, max_leaves=max_leaves,
                                      view_sampling=True, deterministic_view=True,
-                                     rgb_file=rgb_file)
+                                     rgb_file=rgb_file, rgb_gain=rgb_gain)
         self.folders = []
         for views in self.base.plant_views:
             folder = self.base.samples[views[0]]
@@ -167,8 +167,17 @@ def parse_run(spec):
     return run, (ckpt or DEFAULT_CKPT)
 
 
+def run_rgb(run):
+    """(rgb_file, brighten gain) a run trained on, from its config.json (linear_probe.run_rgb_gain)."""
+    cfg = json.loads((REPO / 'outputs' / run / 'config.json').read_text())
+    return cfg.get('rgb_file', 'rgb.png'), LP.run_rgb_gain(cfg)
+
+
 def cache_path(args, run, ckpt, split):
     tag = f'{run}__{Path(ckpt).stem}__{split}__cls__pcview_v{"".join(f"{v:02d}" for v in MASK_VIEWS)}__seed{args.seed}'
+    rgb_file, gain = run_rgb(run)
+    if rgb_file != 'rgb.png':      # as linear_probe.cache_stem: the gain the images were served at
+        tag += f'__g{gain:g}'
     if args.limit:
         tag += f'__limit{args.limit}'
     return Path(args.cache_dir) / f'{tag}.npz'
@@ -190,14 +199,15 @@ def extract(runs, args, split, do_recon):
         print(f'  loaded {run} @ {ckpt} (epoch {epoch}, active {list(model.active_modalities)}, '
               f'recon source mask ratio {mr})')
     # One data pass serves every run, so they must have trained on the same images
-    # (runs before 2026-10-01 have no rgb_file in config.json: rgb.png).
-    rgb_files = {json.loads((REPO / 'outputs' / run / 'config.json').read_text()).get('rgb_file', 'rgb.png')
-                 for run, _ in todo}
+    # (runs before 2026-10-01 have no rgb_file in config.json: rgb.png) at the same
+    # brighten gain (rgb_nobg.png was brightened in place on 2026-10-13).
+    rgb_files = {run_rgb(run) for run, _ in todo}
     if len(rgb_files) != 1:
-        raise SystemExit(f'runs in one pass read different RGB files {sorted(rgb_files)}: '
+        raise SystemExit(f'runs in one pass read different RGB files / gains {sorted(rgb_files)}: '
                          f'evaluate them separately')
+    rgb_file, rgb_gain = rgb_files.pop()
     ds = PCViewSet(args.data_root, split, masks, args.num_points, 224, 24, args.seed, args.limit,
-                   rgb_file=rgb_files.pop())
+                   rgb_file=rgb_file, rgb_gain=rgb_gain)
     loader = DataLoader(LP._RetryTransientIO(ds), batch_size=args.batch_size, shuffle=False,
                         num_workers=args.num_workers, pin_memory=True,
                         persistent_workers=False)

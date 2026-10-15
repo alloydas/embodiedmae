@@ -678,6 +678,8 @@ def train_worker(rank, world_size, args):
         view_sampling=True, view_seed=args.view_seed,
         max_plants=args.max_plants, plant_subset_seed=args.plant_subset_seed,
         rgb_file=args.rgb_file)
+    # Recorded for the probes (see train_sorghum_4m.py): the gain the images carry now.
+    args.rgb_brighten_gain = train_base.disk_rgb_gain()
     val_base = SupervisedSorghumDataset(
         args.data_root, img_size=args.img_size, num_points=args.num_points,
         split='val', max_leaves=args.max_leaves,
