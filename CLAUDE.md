@@ -410,6 +410,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `pr_600_d2`, 16930423 `pr_mean600_d2`, 16930424 `e8_score_d2`, 16930425 `e8_base_sorghum_d2`, 16930426
   `pcview_d2`, and the E5 arms 16930427 `e5_horizon_d2`, 16930428 `e5_topdown_d2`, 16930429 `e5_single_d2`
   (2x A100 each). The E3 probes were not resubmitted: they completed before the cancel.
+- **2026-10-16 09:50: 2-GPU RESUME JOB QUEUED BEHIND E1 (user: "put a resume code with two GPUs after E1
+  finish").** **16950840** `e1_sink_d2_resume`: nova / mech-ai, 2x RTX PRO 6000, 48 CPU, 180G, `NUM_WORKERS=20`,
+  4-day limit, `--time-min 4h`, USR1 self-requeue, `--dependency=afterany:16929801`. The launcher resumes
+  from the newest checkpoint in `outputs/4m_pretrain_15k_d2_sink/checkpoints` (accum = 8/2 = 4, global
+  batch 256 unchanged) and exits at once if epoch 1000 is already there. A USR1 self-requeue of 16929801
+  keeps the dependency waiting (same job id), so this only starts when 16929801 ends for good: finished,
+  failed, cancelled, or a requeue that Slurm refused. E1 pace at 09:45: epoch 185, 8.7 min/epoch on 4x RTX
+  PRO 6000 (val chamfer 1.88e-3 at epoch 180), ETA ~Oct 21.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
