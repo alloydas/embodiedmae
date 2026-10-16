@@ -89,56 +89,111 @@ keeping the sensor-token budget fixed (Sec.~\ref{sec:param-stream}).
     \toprule
      & Maize & Sorghum \\
     \midrule
-    Plants & \todo{$N$} & \todo{$N$; draft: 15,000} \\
-    Views per plant & 10 & 10 \\
+    Plants & 15{,}000 & 15{,}000 \\
+    Split (train/val/test) & \multicolumn{2}{c}{10{,}500 / 2{,}250 / 2{,}250} \\
+    Views per plant & 10, random & 10, fixed rig \\
+    Camera distance & fitted per plant & 2.5\,m \\
+    Per-view cloud & 8{,}192 pts, visible & complete \\
     Parameter slots ($d_\theta$) & $14+14\times28$ & $9+5\times24$ \\
-    Leaf count range & \todo{3--22} & \todo{4--35; check $K$} \\
-    Occluded-row variants & \todo{TBD} & \todo{TBD} \\
-    Neighbor points in crop & $\sim$30\% & \todo{TBD} \\
+    Leaf count range & \todo{3--22} & 4--35 \\
+    Plant height & 0.62--1.44\,m & stem 0.19--1.74\,m \\
+    Rows $\times$ orientations & $15{,}000\times10$ & $15{,}000\times10$ \\
+    Row camera & level, 1.0\,m & level, 2.5\,m \\
+    Row cloud in / target & \multicolumn{2}{c}{24{,}576 / 8{,}192 pts} \\
     Real-field split & \todo{MaizeField3D} & \todo{TBD} \\
     \bottomrule
   \end{tabular}
   \caption{\FieldProc{} dataset configuration. The parameter dimension
-  includes plant-level attributes and a fixed number of leaf slots.
-  \todo{Confirm population sizes, morphology/growth-stage coverage, row
-  variants, and the real-data splits~\cite{maizefield3d2025}.}}
+  includes plant-level attributes and a fixed number of leaf slots. Every
+  row has one main plant from the split and two neighbours at a 0.15\,m
+  stem spacing, widened only when the contact solver needs it
+  (Supp.~\ref{app:data}). \todo{Confirm the maize leaf-count range and the
+  real-data splits~\cite{maizefield3d2025}.}}
   \label{tab:fieldproc}
 \end{table}
 
 \paragraph{Procedural generation.}
 We construct \FieldProc{} using species-specific generators for maize and
-sorghum. Each plant is generated with a seed determined by its index and is
-paired with its exact procedural parameters. The resulting populations span
-continuous variations in morphology, rather than discrete genotype classes;
-accordingly, we evaluate phenotype representations through regression. The
-generators also differ in their trait dependencies. In the supplied sorghum
-population, stem length is strongly coupled to leaf count
-($\text{stem length}=0.05\,n_{\text{leaves}}-0.001$, $R^2=0.988$), whereas
-this association is weaker in maize ($r=0.20$). We therefore evaluate both
-species to examine whether the observed behavior extends beyond a single
+sorghum, 15{,}000 plants each. Plant $i$ is generated with random seed $i$ and
+is paired with its exact procedural parameters. Maize traits are drawn from
+Gaussians (e.g.\ height $0.83\pm0.10$\,m, leaf count $12.4\pm2.6$, leaf angle
+$44^\circ\pm10^\circ$) coupled through four latent traits (vigour, slenderness,
+posture, texture), with canopy-position curves and per-leaf jitter; the plants
+are 0.62--1.44\,m tall. Sorghum plants come from the EvoEngine sorghum
+generator, which draws the heading, stem tilt, leaf count and internode length
+per plant and evaluates per-leaf curves for insertion point, length, width,
+roll (alternating sides), branching angle and bending; they carry 4--35 leaves
+(mean 19.5) on stems of 0.19--1.74\,m. The populations therefore span
+continuous variations in morphology rather than discrete genotype classes,
+and we evaluate phenotype representations through regression. The generators
+also differ in their trait dependencies. In sorghum, stem length is the
+internode length times the leaf count, so it is strongly coupled to leaf
+count ($\text{stem length}=0.05\,n_{\text{leaves}}-0.001$, $R^2=0.988$),
+whereas this association is weak in maize ($r=0.20$). We therefore evaluate
+both species to examine whether the observed behavior extends beyond a single
 generator's correlations.
 
-\paragraph{Multimodal observations.}
-For each plant, we render ten RGB--depth pairs using \texttt{pyrender} at
-$1024\times1024$ resolution and a vertical field of view of $40^\circ$.
-Rendering uses a shared leaf texture, three fixed directional lights, and a
-uniform background that is subsequently converted to transparency. The
-cameras follow a Fibonacci-sphere arrangement at a radius of 2.5\,m, with
-golden-angle azimuths and elevations between $-64^\circ$ and $+64^\circ$.
-A fixed rig seed provides the same camera poses for all plants. Depth is
-stored losslessly in a packed 32-bit representation. For each view, we also
-export the complete point cloud in camera coordinates and retain the camera
-pose. In the isolated setting, the cloud contains the full target plant. In
-the row setting (Sec.~\ref{sec:regime3}), neighboring plants introduce
-interleaved leaves and additional points within the target crop region, with
-leaf deformation under contact.
-\todo{Specify row spacing, the contact model, and occlusion severity.}
+\paragraph{Isolated-plant observations.}
+For each plant, we render ten views with \texttt{pyrender} at $1024\times1024$
+and a $40^\circ$ vertical field of view, each with an RGB image, a depth image
+stored losslessly as a packed 32-bit value, and the camera pose. Three fixed
+directional lights are aimed at the plant's bounding-box centre. Images are
+rendered on a grey background; in the final release it is made transparent
+and composited over black. The
+two species are captured differently. Sorghum views follow one fixed
+Fibonacci-sphere rig at 2.5\,m, five directions above and five below the
+horizon (elevations $-64^\circ$ to $+64^\circ$), so every plant is seen from
+the same ten directions, and the per-view cloud is the complete,
+occlusion-free plant cloud expressed in the camera frame. Maize views are ten
+directions drawn uniformly on the sphere per plant, at a distance fitted to
+the plant's bounding box, with an extra light at the camera; the per-view
+cloud is 8{,}192 points back-projected from that view's depth image, so it
+holds only the surface the camera sees. At 2.5\,m the lens covers about
+1.8\,m of height, so the top or base of the tallest sorghum plants can fall
+outside the frame.
+
+\paragraph{Row observations.}
+The row sets place each plant of a split, as the \emph{main} plant, between two
+neighbours from the same split (one row per plant), with 0.15\,m between stem
+bases. Each row is rendered at ten orientations: the main plant is turned
+about its stem by $0^\circ,10^\circ,\dots,90^\circ$ and each neighbour by the
+same angle plus a uniform offset in $\pm15^\circ$; sorghum neighbours are also
+tilted so their stems run parallel to the main stem. Before rendering, a
+contact solver makes the three plants free of intersections while keeping
+them close to their grown shapes: each leaf blade is a chain of 8\,cm
+segments whose joints bend along circular arcs, so blades stay smooth, keep
+their length and stay attached, while stems, sheaths and tassels stay rigid.
+A leaf that would cross another plant bends by the smallest clearing angle at
+the joint before the contact; neighbours give way first, and a main-plant leaf
+bends only where a neighbour cannot move. Contacts are decided by exact
+triangle--triangle tests, so leaves may touch but never intersect. When no
+layout exists under the bend limits, the limits are loosened in stages and
+then the spacing is widened; in maize, 76--79\,\% of orientations are solved at
+0.15\,m and none needs more than 0.33\,m. A rover camera, level and aimed at
+the main plant's bounding-box centre from 1.0\,m (maize) or 2.5\,m (sorghum),
+takes one shot per orientation, rendered twice: the input with all three
+plants (RGBA, depth, and a 24{,}576-point cloud of every visible plant) and the
+ground truth with the main plant alone, in its bent shape, from the same
+camera (8{,}192 points). The parameter record describes the grown plant, so
+the target geometry departs from it only where the solver had to bend a
+main-plant leaf.
+\todo{Report occlusion severity per shot (visible fraction of the main
+plant, neighbour points in its crop).}
 
 \paragraph{Data partitioning.}
 We partition plants into training, validation, and test sets in a 70/15/15
-ratio. To evaluate unusual morphologies, we rank plants by Mahalanobis distance~\cite{mahalanobis2018generalized}
-from the population centroid in standardized trait space and sample validation
-and test plants with probability proportional to $(\mathrm{rank}+0.02)^2$.
+ratio by plant, so all views and rows of a main plant fall in one split, and
+we bias the held-out sets toward unusual morphologies. For maize, each plant is
+scored by its Mahalanobis distance~\cite{mahalanobis2018generalized} from the
+median over 19 robustly standardized parameter features, and the most extreme
+plants are dealt alternately to test and validation, a pure tail split. For
+sorghum, the extremeness is the Mahalanobis distance from the mean over six
+features (leaf count, stem length, mean and maximum leaf length, mean and
+standard deviation of leaf roll), and the probability of being held out rises
+steadily with its rank, from 0.3\,\% in the least extreme 5\,\% of plants to
+70\,\% in the most extreme 5\,\%; validation and test share one distribution.
+\todo{The sorghum selection rule is inferred from the released assignment;
+confirm it against the script that wrote it.}
 We report errors in native trait units alongside $R^2$, since the latter
 depends on the target distribution of each split. In the ablations, an epoch
 samples one view per training plant, with identical view draws across compared
@@ -271,8 +326,9 @@ The decoder restores a fixed ordering of all $L=588+(1+K)$ token positions
 using mask tokens for missing inputs. Linear heads reconstruct RGB and depth
 patches, a FoldingNet-style head generates 41 points per point-cloud token,
 and an MLP predicts the procedural parameters.
-\todo{Define inference-time leaf presence and the handling of plants with
-more than $K$ leaves.}
+Plants with more than $K$ leaves keep their first $K$ leaf tokens.
+\todo{Define inference-time leaf presence; report the share of sorghum plants
+above $K=24$.}
 
 \paragraph{Modality masking.}
 We use a total mask ratio of $\rho=0.80$ over all four streams, giving a

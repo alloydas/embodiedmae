@@ -249,3 +249,177 @@ at $R^2$ \oldnum{0.806} from a latent where it is barely locally
 organized. t-SNE smoothness is the wrong instrument for representation
 claims on continuous generators; probes are the right one.
 \todo{E9 figures; PC1 identity remains open}
+
+% =========================================================================
+% Condensed from paper/data_generation.tex (2026-10-16). Local paths and
+% reproduction commands are omitted; that file is the full record.
+\section{Dataset Generation}
+\label{app:data}
+
+\FieldProc{} holds four synthetic sets: isolated single-plant captures of maize
+and sorghum, and \emph{row views} in which the same plants stand in a crop row
+between two neighbours and are photographed by a ground rover. All images are
+$1024\times1024$ with a $40^\circ$ vertical field of view
+($f_x=f_y=512/\tan20^\circ=1406.7$\,px, principal point at the centre), in the
+OpenGL convention ($y$ up, the camera looking down $-z$).
+
+\subsection{Procedural plants}
+\paragraph{Maize.} Plant $i$ of 15{,}000 is generated with seed $i$ by a
+procedural maize generator whose traits are drawn from Gaussians (height
+$0.832\pm0.104$\,m, leaf count $12.35\pm2.57$, base leaf length
+$0.448\pm0.057$\,m, base leaf width $0.066\pm0.010$\,m, base leaf angle
+$43.98^\circ\pm10.13^\circ$), coupled through four latent traits (vigour,
+slenderness, posture, texture) with correlation strength 0.735, with bottom,
+middle and top canopy curves and per-leaf jitter (scale 0.687). The plants are
+0.62--1.44\,m tall (median 1.01\,m). The generator record is reduced to the
+plant height, the leaf count and, per leaf, its distance along the stem,
+length, width, azimuth, angle and droopiness; per-leaf curvature is added by
+rebuilding the midrib B-spline (target elevation
+$\text{angle}+\text{droopiness}\cdot t^2$) and integrating
+$\theta=\int|\kappa|\,ds$ over the blade, $s\in[0.22,1]$, with the blade length
+$S$ from 10-node Gauss--Legendre quadrature.
+
+\paragraph{Sorghum.} Plant $i$ of 15{,}000 is generated with seed $i$ by the
+EvoEngine sorghum generator. It draws the plant heading uniformly in
+$[0^\circ,360^\circ)$, the stem tilt ($0\pm1.5^\circ$), the leaf count
+($20\pm2$, clamped to $[2,128]$) and the internode length
+($0.04\pm0.03$\,m), and sets the stem length to
+$\text{internode}\times n_\text{leaves}/(1-s_0)$, with $s_0$ the first leaf's
+starting point. Leaf $k$ at $t=k/(n-1)$ takes its starting point, length,
+width, roll ($\text{roll}_k=(k\bmod2)\cdot180^\circ+\text{roll}(t)$), branching
+angle, bending, curling and waviness from curves over $t$. No panicle is
+generated. The plants carry 4--35 leaves (mean 19.5) on stems of
+0.19--1.74\,m.
+
+\subsection{Splits}
+Both species are split by plant into 10{,}500 / 2{,}250 / 2{,}250 plants.
+\emph{Maize:} 19 scalar features are robustly standardized,
+$z=(x-\mathrm{median})/(1.4826\,\mathrm{MAD})$, each plant is scored by
+$\sqrt{z^\top(\Sigma+10^{-6}I)^{+}z}$, and plants are dealt from most to least
+extreme alternately to test and validation until both hold 2{,}250 (seed 0).
+Train scores span 1.56--4.60, validation 4.60--23.3, test 4.60--32.2.
+\emph{Sorghum:} the extremeness reproduces, to the stored precision, as the
+Mahalanobis distance from the mean (sample covariance) over leaf count, stem
+length, mean and maximum leaf length, and mean and standard deviation of leaf
+roll. The hold-out probability rises with its rank, from 0.3\,\% in the least
+extreme 5\,\% to 70\,\% in the most extreme 5\,\% (median rank 0.75 on validation
+and test, 0.37 on train). \todo{This rule is inferred from the released
+assignment; the script that wrote it was not found.}
+
+\subsection{Isolated-plant captures}
+Both species are rendered off-screen with \texttt{pyrender}. The camera looks at
+the plant's bounding-box centre $\mathbf c$ with world up $(0,1,0)$; lighting is
+ambient 0.15 plus three white directional lights aimed at $\mathbf c$ from
+$(1,1,1)$, $(-1,0.5,-0.5)$ and $(0,1,0)$ (intensities 4.0, 2.0, 1.5), on a grey
+(0.5) background. Depth $z$ with near and far planes $n,f$ is stored as
+$v=\lfloor\mathrm{clip}((z-n)/(f-n),0,1)(2^{32}-1)\rfloor$ across the four
+8-bit channels of a PNG, most significant byte first; $v=0$ is background. A
+pixel $(u,v)$ with depth $z>0$ back-projects to
+\begin{equation}
+  \mathbf p_{\mathrm{cam}}=\Big(\tfrac{u-c_x}{f_x}z,\;-\tfrac{v-c_y}{f_y}z,\;-z\Big),
+  \label{eq:supp-backproject}
+\end{equation}
+and clouds are drawn uniformly without replacement from these points.
+
+\emph{Maize:} ten view directions per plant are drawn uniformly on the sphere
+(seeded per plant), at distance $1.05\,r/\sin20^\circ$ with $r$ half the
+bounding-box diagonal; a fourth light (1.5) sits at the camera, and textured
+leaf, stem and tassel materials are double-sided. Each view stores RGB, an
+RGBA image with the background cleared, depth, the camera pose, the trimmed
+parameter file, and an 8{,}192-point cloud back-projected from that view's
+depth (Eq.~\ref{eq:supp-backproject}), so the cloud holds what the camera sees.
+\emph{Sorghum:} the ten directions form a Fibonacci sphere,
+$y_i=1-2(i+\tfrac12)/10$, $\phi_i=i(\sqrt5-1)\pi+\epsilon_i$ with a small fixed
+jitter, identical for every plant (five above and five below the horizon), at
+2.5\,m; one leaf texture covers the plant and there is no camera light. Each
+view stores RGB, depth, the camera pose, the parameter file, and the complete,
+occlusion-free labelled plant cloud moved into the camera frame.
+
+\subsection{Row views}
+\paragraph{Composition.} Within a split with plant list $L$, row $i$ has main
+plant $L_i$, right neighbour $L_{i+1}$ and left neighbour $L_{i+2}$ (indices
+modulo $|L|$), so every plant is a main plant once. The world frame is the main
+plant's (stem base at the origin, row along $x$, rover on the $+z$ side), with
+the neighbours' stem bases at $(\pm d,0,0)$, $d=0.15$\,m. Each row is rendered
+at ten orientations: the main plant is turned about its stem base by
+$\theta\in\{0^\circ,10^\circ,\dots,90^\circ\}$, each neighbour by
+$\theta+\delta$, $\delta\sim U(-15^\circ,15^\circ)$ (seeded per split and row).
+Sorghum stems lean, so each sorghum neighbour is also rotated about its stem
+base by the smallest rotation that makes its stem axis (the principal axis of
+its stem vertices) parallel to the main plant's; the main plant is never
+tilted, and maize is not tilted.
+
+\paragraph{Contact solver.} The three plants are made free of intersections
+while staying as close as possible to their grown shapes; they may touch but
+not cross. Each blade is a chain of 8\,cm segments from collar to tip whose
+joints bend along circular arcs, up/down and sideways, so the blade stays
+smooth, keeps its length and stays attached. Stems and sheaths (everything
+within 2.5\,cm of the stem axis) and the maize tassel are rigid. A leaf's joint
+bends sum to a total-turn limit, and a leaf may not bend into its own stem or
+cross its own plant's leaves more than it does as grown. Where a leaf would
+cross another plant, it bends at the joint before the contact by the smallest
+clearing angle, smallest first, so it comes to rest on or under what it meets.
+Neighbours give way first; a main-plant leaf bends only where a neighbour
+cannot move (a neighbour's stem or sheath, or a neighbour leaf with no clear
+shape). A sorghum neighbour leaf that cannot bend clear may also roll about its
+stem by up to $\pm90^\circ$. Candidates are screened on 1\,cm occupancy grids and
+every remaining contact is decided by exact triangle--triangle tests; a found
+layout is then settled, each bent leaf easing back toward its grown shape to
+the least bend that still clears. Unsolved layouts are retried under looser
+limits (Tab.~\ref{tab:supp-stages}), then at spacings raised in 5\,cm steps up
+to 1.5\,m and refined in 1\,cm steps. An independent NumPy triangle--triangle
+test on the rendered positions found no crossing plant pairs on the rows
+checked.
+
+\begin{table}[h]\centering\small\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lcccc}
+\toprule
+Stage & collar side & blade side & up/down & total turn \\
+\midrule
+0 & $30^\circ$ & $10^\circ$ & $45^\circ$ & $90^\circ$ \\
+1 & $60^\circ$ & $10^\circ$ & $60^\circ$ & $120^\circ$ \\
+2 & $90^\circ$ & $30^\circ$ & $70^\circ$ & $180^\circ$ \\
+\bottomrule
+\end{tabular}
+\caption{Staged bend limits of the contact solver (per joint, except the
+total turn per leaf).}
+\label{tab:supp-stages}
+\end{table}
+
+\paragraph{Rover camera and outputs.} One shot is taken per orientation from
+$(0,h,\mathrm{dist})$, looking horizontally at $(0,h,0)$ with $h$ the height of
+the main plant's bounding-box centre; $\mathrm{dist}=1.0$\,m for maize and
+2.5\,m for sorghum, near 0.05\,m, far $\mathrm{dist}+2$\,m, with the lens, lights
+and materials of the isolated captures. Each shot is rendered twice from the
+same camera: the input with all three plants (RGBA, depth, and a 24{,}576-point
+cloud of every visible plant) and the ground truth with the main plant alone in
+its bent shape (RGBA, depth, 8{,}192 points), with the main plant's parameter
+record. The maize input clouds were first produced at 8{,}192 points and rebuilt
+at 24{,}576 from the stored depth; the old clouds lie within
+$8.4\times10^{-8}$\,m of the rebuilt one.
+
+\begin{table}[h]\centering\small\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{lrrrr}
+\toprule
+Split & shots & at $d{=}0.15$\,m & stage 0 / 1 / 2 & max $d$ \\
+\midrule
+train & 105{,}000 & 76.4\,\% & 81{,}679 / 16{,}138 / 7{,}183 & 0.33\,m \\
+val   & 22{,}500  & 78.3\,\% & 17{,}780 / 3{,}321 / 1{,}399 & 0.28\,m \\
+test  & 22{,}500  & 79.0\,\% & 17{,}824 / 3{,}284 / 1{,}392 & 0.30\,m \\
+\bottomrule
+\end{tabular}
+\caption{Maize row statistics. The 99th percentile of the spacing is 0.23\,m
+in every split, and no orientation failed. On 10 sample sorghum rows
+(100 orientations), 85 were solved at 0.15\,m and the rest at
+0.16--0.21\,m.}
+\label{tab:supp-rowstats}
+\end{table}
+
+\paragraph{Caveats.} The row ground truth is the main plant as bent in that
+row, while its parameter record describes the grown plant; main-plant leaves
+are bent only where unavoidable. At 2.5\,m the lens covers about 1.8\,m of
+height, so the top or base of tall sorghum plants can leave the frame (in the
+10 sample sorghum rows the main plant touches the top edge in 58 of 100 shots).
+The two isolated sets differ in view sampling, camera distance, materials,
+lighting and per-view cloud. Sorghum plant 0 uses seed 0, for which the
+generator does not reseed. \todo{Check that plant 0's parameters match its mesh.}

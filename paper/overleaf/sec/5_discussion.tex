@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/discussion.tex, commit 3a43dc1).
+% Synced from the embodiedmae repo (paper/discussion.tex, commit 866cb39).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Discussion and Limitations}
 \label{sec:discussion}
@@ -39,8 +39,13 @@ Chamfer's blindness to a missing blade; its ablation is pending
 (\todo{E7}).
 
 \paragraph{From complete clouds to a camera.}
-Everything was pretrained on complete clouds of isolated plants, and
-Sec.~\ref{sec:regime2} shows what that leaves out. The information survives a
+Every sorghum model was pretrained on complete clouds of isolated plants, and
+Sec.~\ref{sec:regime2} shows what that leaves out. \todo{Maize is the other
+case: a maize \texttt{pointcloud\_cam.ply} is the surface its own camera sees
+(2\,\% of a cloud's points hidden from that camera, 25\,\% from another; the
+depth image back-projects to within 1\,mm), so every maize model trained on
+single-camera clouds. The maize study inverts the question (what three and ten
+fused cameras add; \texttt{eval/pc\_view\_eval\_maize.py}) and is queued.} The information survives a
 single camera's view, but the latent moves with coverage, so a readout
 calibrated on complete scans is wrong on partial ones and must be refit; the
 decoder reproduces what it is given and does not hallucinate the hidden half;
