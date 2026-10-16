@@ -87,8 +87,9 @@ a single masking ratio.
     Views / plant & 10 & 10 \\
     Parameters / plant ($d$) & $14 + 14\times28$ & $9 + 5\times24$ \\
     Leaf count range & \todo{3--22} & 4--35 \\
-    Occluded-row variants & \todo{\ldots} & \todo{\ldots} \\
-    Neighbor points in crop & $\sim$30\% & \todo{\ldots} \\
+    Row renders per plant & 10 yaws $\times$ 1 rover pose & \todo{in prep.} \\
+    Neighbor share of the scene cloud & 67\% & \todo{in prep.} \\
+    Target pixels hidden by neighbors & 9\% (1--13\% by yaw) & \todo{in prep.} \\
     Real-field eval split & \todo{MaizeField3D~\cite{kimara2025maizefield3d}} & \todo{---} \\
     \bottomrule
   \end{tabular}
@@ -122,8 +123,28 @@ cloud is the whole plant; the \emph{row} regime (Sec.~\ref{sec:regime3}) renders
 the target inside a planted row whose neighbors' leaves bend on contact, so the
 cloud inside the target's crop region contains neighbor points
 (Tab.~\ref{tab:fieldproc}) and the images show interleaved blades.
-\todo{Row-simulation specifics (spacing, contact model, occlusion severities)
-from the FieldProc generation code.}
+\paragraph{Row rendering.}
+Every plant is also observed inside a planted row: the target between two
+neighbors drawn from the same split at an in-row spacing of $d=0.15$\,m, their
+leaves resolved against contact (a blade that would enter a neighbor is turned
+about its insertion until it clears it; six blades per row are bent on average,
+and the turn angles are recorded). A rover camera on the inter-row side,
+1.0\,m from the row at the target's leaf height (0.35--0.61\,m, mean 0.48),
+level, with the isolated rig's lens ($40^\circ$ vertical field of view,
+$1024^2$), observes the row at ten plant yaws, $0^\circ$ to $90^\circ$ in
+$10^\circ$ steps, the three plants turned together with independent jitter.
+Each shot stores the row observation (RGB, depth and the scene cloud, 24{,}576
+points over the three plants at equal density, so two thirds of the points
+belong to the neighbors) \emph{and} the target alone under the same camera
+(its RGB, depth and 8{,}192-point cloud), so every row observation has an
+isolated twin and every number in Sec.~\ref{sec:regime3} is a paired
+difference. Occlusion is measured per shot from the two depth maps: the
+fraction of the target's own pixels hidden behind a neighbor is 9\,\% on
+average (13\,\% broadside at $0^\circ$, where the generator's single leaf
+plane lies along the row, 1\,\% edge-on at $90^\circ$; 90th percentile
+17\,\%), and the neighbors supply 59--68\,\% of the plant pixels in the frame.
+\todo{Sorghum rows: same renderer, in preparation; fill the sorghum column of
+Tab.~\ref{tab:fieldproc}.}
 
 \paragraph{Splits.}
 We split by plant, 70/15/15, and enrich the held-out splits with unusual
@@ -295,7 +316,8 @@ refit per condition (information retained) and with the full-cloud probe
 transferred (what a readout calibrated on complete scans does on real ones).
 Reconstruction under partial input is run in the masked regime; with every
 token visible the decoder is out of distribution and the cloud collapses, the
-same failure that makes an unmasked teacher unsafe. (iii)~\emph{Real scans.}
+same failure that makes an unmasked teacher unsafe. (iii)~\emph{Rows}: the row
+protocol below. (iv)~\emph{Real scans.}
 We evaluate the single-sensor students on field-grown maize and sorghum whose
 procedural ground truth was reconstructed independently by a staged scan
 pipeline~\cite{hadadi2025vlm,kimara2025maizefield3d}, including row plots in
@@ -304,3 +326,22 @@ geometry and the probe transfer gap of (ii) as the predicted sim-to-real
 penalty. \todo{Real-split protocol: plant segmentation / matting,
 camera-frame alignment of the scan, how pipeline GT handles leaves the scan
 misses.}
+
+\paragraph{Row protocol.}
+Models meet the rows in two ways. \emph{Zero-shot}: the isolated-plant model
+is fed the row observation as it is. \emph{Row fine-tuning}: the pretraining
+objective is kept but its target changes. The encoder sees the masked row
+streams (RGB, depth, the scene cloud with both neighbors in it, the recipe in
+its usual budget) and the decoders are supervised with the target plant alone,
+its RGB, depth and cloud placed in the scene cloud's frame, and its recipe, so
+the model learns to reconstruct the plant behind its neighbors rather than to
+copy the scene; one (yaw, pose) per plant per epoch, 100 epochs at
+$10^{-4}$ and global batch 32 from the isolated checkpoint. The control arm
+runs the same schedule on the isolated twins. Evaluation (Sec.~\ref{sec:regime3})
+scores every held-out item under both inputs with the recipe never an input:
+Chamfer of the generated cloud against the target plant \emph{and} against the
+input cloud (a model that merely echoes the scene scores well on the second and
+badly on the first), recipe error on the real parameter columns, both by yaw
+and by occlusion quartile, and the paired row-minus-isolated difference per
+plant with a bootstrap interval.
+

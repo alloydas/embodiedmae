@@ -177,8 +177,12 @@ ground truth with the main plant alone, in its bent shape, from the same
 camera (8{,}192 points). The parameter record describes the grown plant, so
 the target geometry departs from it only where the solver had to bend a
 main-plant leaf.
-\todo{Report occlusion severity per shot (visible fraction of the main
-plant, neighbour points in its crop).}
+Occlusion is measured per shot from the two depth maps (maize, 120 train
+rows): the fraction of the main plant's own pixels hidden behind a neighbour is
+9\,\% on average, 13\,\% at $0^\circ$, where the generator's single leaf plane
+lies along the row, falling to 1\,\% at $90^\circ$ (90th percentile 17\,\%),
+and the neighbours supply 59--68\,\% of the plant pixels in the frame and two
+thirds of the input cloud. \todo{Same measures for the sorghum rows.}
 
 \paragraph{Data partitioning.}
 We partition plants into training, validation, and test sets in a 70/15/15
@@ -530,6 +534,24 @@ by refitting under each visibility condition and by transferring a probe
 trained on complete clouds. These protocols distinguish recoverable trait
 information from sensitivity to a change in input coverage. Partial-cloud
 reconstruction uses masked input to remain closer to the pretraining regime.
+
+\paragraph{Row protocol.}
+Models meet the rows in two ways. \emph{Zero-shot}: the isolated-plant model
+is fed the row observation as it is. \emph{Row fine-tuning}: the pretraining
+objective is kept but its target changes. The encoder sees the masked row
+streams (RGB, depth, the scene cloud with both neighbours in it, the recipe in
+its usual budget) and the decoders are supervised with the main plant alone,
+its RGB, depth and cloud placed in the scene cloud's frame, and its recipe, so
+the model learns to reconstruct the plant behind its neighbours rather than to
+copy the scene; one orientation per plant per epoch, 100 epochs at
+$10^{-4}$ and global batch 32 from the isolated checkpoint. The control arm
+runs the same schedule on the isolated twins. Evaluation (Sec.~\ref{sec:regime3})
+scores every held-out item under both inputs with the recipe never an input:
+Chamfer of the generated cloud against the main plant \emph{and} against the
+input cloud (a model that merely echoes the scene scores well on the second and
+badly on the first), recipe error on the real parameter columns, both by
+orientation and by occlusion quartile, and the paired row-minus-isolated
+difference per plant with a bootstrap interval.
 % Original coverage diagnostics: one camera observes 49 +/- 7% of a sorghum
 % plant; three cameras observe 78 +/- 4%. Fully visible partial-cloud input
 % produced decoder collapse in the source experiments. Report the selected
