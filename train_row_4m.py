@@ -79,6 +79,10 @@ def config_to_namespace(cfg):
         raise ValueError(f'data.mode must be one of {MODES}')
     ns.train_split = d.get('train_split', 'train')
     ns.val_split = d.get('val_split', 'val')
+    # When the row data has no val split (maize: train + test only), validate on a fixed
+    # hold-out of `val_holdout` train plants (seeded), never on test.
+    ns.val_holdout = int(d.get('val_holdout', 0) or 0)
+    ns.holdout_seed = int(d.get('holdout_seed', 0))
     ns.thetas = d.get('thetas', None)
     ns.img_size = int(d.get('img_size', 224))
     ns.num_points = int(d.get('num_points', sp['num_points']))
@@ -272,19 +276,31 @@ def main():
     out_dir = Path(args.output_dir); ckpt_dir = out_dir / 'checkpoints'
     if is_main:
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        _atomic_json(vars(args), out_dir / 'config.json')
 
     plants = None
     train_ds = RowDataset(args.row_root, args.train_split, args.species, args.row_mode, args.img_size,
                           args.num_points, args.max_leaves, thetas=args.thetas,
                           sample_per_plant=args.sample_per_plant, seed=args.view_seed,
                           occlusion_stats=False, rgb_gain=args.rgb_gain)
+    if args.val_holdout:
+        # hold out whole plants from the train split; the two datasets share nothing
+        import random as _random
+        ids = list(train_ds.plant_ids)
+        _random.Random(args.holdout_seed).shuffle(ids)
+        held = sorted(ids[:args.val_holdout])
+        train_ds.plant_ids = sorted(ids[args.val_holdout:])
+        val_ds = RowDataset(args.row_root, args.train_split, args.species, args.row_mode, args.img_size,
+                            args.num_points, args.max_leaves, thetas=args.thetas, sample_per_plant=True,
+                            deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain, plants=held)
+        args.val_plants = held
+        if is_main:
+            print(f'validation = {len(held)} plants held out of {args.train_split} (seed {args.holdout_seed})')
+    else:
+        val_ds = RowDataset(args.row_root, args.val_split, args.species, args.row_mode, args.img_size,
+                            args.num_points, args.max_leaves, thetas=args.thetas, sample_per_plant=True,
+                            deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain)
     if cli.smoke:
         train_ds.plant_ids = train_ds.plant_ids[:cli.smoke]
-    val_ds = RowDataset(args.row_root, args.val_split, args.species, args.row_mode, args.img_size,
-                        args.num_points, args.max_leaves, thetas=args.thetas, sample_per_plant=True,
-                        deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain)
-    if cli.smoke:
         val_ds.plant_ids = val_ds.plant_ids[:cli.smoke]
     if distributed:
         tr_s = DistributedSampler(train_ds, world, rank, shuffle=True)
@@ -298,6 +314,8 @@ def main():
                             num_workers=args.num_workers, pin_memory=True, collate_fn=collate,
                             persistent_workers=False)
 
+    if is_main:
+        _atomic_json(vars(args), out_dir / 'config.json')     # after the hold-out is known
     model = build_model(args, device)
     if args.init_from and not args.resume:
         warm_start(model, args.init_from, is_main)

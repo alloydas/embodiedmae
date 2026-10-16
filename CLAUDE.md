@@ -460,7 +460,11 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   Smokes: sorghum trainer + eval on a fake 2-plant row sample built from Sorghum_15K/val (scratchpad only);
   the sorghum eval's Chamfer on that sample (1.8e-3) sits where the arm's val Chamfer does. NOTE: at
   13:05 `/work/mech-ai/alloydas/maize_row/val` had disappeared (the user is reorganising the upload);
-  re-check the layout before launching anything.
+  re-check the layout before launching anything. 14:55: the maize upload is now `train/` (10,500 plants)
+  + `test/` (2,252), no val; `train_row_4m.py` therefore validates on a seeded hold-out of train plants
+  (`data.val_split: train`, `val_holdout: 500`, `holdout_seed: 0`; recorded as `val_plants` in config.json;
+  the maize configs carry it, the sorghum ones keep `val_split: val`). Nothing launched: the row train
+  commands are in the config headers.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

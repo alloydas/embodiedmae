@@ -19,7 +19,9 @@ data:
   row_root: /work/mech-ai/alloydas/maize_row
   mode: row                 # row | isolated
   train_split: train
-  val_split: val
+  val_split: train          # the maize row data has train + test only:
+  val_holdout: 500          # validate on 500 plants held out of train (never on test)
+  holdout_seed: 0
   thetas: null              # all ten orientations; e.g. [0, 30, 60, 90]
   sample_per_plant: true    # one (theta, shot) per plant per epoch, as view sampling
   view_seed: 42
