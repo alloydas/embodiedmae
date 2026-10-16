@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Regime III evaluation: a maize 4M checkpoint on the ROW data (maize_row_dataset.py),
+the same plants under the occluded row render and, paired, under the isolated render
+from the same rover camera.
+
+For every item (plant, theta, shot), every mode in --modes and every input set in
+--sources, the model generates the target plant's cloud and recipe with the recipe
+NEVER an input (the param tensor is zeroed and the text stream contributes no encoder
+token, as in every probe here):
+
+  all   : rgb + depth + pc visible, token-masked at --mask-ratio (the regime the model
+          trained in; with every token visible the decoder is out of distribution and the
+          cloud collapses, see CLAUDE.md "Reconstruction must run in the masked regime")
+  rgb / depth / pc : that stream alone, every token visible, the others absent
+
+Scores per item:
+  chamfer_gt : repo Chamfer (embodied_mae.chamfer_distance) of the predicted cloud against
+               the TARGET plant's cloud, in the input cloud's normalised frame
+  chamfer_in : the same against the INPUT cloud; in row mode a model that merely echoes
+               the scene scores well here and badly on chamfer_gt
+  miss_0p01  : fraction of target points with no predicted point within 0.01
+  plant_mae / leaf_mae : recipe error on the real v2 columns (plant token: leafCount,
+               stemInternodeSum, height; leaf tokens: the 7 LEAF_FIELDS_V2), normalised
+               units; leaf tokens weighted by validity. Only for checkpoints whose
+               config.json records param_schema v2 (a v1-schema model predicts a
+               different layout and is scored on geometry only).
+  occ_frac / nbr_frac / theta : the occlusion measures from the dataset, for the bins.
+
+Outputs <out>.csv (one row per item x mode x source) and <out>.json: per mode x source
+mean / median of each score, the same per theta and per occlusion quartile, and the
+PAIRED row - isolated delta per (plant, theta, source) with a bootstrap CI over plants.
+Deterministic: numpy and torch are seeded per item, so a subset run reproduces rows.
+
+    python eval/eval_maize_row.py --run maize_4m --ckpt checkpoints/checkpoint_epoch_600.pth \\
+        --split val --n-plants 64 --out reports/maize_row_eval_maize4m
+    python eval/eval_maize_row.py --run maize_row_ft --ckpt best_model.pth --split test \\
+        --out reports/maize_row_eval_ft
+"""
+import sys as _sys, pathlib as _pathlib
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
+
+import argparse
+import csv
+import json
+import os
+import time
+from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+
+from embodied_mae import chamfer_distance
+from embodied_mae_4m_maize import (embodied_mae_4m_maize_small, embodied_mae_4m_maize_base,
+                                   embodied_mae_4m_maize_large, N_PARAMS, PLANT_FIELDS_V2, LEAF_FIELDS_V2)
+from maize_row_dataset import MaizeRowDataset, collate, MODES
+
+REPO = Path(__file__).resolve().parent.parent
+BUILD = {'small': embodied_mae_4m_maize_small, 'base': embodied_mae_4m_maize_base,
+         'large': embodied_mae_4m_maize_large}
+MODALITIES = ('rgb', 'depth', 'pc', 'text')
+SOURCES = ('all', 'rgb', 'depth', 'pc')
+
+
+def build_model(run_dir, ckpt_name, device):
+    """The run's own config.json decides every constructor kwarg (as linear_probe_maize)."""
+    cfg = json.loads((run_dir / 'config.json').read_text())
+    model = BUILD[cfg.get('model_size', 'base')](
+        active_modalities=cfg.get('active_modalities'), img_size=cfg.get('img_size', 224),
+        num_pc_tokens=196, target_points=cfg.get('num_points', 8192),
+        pc_loss_weight=cfg.get('pc_loss_weight', 1.0), max_leaves=cfg.get('max_leaves', 28),
+        param_schema=cfg.get('param_schema') or 'v1', spline_loss_weight=cfg.get('spline_loss_weight', 5.0),
+        depth_norm_type=cfg.get('depth_norm_type', 'minmax'), pc_loss_name=cfg.get('pc_loss_name', 'qal_loss'),
+        qal_threshold=cfg.get('qal_threshold', 0.01), qal_alpha=cfg.get('qal_alpha', 100.0),
+        qal_use_squared=cfg.get('qal_use_squared', False),
+        pc_sinkhorn_weight=0.0, text_mask_ratio=cfg.get('text_mask_ratio'))
+    ck = torch.load(run_dir / ckpt_name, map_location='cpu', weights_only=False)
+    sd = {(k[7:] if k.startswith('module.') else k): v for k, v in ck['model_state_dict'].items()}
+    model.load_state_dict(sd, strict=True)
+    model.to(device).eval()
+    return model, cfg, ck.get('epoch')
+
+
+def _unpack(out):
+    latent = out[0]
+    masks = dict(zip(MODALITIES, out[1:5]))
+    rests = out[5:9]
+    nvis = dict(zip(MODALITIES, out[9:13]))
+    return latent, masks, rests, nvis
+
+
+@torch.no_grad()
+def predict(model, src, rgb, depth, pc, params, mask_ratio, seed):
+    torch.manual_seed(seed)
+    act = set(model.active_modalities)
+    zeros = torch.zeros_like(params)
+    if src == 'all':
+        vis = {'rgb', 'depth', 'pc'} & act
+        out = model.forward_encoder_select(rgb, depth, pc, zeros, visible=vis, source_mask_ratio=mask_ratio)
+    else:
+        if src not in act:
+            return None, None
+        out = model.forward_encoder_select(rgb, depth, pc, zeros, visible={src}, source_mask_ratio=0.0)
+    latent, masks, rests, nvis = _unpack(out)
+    if 'text' in act:
+        assert nvis['text'] == 0, 'the recipe reached the encoder'
+    _, _, pred_pc, pred_par = model.forward_decoder(latent, *rests, *nvis.values())
+    return pred_pc, pred_par
+
+
+def score_cloud(pred, gt):
+    cd = chamfer_distance(pred, gt)
+    d = torch.cdist(gt, pred)                              # (B, Ngt, Npred)
+    miss = (d.min(dim=2).values > 0.01).float().mean(dim=1)
+    per = ((d.min(dim=2).values ** 2).mean(1) + (d.min(dim=1).values ** 2).mean(1))   # per-item chamfer
+    return per, miss, cd
+
+
+def recipe_error(pred_par, params, valid):
+    pc_ = list(range(len(PLANT_FIELDS_V2))); lc = list(range(len(LEAF_FIELDS_V2)))
+    err = (pred_par - params).abs()
+    plant = err[:, 0, pc_].mean(-1)
+    w = valid[:, 1:]
+    leaf = ((err[:, 1:][..., lc].mean(-1) * w).sum(1) / w.sum(1).clamp(min=1))
+    return plant, leaf
+
+
+def bootstrap_ci(x, n_boot=2000, seed=0):
+    x = np.asarray(x, dtype=np.float64)
+    if len(x) == 0:
+        return float('nan'), float('nan'), float('nan')
+    rng = np.random.default_rng(seed)
+    means = rng.choice(x, size=(n_boot, len(x)), replace=True).mean(1)
+    return float(x.mean()), float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--run', required=True, help='outputs/<run> (its config.json builds the model)')
+    ap.add_argument('--ckpt', default='best_model.pth')
+    ap.add_argument('--root', default='/work/mech-ai/alloydas/maize_row')
+    ap.add_argument('--split', default='val')
+    ap.add_argument('--modes', default='row,isolated')
+    ap.add_argument('--sources', default='all,rgb,depth,pc')
+    ap.add_argument('--thetas', default=None, help='comma list, default all')
+    ap.add_argument('--n-plants', type=int, default=None)
+    ap.add_argument('--batch-size', type=int, default=16)
+    ap.add_argument('--num-workers', type=int, default=8)
+    ap.add_argument('--mask-ratio', type=float, default=None, help="'all' source masking; default the run's")
+    ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
+    ap.add_argument('--out', required=True, help='prefix: writes <out>.csv and <out>.json')
+    a = ap.parse_args()
+
+    device = torch.device(a.device)
+    run_dir = REPO / 'outputs' / a.run if not Path(a.run).exists() else Path(a.run)
+    model, cfg, epoch = build_model(run_dir, a.ckpt, device)
+    schema = cfg.get('param_schema') or 'v1'
+    recipe = ('text' in model.active_modalities) and schema == 'v2'
+    mask_ratio = a.mask_ratio if a.mask_ratio is not None else float(cfg.get('mask_ratio', 0.8))
+    modes = [m for m in a.modes.split(',') if m]
+    sources = [s for s in a.sources.split(',') if s]
+    thetas = None if a.thetas is None else [int(t) for t in a.thetas.split(',')]
+    print(f'run {run_dir.name} @ {a.ckpt} (epoch {epoch}), schema {schema}, recipe scored: {recipe}, '
+          f'modes {modes}, sources {sources}, mask_ratio {mask_ratio}')
+
+    rows = []
+    t0 = time.time()
+    for mode in modes:
+        ds = MaizeRowDataset(a.root, a.split, mode, cfg.get('img_size', 224), cfg.get('num_points', 8192),
+                             cfg.get('max_leaves', 28), thetas=thetas)
+        if a.n_plants:
+            keep = set(ds.plant_ids[:a.n_plants])
+            ds.items = [it for it in ds.items if it[0] in keep]
+            ds.plant_ids = sorted(keep)
+        loader = DataLoader(ds, batch_size=a.batch_size, shuffle=False, num_workers=a.num_workers,
+                            collate_fn=collate, persistent_workers=False,
+                            worker_init_fn=lambda w: np.random.seed(a.seed + 7919 * w))
+        for bi, batch in enumerate(loader):
+            rgb, depth, pc, params, valid, g_rgb, g_depth, g_pc, info = [x.to(device) if torch.is_tensor(x) else x
+                                                                       for x in batch]
+            for src in sources:
+                pred_pc, pred_par = predict(model, src, rgb, depth, pc, params, mask_ratio, a.seed + 1000003 * bi)
+                if pred_pc is None:
+                    continue
+                cg, miss, _ = score_cloud(pred_pc, g_pc)
+                ci, _, _ = score_cloud(pred_pc, pc)
+                pm, lm = recipe_error(pred_par, params, valid) if recipe else (None, None)
+                for k, inf in enumerate(info):
+                    rows.append({'run': run_dir.name, 'epoch': epoch, 'mode': mode, 'source': src,
+                                 'plant': inf['plant'], 'theta': inf['theta'], 'shot': inf['shot'],
+                                 'occ_frac': inf['occ_frac'], 'nbr_frac': inf['nbr_frac'],
+                                 'chamfer_gt': float(cg[k]), 'chamfer_in': float(ci[k]), 'miss_0p01': float(miss[k]),
+                                 'plant_mae': float(pm[k]) if recipe else float('nan'),
+                                 'leaf_mae': float(lm[k]) if recipe else float('nan')})
+            if bi % 10 == 0:
+                print(f'  {mode}: {min((bi + 1) * a.batch_size, len(ds))}/{len(ds)}  ({time.time() - t0:.0f}s)', flush=True)
+
+    out = Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out.with_suffix('.csv'), 'w', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows(rows)
+
+    # ── summary ──────────────────────────────────────────────────────────────
+    metrics = ['chamfer_gt', 'chamfer_in', 'miss_0p01'] + (['plant_mae', 'leaf_mae'] if recipe else [])
+    def agg(sel):
+        return {m: {'mean': float(np.mean([r[m] for r in sel])), 'median': float(np.median([r[m] for r in sel])),
+                    'n': len(sel)} for m in metrics} if sel else {}
+    summary = {'run': run_dir.name, 'ckpt': a.ckpt, 'epoch': epoch, 'schema': schema, 'split': a.split,
+               'mask_ratio': mask_ratio, 'n_rows': len(rows), 'by_mode_source': {}, 'by_theta': {},
+               'by_occlusion_quartile': {}, 'paired_row_minus_isolated': {}}
+    occ = np.array([r['occ_frac'] for r in rows if r['mode'] == 'row'])
+    qs = np.quantile(occ, [0.25, 0.5, 0.75]) if len(occ) else np.array([0, 0, 0])
+    for mode in modes:
+        for src in sources:
+            sel = [r for r in rows if r['mode'] == mode and r['source'] == src]
+            if not sel:
+                continue
+            key = f'{mode}/{src}'
+            summary['by_mode_source'][key] = agg(sel)
+            summary['by_theta'][key] = {str(t): agg([r for r in sel if r['theta'] == t])
+                                        for t in sorted({r['theta'] for r in sel})}
+            if mode == 'row':
+                bins = np.digitize([r['occ_frac'] for r in sel], qs)
+                summary['by_occlusion_quartile'][key] = {
+                    f'q{b + 1}': {**agg([r for r, bb in zip(sel, bins) if bb == b]),
+                                  'occ_range': [float(min([r['occ_frac'] for r, bb in zip(sel, bins) if bb == b], default=np.nan)),
+                                                float(max([r['occ_frac'] for r, bb in zip(sel, bins) if bb == b], default=np.nan))]}
+                    for b in range(4)}
+    if 'row' in modes and 'isolated' in modes:
+        for src in sources:
+            iso = {(r['plant'], r['theta'], r['shot']): r for r in rows if r['mode'] == 'isolated' and r['source'] == src}
+            per_plant = defaultdict(lambda: defaultdict(list))
+            for r in rows:
+                if r['mode'] != 'row' or r['source'] != src:
+                    continue
+                j = iso.get((r['plant'], r['theta'], r['shot']))
+                if j is None:
+                    continue
+                for m in metrics:
+                    per_plant[m][r['plant']].append(r[m] - j[m])
+            summary['paired_row_minus_isolated'][src] = {
+                m: dict(zip(('mean', 'ci_lo', 'ci_hi'), bootstrap_ci([np.mean(v) for v in d.values()], seed=a.seed)))
+                   | {'n_plants': len(d)}
+                for m, d in per_plant.items()}
+    summary['seconds'] = time.time() - t0
+    with open(out.with_suffix('.json'), 'w') as f:
+        json.dump(summary, f, indent=1)
+    print(json.dumps({k: summary[k] for k in ('by_mode_source', 'paired_row_minus_isolated')}, indent=1))
+    print(f'wrote {out.with_suffix(".csv")} and {out.with_suffix(".json")} in {summary["seconds"]:.0f}s')
+
+
+if __name__ == '__main__':
+    main()

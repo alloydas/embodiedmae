@@ -1021,8 +1021,14 @@ class EmbodiedMAE4M(nn.Module):
 
     def forward(self, imgs_rgb, imgs_depth, pc, param_floats, text_valid,
                 mask_ratio: float = 0.75, visible=None, return_features: bool = False,
-                source_mask_ratio: float = 0.0):
+                source_mask_ratio: float = 0.0, targets=None):
         """
+        targets : None (default, every run before 2026-10-16) -> the inputs are also the
+                  reconstruction targets, as in a plain MAE. Else a 3-tuple
+                  (tgt_rgb, tgt_depth, tgt_pc) of tensors shaped like the inputs: the
+                  encoder sees the inputs, the loss is taken against these. The maize ROW
+                  trainer feeds the occluded row render and scores against the target
+                  plant alone (train_maize_row_4m.py); params are always both.
         imgs_rgb    : (B, 3, H, W)
         imgs_depth  : (B, 1, H, W)
         pc          : (B, N, 3)
@@ -1059,8 +1065,12 @@ class EmbodiedMAE4M(nn.Module):
         else:
             pred_rgb, pred_depth, pred_pc, pred_params = dec
 
+        if targets is None:
+            tgt_rgb, tgt_depth, tgt_pc = imgs_rgb, imgs_depth, pc
+        else:
+            tgt_rgb, tgt_depth, tgt_pc = targets
         total, loss_rgb, loss_depth, loss_pc, loss_text = self.forward_loss(
-            imgs_rgb, imgs_depth, pc, param_floats, text_valid,
+            tgt_rgb, tgt_depth, tgt_pc, param_floats, text_valid,
             pred_rgb, pred_depth, pred_pc, pred_params,
             mr, md, mp, mt)
 

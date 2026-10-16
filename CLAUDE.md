@@ -418,6 +418,32 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   keeps the dependency waiting (same job id), so this only starts when 16929801 ends for good: finished,
   failed, cancelled, or a requeue that Slurm refused. E1 pace at 09:45: epoch 185, 8.7 min/epoch on 4x RTX
   PRO 6000 (val chamfer 1.88e-3 at epoch 180), ETA ~Oct 21.
+- **MAIZE ROW DATA (Regime III) PIPELINE BUILT 2026-10-16 (user: "/work/mech-ai/alloydas/maize_row in this
+  path I am pushing the row data write the training testing script for it").** The row renderer writes
+  `<root>/<split>/plant_<id>/row.json` + `theta_<0..90>/shot_<k>/{rgba,depth,gt_rgba,gt_depth}.png`,
+  `pointcloud_cam.ply` (the rover's SCENE cloud, 24,576 pts, target + two bent neighbours at d = 0.15 m),
+  `gt_pointcloud_cam.ply` (the target alone, 8,192 pts, same camera), `maize_<id>_spline.xml` (schema v2
+  + bendAngleDeg/bladeLength, ignored by the v2 parser), `camera_pose.json`. theta = the row's yaw vs the
+  rover (0 = broadside), ten per plant. At 12:00 only `val` existed and was still uploading (811 plants);
+  the loader skips plants whose row.json or shot files are incomplete, so re-index after the upload.
+  Code: `maize_row_dataset.py` (`MaizeRowDataset(root, split, mode='row'|'isolated')`: inputs = row
+  render or the gt_* files, targets ALWAYS the target plant's gt streams + v2 recipe; the gt cloud is
+  moved into the INPUT cloud's centred/unit-sphere frame; per-item `occ_frac` (target pixels hidden by a
+  neighbour, from the two depths) and `nbr_frac`; `sample_per_plant` = one (theta, shot) per plant per
+  epoch), `train_maize_row_4m.py` (torchrun DDP; `EmbodiedMAE4M.forward(..., targets=(rgb, depth, pc))`
+  is a new backward-compatible kwarg so the loss is taken against the target plant while the encoder
+  sees the row; warm start `init.checkpoint`, v1-schema `outputs/maize_4m` ep 600 on Nova until a v2
+  maize checkpoint is here; val reports Chamfer vs target AND vs input (echo detector) + v2 recipe MAE),
+  `configs/config_maize_row_{ft,iso}.yaml` (row vs isolated-control arms, 100 ep, lr 1e-4, global batch
+  32, QAL + Sinkhorn), `slurm/train_maize_row.sbatch [config] [extra]` (nova 2x A100, auto-resume),
+  `eval/eval_maize_row.py` + `slurm/eval_maize_row.sbatch <run> [ckpt] [split] [extra]` (any maize
+  checkpoint; modes row/isolated x sources all/rgb/depth/pc with the recipe never an input; per-item
+  CSV + JSON summary by theta and occlusion quartile and the PAIRED row - isolated delta with a
+  bootstrap CI over plants; recipe error only for v2-schema checkpoints). CPU smokes passed (2-plant
+  train epoch + val; 3-plant eval of maize_4m). **To run once `train/` lands:** `sbatch
+  slurm/train_maize_row.sbatch` and `sbatch --job-name=maize_row_iso slurm/train_maize_row.sbatch
+  configs/config_maize_row_iso.yaml`; zero-shot baseline now: `sbatch slurm/eval_maize_row.sbatch
+  maize_4m checkpoints/checkpoint_epoch_600.pth val`.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

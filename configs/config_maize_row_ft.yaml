@@ -1,0 +1,72 @@
+# MAIZE ROW fine-tune (Regime III): the maize 4M model trained on the rover's row renders
+# with the TARGET PLANT ALONE as the reconstruction target (train_maize_row_4m.py).
+#
+#   torchrun --standalone --nproc_per_node=2 train_maize_row_4m.py --config configs/config_maize_row_ft.yaml
+#   sbatch slurm/train_maize_row.sbatch                       # nova, 2 GPUs
+#   sbatch slurm/train_maize_row.sbatch configs/config_maize_row_ft.yaml --smoke 8
+#
+# The control arm is the same file with data.mode: isolated (configs/config_maize_row_iso.yaml):
+# the gt_* streams in, same targets, same plants -- what the model learns from the camera
+# alone, without neighbours.
+#
+# Warm start: outputs/maize_4m epoch 600 (the v1-schema isolated maize model on Nova). The
+# row XML is schema v2, so the parameter embed/head relearn the mapping during the
+# fine-tune (recorded as init.schema). Point init.checkpoint at maize_4m_d2 / the maize E1
+# once a v2 checkpoint is on this machine.
+
+data:
+  row_root: /work/mech-ai/alloydas/maize_row
+  mode: row                 # row | isolated
+  train_split: train
+  val_split: val
+  thetas: null              # all ten orientations; e.g. [0, 30, 60, 90]
+  sample_per_plant: true    # one (theta, shot) per plant per epoch, as view sampling
+  view_seed: 42
+  img_size: 224
+  num_points: 8192          # the gt cloud has exactly 8192; the scene cloud (24,576) is subsampled
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  text_mask_ratio: null     # the recipe in the shared budget, as maize_4m / maize_4m_d2
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  pc_sinkhorn_weight: 0.5   # the headline loss (QAL + debiased Sinkhorn); 0 = QAL only
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28
+
+init:
+  checkpoint: ./outputs/maize_4m/checkpoints/checkpoint_epoch_600.pth
+  schema: v1                # what that checkpoint's parameter head was trained on
+
+training:
+  batch_size: 16            # per GPU; 2 GPUs -> global 32
+  accum_steps: 1
+  epochs: 100
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 5
+  val_freq: 5
+
+checkpointing:
+  output_dir: ./outputs/maize_row_ft
+  save_freq: 5
+  keep_last: 3
+  keep_every: 25
+  resume: null
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_name: maize_row_ft
