@@ -472,7 +472,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   reshaped in place at 17:10 (user: "reduce GPU numbers to 4") to `--gres=gpu:4` (any type; env from the
   GPU), 32 CPU (8 workers/rank), 128G, 2 d, `--requeue` + the launcher's auto-resume (save_freq 5). Config
   `batch_size: 8` per GPU = global 32 at lr 1e-4 (the config is read at job start, so the pending job
-  picks this up; 2 GPUs would need `--batch_size 16`); warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
+  picks this up; 2 GPUs would need `--batch_size 16`); then (user: "Apply for rtx pro 6000") `TresPerNode=gres/gpu:rtx_pro_6000:4`
+  and MOVED TO NOVA (mech-ai, QOS normal; scavenger cannot reach the Blackwell nodes while nova jobs sit on
+  them), 11 of 17 account GPUs in use at the time; warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
   relearns). Expect ~2-3 min/epoch once the page cache is warm (10,000 items/epoch, loader-bound), so
   ~4-5 h for 100 epochs once it starts; at submission no scavenger node had 8 free GPUs. The isolated
   control `configs/config_maize_row_iso.yaml` (same shape) is NOT launched yet; the zero-shot baseline
