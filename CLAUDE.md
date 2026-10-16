@@ -469,9 +469,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   training of that in scavenger with 8 GPUS").** Upload complete: train 10,500 / val 2,250 / test 2,250
   plants (val is back, but the maize configs still validate on the 500-plant train hold-out; switch to
   `val_split: val`, `val_holdout: 0` for a fresh run if preferred). Job **16955892** `maize_row_ft`: scavenger,
-  `--gres=gpu:8` (any type; env from the GPU), 64 CPU (8 workers/rank), 256G, 2 d, `--requeue` +
-  the launcher's auto-resume (save_freq 5). Config now `batch_size: 8` per GPU = global 64 at lr 1.5e-4
-  (2 GPUs would need `--batch_size 32`); warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
+  reshaped in place at 17:10 (user: "reduce GPU numbers to 4") to `--gres=gpu:4` (any type; env from the
+  GPU), 32 CPU (8 workers/rank), 128G, 2 d, `--requeue` + the launcher's auto-resume (save_freq 5). Config
+  `batch_size: 8` per GPU = global 32 at lr 1e-4 (the config is read at job start, so the pending job
+  picks this up; 2 GPUs would need `--batch_size 16`); warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
   relearns). Expect ~2-3 min/epoch once the page cache is warm (10,000 items/epoch, loader-bound), so
   ~4-5 h for 100 epochs once it starts; at submission no scavenger node had 8 free GPUs. The isolated
   control `configs/config_maize_row_iso.yaml` (same shape) is NOT launched yet; the zero-shot baseline
