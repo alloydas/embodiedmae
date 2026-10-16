@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=maize_row_ft
+#SBATCH --job-name=row_ft
 #SBATCH --partition=nova
 #SBATCH --account=mech-ai
 #SBATCH --qos=normal
@@ -15,11 +15,12 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=alloydas@iastate.edu
 
-# Maize ROW training (Regime III): train_maize_row_4m.py on the rover row renders.
+# ROW training (Regime III), either species: train_row_4m.py on the rover row renders.
 #
-#   sbatch slurm/train_maize_row.sbatch                                   # configs/config_maize_row_ft.yaml
-#   sbatch --job-name=maize_row_iso slurm/train_maize_row.sbatch configs/config_maize_row_iso.yaml
-#   sbatch --time=00:30:00 slurm/train_maize_row.sbatch configs/config_maize_row_ft.yaml --smoke 8
+#   sbatch --job-name=maize_row_ft   slurm/train_row.sbatch configs/config_maize_row_ft.yaml
+#   sbatch --job-name=maize_row_iso  slurm/train_row.sbatch configs/config_maize_row_iso.yaml
+#   sbatch --job-name=sorghum_row_ft slurm/train_row.sbatch configs/config_sorghum_row_ft.yaml
+#   sbatch --time=00:30:00 slurm/train_row.sbatch configs/config_maize_row_ft.yaml --smoke 8
 #
 # Auto-resumes from the newest checkpoint of the config's output_dir (so a requeue or a
 # resubmission continues). Env is picked from the GPU granted (det_cu128 on Blackwell).
@@ -50,5 +51,5 @@ NPROC="${SLURM_GPUS_ON_NODE:-$(echo "${CUDA_VISIBLE_DEVICES//,/ }" | wc -w)}"
 echo "JobID ${SLURM_JOB_ID:-none}  node $(hostname)  GPU ${GPU_NAME} x${NPROC}  env ${CONDA_ENV}"
 echo "Config ${CONFIG}  out ${OUT}  ${RESUME}  extra: $*"
 srun --kill-on-bad-exit=1 torchrun --standalone --nnodes=1 --nproc_per_node="${NPROC}" \
-  train_maize_row_4m.py --config "${CONFIG}" --num_workers "$(( SLURM_CPUS_PER_TASK / NPROC ))" ${RESUME} "$@"
+  train_row_4m.py --config "${CONFIG}" --num_workers "$(( SLURM_CPUS_PER_TASK / NPROC ))" ${RESUME} "$@"
 echo "Done at $(date)"

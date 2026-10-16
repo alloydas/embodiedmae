@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Train / fine-tune the maize 4M model on ROW data (Regime III: neighbour occlusion).
+"""Train / fine-tune the 4M model on ROW data (Regime III: neighbour occlusion), either species.
 
 The encoder sees the rover's row render (RGB, depth and the scene cloud with both
 neighbours in it, masked at `mask_ratio` as in pretraining, the recipe in the shared
 budget as the maize runs did); the loss is taken against the TARGET PLANT ALONE
-(gt_rgba / gt_depth / gt_pointcloud of maize_row_dataset.py) and its recipe. So the model
+(gt_rgba / gt_depth / gt_pointcloud of row_dataset.py) and its recipe. `data.species`
+(maize | sorghum) picks the recipe parser and the model family. So the model
 is trained to reconstruct the plant behind its neighbours, not to copy the scene.
 `data.mode: isolated` instead feeds the gt_* streams: the occlusion-free control with the
 same camera, the same plants and the same targets.
@@ -16,13 +17,14 @@ layout), so a v1-schema warm start keeps its weights but relearns the parameter 
 pass a v2 checkpoint when one is on this machine. `init.checkpoint: null` trains from
 scratch.
 
-    torchrun --standalone --nproc_per_node=2 train_maize_row_4m.py \\
-        --config configs/config_maize_row_ft.yaml
-    python train_maize_row_4m.py --config configs/config_maize_row_ft.yaml --smoke 8 --device cpu
+    torchrun --standalone --nproc_per_node=2 train_row_4m.py --config configs/config_maize_row_ft.yaml
+    torchrun --standalone --nproc_per_node=2 train_row_4m.py --config configs/config_sorghum_row_ft.yaml
+    python train_row_4m.py --config configs/config_maize_row_ft.yaml --smoke 8 --device cpu
 
 Outputs (config.json, checkpoints/, best_model.pth, training_history.json) follow the
-other trainers so eval/eval_maize_row.py and the probes can rebuild the model from
-config.json. config.json records `trainer: maize_row`, `row_mode`, `init_from`.
+other trainers so eval/eval_row.py and the probes can rebuild the model from config.json.
+config.json records `trainer: row`, `species`, `row_mode`, `init_from`, and for sorghum the
+`rgb_brighten_gain` the images are served at (init.rgb_gain, default 1.0 = the renders).
 """
 from __future__ import annotations
 import argparse
@@ -43,18 +45,19 @@ import yaml
 from tqdm import tqdm
 
 from embodied_mae import chamfer_distance
-from embodied_mae_4m_maize import (embodied_mae_4m_maize_small, embodied_mae_4m_maize_base,
-                                   embodied_mae_4m_maize_large, MAX_LEAVES, N_PARAMS,
-                                   PLANT_FIELDS_V2, LEAF_FIELDS_V2)
-from maize_row_dataset import MaizeRowDataset, collate, MODES
+from row_dataset import RowDataset, collate, MODES, species_info
 from train_maize_4m import (_atomic_torch_save, _atomic_json, _parse_modalities,
                             prune_checkpoints)
 
-BUILD = {'small': embodied_mae_4m_maize_small, 'base': embodied_mae_4m_maize_base,
-         'large': embodied_mae_4m_maize_large}
-# the real parameter columns of schema v2 (the rest of the 14 slots are zero padding)
-PLANT_COLS = list(range(len(PLANT_FIELDS_V2)))
-LEAF_COLS = list(range(len(LEAF_FIELDS_V2)))
+
+def model_factories(species):
+    if species == 'maize':
+        from embodied_mae_4m_maize import (embodied_mae_4m_maize_small, embodied_mae_4m_maize_base,
+                                           embodied_mae_4m_maize_large)
+        return {'small': embodied_mae_4m_maize_small, 'base': embodied_mae_4m_maize_base,
+                'large': embodied_mae_4m_maize_large}
+    from embodied_mae_4m import embodied_mae_4m_small, embodied_mae_4m_base, embodied_mae_4m_large
+    return {'small': embodied_mae_4m_small, 'base': embodied_mae_4m_base, 'large': embodied_mae_4m_large}
 
 
 def load_config(path):
@@ -68,6 +71,8 @@ def load_config(path):
 def config_to_namespace(cfg):
     ns = argparse.Namespace()
     d, m, t, c, i, s = cfg['data'], cfg['model'], cfg['training'], cfg['checkpointing'], cfg['init'], cfg['system']
+    ns.species = d.get('species', 'maize')
+    sp = species_info(ns.species)
     ns.row_root = d['row_root']
     ns.row_mode = d.get('mode', 'row')
     if ns.row_mode not in MODES:
@@ -76,11 +81,18 @@ def config_to_namespace(cfg):
     ns.val_split = d.get('val_split', 'val')
     ns.thetas = d.get('thetas', None)
     ns.img_size = int(d.get('img_size', 224))
-    ns.num_points = int(d.get('num_points', 8192))
+    ns.num_points = int(d.get('num_points', sp['num_points']))
     ns.view_seed = int(d.get('view_seed', 42))
     ns.sample_per_plant = bool(d.get('sample_per_plant', True))
-    ns.param_schema = 'v2'                       # the row XML is v2; recorded for the probes
+    ns.param_schema = sp['param_schema']         # maize: the row XML is v2; sorghum: n/a
     ns.rgb_file = 'rgba.png'
+    # sorghum: the brighten_gain the images are served at (the renders carry no tag, 1.0);
+    # recorded as rgb_brighten_gain so the probes serve this run the same brightness.
+    ns.rgb_gain = float(i.get('rgb_gain', 1.0)) if ns.species == 'sorghum' else None
+    ns.rgb_brighten_gain = ns.rgb_gain if ns.rgb_gain is not None else 1.0
+    if ns.species == 'sorghum':
+        from embodied_mae_4m import LEAF_FIELDS
+        ns.leaf_fields = list(LEAF_FIELDS)
     ns.model_size = m.get('model_size', 'base')
     ns.mask_ratio = float(m.get('mask_ratio', 0.8))
     ns.active_modalities = _parse_modalities(m.get('active_modalities'))
@@ -96,7 +108,7 @@ def config_to_namespace(cfg):
     ns.pc_sinkhorn_blur = float(m.get('pc_sinkhorn_blur', 0.02))
     ns.depth_norm_type = m.get('depth_norm_type', 'minmax')
     ns.spline_loss_weight = float(m.get('spline_loss_weight', 5.0))
-    ns.max_leaves = int(m.get('max_leaves', MAX_LEAVES))
+    ns.max_leaves = int(m.get('max_leaves', sp['max_leaves']))
     ns.batch_size = int(t.get('batch_size', 16))
     ns.accum_steps = int(t.get('accum_steps', 1) or 1)
     ns.epochs = int(t.get('epochs', 100))
@@ -118,15 +130,16 @@ def config_to_namespace(cfg):
     ns.wandb_project = w.get('wandb_project', 'embodied-mae-maize')
     ns.wandb_entity = w.get('wandb_entity', None)
     ns.wandb_name = w.get('wandb_name', None)
-    ns.trainer = 'maize_row'
+    ns.trainer = 'row'
     return ns
 
 
 def build_model(args, device):
-    model = BUILD[args.model_size](
+    kw = {'param_schema': args.param_schema} if args.species == 'maize' else {}
+    model = model_factories(args.species)[args.model_size](
         active_modalities=args.active_modalities, img_size=args.img_size, num_pc_tokens=196,
         target_points=args.num_points, pc_loss_weight=args.pc_loss_weight, max_leaves=args.max_leaves,
-        param_schema=args.param_schema, spline_loss_weight=args.spline_loss_weight,
+        spline_loss_weight=args.spline_loss_weight, **kw,
         depth_norm_type=args.depth_norm_type, pc_loss_name=args.pc_loss_name,
         qal_threshold=args.qal_threshold, qal_alpha=args.qal_alpha, qal_use_squared=args.qal_use_squared,
         pc_sinkhorn_weight=args.pc_sinkhorn_weight, pc_sinkhorn_points=args.pc_sinkhorn_points,
@@ -183,7 +196,7 @@ def train_one_epoch(model, loader, optimizer, device, epoch, mask_ratio, accum_s
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, mask_ratio, distributed):
+def evaluate(model, loader, device, mask_ratio, distributed, sp):
     """Masked-regime validation against the target plant: loss terms, Chamfer of the
     predicted cloud against the TARGET cloud and against the INPUT cloud (an echo
     detector in row mode), and the recipe error on hidden real tokens, v2 columns only."""
@@ -200,10 +213,10 @@ def evaluate(model, loader, device, mask_ratio, distributed):
         ch_in = chamfer_distance(pred_pc, pc)
         if 'text' in m.active_modalities:
             err = (pred_par - params).abs()
-            cols = torch.zeros(N_PARAMS, device=device)
-            cols[PLANT_COLS] = 1
-            lcols = torch.zeros(N_PARAMS, device=device)
-            lcols[LEAF_COLS] = 1
+            cols = torch.zeros(sp['n_params'], device=device)
+            cols[sp['plant_cols']] = 1
+            lcols = torch.zeros(sp['n_params'], device=device)
+            lcols[sp['leaf_cols']] = 1
             plant_mae = (err[:, 0] * cols).sum(-1) / cols.sum()                       # (B,)
             leaf_w = (mt[:, 1:] * valid[:, 1:])                                      # hidden real leaves
             leaf_mae = ((err[:, 1:] * lcols).sum(-1) / lcols.sum() * leaf_w).sum() / leaf_w.sum().clamp(min=1)
@@ -254,7 +267,7 @@ def main():
         device = torch.device(args.device if (args.device != 'cuda' or torch.cuda.is_available()) else 'cpu')
     is_main = rank == 0
     args.world_size = world
-    args.trainer = 'maize_row'
+    sp = species_info(args.species)
 
     out_dir = Path(args.output_dir); ckpt_dir = out_dir / 'checkpoints'
     if is_main:
@@ -262,14 +275,15 @@ def main():
         _atomic_json(vars(args), out_dir / 'config.json')
 
     plants = None
-    train_ds = MaizeRowDataset(args.row_root, args.train_split, args.row_mode, args.img_size, args.num_points,
-                               args.max_leaves, thetas=args.thetas, sample_per_plant=args.sample_per_plant,
-                               seed=args.view_seed, occlusion_stats=False)
+    train_ds = RowDataset(args.row_root, args.train_split, args.species, args.row_mode, args.img_size,
+                          args.num_points, args.max_leaves, thetas=args.thetas,
+                          sample_per_plant=args.sample_per_plant, seed=args.view_seed,
+                          occlusion_stats=False, rgb_gain=args.rgb_gain)
     if cli.smoke:
         train_ds.plant_ids = train_ds.plant_ids[:cli.smoke]
-    val_ds = MaizeRowDataset(args.row_root, args.val_split, args.row_mode, args.img_size, args.num_points,
-                             args.max_leaves, thetas=args.thetas, sample_per_plant=True, deterministic=True,
-                             occlusion_stats=False)
+    val_ds = RowDataset(args.row_root, args.val_split, args.species, args.row_mode, args.img_size,
+                        args.num_points, args.max_leaves, thetas=args.thetas, sample_per_plant=True,
+                        deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain)
     if cli.smoke:
         val_ds.plant_ids = val_ds.plant_ids[:cli.smoke]
     if distributed:
@@ -290,7 +304,7 @@ def main():
     if distributed:
         model = DDP(model, device_ids=[local], output_device=local, find_unused_parameters=False)
     if is_main:
-        print(f'params {sum(p.numel() for p in model.parameters()) / 1e6:.1f} M, mode {args.row_mode}, '
+        print(f'{args.species}: params {sum(p.numel() for p in model.parameters()) / 1e6:.1f} M, mode {args.row_mode}, '
               f'train {len(train_ds)} items/epoch over {len(train_ds.plant_ids)} plants, val {len(val_ds)}')
 
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.95))
@@ -340,7 +354,7 @@ def main():
         do_val = epoch % args.val_freq == 0 or epoch == args.epochs or epoch == 1
         vm = None
         if do_val:
-            vm = evaluate(model, val_loader, device, args.mask_ratio, distributed)
+            vm = evaluate(model, val_loader, device, args.mask_ratio, distributed, sp)
             history['val_epoch'].append(epoch)
             for k, v in vm.items():
                 history[k].append(float(v))

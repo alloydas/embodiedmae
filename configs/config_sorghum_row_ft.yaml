@@ -1,0 +1,72 @@
+# SORGHUM ROW fine-tune (Regime III): the sorghum 4M model trained on the rover's row renders
+# with the TARGET PLANT ALONE as the reconstruction target (train_row_4m.py, row_dataset.py).
+#
+#   sbatch --job-name=sorghum_row_ft  slurm/train_row.sbatch configs/config_sorghum_row_ft.yaml
+#   sbatch --job-name=sorghum_row_iso slurm/train_row.sbatch configs/config_sorghum_row_iso.yaml
+#
+# The control arm is configs/config_sorghum_row_iso.yaml (data.mode: isolated): the gt_*
+# streams in, same targets, same plants.
+#
+# Warm start: the four-stream data-version-2 arm (e2_pcrgbdt_d2, epoch 600; width leaf layout,
+# unbrightened images, gain 1.0). Switch init.checkpoint to the Sinkhorn E1
+# (outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth) when it finishes
+# and set init.rgb_gain 1.85, the brightness it trained at (the row renders carry no gain tag,
+# so they are rescaled to that value).
+
+data:
+  species: sorghum
+  row_root: /work/mech-ai/alloydas/sorghum_row
+  mode: row                 # row | isolated
+  train_split: train
+  val_split: val
+  thetas: null              # all orientations; e.g. [0, 30, 60, 90]
+  sample_per_plant: true    # one (theta, shot) per plant per epoch, as view sampling
+  view_seed: 42
+  img_size: 224
+  num_points: 8196          # the sorghum loaders' count; both clouds are sampled/padded to it
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  text_mask_ratio: null     # the recipe in the shared budget, as the sorghum arms
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  pc_sinkhorn_weight: 0.5   # the headline loss (QAL + debiased Sinkhorn); 0 = QAL only
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+init:
+  checkpoint: ./outputs/e2_pcrgbdt_d2/checkpoints/checkpoint_epoch_600.pth
+  rgb_gain: 1.0             # the brightness that checkpoint trained at (E1 Sinkhorn: 1.85)
+
+training:
+  batch_size: 16            # per GPU; 2 GPUs -> global 32
+  accum_steps: 1
+  epochs: 100
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 5
+  val_freq: 5
+
+checkpointing:
+  output_dir: ./outputs/sorghum_row_ft
+  save_freq: 5
+  keep_last: 3
+  keep_every: 25
+  resume: null
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_name: sorghum_row_ft

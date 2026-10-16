@@ -444,6 +444,23 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   slurm/train_maize_row.sbatch` and `sbatch --job-name=maize_row_iso slurm/train_maize_row.sbatch
   configs/config_maize_row_iso.yaml`; zero-shot baseline now: `sbatch slurm/eval_maize_row.sbatch
   maize_4m checkpoints/checkpoint_epoch_600.pth val`.
+- **ROW PIPELINE MADE SPECIES-NEUTRAL (2026-10-16 ~13:00, user: "Do the same for sorghum i am preparing
+  the data").** Renamed: `row_dataset.py` (`RowDataset(root, split, species='maize'|'sorghum', mode)`;
+  the species table carries the recipe glob + parser (maize: `maize_*_spline.xml` schema v2; sorghum:
+  `*_spline.yml`, width layout via `embodied_mae_4m.load_spline_params`), the default point count
+  (8192 / 8196), max leaves (28 / 24) and the REAL parameter columns for the error metrics; plant folders
+  `plant_*` or `Sorghum_*`; `rgb_gain` serves sorghum images at a run's `rgb_brighten_gain`, the renders
+  being untagged = 1.0), `train_row_4m.py` (`data.species`; sorghum runs record `leaf_fields` and
+  `rgb_brighten_gain` = `init.rgb_gain`), `eval/eval_row.py --species` (recipe scored only for the
+  species' current layout: maize param_schema v2, sorghum leaf_fields with 'width'; sorghum images served
+  at the run's recorded gain), `slurm/train_row.sbatch <config> [extra]`, `SPECIES=... slurm/eval_row.sbatch
+  <run> [ckpt] [split]`, configs `config_{maize,sorghum}_row_{ft,iso}.yaml` (sorghum: root
+  `/work/mech-ai/alloydas/sorghum_row` (not there yet), warm start `e2_pcrgbdt_d2` ep 600 at gain 1.0;
+  switch to the Sinkhorn E1 epoch-1000 checkpoint with `init.rgb_gain: 1.85` when it exists).
+  Smokes: sorghum trainer + eval on a fake 2-plant row sample built from Sorghum_15K/val (scratchpad only);
+  the sorghum eval's Chamfer on that sample (1.8e-3) sits where the arm's val Chamfer does. NOTE: at
+  13:05 `/work/mech-ai/alloydas/maize_row/val` had disappeared (the user is reorganising the upload);
+  re-check the layout before launching anything.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

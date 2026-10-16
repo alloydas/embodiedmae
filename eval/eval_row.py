@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regime III evaluation: a maize 4M checkpoint on the ROW data (maize_row_dataset.py),
+"""Regime III evaluation: a 4M checkpoint (either species) on the ROW data (row_dataset.py),
 the same plants under the occluded row render and, paired, under the isolated render
 from the same rover camera.
 
@@ -19,11 +19,13 @@ Scores per item:
   chamfer_in : the same against the INPUT cloud; in row mode a model that merely echoes
                the scene scores well here and badly on chamfer_gt
   miss_0p01  : fraction of target points with no predicted point within 0.01
-  plant_mae / leaf_mae : recipe error on the real v2 columns (plant token: leafCount,
-               stemInternodeSum, height; leaf tokens: the 7 LEAF_FIELDS_V2), normalised
-               units; leaf tokens weighted by validity. Only for checkpoints whose
-               config.json records param_schema v2 (a v1-schema model predicts a
-               different layout and is scored on geometry only).
+  plant_mae / leaf_mae : recipe error on the real columns of the species' current
+               layout (maize: schema v2, plant leafCount / stemInternodeSum / height and the
+               7 LEAF_FIELDS_V2; sorghum: the 9 plant fields and the 5 width-layout leaf
+               fields), normalised units; leaf tokens weighted by validity. Only for
+               checkpoints trained on that layout (maize config.json param_schema v2;
+               sorghum config.json leaf_fields containing 'width'); an older-layout model
+               predicts different columns and is scored on geometry only.
   occ_frac / nbr_frac / theta : the occlusion measures from the dataset, for the bins.
 
 Outputs <out>.csv (one row per item x mode x source) and <out>.json: per mode x source
@@ -31,10 +33,11 @@ mean / median of each score, the same per theta and per occlusion quartile, and 
 PAIRED row - isolated delta per (plant, theta, source) with a bootstrap CI over plants.
 Deterministic: numpy and torch are seeded per item, so a subset run reproduces rows.
 
-    python eval/eval_maize_row.py --run maize_4m --ckpt checkpoints/checkpoint_epoch_600.pth \\
-        --split val --n-plants 64 --out reports/maize_row_eval_maize4m
-    python eval/eval_maize_row.py --run maize_row_ft --ckpt best_model.pth --split test \\
-        --out reports/maize_row_eval_ft
+    python eval/eval_row.py --species maize --run maize_4m --ckpt checkpoints/checkpoint_epoch_600.pth \\
+        --split val --n-plants 64 --out reports/row_eval_maize4m
+    python eval/eval_row.py --species sorghum --root /work/mech-ai/alloydas/sorghum_row \\
+        --run e2_pcrgbdt_d2 --ckpt checkpoints/checkpoint_epoch_600.pth --out reports/row_eval_sorghum_pcrgbdt
+The sorghum images are served at the run's recorded rgb_brighten_gain (1.0 when unrecorded).
 """
 import sys as _sys, pathlib as _pathlib
 _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
@@ -52,25 +55,25 @@ import torch
 from torch.utils.data import DataLoader
 
 from embodied_mae import chamfer_distance
-from embodied_mae_4m_maize import (embodied_mae_4m_maize_small, embodied_mae_4m_maize_base,
-                                   embodied_mae_4m_maize_large, N_PARAMS, PLANT_FIELDS_V2, LEAF_FIELDS_V2)
-from maize_row_dataset import MaizeRowDataset, collate, MODES
+from row_dataset import RowDataset, collate, MODES, species_info, SPECIES
+from train_row_4m import model_factories
 
 REPO = Path(__file__).resolve().parent.parent
-BUILD = {'small': embodied_mae_4m_maize_small, 'base': embodied_mae_4m_maize_base,
-         'large': embodied_mae_4m_maize_large}
 MODALITIES = ('rgb', 'depth', 'pc', 'text')
 SOURCES = ('all', 'rgb', 'depth', 'pc')
+DEFAULT_ROOT = {'maize': '/work/mech-ai/alloydas/maize_row', 'sorghum': '/work/mech-ai/alloydas/sorghum_row'}
 
 
-def build_model(run_dir, ckpt_name, device):
-    """The run's own config.json decides every constructor kwarg (as linear_probe_maize)."""
+def build_model(run_dir, ckpt_name, device, species):
+    """The run's own config.json decides every constructor kwarg (as the probes do)."""
     cfg = json.loads((run_dir / 'config.json').read_text())
-    model = BUILD[cfg.get('model_size', 'base')](
+    sp = species_info(species)
+    kw = {'param_schema': cfg.get('param_schema') or 'v1'} if species == 'maize' else {}
+    model = model_factories(species)[cfg.get('model_size', 'base')](
         active_modalities=cfg.get('active_modalities'), img_size=cfg.get('img_size', 224),
-        num_pc_tokens=196, target_points=cfg.get('num_points', 8192),
-        pc_loss_weight=cfg.get('pc_loss_weight', 1.0), max_leaves=cfg.get('max_leaves', 28),
-        param_schema=cfg.get('param_schema') or 'v1', spline_loss_weight=cfg.get('spline_loss_weight', 5.0),
+        num_pc_tokens=196, target_points=cfg.get('num_points', sp['num_points']),
+        pc_loss_weight=cfg.get('pc_loss_weight', 1.0), max_leaves=cfg.get('max_leaves', sp['max_leaves']),
+        spline_loss_weight=cfg.get('spline_loss_weight', 5.0), **kw,
         depth_norm_type=cfg.get('depth_norm_type', 'minmax'), pc_loss_name=cfg.get('pc_loss_name', 'qal_loss'),
         qal_threshold=cfg.get('qal_threshold', 0.01), qal_alpha=cfg.get('qal_alpha', 100.0),
         qal_use_squared=cfg.get('qal_use_squared', False),
@@ -117,8 +120,17 @@ def score_cloud(pred, gt):
     return per, miss, cd
 
 
-def recipe_error(pred_par, params, valid):
-    pc_ = list(range(len(PLANT_FIELDS_V2))); lc = list(range(len(LEAF_FIELDS_V2)))
+def recipe_scored(cfg, species, model):
+    """Does this checkpoint predict the species' CURRENT recipe layout?"""
+    if 'text' not in model.active_modalities:
+        return False
+    if species == 'maize':
+        return (cfg.get('param_schema') or 'v1') == 'v2'
+    return 'width' in (cfg.get('leaf_fields') or [])
+
+
+def recipe_error(pred_par, params, valid, sp):
+    pc_, lc = sp['plant_cols'], sp['leaf_cols']
     err = (pred_par - params).abs()
     plant = err[:, 0, pc_].mean(-1)
     w = valid[:, 1:]
@@ -137,9 +149,10 @@ def bootstrap_ci(x, n_boot=2000, seed=0):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--species', default='maize', choices=sorted(SPECIES))
     ap.add_argument('--run', required=True, help='outputs/<run> (its config.json builds the model)')
     ap.add_argument('--ckpt', default='best_model.pth')
-    ap.add_argument('--root', default='/work/mech-ai/alloydas/maize_row')
+    ap.add_argument('--root', default=None, help=f'default per species: {DEFAULT_ROOT}')
     ap.add_argument('--split', default='val')
     ap.add_argument('--modes', default='row,isolated')
     ap.add_argument('--sources', default='all,rgb,depth,pc')
@@ -154,22 +167,28 @@ def main():
     a = ap.parse_args()
 
     device = torch.device(a.device)
+    a.root = a.root or DEFAULT_ROOT[a.species]
+    sp = species_info(a.species)
     run_dir = REPO / 'outputs' / a.run if not Path(a.run).exists() else Path(a.run)
-    model, cfg, epoch = build_model(run_dir, a.ckpt, device)
-    schema = cfg.get('param_schema') or 'v1'
-    recipe = ('text' in model.active_modalities) and schema == 'v2'
+    model, cfg, epoch = build_model(run_dir, a.ckpt, device, a.species)
+    schema = (cfg.get('param_schema') or 'v1') if a.species == 'maize' else \
+        ('width' if 'width' in (cfg.get('leaf_fields') or []) else 'waviness')
+    recipe = recipe_scored(cfg, a.species, model)
+    rgb_gain = float(cfg.get('rgb_brighten_gain', 1.0)) if a.species == 'sorghum' else None
     mask_ratio = a.mask_ratio if a.mask_ratio is not None else float(cfg.get('mask_ratio', 0.8))
     modes = [m for m in a.modes.split(',') if m]
     sources = [s for s in a.sources.split(',') if s]
     thetas = None if a.thetas is None else [int(t) for t in a.thetas.split(',')]
-    print(f'run {run_dir.name} @ {a.ckpt} (epoch {epoch}), schema {schema}, recipe scored: {recipe}, '
-          f'modes {modes}, sources {sources}, mask_ratio {mask_ratio}')
+    print(f'{a.species} run {run_dir.name} @ {a.ckpt} (epoch {epoch}), recipe layout {schema}, recipe scored: '
+          f'{recipe}, modes {modes}, sources {sources}, mask_ratio {mask_ratio}'
+          + (f', rgb gain {rgb_gain:g}' if rgb_gain is not None else ''))
 
     rows = []
     t0 = time.time()
     for mode in modes:
-        ds = MaizeRowDataset(a.root, a.split, mode, cfg.get('img_size', 224), cfg.get('num_points', 8192),
-                             cfg.get('max_leaves', 28), thetas=thetas)
+        ds = RowDataset(a.root, a.split, a.species, mode, cfg.get('img_size', 224),
+                        cfg.get('num_points', sp['num_points']), cfg.get('max_leaves', sp['max_leaves']),
+                        thetas=thetas, rgb_gain=rgb_gain)
         if a.n_plants:
             keep = set(ds.plant_ids[:a.n_plants])
             ds.items = [it for it in ds.items if it[0] in keep]
@@ -186,9 +205,9 @@ def main():
                     continue
                 cg, miss, _ = score_cloud(pred_pc, g_pc)
                 ci, _, _ = score_cloud(pred_pc, pc)
-                pm, lm = recipe_error(pred_par, params, valid) if recipe else (None, None)
+                pm, lm = recipe_error(pred_par, params, valid, sp) if recipe else (None, None)
                 for k, inf in enumerate(info):
-                    rows.append({'run': run_dir.name, 'epoch': epoch, 'mode': mode, 'source': src,
+                    rows.append({'species': a.species, 'run': run_dir.name, 'epoch': epoch, 'mode': mode, 'source': src,
                                  'plant': inf['plant'], 'theta': inf['theta'], 'shot': inf['shot'],
                                  'occ_frac': inf['occ_frac'], 'nbr_frac': inf['nbr_frac'],
                                  'chamfer_gt': float(cg[k]), 'chamfer_in': float(ci[k]), 'miss_0p01': float(miss[k]),
@@ -206,7 +225,8 @@ def main():
     def agg(sel):
         return {m: {'mean': float(np.mean([r[m] for r in sel])), 'median': float(np.median([r[m] for r in sel])),
                     'n': len(sel)} for m in metrics} if sel else {}
-    summary = {'run': run_dir.name, 'ckpt': a.ckpt, 'epoch': epoch, 'schema': schema, 'split': a.split,
+    summary = {'species': a.species, 'run': run_dir.name, 'ckpt': a.ckpt, 'epoch': epoch, 'recipe_layout': schema,
+               'recipe_scored': recipe, 'rgb_gain': rgb_gain, 'split': a.split,
                'mask_ratio': mask_ratio, 'n_rows': len(rows), 'by_mode_source': {}, 'by_theta': {},
                'by_occlusion_quartile': {}, 'paired_row_minus_isolated': {}}
     occ = np.array([r['occ_frac'] for r in rows if r['mode'] == 'row'])

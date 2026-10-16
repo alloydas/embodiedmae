@@ -1,9 +1,9 @@
 # MAIZE ROW fine-tune, ISOLATED control arm: config_maize_row_ft.yaml with data.mode isolated.
-# with the TARGET PLANT ALONE as the reconstruction target (train_maize_row_4m.py).
+# with the TARGET PLANT ALONE as the reconstruction target (train_row_4m.py).
 #
-#   torchrun --standalone --nproc_per_node=2 train_maize_row_4m.py --config configs/config_maize_row_ft.yaml
-#   sbatch slurm/train_maize_row.sbatch                       # nova, 2 GPUs
-#   sbatch slurm/train_maize_row.sbatch configs/config_maize_row_ft.yaml --smoke 8
+#   torchrun --standalone --nproc_per_node=2 train_row_4m.py --config configs/config_maize_row_ft.yaml
+#   sbatch --job-name=maize_row_ft slurm/train_row.sbatch configs/config_maize_row_ft.yaml   # nova, 2 GPUs
+#   sbatch slurm/train_row.sbatch configs/config_maize_row_ft.yaml --smoke 8
 #
 # The control arm is the same file with data.mode: isolated (configs/config_maize_row_iso.yaml):
 # the gt_* streams in, same targets, same plants -- what the model learns from the camera
@@ -15,6 +15,7 @@
 # once a v2 checkpoint is on this machine.
 
 data:
+  species: maize
   row_root: /work/mech-ai/alloydas/maize_row
   mode: isolated            # the occlusion-free control: gt_* streams in
   train_split: train
