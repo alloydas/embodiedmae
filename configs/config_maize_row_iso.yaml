@@ -50,10 +50,10 @@ init:
   schema: v1                # what that checkpoint's parameter head was trained on
 
 training:
-  batch_size: 16            # per GPU; 2 GPUs -> global 32
+  batch_size: 8             # per GPU; 8 GPUs -> global 64 (2 GPUs: pass --batch_size 32)
   accum_steps: 1
   epochs: 100
-  lr: 1.0e-4
+  lr: 1.5e-4               # global batch 64
   weight_decay: 0.05
   warmup_epochs: 5
   val_freq: 5
