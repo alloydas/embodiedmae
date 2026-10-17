@@ -489,7 +489,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   the QAL / Chamfer / Sinkhorn losses are size-agnostic, so the warm start loads unchanged. Memory: the
   extra cost is kNN over 24,576 points and a (8192 x 24576) cdist at val, ~0.8 GB/item, so batch 8/GPU on
   96 GB is far inside; per-GPU batch 8 x 4 = global 32 at lr 1e-4 (the 2-GPU recipe). CPU smokes re-run.
-  Sorghum row configs: num_points 24576 / gt_points 8196; warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
+  Sorghum row configs: num_points 24576 / gt_points 8196; then (user: "reduce memory and apply for 4 days")
+  RESUBMITTED as **16956185** (a user cannot raise TimeLimit): scavenger, 4x rtx_pro_6000, 32 CPU, 96G, 4 d,
+  `--requeue`; 16955892 cancelled. Same wall: starts when a Blackwell node has no nova job; warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
   relearns). Expect ~2-3 min/epoch once the page cache is warm (10,000 items/epoch, loader-bound), so
   ~4-5 h for 100 epochs once it starts; at submission no scavenger node had 8 free GPUs. The isolated
   control `configs/config_maize_row_iso.yaml` (same shape) is NOT launched yet; the zero-shot baseline
