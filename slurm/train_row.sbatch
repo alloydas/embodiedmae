@@ -24,6 +24,7 @@
 #
 # Auto-resumes from the newest checkpoint of the config's output_dir (so a requeue or a
 # resubmission continues). Env is picked from the GPU granted (det_cu128 on Blackwell).
+# RACE_CANCEL_NAME=<other job name>: see the twin-job race below.
 
 set -euo pipefail
 CONFIG="${1:-configs/config_maize_row_ft.yaml}"
@@ -47,6 +48,16 @@ if [ -d "${OUT}/checkpoints" ]; then
   LATEST=$(ls -1 "${OUT}"/checkpoints/checkpoint_epoch_*.pth 2>/dev/null | sort -t_ -k3 -n | tail -1 || true)
   [ -n "${LATEST}" ] && RESUME="--resume ${LATEST}"
 fi
+# Twin-job race (RACE_CANCEL_NAME): two copies of the same run queued for different GPU types;
+# whichever starts first cancels the other's PENDING copy (never a running one) and takes a
+# lock on the output dir so two writers can never share it.
+if [ -n "${RACE_CANCEL_NAME:-}" ]; then
+  scancel --name="${RACE_CANCEL_NAME}" --state=PENDING --user="${USER}" 2>/dev/null || true
+  echo "race: cancelled pending twin(s) named ${RACE_CANCEL_NAME}"
+fi
+mkdir -p "${OUT}"
+exec 9>"${OUT}/.train.lock"
+if ! flock -n 9; then echo "another trainer holds ${OUT} (lock busy); exiting"; exit 0; fi
 NPROC="${SLURM_GPUS_ON_NODE:-$(echo "${CUDA_VISIBLE_DEVICES//,/ }" | wc -w)}"
 echo "JobID ${SLURM_JOB_ID:-none}  node $(hostname)  GPU ${GPU_NAME} x${NPROC}  env ${CONDA_ENV}"
 echo "Config ${CONFIG}  out ${OUT}  ${RESUME}  extra: $*"

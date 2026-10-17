@@ -495,7 +495,13 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   Oct 26); then (user: "put the same in A100 lets check what will start 1st") an A100 TWIN **16956275**
   (scavenger, 4x a100, 32 CPU, 96G, 4 d) with BOTH jobs under `Dependency=singleton` (same name
   `maize_row_ft`): whichever starts first trains; the other waits until it ends, resumes from the
-  output dir and exits at once if epoch 100 is there. Never let two writers share outputs/maize_row_ft; warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
+  output dir and exits at once if epoch 100 is there. Never let two writers share outputs/maize_row_ft;
+  CORRECTED 19:30: `singleton` also waits on earlier-SUBMITTED pending jobs of the same name, so the
+  twin would never have raced. Both cancelled and replaced by **16956298** `maize_row_ft_rtx`
+  (4x rtx_pro_6000) and **16956299** `maize_row_ft_a100` (4x a100), scavenger, 32 CPU, 96G, 4 d,
+  `--requeue`, each submitted with `RACE_CANCEL_NAME=<the other's name>`: `slurm/train_row.sbatch` now
+  `scancel --name=<twin> --state=PENDING` at start (never a running job) and holds a `flock` on
+  `<output_dir>/.train.lock` for the run, so the first to start wins and the loser is removed; warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
   relearns). Expect ~2-3 min/epoch once the page cache is warm (10,000 items/epoch, loader-bound), so
   ~4-5 h for 100 epochs once it starts; at submission no scavenger node had 8 free GPUs. The isolated
   control `configs/config_maize_row_iso.yaml` (same shape) is NOT launched yet; the zero-shot baseline
