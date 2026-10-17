@@ -476,7 +476,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   and MOVED TO NOVA (mech-ai, QOS normal; scavenger cannot reach the Blackwell nodes while nova jobs sit on
   them), 11 of 17 account GPUs in use at the time; then (user: "not in nova in scavenger") moved BACK to
   scavenger (mech-ai-scavenger / QOS scavenger) still asking 4x rtx_pro_6000: it will only start when a
-  Blackwell node carries no nova job (OverSubscribe=NO vs scavenger's FORCE:1); warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
+  Blackwell node carries no nova job (OverSubscribe=NO vs scavenger's FORCE:1); then (user: "try with 100 in
+  scavenger", read as the H-series) `TresPerNode=gres/gpu:h200:4` (no H100 on Nova; the three H200 nodes
+  nova25-gpu-[2-4], 4 cards each, all busy at 17:30); warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
   relearns). Expect ~2-3 min/epoch once the page cache is warm (10,000 items/epoch, loader-bound), so
   ~4-5 h for 100 epochs once it starts; at submission no scavenger node had 8 free GPUs. The isolated
   control `configs/config_maize_row_iso.yaml` (same shape) is NOT launched yet; the zero-shot baseline
