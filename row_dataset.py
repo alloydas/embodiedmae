@@ -137,7 +137,7 @@ def decode_depth(arr):
 class RowDataset(Dataset):
     def __init__(self, root, split='val', species='maize', mode='row', img_size=224, num_points=None,
                  max_leaves=None, thetas=None, shots=None, sample_per_plant=False, seed=0,
-                 deterministic=False, plants=None, occlusion_stats=True, rgb_gain=None):
+                 deterministic=False, plants=None, occlusion_stats=True, rgb_gain=None, gt_points=None):
         """
         root/split      : the row data root and split folder
         species         : 'maize' | 'sorghum' (recipe parser, defaults)
@@ -148,6 +148,12 @@ class RowDataset(Dataset):
         deterministic   : with sample_per_plant, always the first item of each plant
         plants          : optional iterable of plant folder names to keep
         rgb_gain        : serve the colour channels at this brighten_gain (None = as on disk)
+        num_points      : points sampled from the INPUT cloud (row mode: the scene cloud holds
+                          three plants, 24,576 points; sampling it down to a plant's 8,192 would
+                          leave the target ~2,700 points, a third of its isolated density, so a
+                          row run keeps the whole scene cloud: num_points 24576)
+        gt_points       : points sampled from the TARGET cloud = the model's output size
+                          (default num_points; a row run keeps the target at its native 8,192)
         """
         if mode not in MODES:
             raise ValueError(f'mode must be one of {MODES}, got {mode!r}')
@@ -155,6 +161,7 @@ class RowDataset(Dataset):
         self.species, self.root, self.split, self.mode = species, Path(root), split, mode
         self.img_size = int(img_size)
         self.num_points = int(num_points or self.sp['num_points'])
+        self.gt_points = int(gt_points or self.num_points)
         self.max_leaves = int(max_leaves or self.sp['max_leaves'])
         self.occlusion_stats = bool(occlusion_stats)
         self.rgb_gain = None if rgb_gain is None else float(rgb_gain)
@@ -203,7 +210,7 @@ class RowDataset(Dataset):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
         n_t = sorted({it[1] for it in self.items})
         print(f'🌾 {species} row [{split}/{mode}]: {len(self.plant_ids)} plants, {len(self.items)} items, '
-              f'thetas {n_t}' + ('  [one item per plant per epoch]' if self.sample_per_plant else '')
+              f'thetas {n_t}, input {self.num_points} pts -> target {self.gt_points} pts' + ('  [one item per plant per epoch]' if self.sample_per_plant else '')
               + (f'  [rgb gain {self.rgb_gain:g}]' if self.rgb_gain is not None else ''))
 
     # ── sampling ──────────────────────────────────────────────────────────────
@@ -241,20 +248,21 @@ class RowDataset(Dataset):
         t = torch.from_numpy(np.ascontiguousarray(d)).unsqueeze(0)
         return TF.resize(t, [self.img_size, self.img_size], interpolation=InterpolationMode.BILINEAR, antialias=True)
 
-    def _subsample(self, pts):
+    @staticmethod
+    def _subsample(pts, k):
         n = pts.shape[0]
-        if n >= self.num_points:
-            return pts[np.random.choice(n, self.num_points, replace=False)]
-        return np.vstack([pts, pts[np.random.choice(n, self.num_points - n, replace=True)]])
+        if n >= k:
+            return pts[np.random.choice(n, k, replace=False)]
+        return np.vstack([pts, pts[np.random.choice(n, k - n, replace=True)]])
 
     def load_clouds(self, in_ply, gt_ply):
-        """(input cloud, gt cloud) in the INPUT cloud's normalised frame."""
-        pin = self._subsample(read_ply_xyz(in_ply))
+        """(input cloud at num_points, gt cloud at gt_points) in the INPUT cloud's normalised frame."""
+        pin = self._subsample(read_ply_xyz(in_ply), self.num_points)
         centre = pin.mean(axis=0)
         pin = pin - centre
         scale = float(np.max(np.linalg.norm(pin, axis=1))) or 1.0
         pin = pin / scale
-        pgt = (self._subsample(read_ply_xyz(gt_ply)) - centre) / scale
+        pgt = (self._subsample(read_ply_xyz(gt_ply), self.gt_points) - centre) / scale
         return pin.astype(np.float32), pgt.astype(np.float32), centre.astype(np.float32), np.float32(scale)
 
     @staticmethod

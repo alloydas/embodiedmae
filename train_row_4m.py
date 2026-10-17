@@ -85,7 +85,8 @@ def config_to_namespace(cfg):
     ns.holdout_seed = int(d.get('holdout_seed', 0))
     ns.thetas = d.get('thetas', None)
     ns.img_size = int(d.get('img_size', 224))
-    ns.num_points = int(d.get('num_points', sp['num_points']))
+    ns.num_points = int(d.get('num_points', sp['num_points']))      # INPUT cloud (row: the scene)
+    ns.gt_points = int(d.get('gt_points', ns.num_points))            # TARGET cloud = output size
     ns.view_seed = int(d.get('view_seed', 42))
     ns.sample_per_plant = bool(d.get('sample_per_plant', True))
     ns.param_schema = sp['param_schema']         # maize: the row XML is v2; sorghum: n/a
@@ -142,7 +143,7 @@ def build_model(args, device):
     kw = {'param_schema': args.param_schema} if args.species == 'maize' else {}
     model = model_factories(args.species)[args.model_size](
         active_modalities=args.active_modalities, img_size=args.img_size, num_pc_tokens=196,
-        target_points=args.num_points, pc_loss_weight=args.pc_loss_weight, max_leaves=args.max_leaves,
+        target_points=args.gt_points, pc_loss_weight=args.pc_loss_weight, max_leaves=args.max_leaves,
         spline_loss_weight=args.spline_loss_weight, **kw,
         depth_norm_type=args.depth_norm_type, pc_loss_name=args.pc_loss_name,
         qal_threshold=args.qal_threshold, qal_alpha=args.qal_alpha, qal_use_squared=args.qal_use_squared,
@@ -281,7 +282,7 @@ def main():
     train_ds = RowDataset(args.row_root, args.train_split, args.species, args.row_mode, args.img_size,
                           args.num_points, args.max_leaves, thetas=args.thetas,
                           sample_per_plant=args.sample_per_plant, seed=args.view_seed,
-                          occlusion_stats=False, rgb_gain=args.rgb_gain)
+                          occlusion_stats=False, rgb_gain=args.rgb_gain, gt_points=args.gt_points)
     if args.val_holdout:
         # hold out whole plants from the train split; the two datasets share nothing
         import random as _random
@@ -291,14 +292,16 @@ def main():
         train_ds.plant_ids = sorted(ids[args.val_holdout:])
         val_ds = RowDataset(args.row_root, args.train_split, args.species, args.row_mode, args.img_size,
                             args.num_points, args.max_leaves, thetas=args.thetas, sample_per_plant=True,
-                            deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain, plants=held)
+                            deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain, plants=held,
+                            gt_points=args.gt_points)
         args.val_plants = held
         if is_main:
             print(f'validation = {len(held)} plants held out of {args.train_split} (seed {args.holdout_seed})')
     else:
         val_ds = RowDataset(args.row_root, args.val_split, args.species, args.row_mode, args.img_size,
                             args.num_points, args.max_leaves, thetas=args.thetas, sample_per_plant=True,
-                            deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain)
+                            deterministic=True, occlusion_stats=False, rgb_gain=args.rgb_gain,
+                            gt_points=args.gt_points)
     if cli.smoke:
         train_ds.plant_ids = train_ds.plant_ids[:cli.smoke]
         val_ds.plant_ids = val_ds.plant_ids[:cli.smoke]

@@ -26,7 +26,9 @@ data:
   sample_per_plant: true    # one (theta, shot) per plant per epoch, as view sampling
   view_seed: 42
   img_size: 224
-  num_points: 8192          # the gt cloud has exactly 8192; the scene cloud (24,576) is subsampled
+  num_points: 24576         # INPUT: the whole scene cloud (three plants); sampling it to 8,192 would thin
+                            # the target to ~2,700 points, a third of its isolated density
+  gt_points: 8192           # TARGET = the model's output: the main plant's own 8,192 points
 
 model:
   active_modalities: "pc,rgb,depth,text"

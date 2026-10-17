@@ -23,7 +23,9 @@ data:
   sample_per_plant: true    # one (theta, shot) per plant per epoch, as view sampling
   view_seed: 42
   img_size: 224
-  num_points: 8196          # the sorghum loaders' count; both clouds are sampled/padded to it
+  num_points: 24576         # INPUT: the whole scene cloud (three plants), see the maize config
+  gt_points: 8196           # TARGET = the model's output size (the sorghum loaders' 8196; the 8,192-pt
+                            # gt cloud is padded by four duplicates)
 
 model:
   active_modalities: "pc,rgb,depth,text"

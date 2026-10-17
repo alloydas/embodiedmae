@@ -479,7 +479,17 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   Blackwell node carries no nova job (OverSubscribe=NO vs scavenger's FORCE:1); then (user: "try with 100 in
   scavenger", read as the H-series) `TresPerNode=gres/gpu:h200:4` (no H100 on Nova; the three H200 nodes
   nova25-gpu-[2-4], 4 cards each, all busy at 17:30); then (user: "A100") `TresPerNode=gres/gpu:a100:4`
-  on scavenger (the 80 GB `a100` type, not `a100-pcie`); warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
+  on scavenger (the 80 GB `a100` type, not `a100-pcie`); then (user: "So put it for RTX pro 6000 and as
+  input number of point cloud is high think about the batch size") BACK TO `gres/gpu:rtx_pro_6000:4` on
+  scavenger, 160G (waits for a Blackwell node with no nova job), and the ROW INPUT NOW KEEPS THE WHOLE
+  SCENE CLOUD: `data.num_points: 24576` (the three plants at full density; sampling to 8,192 had left the
+  target ~2,700 points) with `data.gt_points: 8192` = the model's output / the target cloud
+  (`RowDataset(gt_points=)`, `train_row_4m` builds the model with `target_points=gt_points`, `eval_row.py`
+  reads `gt_points` from config.json and takes `--num-points` for zero-shot models). The folding head and
+  the QAL / Chamfer / Sinkhorn losses are size-agnostic, so the warm start loads unchanged. Memory: the
+  extra cost is kNN over 24,576 points and a (8192 x 24576) cdist at val, ~0.8 GB/item, so batch 8/GPU on
+  96 GB is far inside; per-GPU batch 8 x 4 = global 32 at lr 1e-4 (the 2-GPU recipe). CPU smokes re-run.
+  Sorghum row configs: num_points 24576 / gt_points 8196; warm start `outputs/maize_4m` ep 600 (v1 schema; the v2 head
   relearns). Expect ~2-3 min/epoch once the page cache is warm (10,000 items/epoch, loader-bound), so
   ~4-5 h for 100 epochs once it starts; at submission no scavenger node had 8 free GPUs. The isolated
   control `configs/config_maize_row_iso.yaml` (same shape) is NOT launched yet; the zero-shot baseline

@@ -71,7 +71,7 @@ def build_model(run_dir, ckpt_name, device, species):
     kw = {'param_schema': cfg.get('param_schema') or 'v1'} if species == 'maize' else {}
     model = model_factories(species)[cfg.get('model_size', 'base')](
         active_modalities=cfg.get('active_modalities'), img_size=cfg.get('img_size', 224),
-        num_pc_tokens=196, target_points=cfg.get('num_points', sp['num_points']),
+        num_pc_tokens=196, target_points=cfg.get('gt_points', cfg.get('num_points', sp['num_points'])),
         pc_loss_weight=cfg.get('pc_loss_weight', 1.0), max_leaves=cfg.get('max_leaves', sp['max_leaves']),
         spline_loss_weight=cfg.get('spline_loss_weight', 5.0), **kw,
         depth_norm_type=cfg.get('depth_norm_type', 'minmax'), pc_loss_name=cfg.get('pc_loss_name', 'qal_loss'),
@@ -158,6 +158,9 @@ def main():
     ap.add_argument('--sources', default='all,rgb,depth,pc')
     ap.add_argument('--thetas', default=None, help='comma list, default all')
     ap.add_argument('--n-plants', type=int, default=None)
+    ap.add_argument('--num-points', type=int, default=None,
+                    help='points sampled from the INPUT cloud (default: the run\'s; a row run records 24576, '
+                         'an isolated run 8192, which thins the target to a third of its density)')
     ap.add_argument('--batch-size', type=int, default=16)
     ap.add_argument('--num-workers', type=int, default=8)
     ap.add_argument('--mask-ratio', type=float, default=None, help="'all' source masking; default the run's")
@@ -187,8 +190,9 @@ def main():
     t0 = time.time()
     for mode in modes:
         ds = RowDataset(a.root, a.split, a.species, mode, cfg.get('img_size', 224),
-                        cfg.get('num_points', sp['num_points']), cfg.get('max_leaves', sp['max_leaves']),
-                        thetas=thetas, rgb_gain=rgb_gain)
+                        a.num_points or cfg.get('num_points', sp['num_points']), cfg.get('max_leaves', sp['max_leaves']),
+                        thetas=thetas, rgb_gain=rgb_gain,
+                        gt_points=cfg.get('gt_points', cfg.get('num_points', sp['num_points'])))
         if a.n_plants:
             keep = set(ds.plant_ids[:a.n_plants])
             ds.items = [it for it in ds.items if it[0] in keep]
