@@ -534,6 +534,16 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (`configs/config_maize_row_iso.yaml`, 4x a100, 32 CPU, 96G, 4 d, requeue, no race twin; `outputs/maize_row_iso`).
   Then: `SPECIES=maize sbatch ... slurm/eval_row.sbatch maize_row_iso checkpoints/checkpoint_epoch_100.pth test`
   and the paired row-minus-isolated delta for `tab:rows`.
+  **12:30 update:** the first two evals COMPLETED (55 min each, 1 A100) but ran BEFORE the isolated-mode fix (their
+  isolated rows used the duplicate-padded cloud) and their Chamfer is in the input frame's unit-sphere units, which
+  differ between modes (scene scale 0.52-0.61 m vs target alone 0.50-0.54 m: x1.14-1.32 on squared Chamfer at
+  theta 0-90). Parked in `reports/_stale_row_prefix_2026-10-20/`. `eval_row.py` now also writes `chamfer_*_m2`
+  (m^2, x scale^2) and `miss_5mm`, and the summary/paired delta covers them. Full reruns on scavenger: **17025419**
+  `row_eval_ft`, **17025420** `row_eval_zs` -> `reports/row_maize_*_test_<job>.{csv,json}`. Row-mode numbers from
+  the stale pair are still indicative (row mode was unaffected): fine-tuned row/all Chamfer 0.00197 vs zero-shot
+  0.00881 (normalised, test, 22,500 items); best single source for the fine-tuned model is depth (0.00139), PC alone
+  from the scene cloud fails (0.046); by theta the fine-tuned model is worst broadside (0: 0.0026) and end-on (90:
+  0.0030), best at 40-50 deg (0.0015); no trend over occlusion quartiles.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
