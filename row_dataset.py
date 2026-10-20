@@ -210,7 +210,7 @@ class RowDataset(Dataset):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
         n_t = sorted({it[1] for it in self.items})
         print(f'🌾 {species} row [{split}/{mode}]: {len(self.plant_ids)} plants, {len(self.items)} items, '
-              f'thetas {n_t}, input {self.num_points} pts -> target {self.gt_points} pts' + ('  [one item per plant per epoch]' if self.sample_per_plant else '')
+              f'thetas {n_t}, input {self.num_points if self.mode == "row" else "native"} pts -> target {self.gt_points} pts' + ('  [one item per plant per epoch]' if self.sample_per_plant else '')
               + (f'  [rgb gain {self.rgb_gain:g}]' if self.rgb_gain is not None else ''))
 
     # ── sampling ──────────────────────────────────────────────────────────────
@@ -257,7 +257,11 @@ class RowDataset(Dataset):
 
     def load_clouds(self, in_ply, gt_ply):
         """(input cloud at num_points, gt cloud at gt_points) in the INPUT cloud's normalised frame."""
-        pin = self._subsample(read_ply_xyz(in_ply), self.num_points)
+        raw = read_ply_xyz(in_ply)
+        # num_points is sized for the SCENE cloud (24,576). In isolated mode the input is the
+        # target's own cloud (8,192): never pad it with duplicates up to the scene size.
+        k = min(self.num_points, raw.shape[0]) if self.mode == 'isolated' else self.num_points
+        pin = self._subsample(raw, k)
         centre = pin.mean(axis=0)
         pin = pin - centre
         scale = float(np.max(np.linalg.norm(pin, axis=1))) or 1.0
