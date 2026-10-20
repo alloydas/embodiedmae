@@ -508,6 +508,23 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   ~4-5 h for 100 epochs once it starts; at submission no scavenger node had 8 free GPUs. The isolated
   control `configs/config_maize_row_iso.yaml` (same shape) is NOT launched yet; the zero-shot baseline
   `sbatch slurm/eval_row.sbatch maize_4m checkpoints/checkpoint_epoch_600.pth test` neither.
+- **2026-10-20 10:10 STATUS.** (1) **Maize row fine-tune DONE 100/100** (`outputs/maize_row_ft`, checkpoint_epoch_100):
+  the A100 twin 16956299 won the race (first start 10-17 ~04:49 cancelled the pending rtx twin 16956298 as
+  designed, was preempted at epoch 55, requeued and finished 17:07-18:41 on nova22-gpu-3, 4x A100). Hold-out
+  val (500 train plants): Chamfer vs TARGET 0.00467 (ep 1) -> 0.00187 (ep 100) while Chamfer vs the INPUT scene
+  cloud rose 0.0060 -> 0.0093, so the model stopped echoing the scene and reconstructs the target plant; plant
+  MAE 0.089 -> 0.085, masked leaf MAE 0.051 -> 0.041; val rgb 0.375 -> 0.161, depth 0.044 -> 0.018. NOT yet
+  run: the test-split eval (`SPECIES=maize sbatch slurm/eval_row.sbatch maize_row_ft checkpoints/checkpoint_epoch_100.pth test`),
+  the zero-shot baseline (`... maize_4m checkpoints/checkpoint_epoch_600.pth test --num-points 24576`) and
+  the isolated control arm (`RACE_CANCEL_NAME= sbatch --job-name=maize_row_iso --partition=scavenger
+  --account=mech-ai-scavenger --gres=gpu:a100:4 --cpus-per-task=32 --mem=96G --time=4-00:00:00 --requeue
+  slurm/train_row.sbatch configs/config_maize_row_iso.yaml`, ~1.5 h on 4x A100 once it starts).
+  (2) **Sinkhorn E1 16929801 at epoch 835/1000**, 7.75 min/epoch on 4x RTX PRO 6000 (self-requeued once at
+  the 4-day wall, restarted 10-19 10:17; val pc_chamfer 8.5e-4 at ep 830). ETA ~2026-10-21 08:00-09:00;
+  16950840 (2-GPU resume) still waits afterany behind it. (3) **E5 arms all COMPLETED 600/600 on 10-16**
+  (16930427/8/9) but NOT probed. (4) v2 pair bootstraps 16950816 done 10-16: `reports/{e2,e2_depth,e4,control,
+  control_vs_pcrgbdt,e8_supervised,e8_vs_embodiedmae,e8_pc_vs_pointmae}_delta_d2_16950816.csv` (untracked).
+  mech-ai is at 16/17 GPUs (E1 = 4), so any new nova job pends on AssocGrpGRES: use scavenger.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
