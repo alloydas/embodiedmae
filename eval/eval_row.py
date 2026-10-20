@@ -14,7 +14,7 @@ token, as in every probe here):
   rgb / depth / pc : that stream alone, every token visible, the others absent
 
 Scores per item:
-  chamfer_gt : repo Chamfer (embodied_mae.chamfer_distance) of the predicted cloud against
+  chamfer_gt : squared Chamfer (mean nearest-neighbour distance both ways, per item) of the predicted cloud against
                the TARGET plant's cloud, in the input cloud's normalised frame
   chamfer_in : the same against the INPUT cloud; in row mode a model that merely echoes
                the scene scores well here and badly on chamfer_gt
@@ -54,7 +54,6 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from embodied_mae import chamfer_distance
 from row_dataset import RowDataset, collate, MODES, species_info, SPECIES
 from train_row_4m import model_factories
 
@@ -113,11 +112,18 @@ def predict(model, src, rgb, depth, pc, params, mask_ratio, seed):
 
 
 def score_cloud(pred, gt):
-    cd = chamfer_distance(pred, gt)
-    d = torch.cdist(gt, pred)                              # (B, Ngt, Npred)
-    miss = (d.min(dim=2).values > 0.01).float().mean(dim=1)
-    per = ((d.min(dim=2).values ** 2).mean(1) + (d.min(dim=1).values ** 2).mean(1))   # per-item chamfer
-    return per, miss, cd
+    """Per-item squared Chamfer and miss rate, one item at a time: a batched (B, Ngt, Npred)
+    distance matrix against the 24,576-point scene cloud is ~13 GB at batch 16, and the repo's
+    chamfer_distance expands (B, N, M, 3) on top of it (36 GB; OOM on a 40 GB A100, job 17016779)."""
+    per, miss = [], []
+    for b in range(pred.shape[0]):
+        d = torch.cdist(gt[b], pred[b])                        # (Ngt, Npred)
+        dg = d.min(dim=1).values                               # target -> nearest prediction
+        dp = d.min(dim=0).values                               # prediction -> nearest target
+        miss.append((dg > 0.01).float().mean())
+        per.append((dg ** 2).mean() + (dp ** 2).mean())
+        del d
+    return torch.stack(per), torch.stack(miss), None
 
 
 def recipe_scored(cfg, species, model):
