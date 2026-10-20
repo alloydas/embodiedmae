@@ -525,6 +525,15 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (16930427/8/9) but NOT probed. (4) v2 pair bootstraps 16950816 done 10-16: `reports/{e2,e2_depth,e4,control,
   control_vs_pcrgbdt,e8_supervised,e8_vs_embodiedmae,e8_pc_vs_pointmae}_delta_d2_16950816.csv` (untracked).
   mech-ai is at 16/17 GPUs (E1 = 4), so any new nova job pends on AssocGrpGRES: use scavenger.
+- **2026-10-20 11:30: ROW TEST EVALS + ISOLATED CONTROL LAUNCHED (user: "start the isolated control arm in
+  scavenger").** `eval/eval_row.py` scores Chamfer per item now (the batched (B,N,M,3) expansion OOMed on a 40 GB
+  A100 against the 24,576-point scene cloud, job 17016779). `RowDataset` in ISOLATED mode caps the input cloud at
+  its native size (8,192) instead of padding the target's own cloud with duplicates up to `num_points` (24,576);
+  row mode unchanged. Queued on scavenger: **17016778** `row_eval_ft` (maize_row_ft ep 100, test), **17017988**
+  `row_eval_zs` (maize_4m ep 600 zero-shot, test, `--num-points 24576`), **17021529** `maize_row_iso`
+  (`configs/config_maize_row_iso.yaml`, 4x a100, 32 CPU, 96G, 4 d, requeue, no race twin; `outputs/maize_row_iso`).
+  Then: `SPECIES=maize sbatch ... slurm/eval_row.sbatch maize_row_iso checkpoints/checkpoint_epoch_100.pth test`
+  and the paired row-minus-isolated delta for `tab:rows`.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
