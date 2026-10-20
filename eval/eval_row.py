@@ -18,7 +18,9 @@ Scores per item:
                the TARGET plant's cloud, in the input cloud's normalised frame
   chamfer_in : the same against the INPUT cloud; in row mode a model that merely echoes
                the scene scores well here and badly on chamfer_gt
-  miss_0p01  : fraction of target points with no predicted point within 0.01
+  miss_0p01  : fraction of target points with no predicted point within 0.01 (normalised units)
+  *_m2 / miss_5mm : the same in metres (x scale^2 / 5 mm), comparable between row and isolated
+               inputs, whose unit-sphere frames differ in scale (scene vs target alone)
   plant_mae / leaf_mae : recipe error on the real columns of the species' current
                layout (maize: schema v2, plant leafCount / stemInternodeSum / height and the
                7 LEAF_FIELDS_V2; sorghum: the 9 plant fields and the 5 width-layout leaf
@@ -111,19 +113,27 @@ def predict(model, src, rgb, depth, pc, params, mask_ratio, seed):
     return pred_pc, pred_par
 
 
-def score_cloud(pred, gt):
-    """Per-item squared Chamfer and miss rate, one item at a time: a batched (B, Ngt, Npred)
+def score_cloud(pred, gt, scale):
+    """Per-item squared Chamfer and miss rates, one item at a time: a batched (B, Ngt, Npred)
     distance matrix against the 24,576-point scene cloud is ~13 GB at batch 16, and the repo's
-    chamfer_distance expands (B, N, M, 3) on top of it (36 GB; OOM on a 40 GB A100, job 17016779)."""
-    per, miss = [], []
+    chamfer_distance expands (B, N, M, 3) on top of it (36 GB; OOM on a 40 GB A100, job 17016779).
+
+    Clouds sit in the INPUT cloud's unit-sphere frame, whose scale differs between row (scene,
+    ~0.52-0.61 m) and isolated (target alone, ~0.50-0.54 m) inputs, so a normalised Chamfer is
+    not comparable across modes; `scale` (B,) metres per unit converts to metric units:
+      per       squared Chamfer in the normalised frame   per_m2    the same in m^2
+      miss      target points > 0.01 (normalised) from any prediction   miss_5mm  > 5 mm
+    """
+    per, per_m2, miss, miss_5mm = [], [], [], []
     for b in range(pred.shape[0]):
         d = torch.cdist(gt[b], pred[b])                        # (Ngt, Npred)
         dg = d.min(dim=1).values                               # target -> nearest prediction
         dp = d.min(dim=0).values                               # prediction -> nearest target
-        miss.append((dg > 0.01).float().mean())
-        per.append((dg ** 2).mean() + (dp ** 2).mean())
+        cd = (dg ** 2).mean() + (dp ** 2).mean()
+        per.append(cd); per_m2.append(cd * scale[b] ** 2)
+        miss.append((dg > 0.01).float().mean()); miss_5mm.append((dg * scale[b] > 0.005).float().mean())
         del d
-    return torch.stack(per), torch.stack(miss), None
+    return torch.stack(per), torch.stack(per_m2), torch.stack(miss), torch.stack(miss_5mm)
 
 
 def recipe_scored(cfg, species, model):
@@ -213,14 +223,16 @@ def main():
                 pred_pc, pred_par = predict(model, src, rgb, depth, pc, params, mask_ratio, a.seed + 1000003 * bi)
                 if pred_pc is None:
                     continue
-                cg, miss, _ = score_cloud(pred_pc, g_pc)
-                ci, _, _ = score_cloud(pred_pc, pc)
+                scale = torch.tensor([float(inf['scale']) for inf in info], device=pred_pc.device)
+                cg, cg_m2, miss, miss5 = score_cloud(pred_pc, g_pc, scale)
+                ci, ci_m2, _, _ = score_cloud(pred_pc, pc, scale)
                 pm, lm = recipe_error(pred_par, params, valid, sp) if recipe else (None, None)
                 for k, inf in enumerate(info):
                     rows.append({'species': a.species, 'run': run_dir.name, 'epoch': epoch, 'mode': mode, 'source': src,
                                  'plant': inf['plant'], 'theta': inf['theta'], 'shot': inf['shot'],
-                                 'occ_frac': inf['occ_frac'], 'nbr_frac': inf['nbr_frac'],
+                                 'occ_frac': inf['occ_frac'], 'nbr_frac': inf['nbr_frac'], 'scale_m': float(inf['scale']),
                                  'chamfer_gt': float(cg[k]), 'chamfer_in': float(ci[k]), 'miss_0p01': float(miss[k]),
+                                 'chamfer_gt_m2': float(cg_m2[k]), 'chamfer_in_m2': float(ci_m2[k]), 'miss_5mm': float(miss5[k]),
                                  'plant_mae': float(pm[k]) if recipe else float('nan'),
                                  'leaf_mae': float(lm[k]) if recipe else float('nan')})
             if bi % 10 == 0:
@@ -231,7 +243,7 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows(rows)
 
     # ── summary ──────────────────────────────────────────────────────────────
-    metrics = ['chamfer_gt', 'chamfer_in', 'miss_0p01'] + (['plant_mae', 'leaf_mae'] if recipe else [])
+    metrics = ['chamfer_gt', 'chamfer_in', 'miss_0p01', 'chamfer_gt_m2', 'chamfer_in_m2', 'miss_5mm'] + (['plant_mae', 'leaf_mae'] if recipe else [])
     def agg(sel):
         return {m: {'mean': float(np.mean([r[m] for r in sel])), 'median': float(np.median([r[m] for r in sel])),
                     'n': len(sel)} for m in metrics} if sel else {}
