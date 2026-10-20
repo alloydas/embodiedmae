@@ -38,6 +38,7 @@ import eval_test_scene as E
 import embodied_mae_4m as S4
 import embodied_mae_4m_maize as M4
 from maize_dataset_4m import MaizeDataset4M
+from maize_row_dataset import build_maize_dataset
 from sorghum_dataset_4m import SorghumDataset4M
 from occlusion_scene import SceneConfig, compose, to_world, no_scene_frame
 
@@ -68,7 +69,7 @@ def main():
     scene = SceneConfig.from_dict(rc['occlusion_scene']).for_validation()
     L = int(rc['max_leaves'])
     if sp == 'maize':
-        ds = MaizeDataset4M(rc['data_root'], img_size=rc['img_size'], num_points=rc['num_points'], split='test', max_leaves=L,
+        ds = build_maize_dataset(rc, 'test', deterministic_view=True) if rc.get('dataset') == 'maize_row' else MaizeDataset4M(rc['data_root'], img_size=rc['img_size'], num_points=rc['num_points'], split='test', max_leaves=L,
                             view_sampling=rc['view_sampling'], deterministic_view=True, return_pose=True,
                             return_visibility=scene.visible_only, depth_planes=rc.get('depth_planes'))
     else:
@@ -85,7 +86,8 @@ def main():
         pn, c2w = b[6].to(dev), b[7].to(dev)
         nf = b[8].to(dev) if sp == 'maize' else None      # sorghum: fixed render planes
         sc = compose(rgb, depth, pc, pn, c2w, scene, patch_size=16, near_far=nf, generator=torch.Generator().manual_seed(bi),
-                     vis=b[9].to(dev) if len(b) > 9 else None)
+                     vis=b[9].to(dev) if len(b) > 9 else None,
+                     given=b[10] if len(b) > 10 else None)
         _, world = to_world(pc, pn, c2w)
         r = torch.hypot(world[..., 0], world[..., 2])
         band = torch.clamp((3 * r / r.max(dim=1, keepdim=True).values.clamp(min=1e-6)).long(), max=2)

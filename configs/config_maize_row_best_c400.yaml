@@ -1,0 +1,97 @@
+# 200 -> 400 CONTINUATION of maize_row_best_s1 (Alloy's rendered rows), identical except epochs: 400.
+# Started from its own epoch 200 through the launcher's INIT_CKPT, i.e. a COSINE WARM RESTART (LR ~0 at 200
+# back up, decaying to 0 by 400) -- the protocol of the synthetic *_400 runs. Report as '200 + 200 epochs with
+# a cosine restart'. Question (Yongyun, 2026-10-20): does mixed + QAL + Sinkhorn overtake random + QAL with
+# longer training, as it did on the synthetic maize scenes? Compare the three _c400 arms with each other.
+#
+#   INIT_CKPT=./outputs/maize_row_best_s1/checkpoints/checkpoint_epoch_200.pth \
+#     sbatch --job-name=maize_row_best_c400_s1 slurm/maize_scene_arm.sbatch row_best_c400 1
+#
+data:
+  dataset: maize_row       # Alloy's RENDERED rows (maize_row_dataset.py): the scene comes with the sample
+  data_root: /work/mech-ai/alloydas/maize_row
+  img_size: 224
+  num_points: 8192         # exact point count in pointcloud_cam.ply
+  view_sampling: true
+  view_seed: 42            # one (plant, theta) shot per plant per epoch; val / test a fixed shot per plant
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80         # over pc/rgb/depth; text is outside the budget
+  text_mask_ratio: null      # parameters inside the Dirichlet budget (see distill.visible_mode)
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  pc_sinkhorn_weight: 0.5     # x Sinkhorn divergence, added to the QAL term (pc_sinkhorn.py); as config_*_scene_sink.yaml
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28
+  occlusion_scene:         # config.json records every field
+    prob: 0.5              # share of training samples given their RENDERED scene; the rest see the target alone
+    neighbours: 2          # one each side of a row through the target
+    # Maize plants are ~0.58x sorghum's footprint (95 % of points within 0.30 m
+    # of the stem vs 0.52 m; farthest 0.38 vs ~0.9 m), so sorghum's spacing
+    # [0.35, 0.8] / crop 0.75 hide only 4 % of a maize target. Calibrated on 64
+    # val plants (2026-10-02): spacing [0.15, 0.35] -- a real in-row maize
+    # spacing -- hides 11.7 % of the target's pixels with 65 % of the input
+    # cloud neighbour (sorghum's defaults on sorghum: 16 % / 60 %); crop 0.45
+    # keeps 99.9 % of the target. Preview: reports/scene_preview_maize_val.png.
+    spacing: [0.15, 0.35]
+    row_jitter: 0.05
+    yaw: true
+    crop_radius: 0.45
+    splat_px: 1
+    mask_policy: neighbour_first       # THE change vs config_maize_scene.yaml
+    nf_prob: 0.5           # half the scene samples neighbour-first, half uniform
+    patch_frac: 0.3
+    val_seed: 0            # same val scenes in every arm
+    norm: stem             # origin at the TARGET's stem base, metres / unit_m (see header)
+    unit_m: 0.64           # metres per unit: the median maize plant radius
+
+training:
+  batch_size: 16           # per GPU; the launcher runs 2 GPUs -> global 32
+  epochs: 400
+  lr: 1.5e-4
+  weight_decay: 0.05
+  warmup_epochs: 13
+  val_freq: 20             # 10 val points, each clean + occluded
+  test_freq: 0
+  seed: null               # set per run by the launcher (--seed)
+
+checkpointing:
+  output_dir: ./outputs/maize_row_best_c400
+  save_freq: 20
+  resume: null
+
+visualization:
+  viz_freq: 20             # clean + occluded-scene figures to W&B
+  num_viz_samples: 6
+
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 14
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_row_best_c400
+
+distill:
+  student_init: /work/mech-ai-scratch/alloy/embodiedmae/outputs/maize_4m/checkpoints/checkpoint_epoch_600.pth
+  param_hide_prob: 0.5
+  visible_mode: budget
+  feat_weight: 0.0
+  cls_weight: 0.0
+  val_text_mask_ratio: 1.0
+  seed: 0

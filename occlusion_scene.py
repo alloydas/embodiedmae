@@ -372,7 +372,7 @@ def resample(points, keep, n_out, generator=None):
 # ── The scene ─────────────────────────────────────────────────────────────────
 
 def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=None,
-            near_far=None, vis=None):
+            near_far=None, vis=None, given=None):
     """Turn a batch of clean single plants into occluded scenes, or None.
 
     rgb, depth, pc, pc_norm, cam2world : the dataset's tensors for B samples
@@ -390,6 +390,10 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
         own camera sees (the dataset's return_visibility). Then EVERY sample's
         input cloud is its visible part (clean samples included, so they are no
         longer bit for bit their clean tensors).
+
+    given : a RENDERED scene from the dataset (MaizeRowDataset's 11th item, 2026-10-17): its
+        images and cloud replace the synthetic neighbours -- see compose_given(). None = build
+        the scene here (every run before).
 
     Returns a dict:
       rgb, depth, pc   the scene inputs; samples without neighbours are their
@@ -415,6 +419,8 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
                        loss_patches (scored-while-visible patches per sample)
     None when nothing in the batch gets neighbours (B < 2, or every draw clean).
     """
+    if given is not None:
+        return compose_given(rgb, depth, pc, pc_norm, cam2world, cfg, given, patch_size, generator)
     B, N, _ = pc.shape
     if B < 2:
         return None
@@ -538,6 +544,80 @@ def compose(rgb, depth, pc, pc_norm, cam2world, cfg, patch_size=16, generator=No
         out['stats']['crop_scale'] = out['crop_norm'][:, 3][u].mean().item()
         out['stats']['crop_shift'] = out['crop_norm'][:, :3].norm(dim=1)[u].mean().item()
     return out
+
+
+def compose_given(rgb, depth, pc, pc_norm, cam2world, cfg, given, patch_size=16, generator=None):
+    """compose() for a scene the dataset RENDERED (MaizeRowDataset): `given` holds the scene's
+    rgb / depth / pc (pc in the target's normalised frame), per-point neighbour labels
+    `nb_point`, the per-pixel neighbour share `nb_px` and the share of the target's pixels the
+    neighbours hide `hidden`. A sample gets the scene with prob cfg.prob (its own draw), else its
+    clean target alone; masking policies, frames and stats follow compose(). The clouds are
+    camera-view already, so cfg.visible_only has nothing to remove here."""
+    B, N, _ = pc.shape
+    dev = pc.device
+    use = (torch.rand(B, generator=generator) < float(cfg.prob)).to(dev)
+    if not bool(use.any()):
+        return None
+    g = {k: v.to(dev) for k, v in given.items()}
+    # a FULL scene cloud (MaizeRowDataset scene_points > num_points): the clean samples' input is
+    # their cloud tiled to the same size (match_points), so both kinds batch together
+    pc_clean = match_points(pc, g['pc'].shape[1])
+    u4 = use[:, None, None, None]
+    nb_px = g['nb_px'].to(rgb.dtype) * u4.to(rgb.dtype)
+    nb_point = g['nb_point'].bool() & use[:, None]
+    shown_frac = F.avg_pool2d(nb_px, patch_size).flatten(1)
+    loss_tok = shown_frac > 0
+    out = {'rgb': torch.where(u4, g['rgb'].to(rgb.dtype), rgb),
+           'depth': torch.where(u4, g['depth'].to(depth.dtype), depth),
+           'pc': torch.where(use[:, None, None], g['pc'].to(pc.dtype), pc_clean),
+           'nb_point': nb_point, 'shown': nb_px > 0.5,
+           'loss_tokens': {'rgb': loss_tok, 'depth': loss_tok}}
+    if cfg.mask_policy == 'neighbour_first':
+        img = shown_frac >= float(cfg.patch_frac)
+        nbf = nb_point
+        if float(cfg.nf_prob) < 1.0:
+            sel = (torch.rand(B, generator=generator) < float(cfg.nf_prob)).to(dev)
+            img = img & sel[:, None]
+            nbf = nbf & sel[:, None]
+        out['mask_flags'] = {'rgb': img, 'depth': img, 'pc_points': nbf}
+    if cfg.norm in ('crop', 'metric', 'stem'):
+        if cfg.norm == 'stem':
+            c = stem_origin(pc_norm, cam2world)
+            if float(cfg.origin_jitter_m) > 0:
+                c = c + origin_error(B, cfg, pc_norm, generator)
+        else:
+            c = torch.where(use[:, None], out['pc'].mean(1), torch.zeros_like(out['pc'][:, 0]))
+        if cfg.norm == 'crop':
+            r = (out['pc'] - c[:, None]).norm(dim=-1).max(1).values
+            r = torch.where(use, r.clamp(min=1e-6), torch.ones_like(r))
+        else:
+            r = float(cfg.unit_m) / pc_norm[:, 3]
+        out['pc'] = (out['pc'] - c[:, None]) / r[:, None, None]
+        out['target_pc'] = (pc - c[:, None]) / r[:, None, None]
+        out['crop_norm'] = torch.cat([c, r[:, None]], dim=1)
+    u = use
+    out['stats'] = {
+        'hidden_px': g['hidden'].float()[u].mean().item(),
+        'nb_points': nb_point.float().mean(1)[u].mean().item(),
+        'loss_patches': loss_tok.float().sum(1)[u].mean().item(),
+    }
+    if cfg.norm in ('crop', 'metric', 'stem'):
+        out['stats']['crop_scale'] = out['crop_norm'][:, 3][u].mean().item()
+        out['stats']['crop_shift'] = out['crop_norm'][:, :3].norm(dim=1)[u].mean().item()
+    return out
+
+
+def match_points(pc, m):
+    """(B, N, 3) -> (B, m, 3), m a multiple of N: every point repeated m / N times. With the
+    point embedder's kNN group scaled by the same factor (pc_group_size 32 -> 96 for 3x), a
+    tiled clean cloud gives EXACTLY the groups of the original -- the duplicates fill the larger
+    group -- so clean inputs keep their meaning next to full-size scene clouds. m == N: no-op."""
+    n = pc.shape[1]
+    if m == n:
+        return pc
+    if m % n:
+        raise ValueError(f"scene cloud of {m} points is not a multiple of the target's {n}")
+    return pc.repeat_interleave(m // n, dim=1)
 
 
 def metric_frame(pc, pc_norm, unit_m):

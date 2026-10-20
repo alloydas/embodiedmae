@@ -45,10 +45,12 @@ from embodied_mae_4m_maize import (
     embodied_mae_4m_maize_large,
     MAX_LEAVES,
     N_PARAMS,
+    _PLANT_SCALE,
 )
 from embodied_mae import earth_movers_distance
 from maize_dataset_4m import MaizeDataset4M
-from occlusion_scene import SceneConfig, compose as compose_scene, no_scene_frame, visible_input
+from maize_row_dataset import MaizeRowDataset, monitor_plants
+from occlusion_scene import SceneConfig, compose as compose_scene, no_scene_frame, visible_input, match_points
 from leaf_mask import LeafMaskConfig, mask_weights as leaf_mask_weights
 # Species-agnostic pieces shared with the sorghum trainer: the point-cloud
 # scorer (chunked chamfer + F1/precision/recall), the history-alignment helper
@@ -146,6 +148,23 @@ def config_to_namespace(config):
     # Re-encode depth.png with FIXED near / far planes (metres) instead of the
     # renderer's per-plant ones, which give away the clean plant's centre and size
     # (MaizeDataset4M depth_planes). None -> the renderer's, every run before 2026-10-15.
+    # 'maize' (MaizeDataset4M: single plants, scenes built by occlusion_scene) or 'maize_row'
+    # (MaizeRowDataset: Alloy's RENDERED rows, the scene comes with the sample).
+    ns.dataset            = config['data'].get('dataset', 'maize')
+    if ns.dataset not in ('maize', 'maize_row'):
+        raise ValueError(f"data.dataset must be maize or maize_row, got {ns.dataset!r}")
+    # maize_row only: the scene cloud's size (None = num_points; 24576 = all of Alloy's points),
+    # the training splits ('train' or 'train+val') and, for train+val, how many val plants are
+    # held OUT as the run's only validation (maize_row_dataset.monitor_plants).
+    ns.scene_points       = config['data'].get('scene_points', None)
+    ns.train_splits       = config['data'].get('train_splits', 'train')
+    ns.monitor_plants     = config['data'].get('monitor_plants', None)
+    if ns.dataset != 'maize_row' and (ns.scene_points or ns.train_splits != 'train' or ns.monitor_plants):
+        raise ValueError("data.scene_points / train_splits / monitor_plants need data.dataset: maize_row")
+    if 'val' in str(ns.train_splits).split('+') and not ns.monitor_plants:
+        raise ValueError("training on val needs data.monitor_plants (the held-out validation set)")
+    # point-embedder kNN group size; scale it with the scene cloud (32 for 8,192 points, 96 for 24,576)
+    ns.pc_group_size      = int(config['model'].get('pc_group_size', 32))
     _dp                   = config['data'].get('depth_planes', None)
     ns.depth_planes       = None if _dp in (None, 'null') else [float(_dp[0]), float(_dp[1])]
     ns.model_size         = config['model'].get('model_size', 'base')
@@ -193,6 +212,10 @@ def config_to_namespace(config):
     if _lm is not None and _sc is not None and _sc.visible_only:
         raise ValueError("leaf_mask reads the complete input cloud; it cannot combine "
                          "with occlusion_scene.visible_only")
+    if ns.dataset == 'maize_row' and (_sc is None or _lm is not None or ns.depth_planes is not None):
+        raise ValueError("data.dataset: maize_row needs an occlusion_scene block (prob = share of "
+                         "samples given their rendered scene), no leaf_mask and no depth_planes "
+                         "(its depth planes are already fixed, 0.05 / 3.0 m)")
     if _sc is not None and _sc.visible_only and _sc.prob == 0:
         raise ValueError("occlusion_scene.visible_only is wired through the scene path; "
                          "prob 0 (clean training) would train on complete clouds")
@@ -228,6 +251,9 @@ def config_to_namespace(config):
     # procedural parameters, a student that mostly does not. See train_one_epoch.
     _dist                 = config.get('distill') or None
     ns.distill            = dict(_dist) if _dist else None
+    if ns.distill and float(ns.distill.get('card_feedback_prob', 0.0)) > 0 and (
+            float(ns.distill.get('feat_weight', 1.0)) > 0 or float(ns.distill.get('cls_weight', 0.5)) > 0):
+        raise ValueError("distill.card_feedback_prob is teacher-free: set feat_weight and cls_weight to 0")
     return ns
 
 
@@ -569,7 +595,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
     sstats, n_scene = {}, 0
 
     rank_ = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
-    dsum = {'feat': 0.0, 'cls': 0.0, 'hidden': 0.0, 'card_only': 0.0}
+    dsum = {'feat': 0.0, 'cls': 0.0, 'hidden': 0.0, 'card_only': 0.0, 'feedback': 0.0}
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
     for bi, batch in enumerate(pbar):
         rgb, depth, pc, param_floats, text_valid = (t.to(device) for t in batch[:5])
@@ -578,7 +604,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
         # step with prob param_hide_prob (the same draw on every rank), and seed
         # the step so student and teacher get the same FPS, Dirichlet split and
         # masks -- they then differ ONLY in whether the parameters are visible.
-        hide, step_seed, card_only = False, None, False
+        hide, step_seed, card_only, feedback = False, None, False, False
         if distill is not None:
             # card_only_prob: on this share of steps the model sees ONLY the
             # procedural parameters (every rgb / depth / pc token hidden) and
@@ -587,6 +613,12 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
             # draw, so the hide schedule of the other steps is unchanged.
             card_only = random.Random((epoch * 1_000_003 + bi) * 7 + 3).random() < float(distill.get('card_only_prob', 0.0))
             hide = (not card_only) and random.Random(epoch * 1_000_003 + bi).random() < float(distill.get('param_hide_prob', 1.0))
+            # card_feedback_prob: on this share of the steps that would show the TRUE card,
+            # show the model's OWN predicted card instead (fully visible), as the two-pass
+            # test readout does -- so it learns how far to trust an approximate card. Its own
+            # draw: the hide / card-only schedule of every step is unchanged.
+            feedback = ((not card_only) and (not hide) and
+                        random.Random((epoch * 1_000_003 + bi) * 11 + 5).random() < float(distill.get('card_feedback_prob', 0.0)))
             # visible_mode 'all': parameters fully visible when not hidden (every earlier
             # distill run); 'budget': inside the shared Dirichlet budget (as pretraining)
             m.text_mask_ratio = 1.0 if hide else (None if distill.get('visible_mode', 'all') == 'budget' else 0.0)
@@ -606,7 +638,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
             sc = compose_scene(rgb, depth, pc, batch[6].to(device), batch[7].to(device),
                                scene, patch_size=m.patch_size,
                                near_far=batch[8].to(device),
-                               vis=batch[9].to(device) if len(batch) > 9 else None)
+                               vis=batch[9].to(device) if len(batch) > 9 else None,
+                               given=batch[10] if len(batch) > 10 else None)
             if sc is not None:
                 kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
                       'loss_tokens': sc['loss_tokens'],
@@ -624,6 +657,10 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
                     # input = what the camera sees; scored against the complete plant
                     kw = {'targets': {'pc': pc}}
                     pc = visible_input(pc, batch[9].to(device))
+                if len(batch) > 10 and batch[10]['pc'].shape[1] != pc.shape[1]:
+                    # full-size scene clouds: a clean batch is tiled to their size (match_points)
+                    kw = {'targets': {'pc': kw.get('targets', {}).get('pc', pc)}}
+                    pc = match_points(pc, batch[10]['pc'].shape[1])
         if leaf is not None and not card_only:
             # Weights from the TARGET's geometry: its clean cloud for the image
             # patches, the (possibly scene) input cloud for the PC tokens, with
@@ -634,6 +671,21 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
                 rgb.shape[-2], rgb.shape[-1], m.patch_size,
                 nb_point=sc['nb_point'] if 'targets' in kw else None)
 
+        if feedback:
+            # pass 1, eval mode and no grad (as at test): predict the card with it hidden;
+            # pass 2 (below, trained): the scene + that card, every card token visible. The
+            # leaf count is read off the predicted plant token, leaf tokens past it zeroed.
+            m.eval()
+            with torch.no_grad():
+                m.text_mask_ratio = 1.0
+                pp = m(rgb, depth, pc, param_floats, text_valid, mask_ratio=mask_ratio, **kw)[2][3]
+            m.train()
+            L_ = text_valid.shape[1] - 1
+            n_hat = (pp[:, 0, 0].clamp(0, 1) * float(_PLANT_SCALE[0])).round().clamp(1, L_)
+            text_valid = torch.cat([torch.ones_like(text_valid[:, :1]),
+                                    (torch.arange(L_, device=device)[None] < n_hat[:, None]).to(text_valid.dtype)], 1)
+            param_floats = (pp * text_valid[..., None]).detach()
+            m.text_mask_ratio = 0.0
         use_teacher = (teacher is not None and hide
                        and (float(distill.get('feat_weight', 1.0)) > 0 or float(distill.get('cls_weight', 0.5)) > 0))
         if card_only:
@@ -661,6 +713,7 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
                                                   mask_ratio=mask_ratio, **kw)
         dsum['hidden'] += float(hide)
         dsum['card_only'] += float(card_only)
+        dsum['feedback'] += float(feedback)
 
         optimizer.zero_grad()
         loss.backward()
@@ -689,6 +742,8 @@ def train_one_epoch(model, dataloader, optimizer, device, epoch, mask_ratio=0.75
         distill_stats.update({'feat': dsum['feat'] / nh, 'cls': dsum['cls'] / nh, 'param_hidden': dsum['hidden'] / n})
         if float(distill.get('card_only_prob', 0.0)) > 0:
             distill_stats['card_only'] = dsum['card_only'] / n
+        if float(distill.get('card_feedback_prob', 0.0)) > 0:
+            distill_stats['card_feedback'] = dsum['feedback'] / n
     return tot/n, tot_rgb/n, tot_depth/n, tot_pc/n, tot_txt/n
 
 
@@ -732,7 +787,8 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
                 rgb, depth, pc, batch[6].to(device), batch[7].to(device), scene,
                 patch_size=m.patch_size, near_far=batch[8].to(device),
                 generator=torch.Generator().manual_seed(scene_seed * 1_000_003 + bi),
-                vis=batch[9].to(device) if len(batch) > 9 else None)
+                vis=batch[9].to(device) if len(batch) > 9 else None,
+                given=batch[10] if len(batch) > 10 else None)
             if sc is not None:
                 x_rgb, x_depth, x_pc = sc['rgb'], sc['depth'], sc['pc']
                 kw = {'targets': {'rgb': rgb, 'depth': depth, 'pc': sc.get('target_pc', pc)},
@@ -751,6 +807,10 @@ def evaluate(model, dataloader, device, compute_emd=False, mask_ratio=0.75,
             if len(batch) <= 7:
                 raise ValueError("frame needs the loader built with return_pose=True")
             x_pc, crop_norm = no_scene_frame(pc, batch[6].to(device), batch[7].to(device), frame)
+        if len(batch) > 10 and 'targets' not in kw and batch[10]['pc'].shape[1] != x_pc.shape[1]:
+            # full-size scene clouds: a clean batch is tiled to their size (match_points)
+            kw = {**kw, 'targets': {'pc': x_pc}}
+            x_pc = match_points(x_pc, batch[10]['pc'].shape[1])
         if visible and 'targets' not in kw:
             if len(batch) <= 9:
                 raise ValueError("visible needs the loader built with return_visibility=True")
@@ -945,7 +1005,20 @@ def train_worker(rank, world_size, args):
                  if scene_cfg is not None and scene_cfg.norm in ('metric', 'stem') else None)
     vis_on    = scene_cfg is not None and scene_cfg.visible_only
     leaf_cfg    = LeafMaskConfig.from_dict(getattr(args, 'leaf_mask', None))
-    train_ds = MaizeDataset4M(args.data_root, img_size=args.img_size,
+    if getattr(args, 'dataset', 'maize') == 'maize_row':
+        # Alloy's rendered rows: one (plant, theta) shot per plant per epoch, a fixed shot per
+        # plant for val / test; the scene rides along as the sample's 11th item.
+        row_kw = dict(img_size=args.img_size, num_points=args.num_points, max_leaves=args.max_leaves,
+                      view_sampling=vs, crop_radius=scene_cfg.crop_radius,
+                      scene_points=getattr(args, 'scene_points', None))
+        mon = (monitor_plants(args.data_root, args.monitor_plants)
+               if getattr(args, 'monitor_plants', None) else None)
+        train_ds = MaizeRowDataset(args.data_root, split=getattr(args, 'train_splits', 'train'),
+                                   view_seed=args.view_seed, exclude=mon, **row_kw)
+        val_ds   = MaizeRowDataset(args.data_root, split='val', deterministic_view=True, include=mon, **row_kw)
+        test_ds  = MaizeRowDataset(args.data_root, split='test', deterministic_view=True, **row_kw)
+    else:
+      train_ds = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='train',
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, view_seed=args.view_seed,
@@ -954,14 +1027,14 @@ def train_worker(rank, world_size, args):
                                  return_pose=scene_train is not None or leaf_cfg is not None,
                                  return_visibility=vis_on,
                                  depth_planes=getattr(args, 'depth_planes', None))
-    val_ds   = MaizeDataset4M(args.data_root, img_size=args.img_size,
+      val_ds   = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='val',
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, deterministic_view=True,
                                  return_pose=scene_cfg is not None,
                                  return_visibility=vis_on,
                                  depth_planes=getattr(args, 'depth_planes', None))
-    test_ds  = MaizeDataset4M(args.data_root, img_size=args.img_size,
+      test_ds  = MaizeDataset4M(args.data_root, img_size=args.img_size,
                                  num_points=args.num_points, split='test',
                                  max_leaves=args.max_leaves,
                                  view_sampling=vs, deterministic_view=True,
@@ -997,6 +1070,7 @@ def train_worker(rank, world_size, args):
         active_modalities=args.active_modalities,
         img_size=args.img_size,
         num_pc_tokens=196,
+        pc_group_size=getattr(args, 'pc_group_size', 32),
         target_points=args.num_points,
         pc_loss_weight=args.pc_loss_weight,
         max_leaves=args.max_leaves,

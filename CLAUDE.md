@@ -423,8 +423,10 @@ view checked), so in maize only the target points behind a NEIGHBOUR leak (~18 %
 **sorghum's `*_nc_cam.ply` is the complete plant** (32-65 % of a view's points hidden, median
 ~53 %), so every sorghum input -- clean or scene -- hands the model surfaces it cannot see.
 Fixes built the same day: `data.depth_planes`, `occlusion_scene.visible_only`, `origin_jitter_m`
-(see "Deployable-input arms" below). The RGB framing is not fixed (random shift / zoom, or
-Alloy's renders).
+(see "Deployable-input arms" below). The RGB framing is NOT fixed and will not be: decided with
+Yongyun 2026-10-15 -- sorghum (the real-data species) is framed loosely, and a real pipeline
+crops around the detected plant anyway, so it stays a one-line caveat in the paper (the camera is
+aimed at the plant's centre; maize's distance also scales with its size). No shift / zoom test.
 **Test, occluded, no card (`reports/pc_generation_maize_{stem,metric400}.json`):** stem 200
 F1@10mm **0.432** / 16.2 mm (the leaky target frame at 200: 0.431 / 15.6 mm), true card 0.523
 (leaky: 0.475); metric 400 0.284 / 19.0 mm (metric 200: 0.265). The stem origin recovers all of
@@ -476,6 +478,189 @@ Slurm `afterok` dependencies (pc_generation 16930846 / 16930848, depth_reliance 
 16930849 -> `reports/{pc_generation,depth_reliance}_maize_deploy{,_jit}.json`), so they fire
 without a watcher shell. Compare deploy vs stem (0.432) for the cost of the input fixes, and
 deploy_jit vs deploy under 'origin off N cm' for the robustness.
+**Result, maize `deploy` (finished 2026-10-15 19:40, occluded test, all 2,250 plants):** no card
+F1@10mm **0.446** / 16.1 mm -- the leaky target frame was 0.431, stem 0.432, so removing the depth
+and hidden-surface hints costs NOTHING; true card 0.521 (stem 0.523). Val occluded F1@0.01 0.254
+(stem 0.248), clean 0.332 (0.312). Depth now helps a little, honestly (removed at matched tokens
+0.452 vs 0.477). Origin sensitivity unchanged (1 / 2 / 5 cm: 0.406 / 0.283 / 0.112), as expected
+without jitter. Ignore its 'depth fixed planes' row (0.353): that job ran with the default
+--near 1.0 --far 3.0, i.e. planes the model never saw -- pass --near 0.75 --far 4.0 for a
+fixed-plane run, where the row is then an identity.
+**Result, maize `deploy_jit` (origin_jitter 0.015, finished 2026-10-15): jitter training does NOT
+buy robustness.** Occluded test F1@10mm, exact / 1 / 2 / 5 cm origin error: deploy_jit 0.416 /
+0.394 / 0.311 / 0.124 vs deploy 0.446 / 0.406 / 0.283 / 0.112. It costs 0.03 at an exact origin
+and gains only +0.03 at 2 cm: the model still builds the plant where the origin says rather than
+where the data says. Untested next ideas: a larger jitter or longer training; a head that
+regresses the stem-base offset from the input and re-frames (two passes); or a test-time
+translation-only trimmed ICP of the prediction onto the observed cloud (cheap, existing
+checkpoints). Until then the stem-frame numbers assume a stem base known to ~1 cm.
+**Seed 2 (all six finished by 2026-10-16; maize paired test `reports/test_scene/maize_seeds.json`,
+job 16930944).** Maize occluded test F1@0.01 / F1@10mm, seed 1 -> seed 2: random 0.137 / 0.352 ->
+0.128 / 0.336 (reproduces); random + Sinkhorn 0.217 / 0.439 -> **0.323 / 0.568**; mixed + Sinkhorn
+0.254 / 0.487 -> **0.354 / 0.593**. The RANKING holds in both seeds (mixed + Sinkhorn > random +
+Sinkhorn > random; masking +0.03-0.04 F1@0.01, Sinkhorn +0.08 / +0.20), the Sinkhorn MAGNITUDE does
+not. Val curves match until epoch 100, then both seed-2 Sinkhorn arms jump by epoch 140 (0.149 ->
+0.245, 0.168 -> 0.271); the requeue of mix_sink_s2 (at 140) is not it, sink_s2 never restarted.
+Configs identical. Leading suspect, UNTESTED: hardware -- both seed-1 maize Sinkhorn arms trained on
+`nova26-gpu-1` (RTX PRO 6000, Blackwell), both seed-2 ones on A100s (the random arm, no Sinkhorn,
+reproduces across hardware). geomloss's tensorized Sinkhorn may behave differently there. Report
+Sinkhorn gains as "at least" the seed-1 size until this is pinned down. Sorghum seed 2 trained
+on the NEW renders (above), so it is not a replicate; not scored.
+Sorghum `deploy_jit` (new renders, stem, visible_only, jitter): val occluded F1@0.01 0.264 (ep 1)
+-> 0.319 (ep 180) -- it trains fine; NOT comparable with any old-render sorghum number.
+
+### Alloy's RENDERED occluded maize rows (`/work/mech-ai/alloydas/maize_row`, from 2026-10-17)
+The occluded renders finally landed (2026-10-16). Layout: `{train,val,test}/plant_XXXX/row.json` +
+`theta_{000..090}/shot_000/` (the MAIN plant's yaw; 10 shots per plant, none failed: 105,000 /
+22,500 / 22,500 shots over 10,500 / 2,250 / 2,250 plants, same plant split as Maize). Each shot:
+scene `rgba.png` / `depth.png` / `pointcloud_cam.ply` (24,576 pts) and the TARGET ALONE
+`gt_rgba.png` / `gt_depth.png` / `gt_pointcloud_cam.ply` (8,192), the target's
+`maize_XXXX_spline.xml`, `camera_pose.json` (world = main plant's frame: stem base at the origin,
+y up, row along x; FIXED depth planes 0.05 / 3.0 m). Row: left / right neighbours 0.15 m away
+(always from the same split -- 0 of 600 val neighbours outside val), leaves bent where they
+collide, a LEVEL rover camera 1 m away (pitch 0) -- a different view from the Maize renders.
+Measured on 20 train shots: both clouds are camera-view clouds (99.8 % of gt points on
+gt_depth); neighbours hide 4-24 % of the target's points (val batch: 9 % of its pixels); the scene
+cloud is sampled independently of the gt one (2-3 % of points coincide), so there are NO per-point
+plant ids and no instance masks (alpha is 0 / 255 foreground). **Hint kept: the rover height is
+0.55 x the main plant's height (r = 0.94) with a level camera** -- the image centre row gives the
+plant height away; tell Alloy (a fixed or random rover height removes it).
+**Loader `maize_row_dataset.py` (`MaizeRowDataset`, `build_maize_dataset`).** One (plant, theta)
+shot per plant per epoch (val / test: a fixed shot per plant, theta = plant id mod 10). Returns
+the clean target in the usual slots (so every metric works) and the scene as an 11th item; RGB
+composited on grey 127 (the Maize renders' background); scene cloud cropped to `crop_radius`
+around the stem, resampled to 8,192, in the target's normalised frame. Neighbour labels derived:
+a scene point is TARGET within 1 cm of the target's cloud (cKDTree); a pixel is NEIGHBOUR where
+the scene shows a plant but not the target's surface (|scene depth - target depth| >= 1 cm).
+`compose(..., given=batch[10])` -> `occlusion_scene.compose_given()` turns it into the usual scene
+dict (prob, masking policies incl. mixed, stem frame, stats); trainer switch `data.dataset:
+maize_row` (refuses leaf_mask / depth_planes; the clouds are camera-view so visible_only is moot).
+Index cache in `.dataset_index_cache/maize_row_*` (built 2026-10-17). Loader speed ~1.9
+samples/s per worker -> ~3.5 min / epoch at 2 x 14 workers. Smoke `logs/dv/smoke_row.py`
+(job 16958296, GPU): stem round trip 2e-7, frame origin in world 3e-8, train / eval / figure OK.
+**Arms (scavenger, seed 1, from maize_4m epoch 600, best synthetic recipe):** `maize_row_best_s1`
+(job 16958331, 200 ep), `maize_row_best_fb_s1` (16958333, + card_feedback_prob 0.5),
+`maize_row_best400_s1` (16958335, 400 ep in ONE cosine). card_ensemble evals chained afterok
+(16958332 / 16958334 / 16958336 -> `reports/card_ensemble_maize_row_best{,_fb,400}.json`).
+**Yongyun caps his GPUs at 8** (2026-10-17): queued arms are chained (`afterany`) behind running
+ones so they replace rather than add. `row_best400` (and its eval) was CANCELLED before it started
+to make room for the whole-points test below -- the YOLO run is the long run.
+**YOLO run (planned, launch after the 200-epoch arms report): ONE long maize-row run on train +
+val, whole clouds, 4 GPUs.** Built and smoke-tested (`logs/dv/smoke_yolo.py`, job 16958472):
+`MaizeRowDataset(split='train+val', exclude=monitor_plants(root, 200))` = 12,550 plants, the 200
+held-out val plants (every k-th by name) are its only validation, test untouched; `data.scene_points:
+24576` keeps every scene point (after the crop, topped up by repeats; the TARGET is always all
+8,192 gt points) with `model.pc_group_size: 96` (x3 with the density); clean inputs are tiled x3
+(`occlusion_scene.match_points`), which reproduces their 32-point groups exactly (each point
+thrice; BN statistics unchanged). Trainer keys `data.train_splits` / `monitor_plants` /
+`scene_points`, `model.pc_group_size` (maize_row only; training on val refuses without a monitor
+set). Config `configs/config_maize_row_yolo.yaml` (lr 3e-4 for global 64, save_freq 10;
+PLACEHOLDERS: epochs, card_feedback_prob, scene_points / group), launcher
+`slurm/maize_yolo.sbatch` (4 GPUs, 48 CPUs -> 11 workers / rank, auto-resume) and
+`slurm/maize_yolo_chain.sh N` (N chained 2-day scavenger jobs, `afterany`, so a walltime TIMEOUT
+-- which --requeue does not cover -- resumes too). Loader 13.5 samples/s on 8 workers with
+24,576-point scenes (15.1 with 8,192). The whole-points decision comes from
+`maize_row_best_pts_s1` (job 16958476, chained after deploy_fb; = row_best + scene_points 24576 +
+group 96, same seed and schedule, so val compares epoch for epoch; eval 16958477). Timeline: a
+2-week run started ~Oct 18 ends ~Nov 1, AFTER the Oct 24 freeze -- confirm the paper can wait.
+**Results (2026-10-17/18, occluded TEST, `eval/card_ensemble.py`, F1@10mm, no card / predicted
+card K=1 / K=10 / true card):**
+- Real renders, `maize_row_best_s1`: **0.782 (7.6 mm mean error)** / 0.763 / 0.785 / 0.826; the card
+  is predicted well (leaf count exact 79 % -> 81 % with K=10, |err| 0.34 -> 0.26 leaves), yet without
+  feedback training feeding it back does not help (K=1 HURTS, K=10 neutral). Val occluded F1@0.01
+  0.248 -> 0.545 over 200 epochs, still creeping up at the end (0.537 @160) -> a longer run helps.
+- Whole points, `maize_row_best_pts_s1` (24,576-pt scenes, group 96): 0.785 / 0.766 / 0.787 / 0.829,
+  val 0.549 @200 -- a tie with row_best (+0.003, inside GPU-to-GPU noise), at 14.5 h vs 11.4 h.
+- Card FEEDBACK on the synthetic scenes (matched to deploy, 0.450 / 0.448 / 0.465 / 0.522):
+  `deploy_fb` (25 % feedback steps) 0.452 / 0.478 / **0.485** / 0.512 (K=10 beats no card on 77 % of
+  plants); `deploy_fb100` (50 %, no true-card steps) 0.461 / 0.487 / **0.493** / 0.476 (78 %). Feedback
+  training makes the predicted card HELP (+0.03 over no card, vs +0.015 for averaging alone) at no
+  cost to 'no card'; fb100 trades away the true-card number (never trained on it).
+- `maize_row_best_fb_s1` (feedback on real renders) died at start on a bad GPU (`nova24-gpu-1`,
+  "uncorrectable ECC error" in torch.cuda.set_device) -- resubmitted with `--exclude=nova24-gpu-1`
+  (job 16977644, eval 16977645). If a job dies in setup_distributed with a CUDA ECC error, it is
+  the node: exclude it and resubmit.
+- Real-render ABLATIONS (launched 2026-10-18, matched to row_best, `--exclude=nova24-gpu-1`):
+  `maize_row_random_s1` (random masking, QAL only; job 16977792) and `maize_row_random_sink_s1`
+  (random + QAL + Sinkhorn; 16977794), card_ensemble evals 16977793 / 16977795. With row_best they
+  give baseline -> + Sinkhorn -> + mixed masking on rendered occlusion. The YOLO run starts after them
+  (Yongyun, 2026-10-18).
+- Real-render ABLATION RESULTS (2026-10-19, no card F1@10mm / mean error / R@10 / P@10): random + QAL
+  **0.795 / 6.6 mm** / 0.719 / 0.910; random + QAL + Sinkhorn 0.789 / 7.4 mm / 0.782 / 0.804; mixed + QAL +
+  Sinkhorn (row_best) 0.782 / 7.6 mm / 0.773 / 0.801. Val occluded F1@0.01 (~6 mm) @200: 0.502 / **0.557**
+  / 0.545. So on the renders Sinkhorn trades precision for recall (wins at ~6 mm, ties at 10 mm, worse
+  mean error) and mixed masking shows NO gain. Feedback still wins: row_best_fb with its own card (K=10)
+  **0.813** (73 % of plants better than its no-card 0.786; true card 0.818).
+- Derived neighbour labels are reliable (checked 2026-10-20 on 20 val shots): target-cloud spacing
+  median 1.75 mm / 99th pct 6.6 mm (< the 1 cm tolerance); only 2.5 % of scene points lie 5-15 mm
+  from the target cloud. Label noise does NOT explain mixed masking's null result.
+- Paired re-scores at 5 + 10 mm (job 17011368 -> `reports/card_ensemble_maize_row_*_paired.json`) and
+  `eval/occlusion_strata.py` (job 17011628: per plant, by occlusion quartile, leaf-tip recall,
+  bootstrap CIs; random / random_sink / mixed_sink / mixed_sink_fb / + its card K=10 ->
+  `reports/occlusion_strata_maize_row.json`) -- exploratory, report beside the overall numbers.
+- Mixing-proportion PROXY (3-hour check, 2026-10-20): `maize_row_ft_nf{0,25,50}_s1` (jobs 17011747-9)
+  fine-tune row_random_sink epoch 200 for 20 epochs (lr 5e-5, fresh cosine, `student_init`) with 0 /
+  25 / 50 % neighbour-first; paired test eval chained (17011750 ->
+  `reports/card_ensemble_maize_row_ft_nf{0,25,50}.json`). The 50:50 share was never tuned.
+- Paired 5 mm re-score (job 17011368, one H200, `reports/card_ensemble_maize_row_*_paired.json`), no
+  card F1@5mm / R@5 / P@5: random 0.493 / 0.358 / **0.846**; random + Sinkhorn **0.546 / 0.495** / 0.628;
+  mixed + Sinkhorn 0.538 / 0.481 / 0.630; row_best_fb + own card K=10 **0.570 / 0.527** / 0.632 (10 mm 0.813,
+  6.9 mm). Defensible: Sinkhorn raises fine-scale COVERAGE (recall@5mm +38 % rel.) at a precision cost;
+  it ties at 10 / 20 mm and loses on mean error (precision term). Untested hypothesis for that cost:
+  blur 0.02 = ~13 mm at maize scale, coarser than the renders' ~7 mm error -- try blur ~0.008 / weight
+  0.1-0.25. Even random + QAL gains from its own averaged card (0.795 -> 0.804, no feedback training).
+- **Occlusion strata + leaf tips (`eval/occlusion_strata.py`, job 17011628, all 2,250 test plants, one
+  A100, `reports/occlusion_strata_maize_row.json`; reproduces the paired re-score exactly).** Paired
+  differences, mean [bootstrap 95 % CI over PLANTS -- not over training seeds] (share of plants better):
+  random + Sinkhorn vs random: F1@5mm **+0.053** [+0.051, +0.055] (84 %), leaf-TIP recall@10mm (outer third
+  of the radius) **+0.101** [+0.097, +0.105] (89 %; 0.519 -> 0.620), F1@10mm -0.006, mean error +0.81 mm;
+  same in the most-occluded quartile (tips +0.104, 89 %). Mixed vs random (both + Sinkhorn): slightly
+  WORSE everywhere, incl. the most-occluded quartile (F1@5 -0.007, F1@10 -0.007, tips -0.016) -- the
+  "mixed helps where occlusion is heavy" hypothesis is NOT supported (but the top quartile here is only
+  ~19 % hidden; synthetic was heavier). Full pipeline (mixed + Sinkhorn + feedback + own card K=10) vs
+  random + QAL: F1@5 **+0.077** (87 %), F1@10 **+0.018** (57 %), tips **+0.133** (90 %), mean error +0.29 mm.
+  The card feedback alone (card K=10 vs no card, same model): F1@5 / @10 +0.027, mean error -0.68 mm
+  (70-73 % of plants). The RuntimeWarning in maize_row_dataset.py:230 (inf - inf where both images are
+  background) is harmless: those pixels are gated out by d_gt > 0.
+- **Mixing-proportion proxy result (2026-10-20, paired test eval 17011750, one A100):** 0 / 25 / 50 %
+  neighbour-first give IDENTICAL test numbers -- no card F1@5mm 0.545 / 0.545 / 0.545, F1@10mm 0.788 /
+  0.788 / 0.788, mean error 7.47 / 7.42 / 7.46 mm; val occluded F1@0.01 @20 0.545 / 0.548 / 0.549. The
+  share does not matter on these renders. Weak test, say so: a 20-epoch, lr 5e-5 fine-tune barely moves
+  the model (val 0.532-0.538 at start -> 0.545-0.549), so it cannot show a slow effect; the 200 -> 400
+  continuations are the stronger check.
+- 200 -> 400 CONTINUATIONS (Yongyun's hypothesis: mixed + Sinkhorn overtakes random + QAL with longer
+  training, as on synthetic maize 400): `maize_row_{random,random_sink,best}_c400_s1` (jobs 17011845-7,
+  INIT_CKPT = own epoch 200, cosine warm restart, each chained `afterany` behind one ft_nf arm for the
+  8-GPU cap), paired eval 17011848 -> `reports/card_ensemble_maize_row_*_c400.json`.
+Evals here ran on different GPU types (H200 / L40S / A100), ~0.004 F1 of RNG-level noise; every
+comparison above is far larger except row_best vs row_best_pts.
+
+### Making the predicted card help generation (maize focus, from 2026-10-16)
+Yongyun's direction: the procedural parameters should HELP rebuild the occluded plant, i.e. the
+two-pass readout (predict the card, feed it back) must beat 'no card'.
+**Card averaging, no retraining (`eval/card_ensemble.py`, `reports/card_ensemble_maize_{deploy,pre400}.json`,
+occluded test, same scenes / seeds as pc_generation, H200).** Predict the card K times under K
+different masks (each pass sees a different 20 %), average the normalised params, read the leaf
+count off the averaged plant token, feed it back fully visible. F1@10mm, no card / K=1 / 3 / 5 / 10 /
+TRUE card: deploy 0.450 / 0.448 / 0.458 / 0.461 / **0.465** / 0.522; any-to-any 400 0.457 / 0.467 /
+0.477 / 0.481 / **0.484** / 0.501 (closes ~60 % of the gap to the true card; 62 % of plants
+better than no card). The card itself improves only a little (pre400 leaf count exact 0.49 ->
+0.52, |err| 0.88 -> 0.76 leaves, param MAE 0.0792 -> 0.0759), yet the plant improves monotonically
+with K. (deploy no card 0.450 here vs 0.446 on an A100: GPU-level RNG noise, ~0.004.)
+**Card-feedback training (`distill.card_feedback_prob`, train_maize_4m.py, teacher-free only).** On
+that share of the steps that would show the TRUE card, the model instead first predicts the card
+(card hidden, `eval()` + no_grad, as at test), then trains on the scene + that predicted card,
+fully visible (leaf tokens past the predicted leaf count zeroed; text loss 0 since the card is
+visible). Own RNG draw, so the hide / card-only schedule is unchanged. Smoke
+`logs/dv/smoke_feedback.py` (job 16951678, GPU). Arms, matched to `deploy` (maize_4m start, 200
+epochs, seed 1, leak-free inputs): `maize_scene_anyparam_deploy_fb_s1` (card_feedback_prob 0.5 ->
+25 % feedback / 25 % true card / 50 % hidden; job 16951819) and `..._deploy_fb100_s1` (1.0 -> 50 %
+feedback, no true-card steps; job 16951821). card_ensemble evals chained as afterok (16951820 /
+16951822 -> `reports/card_ensemble_maize_deploy_fb{,100}.json`). Success = 'predicted card, K=1 /
+K=10' clearly above 'no card' AND no loss on 'no card' vs deploy's 0.450.
+Paired seed-1-vs-2 test evals are queued as `afterok` jobs (`eval/eval_test_scene.py --tag seeds`,
+arms `*_s2` added to its EXTRA): maize 16930944, sorghum (see squeue `test_seeds_sorghum`)
+-> `reports/test_scene/{sp}_seeds.json`.
 
 **3D views (2026-10-14).** `export/export_recon_3d.py` (`logs/dv/recon3d.sbatch`) picks three
 occluded test plants per species from the per-plant scores in `reports/test_scene/<sp>_mm.json`
@@ -488,9 +673,27 @@ report's per-plant F1 (2 of 3 plants exactly, one within 0.05). **Sorghum does n
 plants, same scene: hidden fraction identical and the cloud subsample identical -- checked,
 `logs/dv/subsample_check.py`) yet every model scores lower in the export, e.g. random 0.231 vs
 0.360 F1@10mm. The report ran on an RTX PRO 6000 (`nova26-gpu-2`), the export on an A100;
-re-run on an RTX PRO 6000 is job 16906899 (`reports/recon_3d_sorghum_rtx.json`). If it matches,
-sorghum predictions depend on the GPU generation -- check before comparing sorghum numbers
-produced on different GPUs.
+re-run on an RTX PRO 6000 is job 16906899 (`reports/recon_3d_sorghum_rtx.json`).
+**RESOLVED 2026-10-15: not the GPU -- the sorghum RGB renders were replaced on disk.** Every
+`Sorghum_15K/*/rgb.png` was rewritten in place on **2026-10-13** (train 09:22, test 10:11; depth,
+cloud and pose files keep their April dates), with an `rgb_nobg.png` beside it. Same plant, same
+view, same silhouette, different shading: the old renders (what every sorghum model trained on,
+visible in any pre-10-13 figure, e.g. `outputs/sm_scene_s1/visualizations/`) are darker and
+shaded, the new ones brighter with bright yellow midribs (`alloy/shorgum_data/remove_background.py`
+says it leaves rgb.png alone, so something else rewrote it -- ask Alloy). The proof: the SAME
+H200 (same UUID) that gave sorghum any-to-any 400 no card F1@10mm **0.294** on 10-12 gives
+**0.240** today; TF32 on / off on an A100 changes nothing (0.239 / 0.239); and with RGB REMOVED
+the model scores 0.294-0.297 -- i.e. the new RGB actively misleads models trained on the old.
+Maize is untouched (files 2026-09-22) and reproduces exactly (0.457 / 0.457).
+**Consequences:** (1) every sorghum eval run on or after 10-13 for a model trained before it is
+off-distribution and wrong -- the recon_3d sorghum export, `reports/depth_reliance_sorghum_pre400.json`,
+`reports/gpucheck_sorghum_*.json`; sorghum reports dated <= 10-12 are fine. (2) Sorghum runs
+TRAINED from 10-13 on saw the new renders: `sm_scene_s2`, `sm_scene_sink_s2`,
+`sm_scene_mix_sink_s2` are NOT seed replicates of their seed-1 twins (the sorghum seed eval,
+job 16938976, was cancelled for that reason), and `sm_scene_anyparam_deploy_jit_s1` started from
+E1 (old renders) and fine-tunes on the new ones. (3) Nothing on disk holds the old renders that
+we know of (`Sorghum_15K_subset` has only `rgb_nobg.png`) -- unless Alloy kept them, or the
+Delta copy (`slurm/delta/`) predates 10-13.
 
 ### Occluded-scene training (structured-masking follow-up, built 2026-10-01)
 

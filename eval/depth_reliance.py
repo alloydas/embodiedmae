@@ -91,7 +91,8 @@ def main():
         pn, c2w = b[6].to(dev), b[7].to(dev)
         nf = b[8].to(dev) if sp == 'maize' else None
         sc = compose(rgb, depth, pc, pn, c2w, scene, patch_size=16, near_far=nf,
-                     generator=torch.Generator().manual_seed(bi), vis=b[9].to(dev) if len(b) > 9 else None)
+                     generator=torch.Generator().manual_seed(bi), vis=b[9].to(dev) if len(b) > 9 else None,
+                     given=b[10] if len(b) > 10 else None)
         _, world = to_world(pc, pn, c2w)
         rad = torch.hypot(world[..., 0], world[..., 2])
         band = torch.clamp((3 * rad / rad.max(dim=1, keepdim=True).values.clamp(min=1e-6)).long(), max=2)

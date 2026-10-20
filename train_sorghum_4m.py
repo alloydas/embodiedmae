@@ -659,7 +659,8 @@ def visualize_scene_4m(model, dataloader, device, epoch, save_dir, num_samples=4
                                scene.for_validation(), patch_size=m.patch_size,
                                generator=torch.Generator().manual_seed(seed),
                                near_far=batch[8].to(device) if len(batch) > 8 else None,
-                               vis=batch[9].to(device) if len(batch) > 9 else None)
+                               vis=batch[9].to(device) if len(batch) > 9 else None,
+                               given=batch[10] if len(batch) > 10 else None)
             if sc is None:
                 print(f"  [viz] no scene for a batch of {B}; skipped")
                 return []

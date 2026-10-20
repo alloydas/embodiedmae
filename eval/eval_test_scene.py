@@ -86,6 +86,7 @@ def build_model(species, cfg):
     fn = {'small': TM.embodied_mae_4m_maize_small, 'base': TM.embodied_mae_4m_maize_base,
           'large': TM.embodied_mae_4m_maize_large}[ns.model_size]
     return fn(active_modalities=ns.active_modalities, img_size=ns.img_size, num_pc_tokens=196,
+              pc_group_size=getattr(ns, 'pc_group_size', 32),
               target_points=ns.num_points, pc_loss_weight=ns.pc_loss_weight,
               max_leaves=ns.max_leaves, spline_loss_weight=ns.spline_loss_weight,
               depth_norm_type=ns.depth_norm_type, pc_loss_name=ns.pc_loss_name,
