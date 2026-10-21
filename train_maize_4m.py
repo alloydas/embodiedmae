@@ -225,15 +225,27 @@ def config_to_namespace(config):
 
 # ── Distributed helpers ───────────────────────────────────────────────────────
 
+def _dist_timeout():
+    """NCCL collective timeout. torch's default 10 min killed every maize run on
+    2026-10-21 ~12:00 when the shared /work/hdd filesystem stalled (all five jobs, four
+    nodes, the same minute; E1 22870827 died the same way on 10-16): one rank blocked
+    on a read while the other sat in a BROADCAST/ALLREDUCE. 60 min rides that out;
+    DIST_TIMEOUT_MIN overrides. No effect on numbers."""
+    from datetime import timedelta
+    return timedelta(minutes=int(os.environ.get('DIST_TIMEOUT_MIN', '60')))
+
+
 def setup_distributed(rank, world_size, backend, url):
     if int(os.environ.get('LOCAL_RANK', -1)) >= 0:
         dist.init_process_group(backend=backend, init_method='env://',
-                                world_size=world_size, rank=rank)
+                                world_size=world_size, rank=rank,
+                                timeout=_dist_timeout())
     else:
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12356'
         dist.init_process_group(backend=backend, init_method='tcp://localhost:12356',
-                                world_size=world_size, rank=rank)
+                                world_size=world_size, rank=rank,
+                                timeout=_dist_timeout())
     torch.cuda.set_device(rank)
 
 
