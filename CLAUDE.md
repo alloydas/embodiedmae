@@ -578,6 +578,12 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `reports/e9_pr_e5_d2_17060237/`. Then **17060238** `pairboot_e5` (`slurm/pair_bootstrap_e5.sbatch`, CPU, `afterok:17060237`)
   -> `reports/e5_delta_d2_17060238.csv` (each band arm minus the all-view arm). Both score view 0 only; a per-view probe
   (`--probe-view k`) is still not built.
+- **2026-10-21 12:50:** E1 at epoch 990 (7.7 min/epoch; finishes ~14:10 + the final test pass); the distillation
+  smoke 17060189 PASSED (exit 0, 10 steps at global batch 128, gain 1.85, teacher + init from ep 970). The isolated
+  control 17021529 (epoch 16 saved, pending since 10-20 evening, Slurm's worst-case start 10-24 05:44) was widened in
+  place to ANY 4-GPU type on scavenger (`TresPerNode=gres/gpu:4`; the launcher picks the env from the GPU) with the
+  16 GB V100 nodes and the two faulty nodes (nova24-gpu-1 ECC, nova25-gpu-3 hang) excluded; its isolated input is
+  8,192 points, so 40 GB cards are fine. Batch stays 8/GPU x 4 = 32 as the row arm.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
