@@ -584,6 +584,8 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `reports/e9_pr_e5_d2_17060237/`. Then **17060238** `pairboot_e5` (`slurm/pair_bootstrap_e5.sbatch`, CPU, `afterok:17060237`)
   -> `reports/e5_delta_d2_17060238.csv` (each band arm minus the all-view arm). Both score view 0 only; a per-view probe
   (`--probe-view k`) is still not built.
+  **15:40 (user: "Launch E5 if possible"):** the probe's dependency was cleared (`scontrol update Dependency=`), so
+  17060237 runs now on nova (1 GPU, 2 free under the cap); 17060238 still follows it `afterok`.
 - **2026-10-21 12:50:** E1 at epoch 990 (7.7 min/epoch; finishes ~14:10 + the final test pass); the distillation
   smoke 17060189 PASSED (exit 0, 10 steps at global batch 128, gain 1.85, teacher + init from ep 970). The isolated
   control 17021529 (epoch 16 saved, pending since 10-20 evening, Slurm's worst-case start 10-24 05:44) was widened in
