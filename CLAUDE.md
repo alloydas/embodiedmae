@@ -571,6 +571,13 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `--kill-on-invalid-dep=yes` -> `outputs/4m_distill_15k_all_d2`. Expect ~12 min/epoch, ~20 h. When done: the
   per-source before/after (`history['val'][0]` = the warm start), quant generation numbers, single-sensor rows,
   figures on v2; swap the \todo-marked E1-derived numbers in `paper/results.tex`.
+- **2026-10-21 11:10: E5 PROBE CHAINED BEHIND THE DISTILLATION (user: "run the E5 probe after distillation").**
+  **17060237** `pr_e5_d2` = `CKPT=checkpoints/checkpoint_epoch_600.pth E9_SPLITS="val test" slurm/linear_probe.sbatch
+  e5_topdown_d2 e5_horizon_d2 e5_single_d2 e2_pcrgbdt_d2` (nova, 1 GPU; `afterany:17060048`, so it runs when the
+  distillation ends however it ends; the reference arm is a cache hit) -> `reports/probe_pr_e5_d2_17060237.csv`,
+  `reports/e9_pr_e5_d2_17060237/`. Then **17060238** `pairboot_e5` (`slurm/pair_bootstrap_e5.sbatch`, CPU, `afterok:17060237`)
+  -> `reports/e5_delta_d2_17060238.csv` (each band arm minus the all-view arm). Both score view 0 only; a per-view probe
+  (`--probe-view k`) is still not built.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
