@@ -116,6 +116,15 @@ def config_to_namespace(c):
     ns.qal_threshold      = g('model', 'qal_threshold', 0.01)
     ns.qal_alpha          = g('model', 'qal_alpha', 100.0)
     ns.qal_use_squared    = g('model', 'qal_use_squared', False)
+    # Sinkhorn term added to the student's PC loss (pc_sinkhorn.py); 0 = every run before
+    # 2026-10-21, bit-identical. The teacher's loss is never used (its weight is forced to 0).
+    ns.pc_sinkhorn_weight = float(g('model', 'pc_sinkhorn_weight', 0.0) or 0.0)
+    ns.pc_sinkhorn_points = int(g('model', 'pc_sinkhorn_points', 2048))
+    ns.pc_sinkhorn_blur   = float(g('model', 'pc_sinkhorn_blur', 0.01))
+    # Serve the RGB files at this brighten gain (sorghum_dataset.SorghumDataset(rgb_gain=));
+    # None = the files as they are on disk. The run records the effective gain as
+    # rgb_brighten_gain in config.json, which eval/linear_probe.py reads.
+    ns.rgb_gain           = g('data', 'rgb_gain', None)
     ns.batch_size         = g('training', 'batch_size', 8)
     ns.epochs             = g('training', 'epochs', 800)
     ns.lr                 = g('training', 'lr', 1.0e-4)
@@ -137,6 +146,9 @@ def config_to_namespace(c):
                                   './outputs/4m_run_v3/checkpoints/checkpoint_epoch_2400.pth')
     ns.student_init           = g('distill', 'student_init',
                                   './outputs/4m_run_v3/checkpoints/checkpoint_epoch_2400.pth')
+    # Refuse a teacher / init checkpoint from another epoch than the one the config names
+    # (a half-finished pretrain would otherwise be distilled silently). None = no check.
+    ns.expect_init_epoch      = g('distill', 'expect_init_epoch', None)
     ns.crossmodal_prob        = g('distill', 'crossmodal_prob', 0.7)
     # Mask the SOURCE modality during cross-modal steps. 0.0 (default) hands the
     # source over whole, which is how every run up to 2026-09-03 behaved. Above 0,
@@ -207,11 +219,17 @@ def build_model(args, device):
         qal_threshold=args.qal_threshold,
         qal_alpha=args.qal_alpha,
         qal_use_squared=args.qal_use_squared,
+        pc_sinkhorn_weight=args.pc_sinkhorn_weight,
+        pc_sinkhorn_points=args.pc_sinkhorn_points,
+        pc_sinkhorn_blur=args.pc_sinkhorn_blur,
     ).to(device)
 
 
-def load_weights_into(model, ckpt_path, device, tag):
+def load_weights_into(model, ckpt_path, device, tag, expect_epoch=None):
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+    if expect_epoch is not None and ckpt.get('epoch') != expect_epoch:
+        raise SystemExit(f"[{tag}] {ckpt_path} is epoch {ckpt.get('epoch')}, config expects "
+                         f"distill.expect_init_epoch = {expect_epoch}")
     sd = ckpt['model_state_dict']
     if list(sd)[0].startswith('module.'):
         sd = {k[7:]: v for k, v in sd.items()}
@@ -604,10 +622,22 @@ def train_worker(rank, world_size, args):
     # Data
     train_ds = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                 num_points=args.num_points, split='train',
-                                max_leaves=args.max_leaves, rgb_file=args.rgb_file)
+                                max_leaves=args.max_leaves, rgb_file=args.rgb_file,
+                                rgb_gain=args.rgb_gain)
     val_ds   = SorghumDataset4M(args.data_root, img_size=args.img_size,
                                 num_points=args.num_points, split='val',
-                                max_leaves=args.max_leaves, rgb_file=args.rgb_file)
+                                max_leaves=args.max_leaves, rgb_file=args.rgb_file,
+                                rgb_gain=args.rgb_gain)
+    # The gain the RGB stream is actually served at (data.rgb_gain, else the files' own
+    # brighten_gain tag, 1.0 for untagged files); recorded for the probe.
+    args.rgb_brighten_gain = float(args.rgb_gain) if args.rgb_gain is not None else train_ds.disk_rgb_gain()
+    if is_main:
+        print(f"RGB file {args.rgb_file} served at brighten_gain {args.rgb_brighten_gain:g}"
+              f" (on disk: {train_ds.disk_rgb_gain():g})")
+        tmp = output_dir / 'config.json.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(vars(args), f, indent=4)
+        os.replace(tmp, output_dir / 'config.json')
     if world_size > 1:
         train_sampler = DistributedSampler(train_ds, world_size, rank, shuffle=True)
         shuffle_train = False
@@ -633,7 +663,8 @@ def train_worker(rank, world_size, args):
     # ── Teacher (frozen, full-modal) ──────────────────────────────────────────
     if is_main: print("\n🧊 Building frozen TEACHER…")
     teacher = build_model(args, device)
-    load_weights_into(teacher, args.teacher_checkpoint, device, 'teacher')
+    load_weights_into(teacher, args.teacher_checkpoint, device, 'teacher', args.expect_init_epoch)
+    teacher.pc_sinkhorn_weight = 0.0     # its loss is never used; skip the geomloss call
     teacher.eval()
     for p in teacher.parameters():
         p.requires_grad_(False)
@@ -642,7 +673,7 @@ def train_worker(rank, world_size, args):
     if is_main: print("\n🎓 Building STUDENT…")
     student = build_model(args, device)
     if args.student_init and os.path.exists(args.student_init):
-        load_weights_into(student, args.student_init, device, 'student-init')
+        load_weights_into(student, args.student_init, device, 'student-init', args.expect_init_epoch)
     elif is_main:
         print("  [student-init] none found — training from scratch")
 

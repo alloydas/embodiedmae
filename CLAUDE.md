@@ -554,6 +554,23 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   17025420 `row_eval_zs` sat 4 h on nova25-gpu-3 (H200 node) with an EMPTY .out (hung before the launcher's first
   echo: cd / conda / nvidia-smi), TIMEOUT; the cancelled 17021710 on the same node also logged nothing. Resubmitted
   with `--exclude=nova24-gpu-1,nova25-gpu-3`: **17059822** `row_eval_ft`, **17059823** `row_eval_zs` (scavenger, 1 GPU, 4 h).
+- **2026-10-21 10:40: SORGHUM d2 DISTILLATION QUEUED BEHIND E1 (user: "start the sorghum distillation after E1
+  finish").** `configs/config_4m_distill_15k_all_d2.yaml` = the v1 all-source recipe (all-visible teacher,
+  crossmodal_prob 0.8, feat 1.0 / cls 0.5, 100 ep, global batch 128, lr 1e-4) with teacher = student init =
+  `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`, `rgb_file: rgb_nobg.png`,
+  `rgb_gain: 1.85` (served at the gain E1 trained on, whatever is on disk), the E1 Sinkhorn keys (0.5 / 1024 /
+  0.02) and `expect_init_epoch: 1000`. `train_sorghum_4m_distill.py` gained `model.pc_sinkhorn_*` (student only;
+  the teacher's weight is forced to 0; default 0 = every earlier run), `data.rgb_gain`, `rgb_brighten_gain` in
+  config.json (as the pretrain trainer), and `distill.expect_init_epoch` (refuses a teacher / init checkpoint of
+  another epoch; tested: epoch 970 vs 1000 -> SystemExit). The sorghum distill trainer cannot run on CPU
+  (`torch.cuda.reset_peak_memory_stats` in train_one_epoch, pre-existing), so the smoke is a GPU job: **17060047**
+  `distill_d2_smoke` (scavenger, 1 GPU, 40 min, 10 steps + 2 val batches from checkpoint_970, output in the
+  session scratchpad; a test, not a gate). Launcher `slurm/distill_15k_all_d2.sbatch`: nova / mech-ai, 4x RTX PRO
+  6000, 80 CPU, 280G, 4 d with `--time-min 4h`, USR1 self-requeue, auto-resume, accum = 8 / GPUs (global 128),
+  exits 3 if the teacher checkpoint is missing. Job **17060048** `distill_d2` = `afterok:16929801`,
+  `--kill-on-invalid-dep=yes` -> `outputs/4m_distill_15k_all_d2`. Expect ~12 min/epoch, ~20 h. When done: the
+  per-source before/after (`history['val'][0]` = the warm start), quant generation numbers, single-sensor rows,
+  figures on v2; swap the \todo-marked E1-derived numbers in `paper/results.tex`.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

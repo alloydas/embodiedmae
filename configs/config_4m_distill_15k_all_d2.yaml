@@ -1,0 +1,82 @@
+# EmbodiedMAE-4M cross-modal distillation, DATA VERSION 2, from the Sinkhorn E1.
+# Any single modality (the other three fully masked) regenerates all four; teacher AND
+# student warm-start from the completed E1 d2 run `4m_pretrain_15k_d2_sink`
+# (configs/config_4m_pretrain15k_d2_sink.yaml, 1000 epochs, QAL + debiased Sinkhorn,
+# job 16929801). Otherwise the v1 recipe (configs/config_4m_distill_15k_all.yaml) verbatim:
+# all-visible teacher, crossmodal_prob 0.8, feat 1.0 / cls 0.5, 100 epochs, global batch 128.
+#
+#   sbatch --dependency=afterok:<E1 job> slurm/distill_15k_all_d2.sbatch      # nova, 4x RTX PRO 6000
+#
+# Paper data policy (2026-10-14): E1 and everything derived from it is v2. This run is the
+# source of the any-subset / distillation numbers (Sec. 4) and the single-sensor students.
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  rgb_file: rgb_nobg.png    # data version 2 (black background)
+  rgb_gain: 1.85            # E1 trained on the files brightened in place on 2026-10-13 (tag
+                            # brighten_gain 1.85); serve the same gain whatever is on disk
+  img_size: 224
+  num_points: 8196
+
+model:
+  model_size: base
+  mask_ratio: 0.80          # matches the teacher's pretraining regime
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  pc_sinkhorn_weight: 0.5   # the E1 d2 loss: QAL + 0.5 x debiased Sinkhorn (pc_sinkhorn.py)
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+
+distill:
+  teacher_checkpoint: ./outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth
+  student_init:       ./outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth
+  expect_init_epoch: 1000   # refuse any other epoch (a half-finished E1)
+  crossmodal_prob: 0.8
+  sources: [rgb, depth, pc, text]
+  feat_distill_weight: 1.0
+  cls_distill_weight: 0.5
+  output_distill_weight: 0.0
+  distill_masked_only: true
+  source_mask_ratio: 0.0    # v1 behaviour: the source is handed over whole
+  viz_source: pc
+
+training:
+  batch_size: 16            # per GPU; the launcher sets accum_steps = 8 / GPUs -> global 128 as v1
+  accum_steps: 2
+  epochs: 100
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 5
+  val_freq: 5
+  val_max_batches: 100      # 1,600 val samples per source
+
+checkpointing:
+  output_dir: ./outputs/4m_distill_15k_all_d2
+  save_freq: 2
+  keep_last: 2
+  resume: null              # the launcher passes --resume from the newest checkpoint
+
+visualization:
+  viz_freq: 10
+  num_viz_samples: 6
+
+distributed:
+  world_size: 4
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 16           # per rank
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: distill_15k_allsrc_d2_100ep
