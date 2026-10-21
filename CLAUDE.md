@@ -607,7 +607,11 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   the E1 ckpt passed), `slurm/eval_rgb2pc_test_d2.sbatch` = the v1 list with d2 labels (`teacher_undistilled_d2` =
   E1 ep 1000, `smr00_full_d2`, `smr50_seed1_d2`, `smr50_seed2_d2`, `generalist_depth_d2`, `generalist_rgb_d2`;
   skips existing reports). **17061908** runs now (teacher row; student rows fail-and-continue until their best_model.pth
-  exists) and **17061909** runs `afterany` all four distillations -> `reports/quant_*_d2_{val,test}.json`. Still not
+  exists) and **17061909** runs `afterany` all four distillations -> `reports/quant_*_d2_{val,test}.json`.
+  **15:30 (user: "Put them in NOVA"):** 17061902/3/4 and the two quant jobs 17061908/9 moved in place to nova /
+  mech-ai / normal (`scontrol update QOS=normal Account=mech-ai Partition=nova`; the `(a100&NVLINK)|h200` constraint
+  stays). mech-ai at 15 of 17 GPUs with distill_d2's 4, so the students start as labmates' jobs end; Slurm's
+  (worst-case) starts: full 19:21, smr50 23:22, smr50b 10-22 03:22; teacher quant 15:38. Still not
   queued: the E1 probe + E9 at epoch 1000 and the E1 row of `pc_view_eval` (1 GPU each).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
