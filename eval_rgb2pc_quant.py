@@ -25,12 +25,14 @@ and the symmetric sum hides that.
 
 CPU by default -- the GPUs are training.  ~5 s/plant at 8196 points.
 """
+import os
 import argparse, json, pathlib, re, collections
 import numpy as np
 import torch
 
 from embodied_mae_4m import embodied_mae_4m_base
 from sorghum_dataset_4m import SorghumDataset4M
+from sorghum_dataset import RGB_FILE
 
 _NAME = re.compile(r'^(?P<stem>.+)_(?P<plant>\d+)_(?P<view>\d+)$')
 
@@ -54,12 +56,25 @@ def main():
     ap.add_argument('--source', default='rgb', help="visible modality, e.g. rgb / depth / rgb,depth")
     ap.add_argument('--device', default='cpu')
     ap.add_argument('--out', required=True, help='path to write the JSON report')
+    ap.add_argument('--rgb_file', default=None, help="RGB file name; default: the run's config.json (rgb_file), else the dataset default")
+    ap.add_argument('--rgb_gain', type=float, default=None, help="serve RGB at this brighten gain; default: the run's config.json (rgb_brighten_gain), else the files as on disk")
     args = ap.parse_args()
 
     dev = torch.device(args.device)
     rng = np.random.default_rng(args.seed)
 
-    ds = SorghumDataset4M(args.data_root, split=args.split, num_points=args.num_points)
+    # Serve the images the checkpoint trained on: the run dir's config.json records rgb_file
+    # (data v2 = rgb_nobg.png) and rgb_brighten_gain (1.85 for runs trained after 2026-10-13).
+    import json as _json
+    _run_cfg = {}
+    for _d in (os.path.dirname(args.checkpoint), os.path.dirname(os.path.dirname(args.checkpoint))):
+        _cj = os.path.join(_d, 'config.json')
+        if os.path.exists(_cj):
+            _run_cfg = _json.load(open(_cj)); break
+    rgb_file = args.rgb_file or _run_cfg.get('rgb_file') or RGB_FILE
+    rgb_gain = args.rgb_gain if args.rgb_gain is not None else _run_cfg.get('rgb_brighten_gain')
+    print(f'RGB: {rgb_file} at gain {rgb_gain if rgb_gain is not None else "as on disk"}')
+    ds = SorghumDataset4M(args.data_root, split=args.split, num_points=args.num_points, rgb_file=rgb_file, rgb_gain=rgb_gain)
 
     # one seeded view per plant, plants themselves sampled without replacement
     by_plant = collections.defaultdict(list)

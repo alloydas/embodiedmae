@@ -591,6 +591,24 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `Features=a100|l40s|h200` (keeps it off the 16 GB V100s; `ExcludeNodeList` cannot be updated in place, so the two
   faulty nodes nova24-gpu-1 / nova25-gpu-3 are NOT excluded: if it dies there, resubmit with `--exclude`); its
   isolated input is 8,192 points, so 40 GB cards are fine. Batch stays 8/GPU x 4 = 32 as the row arm.
+- **2026-10-21 15:20: E1 DONE; ALL SORGHUM d2 DISTILLATION JOBS QUEUED (user: "Put all the distillation jobs in
+  queue").** E1 16929801 COMPLETED 14:28 (1000/1000, test pc_chamfer 7.37e-4, param_mae_masked 0.0132, acc@0.05
+  0.953; `checkpoint_epoch_1000.pth`). The resume job 16950840 ran and exited as designed. **17060048** `distill_d2`
+  (all-source generalist) RUNNING since 14:28 on nova26-gpu-1 (4x RTX PRO 6000). The v1 single-sensor students now
+  have d2 twins, each = its v1 config (lr 3e-5, crossmodal_prob 0.8, RGB -> PC, feat 1.0 / cls 0.5) with the d2
+  data/model/teacher block of `config_4m_distill_15k_all_d2.yaml`, 100 epochs (v1 `rgb2pc_full` ran 200; its quant
+  row used best_model at epoch 23), global batch 128, `expect_init_epoch: 1000`: `configs/config_4m_distill_15k_
+  {rgb2pc_full_d2, rgb2pc_smr50_d2, rgb2pc_smr50b_d2}.yaml` (source_mask_ratio 0 / 0.5 / 0.5; the two smr50 runs
+  are independent draws, no seed is set, as v1's `smr50` / `smr50_nova`). Jobs **17061902 / 17061903 / 17061904**
+  `dist_rgb2pc_*_d2`: scavenger, `--gres=gpu:4 --constraint="(a100&NVLINK)|h200"` (80 GB cards: batch 16 needs ~54 GB),
+  40 CPU, 200G, 2 d, `--requeue`, same launcher (`DISTILL_CONFIG=`, USR1 self-requeue, auto-resume, accum 2).
+  Quant generation (photograph -> cloud, 2,250 val + test plants): `eval_rgb2pc_quant.py` now reads `rgb_file` /
+  `rgb_brighten_gain` from the checkpoint's run config.json (`--rgb_file` / `--rgb_gain` override; CPU smoke on
+  the E1 ckpt passed), `slurm/eval_rgb2pc_test_d2.sbatch` = the v1 list with d2 labels (`teacher_undistilled_d2` =
+  E1 ep 1000, `smr00_full_d2`, `smr50_seed1_d2`, `smr50_seed2_d2`, `generalist_depth_d2`, `generalist_rgb_d2`;
+  skips existing reports). **17061908** runs now (teacher row; student rows fail-and-continue until their best_model.pth
+  exists) and **17061909** runs `afterany` all four distillations -> `reports/quant_*_d2_{val,test}.json`. Still not
+  queued: the E1 probe + E9 at epoch 1000 and the E1 row of `pc_view_eval` (1 GPU each).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

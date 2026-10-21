@@ -1,0 +1,70 @@
+# RGB -> point-cloud student, source handed over whole (source_mask_ratio 0.0), DATA VERSION 2: teacher = student init = the Sinkhorn E1 epoch 1000
+# (outputs/4m_pretrain_15k_d2_sink). Everything else is configs/config_4m_distill_15k_rgb2pc_full.yaml (lr 3e-05, crossmodal_prob
+# 0.8, feat 1.0 / cls 0.5) at 100 epochs and global batch 128 (16 x GPUs x accum, the launcher
+# sets accum = 8 / GPUs), RGB served at the gain E1 trained on, the E1 Sinkhorn term on the student.
+#   DISTILL_CONFIG=configs/config_4m_distill_15k_rgb2pc_full_d2.yaml sbatch slurm/distill_15k_all_d2.sbatch
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  rgb_file: rgb_nobg.png
+  rgb_gain: 1.85
+  img_size: 224
+  num_points: 8196
+model:
+  model_size: base
+  mask_ratio: 0.8
+  loss_name: qal_loss
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  pc_sinkhorn_weight: 0.5
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+distill:
+  teacher_checkpoint: ./outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth
+  student_init: ./outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth
+  crossmodal_prob: 0.8
+  sources:
+  - rgb
+  target:
+  - pc
+  feat_distill_weight: 1.0
+  cls_distill_weight: 0.5
+  output_distill_weight: 0.0
+  distill_masked_only: true
+  viz_source: rgb
+  expect_init_epoch: 1000
+training:
+  batch_size: 16
+  epochs: 100
+  lr: 3.0e-05
+  weight_decay: 0.05
+  warmup_epochs: 5
+  val_freq: 1
+  val_max_batches: 100
+  max_steps: 0
+  accum_steps: 2
+checkpointing:
+  output_dir: ./outputs/4m_distill_15k_rgb2pc_full_d2
+  save_freq: 2
+  keep_last: 2
+  resume: null
+visualization:
+  viz_freq: 10
+  num_viz_samples: 6
+distributed:
+  world_size: 4
+  dist_backend: nccl
+  dist_url: env://
+system:
+  num_workers: 16
+  device: cuda
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: distill_15k_rgb2pc_full_d2_100ep
