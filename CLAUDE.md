@@ -546,6 +546,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   0.00881 (normalised, test, 22,500 items); best single source for the fine-tuned model is depth (0.00139), PC alone
   from the scene cloud fails (0.046); by theta the fine-tuned model is worst broadside (0: 0.0026) and end-on (90:
   0.0030), best at 40-50 deg (0.0015); no trend over occlusion quartiles.
+- **2026-10-21 09:40 STATUS.** E1 16929801 at epoch 968/1000, 8.2 min/epoch (checkpoint_965 at 09:04): finishes
+  ~14:00 today, then 16950840 (resume) starts, finds epoch 1000 and exits. `maize_row_iso` 17021529 ran twice on
+  scavenger and was preempted (Restarts=2, checkpoint_epoch_15, 108 s/epoch on 4x A100; val Chamfer 0.0029 at ep 15
+  on its own clean inputs), pending again (Priority, est. 10-22 22:00; it resumes at 15). Yesterday's row evals both
+  died on hardware: 17025419 `row_eval_ft` CUDA "uncorrectable ECC error" on nova24-gpu-1 (L40S) after 1 min;
+  17025420 `row_eval_zs` sat 4 h on nova25-gpu-3 (H200 node) with an EMPTY .out (hung before the launcher's first
+  echo: cd / conda / nvidia-smi), TIMEOUT; the cancelled 17021710 on the same node also logged nothing. Resubmitted
+  with `--exclude=nova24-gpu-1,nova25-gpu-3`: **17059822** `row_eval_ft`, **17059823** `row_eval_zs` (scavenger, 1 GPU, 4 h).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
