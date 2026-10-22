@@ -723,6 +723,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (the trainer's val 0.75e-3 uses a different protocol; same gap as v1's 1.31 vs 0.72). Ledger filled. The generalist
   17060048 has been RUNNING since 13:06 on nova26-gpu-1 with 2 RTX PRO 6000 (the 2-GPU reshape fit under the cap):
   epoch 26 at 15:45, 23 min/epoch, 4.5 h segments (next USR1 requeue ~17:36).
+- **2026-10-22 16:00 (user: "move 2 jobs to NOVA"):** the two sorghum row trainings moved in place to nova / mech-ai /
+  normal: **17072337** `sorghum_row_ft` (2x (a100&NVLINK)|h200|rtxpro6000) and **17073182** `sorghum_row_iso`
+  (2x a100|l40s|h200|rtxpro6000). They now count against the 17-GPU cap (generalist 2 + these 4 + students 6 when
+  all run). The zero-shot row eval 17071869 stays on scavenger.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
