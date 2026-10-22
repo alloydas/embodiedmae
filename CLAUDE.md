@@ -663,7 +663,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (`(a100&NVLINK)|h200`: 24,576-pt input), **17070979** `sorghum_row_iso` (`a100|l40s|h200`), and the zero-shot
   baseline **17070980** `srow_eval_zs` = E1 ep 1000 on the test rows (`SPECIES=sorghum eval_row.sbatch ... --num-points
   24576`; gt padded 8192 -> 8196 = the E1 target size). 11:10 (user: "Add rtx_pro_6000 also"): `rtxpro6000` added to
-  the Features of 17070978 / 17070979 and of the generalist twin 17070513 (scavenger still cannot co-locate with the
+  the Features of 17070978 / 17070979 and of the generalist twin 17070513. 11:20: because `afterany` is satisfied by a
+  CANCELLED job (the twin cancels the pending nova copy when it wins), the E5 probe 17060237 now waits
+  `afterany:17060048:17070513` and the quant job 17061909 `afterany:17060048:17070513:17061902:17061903:17061904`
+  (both copies always terminate: the loser exits 0 on the lock or at epoch 100) (scavenger still cannot co-locate with the
   nova jobs on nova26-gpu-[1-2]; the feature only widens the choice when a Blackwell node is free of them). Then: `SPECIES=sorghum sbatch slurm/eval_row.sbatch
   sorghum_row_{ft,iso} checkpoints/checkpoint_epoch_100.pth test` and the paired table as for maize
   (`reports/row_maize_pair_*` recipe). Expect ~2-3 min/epoch -> ~4-5 h each once started.
