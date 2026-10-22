@@ -697,7 +697,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   17070978 (started 10:24, epoch ~25) trains with the OLD unscaled depth input**: it will adapt, but its warm start,
   the zero-shot baseline and the pending isolated control (17070979, picks up the fixed loader at start) would not be
   on the same footing. Recommended: cancel 17070978, `rm -r outputs/sorghum_row_ft`, resubmit the same sbatch line
-  (the user decides; not done). E8 supervised etc. unaffected.
+  12:55 (user: "restart the sorghum row fine-tune with the fix"): 17070978 CANCELLED at epoch ~27; its run dir moved
+  to `outputs/_stale/sorghum_row_ft_unscaled_depth_2026-10-22`; resubmitted as **17071886** `sorghum_row_ft` (same shape,
+  scavenger, 4x (a100&NVLINK)|h200|rtxpro6000, fixed loader).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
