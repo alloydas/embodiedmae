@@ -616,6 +616,22 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   stays). mech-ai at 15 of 17 GPUs with distill_d2's 4, so the students start as labmates' jobs end; Slurm's
   (worst-case) starts: full 19:21, smr50 23:22, smr50b 10-22 03:22; teacher quant 15:38. Still not
   queued: the E1 probe + E9 at epoch 1000 and the E1 row of `pc_view_eval` (1 GPU each).
+- **2026-10-21 19:40 STATUS.** (1) **Isolated control `maize_row_iso` DONE 100/100** (17021529 ran 16:23-18:53 on
+  nova25-gpu-1, 4x L40S, 90 s/epoch; hold-out val on its own clean inputs: Chamfer 0.00142, plant MAE
+  0.08296, masked leaf MAE 0.03594, rgb 0.11007, depth 0.01268). Test eval queued:
+  **17064411** `row_eval_iso` (scavenger, 1 GPU, row + isolated modes) -> `reports/row_maize_maize_row_iso_checkpoint_epoch_100_test_17064411.*`;
+  then the paired row-vs-isolated table = row-trained-on-rows vs isolated-trained-on-isolated (both test, same plants).
+  (2) **The generalist distillation 17060048 self-requeued at epoch 21** (18:49): backfill had cut its limit to 4 h 31
+  (`--time-min 4h`), the USR1 trap requeued it, and the REQUEUED JOB KEEPS THE CUT LIMIT (TimeLimit 4:31:00 now; a
+  user cannot raise it), so it will run in <= 4.5 h segments, each re-queued (12.4 min/epoch -> ~16 h left = 4+
+  segments). It pended on Priority for the RTX PRO 6000 (est. 10-26) although all 16 Blackwell GPUs were idle (nodes
+  PLANNED for others), so it was widened in place to `TresPerNode=gres/gpu:4` + `Features=(a100&NVLINK)|h200|rtxpro6000`
+  (the launcher picks the env from the GPU; accum stays 8/4 = 2; batch 16 needs ~54 GB/card, so no 40 GB types).
+  Checkpoint_epoch_20 is the resume point. If this keeps stalling: cancel and resubmit WITHOUT `--time-min` for a
+  fresh 4-day limit (it then waits for a real 4-day slot). (3) Students 17061902/3/4 pending on nova (Priority,
+  est. 10-22 22:38; 15/17 cap in use by others). (4) Teacher quant 17061908 done -> `reports/quant_teacher_undistilled_d2_{val,test}.json`;
+  it also wrote generalist rows from the all_d2 best_model at EPOCH 1 (premature): moved to
+  `reports/_premature_generalist_d2_2026-10-21/` so 17061909 recomputes them.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
