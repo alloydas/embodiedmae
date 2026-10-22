@@ -708,6 +708,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   24 CPU, 120G (features unchanged). The launcher sets accum = 8 / 2 = 4, so the global batch stays 128; `NUM_WORKERS=8`
   per rank = 16 workers. Expect ~2x the 4-GPU epoch time (~25 min/epoch, ~40 h per student; the generalist needs ~80
   epochs more, in 4.5 h segments). The scavenger twin 17070513 keeps 4 GPUs.
+- **2026-10-22 13:40 (user: "change the scavenger jobs to 2 GPUs"):** generalist twin 17070513 reshaped in place to
+  `gres/gpu:2`, 24 CPU, 120G (accum = 4 from the launcher). Isolated control 17070979 (4 GPUs, spooled without
+  `--batch_size`) cancelled before starting and resubmitted as **17073182** `sorghum_row_iso` = 2 GPUs, 16 CPU, 64G,
+  `--batch_size 16` (global 32), `a100|l40s|h200|rtxpro6000`. Every job of ours is now a 1- or 2-GPU request.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
