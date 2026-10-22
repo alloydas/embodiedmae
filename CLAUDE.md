@@ -662,7 +662,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   0 unexpected. Jobs (scavenger, 4 GPUs, 32 CPU, 96G, 4 d, requeue, auto-resume): **17070978** `sorghum_row_ft`
   (`(a100&NVLINK)|h200`: 24,576-pt input), **17070979** `sorghum_row_iso` (`a100|l40s|h200`), and the zero-shot
   baseline **17070980** `srow_eval_zs` = E1 ep 1000 on the test rows (`SPECIES=sorghum eval_row.sbatch ... --num-points
-  24576`; gt padded 8192 -> 8196 = the E1 target size). Then: `SPECIES=sorghum sbatch slurm/eval_row.sbatch
+  24576`; gt padded 8192 -> 8196 = the E1 target size). 11:10 (user: "Add rtx_pro_6000 also"): `rtxpro6000` added to
+  the Features of 17070978 / 17070979 and of the generalist twin 17070513 (scavenger still cannot co-locate with the
+  nova jobs on nova26-gpu-[1-2]; the feature only widens the choice when a Blackwell node is free of them). Then: `SPECIES=sorghum sbatch slurm/eval_row.sbatch
   sorghum_row_{ft,iso} checkpoints/checkpoint_epoch_100.pth test` and the paired table as for maize
   (`reports/row_maize_pair_*` recipe). Expect ~2-3 min/epoch -> ~4-5 h each once started.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
