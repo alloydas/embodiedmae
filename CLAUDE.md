@@ -703,6 +703,11 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   13:05 (user: "Can you try with 2 gpus instead of 4 GPUs?"): 17071886 (never started) cancelled; **17072337** `sorghum_row_ft`
   = 2 GPUs (same 80 GB constraint), 16 CPU, 64G, `--batch_size 16` so the global batch stays 32 (per-GPU batch 16 vs the
   maize row arms' 8: PointCloudEmbed's BatchNorm sees 16; the sorghum E2 arms trained at 16/GPU too).
+- **2026-10-22 13:20 (user: "put the nova jobs to 2 GPUs only"):** the four nova distillation jobs reshaped in place to
+  2 GPUs: 17061902 / 17061903 / 17061904 (students) and 17060048 (generalist, nova copy) now `TresPerNode=gres/gpu:2`,
+  24 CPU, 120G (features unchanged). The launcher sets accum = 8 / 2 = 4, so the global batch stays 128; `NUM_WORKERS=8`
+  per rank = 16 workers. Expect ~2x the 4-GPU epoch time (~25 min/epoch, ~40 h per student; the generalist needs ~80
+  epochs more, in 4.5 h segments). The scavenger twin 17070513 keeps 4 GPUs.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
