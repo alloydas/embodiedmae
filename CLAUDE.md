@@ -670,6 +670,16 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   nova jobs on nova26-gpu-[1-2]; the feature only widens the choice when a Blackwell node is free of them). Then: `SPECIES=sorghum sbatch slurm/eval_row.sbatch
   sorghum_row_{ft,iso} checkpoints/checkpoint_epoch_100.pth test` and the paired table as for maize
   (`reports/row_maize_pair_*` recipe). Expect ~2-3 min/epoch -> ~4-5 h each once started.
+- **2026-10-22 11:50: POINT-CLOUD PRECISION / RECALL / F1 (user: "calculate precision recall and F1 for point clouds
+  also").** `eval/pc_fscore.py` + `slurm/pc_fscore.sbatch`: view 00 of every plant, masked-regime reconstruction
+  exactly as pc_view_eval's 'full' condition (reproduces the published Chamfer: smoke 4 plants, E1 1.2e-3, PC-only
+  4.4e-3, PC+RGB+D 1.6e-3), then per plant precision (predicted points within tau of GT), recall (GT points within tau of
+  a prediction) and F1 at tau 0.005 / 0.01 / 0.02 normalised units, with `scale_m` (metres per unit) per plant for
+  conversion; one data pass per (rgb_file, gain) group; summary = means, medians, plant-bootstrap CI of the F1 means.
+  Job **17071405** `pcfscore_d2` (scavenger, 1 GPU, 6 h): the 16 sorghum v2 runs (E2 x4, tg/tg40/tg100, E3 x3 at
+  6168/2024/624, E4 x2, E5 x3, E1 d2 sink @1000), val + test -> `reports/pcfscore_17071405_{items,summary}.csv`.
+  The supervised E8 row has no decoder and is not scored. The ledger artifact is being cut to SORGHUM v2 ONLY
+  (user: "in the artifact keep only sorghum v2").
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
