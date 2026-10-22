@@ -71,6 +71,17 @@ case "${NPROC}" in
 esac
 echo "GPUs ${NPROC} x batch 16 x accum ${ACCUM} = global batch 128"
 
+# Twin-job race (RACE_CANCEL_NAME=<other job name>): the first copy to start cancels the other's
+# PENDING copy (never a running job) and holds a lock on the output dir for the whole run, so two
+# writers can never share it; a copy that finds the lock held exits 0 at once.
+if [ -n "${RACE_CANCEL_NAME:-}" ]; then
+  scancel --name="${RACE_CANCEL_NAME}" --state=PENDING --user="${USER}" 2>/dev/null || true
+  echo "race: cancelled pending twin(s) named ${RACE_CANCEL_NAME}"
+fi
+mkdir -p "${OUT_DIR}"
+exec 9>"${OUT_DIR}/.train.lock"
+if ! flock -n 9; then echo "another trainer holds ${OUT_DIR} (lock); exiting"; exit 0; fi
+
 RESUME_ARG=""
 if [ -d "${CKPT_DIR}" ]; then
   LATEST=$(for f in "${CKPT_DIR}"/checkpoint_epoch_*.pth; do

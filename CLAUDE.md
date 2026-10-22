@@ -632,6 +632,22 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   est. 10-22 22:38; 15/17 cap in use by others). (4) Teacher quant 17061908 done -> `reports/quant_teacher_undistilled_d2_{val,test}.json`;
   it also wrote generalist rows from the all_d2 best_model at EPOCH 1 (premature): moved to
   `reports/_premature_generalist_d2_2026-10-21/` so 17061909 recomputes them.
+- **2026-10-22 09:50: REGIME III PAIRED RESULT + GENERALIST SCAVENGER TWIN.** `row_eval_iso` 17064411 done (50 min) ->
+  `reports/row_maize_maize_row_iso_checkpoint_epoch_100_test_17064411.{csv,json}`. Paired over the same 2,250 test plants x
+  10 yaws (`reports/row_maize_pair_ft17059822_iso17064411.csv`, bootstrap over plants, all-stream input, Chamfer vs
+  target in 1e-4 m^2): isolated-trained on isolated inputs 3.97 / miss@5mm 0.62; row-trained on rows 6.55 / 0.73
+  (the cost of the row regime: +2.58 [2.51, 2.66], miss +0.107, plant MAE +0.004, leaf MAE +0.005); isolated-trained
+  zero-shot on rows 33.1 / 0.89 (+29.1 vs its own clean inputs); row-trained vs isolated-trained BOTH on rows -26.5
+  [-26.9, -26.1], miss -0.157, plant MAE -0.017, leaf MAE -0.035: row fine-tuning removes 91 % of the row penalty.
+  Per source the same ordering holds (rgb / depth); cloud-only fails in every arm (>= 93 on rows). These are the
+  `tab:rows` numbers (not yet in results.tex). **Generalist distillation:** 17060048 still PENDING (AssocGrpGRES: the
+  mech-ai cap is full with labmates' jobs; nothing of ours ran overnight), so `slurm/distill_15k_all_d2.sbatch` gained
+  the twin race (RACE_CANCEL_NAME + flock on the output dir, as train_row.sbatch) and a scavenger twin **17070513**
+  `distill_d2_scav` (RACE_CANCEL_NAME=distill_d2, 4x (a100&NVLINK)|h200, 40 CPU, 200G, fresh 2-day limit, requeue)
+  was submitted: whichever starts first holds `outputs/4m_distill_15k_all_d2/.train.lock`; the twin cancels the
+  pending nova copy when it starts first; the nova copy (old spooled script, no race code) cannot cancel the twin,
+  but the twin exits 0 if it starts while the nova copy holds the lock. Students 17061902/3/4 stay on nova per the
+  user ("Put them in NOVA"), AssocGrpGRES, est. 10-23 02:06.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
