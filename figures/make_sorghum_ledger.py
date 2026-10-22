@@ -1,0 +1,117 @@
+"""Build the sorghum (final data) results page: one HTML file with the numbers embedded as JSON
+and rendered client-side (tables, inline-SVG charts, t-SNE and reconstruction images), in the
+style of the maize d2 page.
+
+  python figures/make_sorghum_ledger.py --out /path/to/cropcode_ledger.html
+
+Sources: outputs/<run>/{training_history,config}.json, reports/probe_pr_*_d2_*.csv,
+reports/*_delta_d2_16950816.csv, reports/e9_pr_*_d2_*/e9_latent_summary_{val,test}.csv,
+reports/pcfscore_17071405_items.csv, reports/pcview_16930426_*.csv, reports/quant_*_d2_*.json,
+reports/row_*.json, the E9 t-SNE figures and the E1 visualisations. Queue rows are passed in
+--queue (a JSON file) or left as written below.
+"""
+import argparse, base64, glob, io, json, re, sys
+from pathlib import Path
+import numpy as np, pandas as pd
+from PIL import Image
+
+REPO = Path(__file__).resolve().parents[1]
+R = REPO / 'reports'; O = REPO / 'outputs'
+
+RUNS = {  # slug -> short label
+ 'e2_pc_d2':'PC', 'e2_pcrgb_d2':'PC+RGB', 'e2_pcrgbd_d2':'PC+RGB+D', 'e2_pcrgbdt_d2':'all four',
+ 'e2_pcrgbdt_tg_d2':'tg 20%', 'e2_pcrgbdt_tg40_d2':'tg 60%', 'e2_pcrgbdt_tg100_d2':'tg target-only',
+ 'e3_1k_d2':'1k', 'e3_3k_d2':'3k', 'e3_10k_d2':'10k', 'e4_small_d2':'small', 'e4_large_d2':'large',
+ 'e5_topdown_d2':'E5 top-down', 'e5_horizon_d2':'E5 horizon', 'e5_single_d2':'E5 single',
+ '4m_pretrain_15k_d2_sink':'E1', 'e8_supervised_d2':'supervised',
+}
+CKPT = {'e3_1k_d2':6168, 'e3_3k_d2':2024, 'e3_10k_d2':624, '4m_pretrain_15k_d2_sink':1000}
+TARGETS = ['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_len_max','leaf_width_mean','leaf_width_max']
+
+def val_epochs(n_val, epochs, val_freq):
+    ep = [1] + [k*val_freq for k in range(1, epochs//val_freq + 1)]
+    if ep[-1] != epochs: ep.append(epochs)
+    ep = [e for e in ep if e <= epochs]
+    if len(ep) != n_val:          # resumes can duplicate the last point: pad/trim to the recorded length
+        ep = (ep + [epochs]*n_val)[:n_val]
+    return ep
+
+def curve(run):
+    h = json.load(open(O/run/'training_history.json')); c = json.load(open(O/run/'config.json'))
+    tl = h['train_loss']; n = len(tl); epochs = int(c['epochs']); vf = int(c.get('val_freq', 25))
+    step = max(1, n // 120)
+    train = [[i+1, round(tl[i], 5)] for i in range(0, n, step)] + ([[n, round(tl[-1], 5)]] if (n-1) % step else [])
+    ve = val_epochs(len(h['val_loss']), epochs, vf)
+    pts = lambda k: [[e, round(v, 6)] for e, v in zip(ve, h[k])] if h.get(k) else []
+    fin = {'val_loss': h['val_loss'][-1] if h['val_loss'] else None, 'val_pc_chamfer': h['val_pc_chamfer'][-1] if h['val_pc_chamfer'] else None,
+           'val_rgb_mse': h['val_rgb_mse'][-1] if h.get('val_rgb_mse') else None, 'val_depth_mse': h['val_depth_mse'][-1] if h.get('val_depth_mse') else None,
+           'val_param_mae': h['val_param_mae_masked'][-1] if h.get('val_param_mae_masked') else None, 'train_loss': tl[-1],
+           'test_pc_chamfer': h['test_pc_chamfer'][-1] if h.get('test_pc_chamfer') else None, 'test_param_mae': h['test_param_mae_masked'][-1] if h.get('test_param_mae_masked') else None}
+    cfg = {k: c.get(k) for k in ('epochs','batch_size','world_size','max_plants','active_modalities','model_size','mask_ratio','lr','rgb_file','rgb_brighten_gain','pc_loss_name','text_mask_ratio','accum_steps','pc_sinkhorn_weight','train_views')}
+    return {'epochs': epochs, 'done': n, 'val_freq': vf, 'train_loss': train, 'val_loss': pts('val_loss'), 'val_chamfer': pts('val_pc_chamfer'), 'val_param_mae': pts('val_param_mae_masked'), 'final': fin, 'cfg': cfg}
+
+def probe_rows(files, feature='cls'):
+    d = pd.concat([pd.read_csv(f) for f in files]); d = d[d.feature == feature] if (feature and 'feature' in d.columns) else d
+    out = {}
+    for run, g in d.groupby('run'):
+        g = g.drop_duplicates('target')
+        out[run] = {'epoch': int(g.epoch.iloc[0]), 'targets': {r.target: {'unit': r.unit, 'src': r.source_col, 'val_r2': r.val_r2, 'test_r2': r.test_r2, 'val_mae': r.val_mae, 'test_mae': r.test_mae, 'val_base_mae': r.val_base_mae} for r in g.itertuples() if r.target in TARGETS}}
+    return out
+
+def img_b64(path, width=900, quality=80):
+    im = Image.open(path).convert('RGB')
+    if im.width > width: im = im.resize((width, int(im.height*width/im.width)), Image.LANCZOS)
+    b = io.BytesIO(); im.save(b, 'JPEG', quality=quality, optimize=True)
+    return 'data:image/jpeg;base64,' + base64.b64encode(b.getvalue()).decode()
+
+def main():
+    ap = argparse.ArgumentParser(); ap.add_argument('--out', required=True); ap.add_argument('--no-images', action='store_true'); a = ap.parse_args()
+    D = {}
+    D['curves'] = {r: curve(r) for r in RUNS if (O/r/'training_history.json').exists() and r != 'e8_supervised_d2'}
+    # supervised row (different history layout)
+    hs = json.load(open(O/'e8_supervised_d2'/'training_history.json'))
+    D['e8sup'] = {'done': len(hs['epoch']), 'val_epochs': hs['val_epoch'], 'val_loss': hs['val_loss'], 'r2': {t: hs[f'val_r2_{t}'][-1] for t in TARGETS if f'val_r2_{t}' in hs}}
+    # generalist distillation (in progress)
+    hd = json.load(open(O/'4m_distill_15k_all_d2'/'training_history.json'))
+    D['distill'] = {'train': [[e['epoch'], round(e['loss'], 5)] for e in hd['train']], 'val': [{'epoch': v['epoch'], 'mean_gen': v['mean_gen'], 'per_source': {s: {k: v['per_source'][s][k] for k in ('pc_chamfer','param_mae_masked','total')} for s in v['per_source']}} for v in hd['val']], 'epochs': 100}
+    D['probe'] = probe_rows([R/'probe_pr_600_d2_16930422.csv', R/'probe_pr_6168_d2_16928969.csv', R/'probe_pr_2024_d2_16928970.csv', R/'probe_pr_624_d2_16928971.csv'])
+    D['probe_mean'] = probe_rows([R/'probe_pr_mean600_d2_16930423.csv'], 'mean')
+    D['e8'] = probe_rows([R/'probe_e8_base_sorghum_d2_16930425.csv'], 'mean')
+    D['e8']['e8_supervised_d2 (mean pool)'] = probe_rows([R/'probe_e8_score_d2_16930424_mean.csv'], 'mean')['e8_supervised_d2']
+    D['e8']['e8_supervised_d2 (own head)'] = probe_rows([R/'probe_e8_score_d2_16930424_head.csv'], None)['e8_supervised_d2_head']
+    boot = pd.concat([pd.read_csv(f) for f in sorted(glob.glob(str(R/'*_delta_d2_16950816.csv')))])
+    boot = boot[boot.target.isin(TARGETS)]
+    D['boot'] = [{k: (round(float(v), 4) if isinstance(v, (float, np.floating)) else v) for k, v in r.items()} for r in boot[['a','b','feature','target','split','r2_a','r2_b','delta','lo','hi']].to_dict('records')]
+    e9 = {}
+    for d in [R/'e9_pr_600_d2_16930422', R/'e9_pr_6168_d2_16928969', R/'e9_pr_2024_d2_16928970', R/'e9_pr_624_d2_16928971']:
+        for sp in ('val','test'):
+            for r in pd.read_csv(d/f'e9_latent_summary_{sp}.csv').to_dict('records'):
+                e9.setdefault(r['run'], {})[sp] = {k: (None if (isinstance(v, float) and np.isnan(v)) else v) for k, v in r.items()}
+    D['e9'] = e9
+    it = pd.read_csv(R/'pcfscore_17071405_items.csv'); it['chamfer'] = it.chamfer_pred_to_gt + it.chamfer_gt_to_pred
+    fs = []
+    for (run, split), g in it.groupby(['run','split']):
+        for t in (0.005, 0.01, 0.02):
+            f1 = g[f'f1_{t:g}']; fs.append({'run': run, 'split': split, 'epoch': int(g.epoch.iloc[0]), 'n_plants': len(g), 'tau': t, 'precision': round(g[f'precision_{t:g}'].mean(), 5), 'recall': round(g[f'recall_{t:g}'].mean(), 5), 'f1': round(f1.mean(), 5), 'f1_median': round(float(f1.median()), 5), 'f1_p10': round(float(f1.quantile(0.1)), 5), 'chamfer': round(g.chamfer.mean(), 6), 'scale_m': round(float(g.scale_m.median()), 3)})
+    D['fscore'] = fs
+    pv = pd.read_csv(R/'pcview_16930426_probe.csv'); rc = pd.read_csv(R/'pcview_16930426_recon.csv'); cov = pd.read_csv(R/'pcview_16930426_coverage.csv')
+    D['pcview'] = {'probe': [{k: r[k] for k in ('run','condition','fit','target','val_r2','test_r2')} for r in pv[pv.target.isin(['height','leaf_angle_roll','leaf_len_mean'])].to_dict('records')],
+                   'recon': [{k: r[k] for k in ('run','condition','chamfer','echo_chamfer')} for r in rc.to_dict('records')],
+                   'coverage': {r['condition']: r['mean'] for r in cov.groupby('condition')['mean'].mean().reset_index().to_dict('records')}}
+    q = {}
+    for f in sorted(glob.glob(str(R/'quant_*_d2_*.json'))):
+        d = json.load(open(f)); q[f'{d["label"]}|{d["split"]}'] = {'label': d['label'], 'split': d['split'], 'epoch': d['epoch'], 'chamfer': d['summary']['model']['symmetric']['mean'], 'skill': d['skill_vs_mean_plant']}
+    D['quant'] = list(q.values())
+    D['images'] = {}
+    if not a.no_images:
+        for run in list(RUNS)[:12]:
+            p = sorted(glob.glob(str(R/'e9_pr_*_d2_*'/'figures'/f'e9_latent_{run}_val_tsne.png')))
+            if p: D['images'][f'tsne_{run}'] = img_b64(p[0], 760, 72)
+        for i, p in enumerate(sorted(glob.glob(str(O/'4m_pretrain_15k_d2_sink'/'visualizations'/'epoch_980_sample_*_00.png')))[:3]):
+            D['images'][f'recon{i}'] = img_b64(p, 700, 72); D['images'][f'recon{i}_name'] = Path(p).stem.split('_', 4)[-1]
+    tpl = open(REPO/'figures'/'sorghum_ledger_template.html').read()
+    html = tpl.replace('/*DATA*/', json.dumps(D, separators=(',', ':')))
+    Path(a.out).write_text(html); print('wrote', a.out, len(html)//1024, 'KB; images', len(D['images']), '; fscore rows', len(fs), '; boot rows', len(D['boot']))
+
+if __name__ == '__main__':
+    main()

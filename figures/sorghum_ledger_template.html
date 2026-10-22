@@ -1,0 +1,471 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sorghum Results Ledger</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one 1080px column; summary strip, programme matrix, then one section per experiment; tables scroll inside their frames; charts are inline SVG. */
+:root{
+  --bg:#f5f6f2; --surface:#ffffff; --fg:#1d221c; --muted:#5f685c; --line:#d8ddd2;
+  --accent:#2f6b2a; --accent-soft:#e3eedf; --gold:#b8860b;
+  --ok:#2f6b2a; --warn:#b8860b; --pend:#8a8f86; --blank:#eceee8;
+  --c1:#2f6b2a; --c2:#b8860b; --c3:#1f6f8b; --c4:#a2402b; --c5:#6b4c9a; --c6:#4a7f6b; --c7:#8b6b1f; --c8:#555b52;
+  --font-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#141814; --surface:#1c211c; --fg:#e6e9e1; --muted:#a2a99d; --line:#333a32;
+  --accent:#7cc26f; --accent-soft:#223322; --gold:#e0b240;
+  --ok:#7cc26f; --warn:#e0b240; --pend:#8a8f86; --blank:#222823;
+  --c1:#7cc26f; --c2:#e0b240; --c3:#5fb3d3; --c4:#e2795f; --c5:#a98be0; --c6:#7fc2a6; --c7:#d3a94a; --c8:#aab0a6;
+  color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#141814; --surface:#1c211c; --fg:#e6e9e1; --muted:#a2a99d; --line:#333a32;
+  --accent:#7cc26f; --accent-soft:#223322; --gold:#e0b240;
+  --ok:#7cc26f; --warn:#e0b240; --pend:#8a8f86; --blank:#222823;
+  --c1:#7cc26f; --c2:#e0b240; --c3:#5fb3d3; --c4:#e2795f; --c5:#a98be0; --c6:#7fc2a6; --c7:#d3a94a; --c8:#aab0a6;
+  color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.5;margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:20px;padding-block:28px 64px}
+h1{font-size:2rem;line-height:1.15;margin:0 0 6px;font-weight:700;letter-spacing:-0.01em;text-wrap:balance}
+h2{font-size:1.35rem;margin:0 0 4px;font-weight:650;text-wrap:balance}
+h3{font-size:1.02rem;margin:0 0 6px;font-weight:600}
+p{max-width:72ch;margin:0 0 10px}
+.lede{color:var(--muted);font-size:1rem;max-width:76ch}
+.eyebrow{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+section{margin-top:44px;padding-top:22px;border-top:1px solid var(--line)}
+.sechead{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;margin-bottom:14px}
+.mono,.num,td.n{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:20px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.tile .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.tile .v{font-family:var(--font-mono);font-size:1.3rem;font-weight:500;margin-top:2px}
+.tile .s{font-size:.78rem;color:var(--muted)}
+.pill{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
+.pill.done{background:var(--accent-soft);color:var(--ok);border-color:var(--ok)}
+.pill.running{background:transparent;color:var(--warn);border-color:var(--warn)}
+.pill.queued{background:transparent;color:var(--pend);border-color:var(--pend)}
+.pill.blank{background:var(--blank);color:var(--muted);border-color:var(--line)}
+.pill.elsewhere{background:transparent;color:var(--muted);border-style:dashed;border-color:var(--muted)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+th{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--surface);position:sticky;top:0}
+tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right}
+td.blankc{background:var(--blank);color:var(--muted);text-align:center}
+td.lead{font-weight:600}
+td.wrapc{white-space:normal;min-width:260px;max-width:520px}
+.heat{position:relative}
+.heat .bar{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.18;z-index:0}
+.heat span{position:relative;z-index:1}
+.chartgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:14px}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 12px 6px;min-width:0}
+.chart h3{margin-bottom:2px}
+.chart .sub{font-size:.78rem;color:var(--muted);margin-bottom:6px}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.78rem;margin-top:4px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.imggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px}
+figure{margin:0;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+figure img{display:block;width:100%;max-width:100%;height:auto}
+figcaption{padding:8px 10px;font-size:.8rem;color:var(--muted);white-space:normal}
+.note{border-left:3px solid var(--gold);padding:6px 12px;background:var(--surface);border-radius:0 6px 6px 0;margin:12px 0;max-width:80ch;font-size:.9rem}
+.toggle{display:inline-flex;flex-wrap:wrap;gap:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:0 0 10px}
+.toggle button{background:var(--surface);color:var(--fg);border:0;padding:5px 12px;font:inherit;font-size:.82rem;cursor:pointer}
+.toggle button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.toggle button:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
+.muted{color:var(--muted)} .small{font-size:.8rem}
+@media (max-width:520px){h1{font-size:1.5rem}.wrap{padding-inline:16px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<div class="wrap">
+  <div class="eyebrow">CropCode · EmbodiedMAE 4M · sorghum · final data release · Nova</div>
+  <h1>Sorghum Results Ledger</h1>
+  <p class="lede">Every sorghum result on the final data release (background-free RGB brightened ×1.85, per-leaf width in the recipe), and an empty cell for every number the paper still needs. First-release sorghum and maize numbers are not on this page. State as of <span id="asof"></span>. Sources: each run's <span class="mono">training_history.json</span>, the gain-matched probes <span class="mono">reports/probe_pr_*_d2_*.csv</span>, the paired bootstraps <span class="mono">reports/*_delta_d2_16950816.csv</span>, the E9 reports, <span class="mono">reports/pcfscore_17071405_*.csv</span> and <span class="mono">reports/pcview_16930426_*.csv</span>.</p>
+  <div class="strip" id="strip"></div>
+
+  <section id="matrix">
+    <div class="sechead"><span class="eyebrow">Programme</span><h2>E1 to E10 on the final sorghum data</h2></div>
+    <p>Grey cells are experiments with no result yet.</p>
+    <div class="tablewrap"><table id="matrixtbl"></table></div>
+  </section>
+
+  <section id="queue">
+    <div class="sechead"><span class="eyebrow">Nova</span><h2>Queue</h2></div>
+    <div class="note" id="queuenote"></div>
+    <div class="tablewrap"><table id="queuetbl"></table></div>
+  </section>
+
+  <section id="curves">
+    <div class="sechead"><span class="eyebrow">Training</span><h2>Validation curves</h2></div>
+    <p>Every ablation arm trains 197,400 optimizer steps at global batch 32; E3 arms are drawn against steps because their epoch counts differ by 10× on purpose (1k plants = 32 steps/epoch, 3k = 94, 10k = 313, full = 329). E1 is 1,000 epochs over all ten views at global batch 256. Chamfer is the masked validation step, unit-sphere frame.</p>
+    <div class="chartgrid">
+      <div class="chart"><h3>E2 arms: validation chamfer</h3><div class="sub">Which token streams exist. Log scale.</div><div id="ch_e2_cham"></div></div>
+      <div class="chart"><h3>Parameter-budget controls: validation chamfer</h3><div class="sub">The four-stream arm with the recipe tokens inside the budget (as trained), gated to 20 % or 60 % visible, or as a target only. Log scale.</div><div id="ch_tg_cham"></div></div>
+      <div class="chart"><h3>E3 arms: validation chamfer vs optimizer steps</h3><div class="sub">Log scale.</div><div id="ch_e3_cham"></div></div>
+      <div class="chart"><h3>E4 and E5 arms: validation chamfer</h3><div class="sub">Model size, and the view band the train draw was restricted to (val scores view 0). Log scale.</div><div id="ch_e45_cham"></div></div>
+      <div class="chart"><h3>E1: validation chamfer and parameter MAE</h3><div class="sub">QAL + Sinkhorn, 1,000 epochs. Log scale.</div><div id="ch_e1"></div></div>
+      <div class="chart"><h3>Train loss, all arms</h3><div class="sub">Per-epoch mean against fraction of the schedule. Log scale.</div><div id="ch_train"></div></div>
+    </div>
+    <h3 style="margin-top:18px">Final validation metrics</h3>
+    <div class="tablewrap"><table id="finaltbl"></table></div>
+  </section>
+
+  <section id="fscore">
+    <div class="sechead"><span class="eyebrow">Reconstruction</span><h2>Point-cloud precision, recall and F1</h2></div>
+    <p>Each plant's view-0 cloud is reconstructed in the run's own training regime (Dirichlet masking at mask ratio 0.80, the recipe hidden and zeroed, as in the trainer's validation pass), then compared point by point with a second seeded subsample of the complete cloud. Both are in the loader's frame: centred, farthest point on the unit sphere. At a distance threshold τ:</p>
+    <ul>
+      <li><strong>precision</strong> = share of predicted points within τ of some ground-truth point (no stray points),</li>
+      <li><strong>recall</strong> = share of ground-truth points within τ of some predicted point (nothing missing),</li>
+      <li><strong>F1</strong> = 2PR / (P + R), computed per plant and averaged over plants.</li>
+    </ul>
+    <p>A sorghum cloud spans about 1 m from its centre, so τ = 0.01 is about 1 cm; τ = 0.01 is the headline.</p>
+    <div class="note" id="fsnote"></div>
+    <div class="toggle" role="group" aria-label="Split and threshold" id="fstog"></div>
+    <div class="tablewrap"><table id="fstbl"></table></div>
+    <div class="chartgrid">
+      <div class="chart"><h3>F1 against threshold τ</h3><div class="sub">test, per-plant mean. Log x.</div><div id="ch_fs_tau"></div></div>
+      <div class="chart"><h3>Precision against recall at τ = 0.01</h3><div class="sub">test. Up and right is better; every model sits far above the diagonal, i.e. under-covers.</div><div id="ch_fs_pr"></div></div>
+    </div>
+  </section>
+
+  <section id="probe">
+    <div class="sechead"><span class="eyebrow">Decision 6.4</span><h2>Linear probe on the frozen CLS token</h2></div>
+    <p>Ridge regression on the CLS token, one deterministic view per plant, recipe never visible and parameters zeroed, scaler fit on train only, every model served the RGB brightness it trained at. R² on the held-out split. Height, leaf count and biomass are one generator variable in sorghum (r ≈ 0.99); roll, leaf length and leaf width are the independent axes. Waviness is at R² ≈ 0 for every arm and is omitted.</p>
+    <div class="toggle" role="group" aria-label="Split"><button id="tg_val" aria-pressed="true">val R²</button><button id="tg_test" aria-pressed="false">test R²</button><button id="tg_mae" aria-pressed="false">val MAE (native units)</button></div>
+    <div class="tablewrap"><table id="probetbl"></table></div>
+    <div class="chartgrid">
+      <div class="chart"><h3>E2: what each stream adds (val R²)</h3><div class="sub">PC → +RGB → +depth → +recipe.</div><div id="ch_e2_probe"></div></div>
+      <div class="chart"><h3>E3: data scaling (val R²)</h3><div class="sub">Plants in the train split, log x. Full data = the four-stream arm.</div><div id="ch_e3_probe"></div></div>
+      <div class="chart"><h3>Parameter budget: the controls (val R²)</h3><div class="sub">Same vision tokens, recipe visible 58 % / 20 % / 60 % / 0 %.</div><div id="ch_tg_probe"></div></div>
+      <div class="chart"><h3>E4: model size (val R²)</h3><div class="sub">25 M / 114 M / 332 M parameters, same steps.</div><div id="ch_e4_probe"></div></div>
+    </div>
+  </section>
+
+  <section id="boot">
+    <div class="sechead"><span class="eyebrow">Significance</span><h2>Paired bootstrap of the probe</h2></div>
+    <p>Δ = R²(a) − R²(b), 2,000 resamples over plants, 95 % interval. A <strong>win</strong> or <strong>loss</strong> needs the interval to exclude zero on both val and test; everything else is a draw.</p>
+    <div class="note" id="bootnote"></div>
+    <div class="toggle" role="group" aria-label="Comparison" id="boottog"></div>
+    <div class="tablewrap"><table id="boottbl"></table></div>
+  </section>
+
+  <section id="e8">
+    <div class="sechead"><span class="eyebrow">E8</span><h2>Frozen-encoder baselines</h2></div>
+    <p>Published checkpoints read through the same ridge probe on the same plants, mean pooling for every model (the one pooling all share), plus a network trained from scratch to regress the targets. Val R².</p>
+    <div class="tablewrap"><table id="e8tbl"></table></div>
+  </section>
+
+  <section id="pcview">
+    <div class="sechead"><span class="eyebrow">Partial clouds</span><h2>What one or three cameras see</h2></div>
+    <p>Every arm trained on the complete plant cloud. Here the cloud is cut by ray-casting each camera against the mesh: camera 0 alone, or cameras 0 + 1 + 2. <strong>Matched</strong> = probe refit per condition; <strong>transferred</strong> = full-cloud probe applied as is. Chamfer against the complete cloud (val); test R².</p>
+    <div class="tablewrap"><table id="pcviewtbl"></table></div>
+    <div class="chartgrid">
+      <div class="chart"><h3>Height R² against cloud coverage</h3><div class="sub">test; solid = refit per condition, dashed = full-cloud probe transferred.</div><div id="ch_pcview"></div></div>
+    </div>
+  </section>
+
+  <section id="e9">
+    <div class="sechead"><span class="eyebrow">E9</span><h2>Latent analysis</h2></div>
+    <p>Same CLS features as the probe. The generator has no genotype variable (one continuous distribution, 15,000 seeds), so a near-zero silhouette is the expected, positive result. <span class="mono">align</span> is the best |r| between any single principal component and that target.</p>
+    <div class="tablewrap"><table id="e9tbl"></table></div>
+    <h3 style="margin-top:18px">t-SNE of the val latent</h3>
+    <div class="imggrid" id="tsnegrid"></div>
+  </section>
+
+  <section id="distill">
+    <div class="sechead"><span class="eyebrow">Distillation</span><h2>Single-sensor generation</h2></div>
+    <p>Teacher = student init = E1 (epoch 1,000). The generalist student sees one source at a time and regenerates all four; three RGB→cloud students are queued. Before = E1 used zero-shot; after = the distilled student.</p>
+    <div class="chartgrid">
+      <div class="chart"><h3>Generalist: validation mean generation loss</h3><div class="sub">Running; every 5 epochs.</div><div id="ch_distill"></div></div>
+      <div class="chart"><h3>Generalist: cloud Chamfer per source</h3><div class="sub">Source alone → full cloud, validation. Log scale.</div><div id="ch_distill_src"></div></div>
+    </div>
+    <div class="tablewrap"><table id="distilltbl"></table></div>
+    <h3 style="margin-top:18px">Photograph → cloud, 2,250 held-out plants per split</h3>
+    <div class="tablewrap"><table id="quanttbl"></table></div>
+  </section>
+
+  <section id="rows">
+    <div class="sechead"><span class="eyebrow">Regime III</span><h2>Rows: neighbours and occlusion</h2></div>
+    <p>Rover renders of a target plant between two bent neighbours at 0.15 m (rover 2.5 m from the row), ten yaws per plant; train 10,500 / val 2,250 / test 2,250 plants. The encoder sees the row; every loss and metric is against the target plant alone.</p>
+    <div class="note" id="rownote"></div>
+    <div class="tablewrap"><table id="rowtbl"></table></div>
+  </section>
+
+  <section id="recon">
+    <div class="sechead"><span class="eyebrow">Reconstructions</span><h2>E1 at epoch 980</h2></div>
+    <p>The trainer's five-row grid: RGB, depth, point cloud and decoded recipe text, input against reconstruction, at mask ratio 0.80.</p>
+    <div class="note">The reconstructed-depth panel borrows its silhouette from the ground-truth depth, so the outline is free and only the values inside it come from the model. No reported number uses this render.</div>
+    <div class="imggrid" id="recongrid"></div>
+  </section>
+
+  <section id="e10">
+    <div class="sechead"><span class="eyebrow">E10 · E6 · E7</span><h2>Real field data, masking, loss</h2></div>
+    <p>Nothing has been run on real scans; the one-camera transfer gap above is the predicted sim-to-real penalty until then. E6 (masking) and E7 (loss) are a collaborator's; the Sinkhorn term from E7 is adopted in E1 and every distillation. Before their numbers are merged, confirm the same 70/15/15 split (seed 42), global batch 32, and a budget in optimizer steps.</p>
+  </section>
+</div>
+
+<script id="data" type="application/json">/*DATA*/</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const ASOF = '2026-10-22 16:30 CDT';
+document.getElementById('asof').textContent = ASOF;
+const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
+const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
+const E3=['e3_1k_d2','e3_3k_d2','e3_10k_d2','e2_pcrgbdt_d2'];
+const E4=['e4_small_d2','e2_pcrgbdt_d2','e4_large_d2'];
+const E5=['e5_topdown_d2','e5_horizon_d2','e5_single_d2','e2_pcrgbdt_d2'];
+const ALL=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2','e3_1k_d2','e3_3k_d2','e3_10k_d2','e4_small_d2','e4_large_d2','e5_topdown_d2','e5_horizon_d2','e5_single_d2','4m_pretrain_15k_d2_sink'];
+const PROBED=ALL.filter(r=>D.probe[r]);
+const SHORT={e2_pc_d2:'PC',e2_pcrgb_d2:'PC+RGB',e2_pcrgbd_d2:'PC+RGB+D',e2_pcrgbdt_d2:'all four',e2_pcrgbdt_tg_d2:'tg 20 %',e2_pcrgbdt_tg40_d2:'tg 60 %',e2_pcrgbdt_tg100_d2:'target only',e3_1k_d2:'1k plants',e3_3k_d2:'3k plants',e3_10k_d2:'10k plants',e4_small_d2:'small 25 M',e4_large_d2:'large 332 M',e5_topdown_d2:'E5 top-down',e5_horizon_d2:'E5 horizon',e5_single_d2:'E5 single view','4m_pretrain_15k_d2_sink':'E1',e8_supervised_d2:'supervised'};
+const COL={e2_pc_d2:'var(--c4)',e2_pcrgb_d2:'var(--c2)',e2_pcrgbd_d2:'var(--c3)',e2_pcrgbdt_d2:'var(--c1)',e2_pcrgbdt_tg_d2:'var(--c5)',e2_pcrgbdt_tg40_d2:'var(--c6)',e2_pcrgbdt_tg100_d2:'var(--c7)',e3_1k_d2:'var(--c5)',e3_3k_d2:'var(--c6)',e3_10k_d2:'var(--c7)',e4_small_d2:'var(--c2)',e4_large_d2:'var(--c4)',e5_topdown_d2:'var(--c3)',e5_horizon_d2:'var(--c4)',e5_single_d2:'var(--c2)','4m_pretrain_15k_d2_sink':'var(--c8)'};
+const STEPS={e3_1k_d2:32,e3_3k_d2:94,e3_10k_d2:313,e2_pcrgbdt_d2:329};
+const TARGETS=['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_len_max','leaf_width_mean','leaf_width_max'];
+const TLAB={height:'height',leaf_count:'leaf count',biomass:'biomass',leaf_angle:'leaf angle',leaf_angle_roll:'roll',leaf_len_mean:'leaf len mean',leaf_len_max:'leaf len max',leaf_width_mean:'leaf width mean',leaf_width_max:'leaf width max'};
+const f3=v=>v==null?'':v.toFixed(3);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pill=s=>({done:'<span class="pill done">done</span>',running:'<span class="pill running">running</span>',queued:'<span class="pill queued">queued</span>',blank:'<span class="pill blank">no result</span>',elsewhere:'<span class="pill elsewhere">owned elsewhere</span>',built:'<span class="pill queued">built, not run</span>'})[s];
+const FS=D.fscore; const fsRow=(r,s,t)=>FS.find(x=>x.run===r&&x.split===s&&Math.abs(x.tau-t)<1e-9);
+const C=D.curves;
+
+// ---------- summary strip
+(function(){
+  const e1=C['4m_pretrain_15k_d2_sink'], f=fsRow('4m_pretrain_15k_d2_sink','test',0.01), fb=fsRow('e2_pcrgbd_d2','test',0.01);
+  const tiles=[
+    ['E1','1000 / 1000 ep','QAL + Sinkhorn, done 10-21'],
+    ['E1 test chamfer',(e1.final.test_pc_chamfer*1e3).toFixed(2)+' ×10⁻³','trainer protocol; recipe MAE '+e1.final.test_param_mae.toFixed(3)],
+    ['E1 F1 @ 0.01 (test)',f.f1.toFixed(3),'P '+f.precision.toFixed(2)+' · R '+f.recall.toFixed(2)],
+    ['best ablation arm','PC+RGB+D','probe height '+f3(D.probe.e2_pcrgbd_d2.targets.height.val_r2)+', F1 '+fb.f1.toFixed(3)],
+    ['arms probed',String(PROBED.length)+' / 16','E5 probe queued'],
+    ['distillation','1 running, 3 queued','generalist epoch '+D.distill.train.length+' / 100'],
+    ['row (Regime III)','0 / 3','fine-tune, control, zero-shot queued'],
+  ];
+  document.getElementById('strip').innerHTML=tiles.map(t=>`<div class="tile"><div class="k">${esc(t[0])}</div><div class="v">${esc(t[1])}</div><div class="s">${esc(t[2])}</div></div>`).join('');
+})();
+
+// ---------- programme matrix
+(function(){
+  const rows=[
+    ['E1','headline pretrain','done','4m_pretrain_15k_d2_sink: 1,000 epochs over all 105,000 views, global batch 256, QAL + 0.5 × Sinkhorn; finished 2026-10-21 14:28 on 4× RTX PRO 6000. Probe and partial-cloud row not run yet.'],
+    ['E2','modality value-add','done','PC / PC+RGB / PC+RGB+D / all four at 600 / 600; probed, E9, paired bootstraps, point-cloud F1.'],
+    ['E2 control','parameter budget','done','The four-stream arm with the recipe tokens gated to 20 % (tg), 60 % (tg40) or 0 % visible (tg100, target only), so the sensor streams keep the three-stream arm\'s 117 visible tokens. Probed, CIs, F1.'],
+    ['E3','data scaling','done','1k / 3k / 10k plants (6,169 / 2,100 / 631 epochs, 197,400 steps each), probed, E9, F1. Full-data point = the four-stream arm. Paired CIs not run.'],
+    ['E4','model scaling','done','small (25 M) / large (332 M) at 600; base = the four-stream arm. Probed, CIs, F1.'],
+    ['E5','view regime','running','Train draw restricted to a band of the ten-view elevation ladder: top-down (views 0-1), horizon (4-5), single (view 0). Three arms done at 600; probe 17060237 and pair bootstrap 17060238 wait behind the generalist distillation. Val and test score view 0.'],
+    ['E6','masking / noise','elsewhere','Collaborator (yongyun branch).'],
+    ['E7','loss study','elsewhere','Collaborator. Its winner, QAL + Sinkhorn, is the loss of E1 and the distillations.'],
+    ['E8','baselines','done','DINOv2 ViT-B/14, MultiMAE-B, Point-MAE, EmbodiedMAE-B, random init, supervised from scratch (600 ep); paired CIs.'],
+    ['Partial clouds','1 vs 3 cameras','running','Four E2 arms done (16930426). E1 row not run.'],
+    ['P / R / F1','point-cloud quality','done','16 runs, val + test, 2,250 plants each (17071405).'],
+    ['Distillation','single-sensor students','running','Generalist (all sources) at epoch '+D.distill.train.length+' / 100 on 2× RTX PRO 6000 (17060048, 4.5 h segments; scavenger twin 17070513). Three RGB→cloud students queued on nova (17061902-4). Quant generation after all four (17061909).'],
+    ['Regime III','rows: neighbours, occlusion','queued','Row fine-tune from E1 (17072337), isolated control (17073182) and zero-shot E1 on the test rows (17071869) queued. Depth-encoding mismatch of the row renders found and fixed 2026-10-22 (see the rows section).'],
+    ['E9','latent analysis','done','All probed arms, val and test.'],
+    ['E10','real field data','blank','Nothing on real scans.'],
+  ];
+  document.getElementById('matrixtbl').innerHTML='<thead><tr><th>exp</th><th>question</th><th>state</th><th>runs and notes</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="lead">${r[0]}</td><td>${esc(r[1])}</td><td>${pill(r[2])}</td><td class="wrapc${r[2]==='blank'?' blankc':''}" style="text-align:left">${esc(r[3])}</td></tr>`).join('')+'</tbody>';
+})();
+
+// ---------- queue
+(function(){
+  document.getElementById('queuenote').innerHTML='<strong>Distillation: 1 running, 3 queued.</strong> Reshaping every job to 2 GPUs let the generalist back under the account\'s 17-GPU cap on 10-22 13:06; everything else on nova waits on that cap (labmates hold the rest until 10-27 to 10-31); the zero-shot row eval waits on scavenger priority. Slurm start times are worst cases.';
+  const rows=[
+    ['17060048','distill_d2 (generalist)','nova, 2× RTX PRO 6000','running since 13:06, 23 min/epoch, 4.5 h segments that requeue','all-source generalist, teacher = E1 ep 1000'],
+    ['17070513','distill_d2_scav','scavenger, 2 GPUs','pending (twin; exits if the nova copy holds the lock)','same run'],
+    ['17061902 / 3 / 4','dist_rgb2pc_{full,smr50,smr50b}_d2','nova, 2 GPUs each','pending, account cap (est. 21:41)','RGB→cloud students: source visible; 50 % hidden ×2'],
+    ['17072337','sorghum_row_ft','nova, 2 GPUs','pending, account cap','row fine-tune from E1, batch 16 per GPU'],
+    ['17073182','sorghum_row_iso','nova, 2 GPUs','pending, account cap','isolated control'],
+    ['17071869','srow_eval_zs','scavenger, 1 GPU','pending (est. 10-24)','zero-shot E1 on the test rows, depth fix'],
+    ['17060237 → 17060238','pr_e5_d2 → pairboot_e5','nova','after the generalist','E5 probe, then pair bootstrap vs the all-view arm'],
+    ['17061909','r2pquant_d2','nova, 1 GPU','after all four distillations','photograph → cloud quant for every student'],
+  ];
+  document.getElementById('queuetbl').innerHTML='<thead><tr><th>job</th><th>name</th><th>where</th><th>state</th><th>what</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="mono">${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td><td class="wrapc" style="white-space:normal;min-width:200px">${esc(r[3])}</td><td class="wrapc" style="white-space:normal">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
+})();
+
+// ---------- generic line chart
+function lineChart(el, series, opt){
+  opt=opt||{}; const W=640,H=300,m={l:62,r:14,t:10,b:40}; const xs=[],ys=[];
+  series.forEach(s=>s.points.forEach(p=>{ if(p[1]!=null&&isFinite(p[1])&&(!opt.logy||p[1]>0)){xs.push(p[0]);ys.push(p[1]);} }));
+  if(!xs.length){ el.innerHTML='<p class="muted small">no data</p>'; return; }
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  if(opt.logx){x0=Math.log10(x0);x1=Math.log10(x1);}
+  if(opt.y0!=null)y0=opt.y0; if(opt.y1!=null)y1=opt.y1;
+  if(opt.logy){y0=Math.log10(y0);y1=Math.log10(y1);}
+  if(y1===y0){y1=y0+1;} const padY=(y1-y0)*0.06; y0-=padY; y1+=padY; const padX=(x1-x0)*0.02; x0-=padX; x1+=padX;
+  const sx=v=>m.l+((opt.logx?Math.log10(v):v)-x0)/(x1-x0)*(W-m.l-m.r), sy=v=>H-m.b-((opt.logy?Math.log10(v):v)-y0)/(y1-y0)*(H-m.t-m.b);
+  function niceTicks(a,b,n){const span=b-a,step0=span/n,p=Math.pow(10,Math.floor(Math.log10(step0))),cand=[1,2,2.5,5,10].map(c=>c*p);const step=cand.find(c=>span/c<=n)||cand[4];const t=[];for(let v=Math.ceil(a/step)*step;v<=b+1e-9;v+=step)t.push(+v.toFixed(10));return t;}
+  let yt=opt.logy?[]:niceTicks(y0,y1,5); if(opt.logy){for(let e=Math.floor(y0);e<=Math.ceil(y1);e++){[1,2,5].forEach(k=>{const v=Math.log10(k*Math.pow(10,e));if(v>=y0&&v<=y1)yt.push(v);});}}
+  let xt=opt.logx?[]:niceTicks(x0,x1,6); if(opt.logx){for(let e=Math.floor(x0);e<=Math.ceil(x1);e++){[1,2,5].forEach(k=>{const v=Math.log10(k*Math.pow(10,e));if(v>=x0&&v<=x1)xt.push(v);});}}
+  const fmt=v=>{if(Math.abs(v)>=1000)return (v/1000).toFixed(v%1000?1:0)+'k';if(Math.abs(v)<0.01&&v!==0)return v.toExponential(0);return +v.toFixed(3);};
+  let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opt.aria||'line chart')}"><rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="none" stroke="var(--line)"/>`;
+  yt.forEach(v=>{const yy=m.t+(y1-v)/(y1-y0)*(H-m.t-m.b);const lab=opt.logy?fmt(Math.pow(10,v)):fmt(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${m.l-6}" y="${yy+4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--font-mono)">${lab}</text>`;});
+  xt.forEach(v=>{const xx=m.l+(v-x0)/(x1-x0)*(W-m.l-m.r);const lab=opt.logx?fmt(Math.pow(10,v)):fmt(v);g+=`<line y1="${H-m.b}" y2="${H-m.b+4}" x1="${xx}" x2="${xx}" stroke="var(--muted)"/><text x="${xx}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font-mono)">${lab}</text>`;});
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(opt.xlabel||'')}</text><text transform="translate(12 ${(m.t+H-m.b)/2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(opt.ylabel||'')}</text>`;
+  series.forEach(s=>{const pts=s.points.filter(p=>p[1]!=null&&isFinite(p[1])&&(!opt.logy||p[1]>0));if(!pts.length)return;
+    const d=pts.map((p,i)=>(i?'L':'M')+sx(p[0]).toFixed(1)+' '+sy(p[1]).toFixed(1)).join(' ');
+    g+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width||1.8}" stroke-linejoin="round"${s.dash?' stroke-dasharray="5 4"':''}/>`;
+    if(s.dots){pts.forEach(p=>{g+=`<circle cx="${sx(p[0]).toFixed(1)}" cy="${sy(p[1]).toFixed(1)}" r="3" fill="${s.color}"/>`;});}
+    const last=pts[pts.length-1]; g+=`<circle cx="${sx(last[0]).toFixed(1)}" cy="${sy(last[1]).toFixed(1)}" r="3.2" fill="${s.color}"/>`;});
+  g+='</svg><div class="legend">'+series.map(s=>`<span><i style="background:${s.color}${s.dash?';height:0;border-top:3px dashed '+s.color:''}"></i>${esc(s.name)}</span>`).join('')+'</div>';
+  el.innerHTML=g;
+}
+function barChart(el, groups, cats, catCol, opt){ // groups: [{name, values:[...]}]
+  const W=640,H=300,m={l:48,r:10,t:10,b:44}; const gw=(W-m.l-m.r)/groups.length, bw=gw/(cats.length+1);
+  const sy=v=>H-m.b-Math.max(0,Math.min(1,v))*(H-m.t-m.b);
+  let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opt.aria||'bars')}">`;
+  [0,0.2,0.4,0.6,0.8,1].forEach(v=>{g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${m.l-6}" y="${sy(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--font-mono)">${v}</text>`;});
+  groups.forEach((gr,i)=>{gr.values.forEach((v,j)=>{if(v==null)return;const x=m.l+i*gw+bw*0.5+j*bw;g+=`<rect x="${x.toFixed(1)}" y="${sy(v).toFixed(1)}" width="${(bw*0.9).toFixed(1)}" height="${(H-m.b-sy(v)).toFixed(1)}" fill="${catCol[j]}"/>`;});g+=`<text x="${m.l+i*gw+gw/2}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--fg)">${esc(gr.name)}</text>`;});
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(opt.xlabel||'')}</text></svg>`;
+  g+='<div class="legend">'+cats.map((t,j)=>`<span><i style="background:${catCol[j]}"></i>${esc(t)}</span>`).join('')+'</div>';
+  el.innerHTML=g;
+}
+
+// ---------- curves
+(function(){
+  lineChart(document.getElementById('ch_e2_cham'), E2.map(r=>({name:SHORT[r],color:COL[r],points:C[r].val_chamfer})), {xlabel:'epoch',ylabel:'val chamfer',logy:true,aria:'E2 validation chamfer'});
+  lineChart(document.getElementById('ch_tg_cham'), TG.map(r=>({name:SHORT[r],color:COL[r],points:C[r].val_chamfer})), {xlabel:'epoch',ylabel:'val chamfer',logy:true,aria:'control validation chamfer'});
+  lineChart(document.getElementById('ch_e3_cham'), E3.map(r=>({name:SHORT[r]+(r==='e2_pcrgbdt_d2'?' (full, 10.5k)':''),color:COL[r],points:C[r].val_chamfer.map(p=>[p[0]*STEPS[r],p[1]])})), {xlabel:'optimizer steps',ylabel:'val chamfer',logy:true,aria:'E3 validation chamfer'});
+  lineChart(document.getElementById('ch_e45_cham'), ['e4_small_d2','e4_large_d2','e5_topdown_d2','e5_single_d2','e5_horizon_d2','e2_pcrgbdt_d2'].map(r=>({name:SHORT[r]+(r==='e2_pcrgbdt_d2'?' (base, all views)':''),color:COL[r],points:C[r].val_chamfer,dash:r.startsWith('e5')})), {xlabel:'epoch',ylabel:'val chamfer',logy:true,aria:'E4 and E5 validation chamfer'});
+  const e1=C['4m_pretrain_15k_d2_sink'];
+  lineChart(document.getElementById('ch_e1'), [{name:'val chamfer',color:'var(--c1)',points:e1.val_chamfer},{name:'val recipe MAE (masked)',color:'var(--c2)',points:e1.val_param_mae}], {xlabel:'epoch',ylabel:'value',logy:true,aria:'E1 validation'});
+  lineChart(document.getElementById('ch_train'), ALL.map(r=>({name:SHORT[r],color:COL[r],width:1.2,points:C[r].train_loss.map(p=>[p[0]/C[r].epochs,p[1]])})), {xlabel:'fraction of schedule',ylabel:'train loss',logy:true,aria:'train loss'});
+  const cols=[['val_loss','val loss'],['val_pc_chamfer','val chamfer'],['val_rgb_mse','val RGB MSE'],['val_depth_mse','val depth MSE'],['val_param_mae','val recipe MAE'],['train_loss','train loss (last)']];
+  let h='<thead><tr><th>run</th><th>modalities</th><th>size</th><th class="n">plants</th><th class="n">epochs</th><th class="n">global batch</th><th>loss</th>'+cols.map(x=>`<th class="n">${x[1]}</th>`).join('')+'</tr></thead><tbody>';
+  ALL.forEach(r=>{const f=C[r].final,cfg=C[r].cfg; const am=cfg.active_modalities; const mods=Array.isArray(am)?am.join('+'):(typeof am==='string'?am.replace(/,/g,'+'):'pc+rgb+depth+text'); const loss=(cfg.pc_sinkhorn_weight>0?'QAL + Sinkhorn':'QAL')+(cfg.text_mask_ratio!=null?', text gate '+cfg.text_mask_ratio:'')+(cfg.train_views?', views '+(Array.isArray(cfg.train_views)?cfg.train_views.join(','):cfg.train_views):'');
+    h+=`<tr><td class="lead mono">${r}</td><td>${mods}</td><td>${cfg.model_size}</td><td class="n">${cfg.max_plants||10500}</td><td class="n">${C[r].done}/${C[r].epochs}</td><td class="n">${(cfg.batch_size||0)*(cfg.world_size||1)*(cfg.accum_steps||1)}</td><td>${esc(loss)}</td>`+cols.map(x=>{const v=f[x[0]];return v==null?'<td class="blankc">n/a</td>':`<td class="n">${x[0]==='val_pc_chamfer'?v.toFixed(5):v.toFixed(4)}</td>`;}).join('')+'</tr>';});
+  document.getElementById('finaltbl').innerHTML=h+'</tbody>';
+})();
+
+// ---------- F-score
+(function(){
+  document.getElementById('fsnote').innerHTML='All 2,250 plants of each split, view 0, job 17071405 (28 min on one A100). The harness Chamfer reproduces each arm\'s published validation Chamfer within a few percent; for E1 it reads 1.36 ×10⁻³ against the trainer\'s 0.75 because the trainer scores a different draw of the complete cloud, so compare F1 across rows, not E1\'s Chamfer against the table above. <strong>Precision runs far ahead of recall for every model</strong>: predicted points lie on the plant, but the reconstruction under-covers it, the thin-leaf failure Chamfer only hints at. The 95 % plant-bootstrap interval of each F1 mean is about ±0.004.';
+  const taus=[...new Set(FS.map(x=>x.tau))].sort((a,b)=>a-b), splits=['test','val'];
+  const order=ALL.filter(r=>FS.some(x=>x.run===r));
+  const tog=document.getElementById('fstog'); const opts=[]; splits.forEach(s=>taus.forEach(t=>opts.push([s,t])));
+  tog.innerHTML=opts.map((o,i)=>`<button data-i="${i}" aria-pressed="false">${o[0]} · τ ${o[1]}</button>`).join('');
+  function render(i){const [s,t]=opts[i]; const rows=order.map(r=>fsRow(r,s,t)).filter(Boolean); const best=k=>Math.max(...rows.map(x=>x[k]));
+    let h='<thead><tr><th>run</th><th>arm</th><th class="n">epoch</th><th class="n">plants</th><th class="n">precision</th><th class="n">recall</th><th class="n">F1</th><th class="n">F1 median</th><th class="n">F1 p10</th><th class="n">chamfer ×10⁻³</th></tr></thead><tbody>';
+    rows.forEach(x=>{const cell=k=>{const w=Math.max(0,Math.min(1,x[k]))*100;const b=x[k]>=best(k)-1e-9?' style="font-weight:600"':'';return `<td class="n heat"><div class="bar" style="width:${w.toFixed(0)}%"></div><span${b}>${x[k].toFixed(3)}</span></td>`;};
+      h+=`<tr><td class="lead mono">${x.run}</td><td>${esc(SHORT[x.run])}</td><td class="n">${x.epoch}</td><td class="n">${x.n_plants}</td>${cell('precision')}${cell('recall')}${cell('f1')}<td class="n">${x.f1_median.toFixed(3)}</td><td class="n">${x.f1_p10.toFixed(3)}</td><td class="n">${(x.chamfer*1e3).toFixed(2)}</td></tr>`;});
+    document.getElementById('fstbl').innerHTML=h+'</tbody>'; tog.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.i==String(i)?'true':'false'));}
+  tog.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>render(+b.dataset.i)));
+  render(opts.findIndex(o=>o[0]==='test'&&Math.abs(o[1]-0.01)<1e-9));
+  const main=['4m_pretrain_15k_d2_sink','e2_pcrgbd_d2','e2_pcrgb_d2','e2_pcrgbdt_d2','e2_pc_d2','e5_single_d2','e4_small_d2','e4_large_d2'];
+  lineChart(document.getElementById('ch_fs_tau'), main.map(r=>({name:SHORT[r],color:COL[r],dots:true,points:taus.map(t=>{const x=fsRow(r,'test',t);return [t,x?x.f1:null];})})), {xlabel:'threshold τ (unit-sphere frame)',ylabel:'F1',logx:true,y0:0,y1:1,aria:'F1 against threshold'});
+  const W=640,H=300,m={l:52,r:14,t:10,b:40}; const pts=order.filter(r=>r!=='e5_horizon_d2').map(r=>({r,x:fsRow(r,'test',0.01)})).filter(p=>p.x);
+  const xs=pts.map(p=>p.x.recall),ys=pts.map(p=>p.x.precision); const pad=v=>[Math.max(0,Math.min(...v)-0.05),Math.min(1,Math.max(...v)+0.05)]; const [x0,x1]=pad(xs),[y0,y1]=pad(ys);
+  const sx=v=>m.l+(v-x0)/(x1-x0)*(W-m.l-m.r), sy=v=>H-m.b-(v-y0)/(y1-y0)*(H-m.t-m.b);
+  let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="precision against recall"><rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="none" stroke="var(--line)"/>`;
+  for(let k=0;k<=4;k++){const vx=x0+(x1-x0)*k/4,vy=y0+(y1-y0)*k/4;g+=`<text x="${sx(vx)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font-mono)">${vx.toFixed(2)}</text><line x1="${m.l}" x2="${W-m.r}" y1="${sy(vy)}" y2="${sy(vy)}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${m.l-6}" y="${sy(vy)+4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--font-mono)">${vy.toFixed(2)}</text>`;}
+  pts.forEach(p=>{g+=`<circle cx="${sx(p.x.recall).toFixed(1)}" cy="${sy(p.x.precision).toFixed(1)}" r="5" fill="${COL[p.r]}"/><text x="${(sx(p.x.recall)+8).toFixed(1)}" y="${(sy(p.x.precision)+4).toFixed(1)}" font-size="10.5" fill="var(--fg)">${esc(SHORT[p.r])}</text>`;});
+  g+=`<text x="${(m.l+W-m.r)/2}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--muted)">recall</text><text transform="translate(12 ${(m.t+H-m.b)/2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--muted)">precision</text></svg><p class="small muted">E5 horizon (0.05 / 0.03) is off the chart: it trained on the horizon views and is scored on view 0.</p>`;
+  document.getElementById('ch_fs_pr').innerHTML=g;
+})();
+
+// ---------- probe
+function renderProbe(mode){
+  const P=D.probe; const unit=t=>P.e2_pcrgbd_d2.targets[t].unit;
+  let h='<thead><tr><th>run</th><th>arm</th><th class="n">epoch</th>'+TARGETS.map(t=>`<th class="n">${TLAB[t]}${mode==='mae'?'<br><span style="font-weight:400;text-transform:none;letter-spacing:0">'+esc(unit(t))+'</span>':''}</th>`).join('')+'</tr></thead><tbody>';
+  const best={}; if(mode!=='mae'){TARGETS.forEach(t=>{best[t]=Math.max(...PROBED.map(r=>P[r].targets[t][mode==='test'?'test_r2':'val_r2']));});}
+  PROBED.forEach(r=>{h+=`<tr><td class="lead mono">${r}</td><td>${esc(SHORT[r])}</td><td class="n">${P[r].epoch}</td>`;
+    TARGETS.forEach(t=>{const d=P[r].targets[t]; if(!d){h+='<td class="blankc"></td>';return;} if(mode==='mae'){const v=d.val_mae;h+=`<td class="n">${v<0.1?v.toFixed(4):v.toFixed(3)}</td>`;return;}
+      const v=mode==='test'?d.test_r2:d.val_r2; const w=Math.max(0,Math.min(1,v))*100; const b=(v>=best[t]-1e-9)?' style="font-weight:600"':''; h+=`<td class="n heat"><div class="bar" style="width:${w.toFixed(0)}%"></div><span${b}>${v.toFixed(3)}</span></td>`;}); h+='</tr>';});
+  [['e5_topdown_d2 / e5_horizon_d2 / e5_single_d2','E5 arms · done at 600, probe queued (17060237)'],['4m_pretrain_15k_d2_sink','E1 · done, probe not run']].forEach(p=>{h+=`<tr><td class="lead mono">${p[0]}</td><td class="blankc" colspan="${TARGETS.length+2}">${esc(p[1])}</td></tr>`;});
+  document.getElementById('probetbl').innerHTML=h+'</tbody>';
+  ['val','test','mae'].forEach(m=>document.getElementById('tg_'+m).setAttribute('aria-pressed',m===mode?'true':'false'));
+}
+renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_'+m).addEventListener('click',()=>renderProbe(m)));
+(function(){
+  const P=D.probe; const tg=['height','leaf_count','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_width_mean']; const tcol=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
+  const vals=r=>tg.map(t=>P[r]&&P[r].targets[t]?P[r].targets[t].val_r2:null);
+  barChart(document.getElementById('ch_e2_probe'), E2.map(r=>({name:SHORT[r],values:vals(r)})), tg.map(t=>TLAB[t]), tcol, {xlabel:'E2 arm (val R², CLS probe, epoch 600)',aria:'E2 probe bars'});
+  lineChart(document.getElementById('ch_e3_probe'), tg.map((t,j)=>({name:TLAB[t],color:tcol[j],dots:true,points:[['e3_1k_d2',1000],['e3_3k_d2',3000],['e3_10k_d2',10000],['e2_pcrgbdt_d2',10500]].map(x=>[x[1],P[x[0]].targets[t].val_r2])})), {xlabel:'plants in train split',ylabel:'val R²',logx:true,y0:0,y1:1,aria:'E3 probe scaling'});
+  barChart(document.getElementById('ch_tg_probe'), [['e2_pcrgbd_d2','PC+RGB+D'],['e2_pcrgbdt_d2','58 % (as trained)'],['e2_pcrgbdt_tg_d2','20 %'],['e2_pcrgbdt_tg40_d2','60 %'],['e2_pcrgbdt_tg100_d2','target only']].map(x=>({name:x[1],values:vals(x[0])})), tg.map(t=>TLAB[t]), tcol, {xlabel:'recipe visibility during pretraining (val R²)',aria:'control probe bars'});
+  barChart(document.getElementById('ch_e4_probe'), E4.map(r=>({name:SHORT[r]==='all four'?'base 114 M':SHORT[r],values:vals(r)})), tg.map(t=>TLAB[t]), tcol, {xlabel:'model size (val R²)',aria:'E4 probe bars'});
+})();
+
+// ---------- bootstrap
+(function(){
+  const B=D.boot.filter(x=>x.feature==='cls'||x.feature==='mean'); const pairs=[...new Map(B.map(x=>[x.a+'|'+x.b+'|'+x.feature,[x.a,x.b,x.feature]])).values()];
+  const lab=r=>SHORT[r]||r.replace('base:','');
+  const tog=document.getElementById('boottog'); tog.innerHTML=pairs.map((p,i)=>`<button data-i="${i}" aria-pressed="false">${esc(lab(p[0]))} vs ${esc(lab(p[1]))}${p[2]==='mean'?' (mean pool)':''}</button>`).join('');
+  document.getElementById('bootnote').innerHTML='<strong>Reading.</strong> PC+RGB+D beats PC on all 9 targets and the four-stream arm on all 9; against PC+RGB it wins leaf length and loses size and the angles by a few thousandths. Every parameter-stream control (20 %, 60 %, target only) loses every learnable target to PC+RGB+D. E4: small beats base on 5 targets and loses none; large loses 5. E8: PC+RGB+D beats EmbodiedMAE-B on 8 of 9 and the supervised network on 7 with no losses; Point-MAE beats our PC-only arm on all 9.';
+  function render(i){const [a,b,fe]=pairs[i]; const get=(t,s)=>B.find(x=>x.a===a&&x.b===b&&x.feature===fe&&x.target===t&&x.split===s); let wins=0,losses=0,n=0;
+    let h=`<thead><tr><th>target</th><th class="n">val R² a</th><th class="n">val R² b</th><th class="n">Δ val [95 % CI]</th><th class="n">Δ test [95 % CI]</th><th>verdict</th></tr></thead><tbody>`;
+    TARGETS.forEach(t=>{const v=get(t,'val'),te=get(t,'test'); if(!v||!te)return; n++; const sig=x=>x.lo>0?1:(x.hi<0?-1:0); const sv=sig(v),st=sig(te); const verdict=(sv===1&&st===1)?'win':((sv===-1&&st===-1)?'loss':'draw'); if(verdict==='win')wins++; if(verdict==='loss')losses++;
+      const col=verdict==='win'?'var(--ok)':(verdict==='loss'?'var(--c4)':'var(--muted)'); const ci=x=>`${x.delta>=0?'+':''}${x.delta.toFixed(3)} <span class="muted">[${x.lo.toFixed(3)}, ${x.hi.toFixed(3)}]</span>`;
+      h+=`<tr><td>${TLAB[t]}</td><td class="n">${v.r2_a.toFixed(3)}</td><td class="n">${v.r2_b.toFixed(3)}</td><td class="n">${ci(v)}</td><td class="n">${ci(te)}</td><td style="color:${col};font-weight:600">${verdict}</td></tr>`;});
+    h+=`<tr><td class="lead" colspan="6">a = <span class="mono">${esc(a)}</span>, b = <span class="mono">${esc(b)}</span> (${fe} feature): ${wins} wins, ${losses} losses, ${n-wins-losses} draws</td></tr>`;
+    document.getElementById('boottbl').innerHTML=h+'</tbody>'; tog.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.i==String(i)?'true':'false'));}
+  tog.querySelectorAll('button').forEach(x=>x.addEventListener('click',()=>render(+x.dataset.i))); render(0);
+})();
+
+// ---------- E8
+(function(){
+  const rows=[['dinov2_vitb14','DINOv2 ViT-B/14','RGB'],['multimae','MultiMAE-B','RGB + D'],['pointmae','Point-MAE','PC'],['embodiedmae','EmbodiedMAE-B','RGB + D + PC'],['random_init','Random init (ViT-B)','RGB + D + PC'],['e8_supervised_d2 (mean pool)','Supervised from scratch, mean pool','RGB + D + PC'],['e8_supervised_d2 (own head)','Supervised, its own head','RGB + D + PC']];
+  const ours=[['e2_pc_d2','CropCode PC only','PC'],['e2_pcrgbd_d2','CropCode PC + RGB + D','RGB + D + PC'],['e2_pcrgbdt_d2','CropCode four streams','RGB + D + PC']];
+  const T7=TARGETS.slice(0,7); const allv={}; rows.forEach(r=>{const d=D.e8[r[0]];if(d)T7.forEach(t=>{(allv[t]=allv[t]||[]).push(d.targets[t]?d.targets[t].val_r2:-1);});}); ours.forEach(r=>{const d=D.probe_mean[r[0]];if(d)T7.forEach(t=>{(allv[t]=allv[t]||[]).push(d.targets[t]?d.targets[t].val_r2:-1);});});
+  const cell=(d,t)=>{if(!d||!d.targets[t])return '<td class="blankc"></td>';const v=d.targets[t].val_r2;const w=Math.max(0,Math.min(1,v))*100;const b=v>=Math.max(...allv[t])-1e-9?' style="font-weight:600"':'';return `<td class="n heat"><div class="bar" style="width:${w.toFixed(0)}%"></div><span${b}>${v.toFixed(3)}</span></td>`;};
+  let h='<thead><tr><th>encoder</th><th>input</th>'+T7.map(t=>`<th class="n">${TLAB[t]}</th>`).join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{h+=`<tr><td class="lead">${esc(r[1])}</td><td>${esc(r[2])}</td>`+T7.map(t=>cell(D.e8[r[0]],t)).join('')+'</tr>';});
+  h+=`<tr><td class="lead" colspan="${T7.length+2}" style="background:var(--accent-soft)">ours, mean pool · reports/probe_pr_mean600_d2_16930423.csv</td></tr>`;
+  ours.forEach(r=>{h+=`<tr><td class="lead">${esc(r[1])}</td><td>${esc(r[2])}</td>`+T7.map(t=>cell(D.probe_mean[r[0]],t)).join('')+'</tr>';});
+  document.getElementById('e8tbl').innerHTML=h+'</tbody>';
+})();
+
+// ---------- partial clouds
+(function(){
+  const PV=D.pcview; const conds=['full','3view','1view']; const cl={full:'full ('+(PV.coverage.full*100).toFixed(0)+' %)','3view':'3 cameras ('+(PV.coverage['3view']*100).toFixed(0)+' %)','1view':'1 camera ('+(PV.coverage['1view']*100).toFixed(0)+' %)'};
+  const g=(r,fit,c,t,s)=>{const x=PV.probe.find(y=>y.run===r&&y.fit===fit&&y.condition===c&&y.target===t);return x?x[s+'_r2']:null;}; const rc=(r,c)=>{const x=PV.recon.find(y=>y.run===r&&y.condition===c);return x?x.chamfer*1e3:null;};
+  let h='<thead><tr><th>arm</th>'+conds.map(c=>`<th class="n">matched height · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">transferred height · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">matched roll · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">chamfer ×10⁻³ · ${cl[c]}</th>`).join('')+'</tr></thead><tbody>';
+  E2.forEach(r=>{h+=`<tr><td class="lead">${esc(SHORT[r])}</td>`+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'transfer',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'leaf_angle_roll','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${rc(r,c)==null?'':rc(r,c).toFixed(2)}</td>`).join('')+'</tr>';});
+  h+=`<tr><td class="lead">E1</td><td class="blankc" colspan="12">not run</td></tr>`;
+  document.getElementById('pcviewtbl').innerHTML=h+'</tbody>';
+  const cov=c=>PV.coverage[c]*100;
+  lineChart(document.getElementById('ch_pcview'), E2.flatMap(r=>[{name:SHORT[r]+' refit',color:COL[r],dots:true,points:conds.map(c=>[cov(c),g(r,'matched',c,'height','test')])},{name:SHORT[r]+' transferred',color:COL[r],dash:true,dots:true,points:conds.map(c=>[cov(c),g(r,'transfer',c,'height','test')])}]), {xlabel:'cloud coverage (% of the complete plant)',ylabel:'test height R²',y0:-0.1,y1:1,aria:'height R² against coverage'});
+})();
+
+// ---------- E9
+(function(){
+  const E=D.e9; const cols=[['pc1_var','PC1 var'],['pc1_3_var','PC1-3 var'],['n_pcs_90','PCs to 90 %'],['participation_ratio','participation ratio'],['best_silhouette','best silhouette'],['ari_at_best_k','ARI vs size deciles'],['tsne_trustworthiness_k10','t-SNE trust (k=10)'],['align_n_leaves','align leaf count'],['align_stem_length','align height'],['align_leaf_len_mean','align leaf length']];
+  let h='<thead><tr><th>run</th><th>split</th>'+cols.map(c=>`<th class="n">${c[1]}</th>`).join('')+'</tr></thead><tbody>';
+  PROBED.forEach(r=>{['val','test'].forEach(s=>{const d=E[r]&&E[r][s];if(!d)return;h+=`<tr><td class="lead mono">${r}</td><td>${s}</td>`+cols.map(c=>{const v=d[c[0]];return v==null?'<td></td>':`<td class="n">${c[0]==='n_pcs_90'?v:(+v).toFixed(3)}</td>`;}).join('')+'</tr>';});});
+  document.getElementById('e9tbl').innerHTML=h+'</tbody>';
+  document.getElementById('tsnegrid').innerHTML=PROBED.map(r=>D.images['tsne_'+r]?`<figure><img src="${D.images['tsne_'+r]}" alt="t-SNE of ${r} val latent" loading="lazy"><figcaption><span class="mono">${r}</span> · val · silhouette ${(+E[r].val.best_silhouette).toFixed(3)}</figcaption></figure>`:'').join('');
+})();
+
+// ---------- distillation
+(function(){
+  const d=D.distill; const srcs=['rgb','depth','pc','text']; const scol={rgb:'var(--c2)',depth:'var(--c3)',pc:'var(--c1)',text:'var(--c5)'};
+  lineChart(document.getElementById('ch_distill'), [{name:'val mean generation loss',color:'var(--c1)',dots:true,points:d.val.map(v=>[v.epoch,v.mean_gen])},{name:'train loss',color:'var(--c8)',width:1.2,points:d.train}], {xlabel:'epoch (of 100)',ylabel:'loss',aria:'generalist distillation'});
+  lineChart(document.getElementById('ch_distill_src'), srcs.map(s=>({name:'source '+s,color:scol[s],dots:true,points:d.val.map(v=>[v.epoch,v.per_source[s]?v.per_source[s].pc_chamfer:null])})), {xlabel:'epoch',ylabel:'val chamfer (cloud from one source)',logy:true,aria:'per-source chamfer'});
+  const first=d.val[0], last=d.val[d.val.length-1];
+  let h='<thead><tr><th>student</th><th>source</th><th class="n">chamfer ×10⁻³, epoch '+first.epoch+'</th><th class="n">chamfer ×10⁻³, epoch '+last.epoch+'</th><th class="n">recipe MAE, epoch '+first.epoch+'</th><th class="n">recipe MAE, epoch '+last.epoch+'</th><th class="n">epochs</th></tr></thead><tbody>';
+  srcs.forEach(s=>{const a=first.per_source[s],b=last.per_source[s];h+=`<tr><td class="lead">generalist</td><td>${s}</td><td class="n">${(a.pc_chamfer*1e3).toFixed(2)}</td><td class="n">${(b.pc_chamfer*1e3).toFixed(2)}</td><td class="n">${a.param_mae_masked.toFixed(4)}</td><td class="n">${b.param_mae_masked.toFixed(4)}</td><td class="n">${d.train.length} / ${d.epochs} <span class="pill running">running</span></td></tr>`;});
+  [['source fully visible','RGB'],['50 % of source tokens hidden, run 1','RGB'],['50 % of source tokens hidden, run 2','RGB']].forEach(x=>{h+=`<tr><td class="lead">${esc(x[0])}</td><td>${x[1]}</td><td class="blankc" colspan="4">queued (nova 17061902-4)</td><td class="n">0 / 100</td></tr>`;});
+  document.getElementById('distilltbl').innerHTML=h+'</tbody>';
+  const q=D.quant; const get=(l,s)=>q.find(x=>x.label===l&&x.split===s);
+  let hq='<thead><tr><th>model</th><th>source</th><th class="n">val chamfer ×10⁻³</th><th class="n">test chamfer ×10⁻³</th><th class="n">skill vs mean plant (test)</th><th class="n">runs</th></tr></thead><tbody>';
+  const t=get('teacher_undistilled_d2','val'),tt=get('teacher_undistilled_d2','test');
+  hq+=`<tr><td class="lead">E1 pretrained, zero-shot</td><td>RGB</td><td class="n">${(t.chamfer*1e3).toFixed(2)}</td><td class="n">${(tt.chamfer*1e3).toFixed(2)}</td><td class="n">${tt.skill.toFixed(3)}</td><td class="n">—</td></tr>`;
+  [['RGB student, source fully visible','RGB',1],['RGB student, 50 % of source tokens hidden','RGB',2],['generalist student','depth',1],['generalist student','RGB',1]].forEach(x=>{hq+=`<tr><td class="lead">${esc(x[0])}</td><td>${x[1]}</td><td class="blankc" colspan="3">after job 17061909</td><td class="n">${x[2]}</td></tr>`;});
+  document.getElementById('quanttbl').innerHTML=hq+'</tbody>';
+})();
+
+// ---------- rows
+(function(){
+  document.getElementById('rownote').innerHTML='<strong>Depth encoding (found 2026-10-22).</strong> The row renderer stores depth as (z − 0.05) / (4.5 − 0.05), about 0.4–0.7 on the plant; the training renders store about (z − 0.024) / 50, about 0.03–0.07. Depth is fed to the encoder unnormalised, so every sorghum model saw it ~10× out of range: the first zero-shot E1 run scored Chamfer 42 ×10⁻³ even on clean isolated inputs. The loader now decodes the row depth to metres with each shot\'s near / far and re-encodes it in the training convention (row foreground mean 0.036 vs 0.039 on the originals); the fine-tune that had started on the unscaled depth was cancelled at epoch 27 and resubmitted. RGB, clouds and plant scale match the originals. The recipe is read from the data-v2 split file by plant id, because the renderer ships the pre-width YAML.';
+  const blank='<td class="blankc"></td>';
+  const rows=[['zero-shot E1 (epoch 1,000) on the test rows · 17071869 queued',['row input, all streams','isolated input, all streams']],['row fine-tune from E1 (sorghum_row_ft, 100 ep, 2 GPUs) · 17072337 queued',['row input, all streams','row input, depth only']],['isolated control (sorghum_row_iso) · 17073182 queued',['isolated input, all streams','row input (zero-shot to rows)']],['paired deltas over plants',['cost of the row regime (row-trained on rows − isolated-trained on isolated)','gain from row fine-tuning (row-trained − isolated-trained, both on rows)']]];
+  let h='<thead><tr><th>model / input</th><th class="n">Chamfer vs target, 10⁻⁴ m²</th><th class="n">normalised ×10⁻³</th><th class="n">miss @ 5 mm</th><th class="n">plant MAE</th><th class="n">leaf MAE</th></tr></thead><tbody>';
+  rows.forEach(g=>{h+=`<tr><td class="lead" colspan="6" style="background:var(--accent-soft)">${esc(g[0])}</td></tr>`;g[1].forEach(r=>{h+=`<tr><td>${esc(r)}</td>${blank.repeat(5)}</tr>`;});});
+  document.getElementById('rowtbl').innerHTML=h+'</tbody>';
+})();
+
+// ---------- reconstructions
+(function(){
+  const items=[0,1,2].filter(i=>D.images['recon'+i]).map(i=>[D.images['recon'+i],(D.images['recon'+i+'_name']||'')+', epoch 980']);
+  document.getElementById('recongrid').innerHTML=items.map(i=>`<figure><img src="${i[0]}" alt="${esc(i[1])}" loading="lazy"><figcaption>${esc(i[1])}</figcaption></figure>`).join('');
+})();
+</script>
+</body></html>

@@ -727,6 +727,17 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   normal: **17072337** `sorghum_row_ft` (2x (a100&NVLINK)|h200|rtxpro6000) and **17073182** `sorghum_row_iso`
   (2x a100|l40s|h200|rtxpro6000). They now count against the 17-GPU cap (generalist 2 + these 4 + students 6 when
   all run). The zero-shot row eval 17071869 stays on scavenger.
+- **2026-10-22 16:40: LEDGER REBUILT WITH CHARTS (user: "check this artifact [Maize D2 Results] its looking good with plot
+  try to do the same").** `figures/make_sorghum_ledger.py` + `figures/sorghum_ledger_template.html` generate the sorghum
+  page (https://claude.ai/artifact/BF9MN2zaBGDKRLpakinz7r, v12, 1.6 MB): numbers embedded as JSON, rendered client-side
+  with inline-SVG charts in the maize page's style: summary strip, programme matrix, queue, validation curves (E2,
+  controls, E3 vs steps, E4+E5, E1, train loss), final-metrics table, P/R/F1 (toggle split x tau, F1-vs-tau, P-vs-R
+  scatter), probe (val/test/MAE toggles + E2/E3/controls/E4 charts), paired bootstraps (toggle per pair), E8, partial
+  clouds (+ R2-vs-coverage chart), E9 table + t-SNE images, distillation (generalist curves per source, quant table),
+  Regime III (blank rows + the depth note), E1 reconstructions. Rebuild: `python figures/make_sorghum_ledger.py --out
+  <file>` then publish with `url` set; the queue rows and the as-of date are hard-coded in the template's script
+  (`ASOF`, the `queue` block) and must be edited by hand. Smoke-run of the script against a DOM stub (node) draws
+  15/15 charts.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
