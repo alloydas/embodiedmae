@@ -86,6 +86,13 @@ def _maize_species():
 def _sorghum_species():
     from embodied_mae_4m import load_spline_params, N_PARAMS, LEAF_FIELDS
     return dict(name='sorghum', recipe_glob='*_spline.yml',
+                # Depth INPUT convention. The row renderer encodes (z - near) / (far - near) with near 0.05,
+                # far 4.5 (camera_pose.json), i.e. ~0.4-0.7 on the plant; the Sorghum_15K renders the models
+                # trained on encode ~(z - 0.0238) / 50, i.e. ~0.03-0.07 (measured against the camera-frame
+                # clouds, CLAUDE.md). The loader decodes the row depth to metres with the shot's near / far and
+                # re-encodes it in the training convention, otherwise every sorghum model sees depth ~10x
+                # out of range (zero-shot E1 on the rows: Chamfer 42e-3 vs 0.75e-3, job 17070980).
+                depth_reencode=lambda z: (z - 0.0238) / 50.0,
                 # The row renderer copies the ORIGINAL (pre-2026-09-30) spline YAML next to each shot:
                 # waviness fields, no per-leaf width. The models' recipe layout is the rewritten
                 # data-v2 file (width), so the recipe is read from the Sorghum_15K split by plant id
@@ -167,6 +174,7 @@ class RowDataset(Dataset):
         # where the target plant's recipe is read from (see the species table); None = the shot folder
         self.recipe_root = recipe_root if recipe_root is not None else self.sp.get('recipe_root')
         self._recipe_cache = {}
+        self._pose_cache = {}
         self.species, self.root, self.split, self.mode = species, Path(root), split, mode
         self.img_size = int(img_size)
         self.num_points = int(num_points or self.sp['num_points'])
@@ -254,6 +262,14 @@ class RowDataset(Dataset):
     def load_depth(self, path):
         with Image.open(path) as im:
             d = decode_depth(np.asarray(im))
+        fn = self.sp.get('depth_reencode')
+        if fn is not None:
+            # row encoding -> metres (per-shot near / far) -> the species' training encoding; background stays 0
+            cp = self._camera_pose(Path(path).parent)
+            near, far = float(cp.get('near', 0.05)), float(cp.get('far', 4.5))
+            fg = d > 0
+            z = d[fg] * (far - near) + near
+            d = d.copy(); d[fg] = np.clip(fn(z), 1e-6, None).astype(np.float32)
         t = torch.from_numpy(np.ascontiguousarray(d)).unsqueeze(0)
         return TF.resize(t, [self.img_size, self.img_size], interpolation=InterpolationMode.BILINEAR, antialias=True)
 
@@ -277,6 +293,15 @@ class RowDataset(Dataset):
         pin = pin / scale
         pgt = (self._subsample(read_ply_xyz(gt_ply), self.gt_points) - centre) / scale
         return pin.astype(np.float32), pgt.astype(np.float32), centre.astype(np.float32), np.float32(scale)
+
+    def _camera_pose(self, folder):
+        key = str(folder)
+        if key not in self._pose_cache:
+            try:
+                self._pose_cache[key] = json.loads((folder / 'camera_pose.json').read_text())
+            except (OSError, json.JSONDecodeError):
+                self._pose_cache[key] = {}
+        return self._pose_cache[key]
 
     def recipe_path(self, plant, folder):
         """The target's recipe file: <recipe_root>/<split>/<plant>_00/<plant>_spline.yml when the

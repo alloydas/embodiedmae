@@ -682,6 +682,22 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   6168/2024/624, E4 x2, E5 x3, E1 d2 sink @1000), val + test -> `reports/pcfscore_17071405_{items,summary}.csv`.
   The supervised E8 row has no decoder and is not scored. The ledger artifact is being cut to SORGHUM v2 ONLY
   (user: "in the artifact keep only sorghum v2").
+- **2026-10-22 12:40: SORGHUM ROW DEPTH ENCODING MISMATCH FOUND AND FIXED.** The zero-shot E1 eval 17070980 came back
+  at Chamfer 42e-3 even on the clean isolated inputs (E1 is at 0.75e-3 on the standard renders). Cause: the row
+  renderer encodes depth as (z - near) / (far - near) with near 0.05 / far 4.5 (`camera_pose.json`: `near`, `far`,
+  `depthEncoding`), i.e. ~0.4-0.7 on the plant, while the Sorghum_15K renders encode ~(z - 0.0238) / 50, ~0.03-0.07;
+  the depth INPUT is not normalised at load, so every sorghum model saw depth ~10x out of range (RGB and clouds match:
+  same radius ~0.95 m, same pixel fraction, RGB mean -1.79 after normalisation in both). Fix: `RowDataset` for
+  sorghum (`_sorghum_species` `depth_reencode`) decodes to metres with the shot's near / far and re-encodes in the
+  training convention (verified: row isolated depth fg mean 0.036 [0.0001, 0.059] vs original 0.039 [0.0001, 0.058]).
+  Maize is unchanged: its originals use per-plant tight near / far (0.97-1.03 / 2.83-3.00) and the row renders near
+  0.05 / far 3.0, both in the 0.26-0.74 band (row values compressed ~0.6x; the maize zero-shot baseline saw that
+  compression, the fine-tune adapted to it; left as is, noted). Stale report parked in
+  `reports/_stale_sorghum_row_depth_2026-10-22/`; zero-shot rerun **17071869** `srow_eval_zs`. **The running fine-tune
+  17070978 (started 10:24, epoch ~25) trains with the OLD unscaled depth input**: it will adapt, but its warm start,
+  the zero-shot baseline and the pending isolated control (17070979, picks up the fixed loader at start) would not be
+  on the same footing. Recommended: cancel 17070978, `rm -r outputs/sorghum_row_ft`, resubmit the same sbatch line
+  (the user decides; not done). E8 supervised etc. unaffected.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
