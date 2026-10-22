@@ -86,6 +86,11 @@ def _maize_species():
 def _sorghum_species():
     from embodied_mae_4m import load_spline_params, N_PARAMS, LEAF_FIELDS
     return dict(name='sorghum', recipe_glob='*_spline.yml',
+                # The row renderer copies the ORIGINAL (pre-2026-09-30) spline YAML next to each shot:
+                # waviness fields, no per-leaf width. The models' recipe layout is the rewritten
+                # data-v2 file (width), so the recipe is read from the Sorghum_15K split by plant id
+                # (<recipe_root>/<split>/<plant>_00/<plant>_spline.yml); the shot's copy is the fallback.
+                recipe_root='/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K',
                 load_recipe=lambda p, k: load_spline_params(p, k),
                 num_points=8196, max_leaves=24, n_params=N_PARAMS,
                 plant_cols=list(range(N_PARAMS)), leaf_cols=list(range(len(LEAF_FIELDS))),
@@ -137,7 +142,8 @@ def decode_depth(arr):
 class RowDataset(Dataset):
     def __init__(self, root, split='val', species='maize', mode='row', img_size=224, num_points=None,
                  max_leaves=None, thetas=None, shots=None, sample_per_plant=False, seed=0,
-                 deterministic=False, plants=None, occlusion_stats=True, rgb_gain=None, gt_points=None):
+                 deterministic=False, plants=None, occlusion_stats=True, rgb_gain=None, gt_points=None,
+                 recipe_root=None):
         """
         root/split      : the row data root and split folder
         species         : 'maize' | 'sorghum' (recipe parser, defaults)
@@ -158,6 +164,9 @@ class RowDataset(Dataset):
         if mode not in MODES:
             raise ValueError(f'mode must be one of {MODES}, got {mode!r}')
         self.sp = species_info(species)
+        # where the target plant's recipe is read from (see the species table); None = the shot folder
+        self.recipe_root = recipe_root if recipe_root is not None else self.sp.get('recipe_root')
+        self._recipe_cache = {}
         self.species, self.root, self.split, self.mode = species, Path(root), split, mode
         self.img_size = int(img_size)
         self.num_points = int(num_points or self.sp['num_points'])
@@ -269,6 +278,22 @@ class RowDataset(Dataset):
         pgt = (self._subsample(read_ply_xyz(gt_ply), self.gt_points) - centre) / scale
         return pin.astype(np.float32), pgt.astype(np.float32), centre.astype(np.float32), np.float32(scale)
 
+    def recipe_path(self, plant, folder):
+        """The target's recipe file: <recipe_root>/<split>/<plant>_00/<plant>_spline.yml when the
+        species has a recipe_root and that file exists (sorghum: the data-v2 rewrite with leaf
+        width), otherwise the copy the row renderer put in the shot folder."""
+        if plant in self._recipe_cache:
+            return self._recipe_cache[plant]
+        path = None
+        if self.recipe_root:
+            cand = Path(self.recipe_root) / self.split / f'{plant}_00' / f'{plant}_spline.yml'
+            if cand.exists():
+                path = cand
+        if path is None:
+            path = next(folder.glob(self.sp['recipe_glob']))
+        self._recipe_cache[plant] = path
+        return path
+
     @staticmethod
     def occlusion(folder, size=256):
         """occ_frac (target pixels hidden by a neighbour), nbr_frac (non-target plant pixels)."""
@@ -302,7 +327,7 @@ class RowDataset(Dataset):
         gt_rgb = self.load_rgb(folder / 'gt_rgba.png')
         gt_depth = self.load_depth(folder / 'gt_depth.png')
         pc, gt_pc, centre, scale = self.load_clouds(folder / f_ply, folder / 'gt_pointcloud_cam.ply')
-        recipe = next(folder.glob(self.sp['recipe_glob']))
+        recipe = self.recipe_path(plant, folder)
         valid, params = self.sp['load_recipe'](recipe, self.max_leaves)
         occ, nbr = self.occlusion(folder) if self.occlusion_stats else (float('nan'), float('nan'))
         info = {'plant': plant, 'theta': theta, 'shot': shot, 'idx': i,

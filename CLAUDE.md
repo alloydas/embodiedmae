@@ -648,6 +648,23 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   pending nova copy when it starts first; the nova copy (old spooled script, no race code) cannot cancel the twin,
   but the twin exits 0 if it starts while the nova copy holds the lock. Students 17061902/3/4 stay on nova per the
   user ("Put them in NOVA"), AssocGrpGRES, est. 10-23 02:06.
+- **2026-10-22 11:00: SORGHUM ROW (Regime III) LAUNCHED (user: "I have uploaded the sorghum_row data can you try to
+  start distillation with that data?", read as the row fine-tune + its isolated control, warm-started from E1).**
+  `/work/mech-ai/alloydas/sorghum_row/{train,val,test}` = 10,500 / 2,250 / 2,250 plants (`Sorghum_<id>/row.json`,
+  ten yaws x one shot: rgba/depth/gt_rgba/gt_depth 1024^2 RGBA, `pointcloud_cam.ply` 24,576 pts, `gt_pointcloud_cam.ply`
+  8,192 pts, camera_pose.json, `Sorghum_<id>_spline.yml`; rover 2.5 m, d 0.15; splits match Sorghum_15K's plant
+  assignment, 24/24 checked). **The shot's spline YAML is the ORIGINAL pre-width file** (waviness fields): the models'
+  layout is the data-v2 rewrite, so `RowDataset` (sorghum species table `recipe_root`) reads
+  `Sorghum_15K/<split>/<plant>_00/<plant>_spline.yml` (17 valid leaves on the sample) and falls back to the shot copy;
+  `RowDataset(recipe_root=)` overrides. Configs `config_sorghum_row_{ft,iso}.yaml`: init = E1 d2 sink epoch 1000 at
+  `rgb_gain: 1.85` (the renders are untagged raw output), `gt_points: 8192`, batch 8/GPU x 4 = 32, lr 1e-4, 100 ep,
+  val on the 2,250-plant val split (one yaw per plant). CPU smoke (2 plants, 1 epoch + val) exit 0, warm start 0 missing /
+  0 unexpected. Jobs (scavenger, 4 GPUs, 32 CPU, 96G, 4 d, requeue, auto-resume): **17070978** `sorghum_row_ft`
+  (`(a100&NVLINK)|h200`: 24,576-pt input), **17070979** `sorghum_row_iso` (`a100|l40s|h200`), and the zero-shot
+  baseline **17070980** `srow_eval_zs` = E1 ep 1000 on the test rows (`SPECIES=sorghum eval_row.sbatch ... --num-points
+  24576`; gt padded 8192 -> 8196 = the E1 target size). Then: `SPECIES=sorghum sbatch slurm/eval_row.sbatch
+  sorghum_row_{ft,iso} checkpoints/checkpoint_epoch_100.pth test` and the paired table as for maize
+  (`reports/row_maize_pair_*` recipe). Expect ~2-3 min/epoch -> ~4-5 h each once started.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

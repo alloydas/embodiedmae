@@ -13,6 +13,10 @@
 # and set init.rgb_gain 1.85, the brightness it trained at (the row renders carry no gain tag,
 # so they are rescaled to that value).
 
+# Recipe: the row renderer ships the pre-width spline YAML; RowDataset reads the data-v2 file from
+# Sorghum_15K/<split>/<plant>_00/ instead (row_dataset._sorghum_species recipe_root).
+# Data uploaded 2026-10-22: train 10,500 / val 2,250 / test 2,250 plants, ten yaws x one shot each.
+
 data:
   species: sorghum
   row_root: /work/mech-ai/alloydas/sorghum_row
@@ -24,7 +28,8 @@ data:
   view_seed: 42
   img_size: 224
   num_points: 24576         # INPUT: the whole scene cloud (three plants), see the maize config
-  gt_points: 8196           # TARGET = the model's output size (the sorghum loaders' 8196; the 8,192-pt
+  gt_points: 8192           # the row renderer writes 8,192-point target clouds (the model output size;
+                            # the E1 warm start was built at 8196: same 41 points per token, weights load unchanged)           # TARGET = the model's output size (the sorghum loaders' 8196; the 8,192-pt
                             # gt cloud is padded by four duplicates)
 
 model:
@@ -45,11 +50,12 @@ model:
   max_leaves: 24
 
 init:
-  checkpoint: ./outputs/e2_pcrgbdt_d2/checkpoints/checkpoint_epoch_600.pth
-  rgb_gain: 1.0             # the brightness that checkpoint trained at (E1 Sinkhorn: 1.85)
+  checkpoint: ./outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth   # the Sinkhorn E1 (data v2)
+  rgb_gain: 1.85            # E1 trained on the x1.85-brightened rgb_nobg.png; the row renders are untagged (raw renderer
+                            # output), so they are served at the same gain
 
 training:
-  batch_size: 16            # per GPU; 2 GPUs -> global 32
+  batch_size: 8             # per GPU; 4 GPUs -> global 32 at lr 1e-4 (2 GPUs: pass --batch_size 16), as the maize row arms
   accum_steps: 1
   epochs: 100
   lr: 1.0e-4
