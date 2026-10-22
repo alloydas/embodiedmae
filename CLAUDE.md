@@ -714,6 +714,15 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `gres/gpu:2`, 24 CPU, 120G (accum = 4 from the launcher). Isolated control 17070979 (4 GPUs, spooled without
   `--batch_size`) cancelled before starting and resubmitted as **17073182** `sorghum_row_iso` = 2 GPUs, 16 CPU, 64G,
   `--batch_size 16` (global 32), `a100|l40s|h200|rtxpro6000`. Every job of ours is now a 1- or 2-GPU request.
+- **2026-10-22 15:50: P/R/F1 DONE; GENERALIST RUNNING ON 2 RTX PRO 6000.** 17071405 completed in 28 min ->
+  `reports/pcfscore_17071405_{items,summary}.csv` (16 runs x val/test x 2,250 plants). Test F1 @ tau 0.01 (P / R):
+  E1 0.394 (0.51 / 0.32), PC+RGB+D 0.305 (0.65 / 0.20), E5 single 0.280, E5 topdown 0.270, PC+RGB 0.260, four-stream
+  0.253, tg100 0.251, E3 10k 0.239, E4 small 0.238, E3 3k 0.236, E4 large 0.233, tg 0.229, E3 1k 0.217, tg40 0.192,
+  PC 0.116, E5 horizon 0.029 (view-0 mismatch); F1 @ 0.02: E1 0.72, PC+RGB+D 0.63, PC 0.39. Precision >> recall for
+  every model (the reconstruction under-covers thin leaves). Val within 0.003 of test. E1's harness Chamfer is 1.36e-3
+  (the trainer's val 0.75e-3 uses a different protocol; same gap as v1's 1.31 vs 0.72). Ledger filled. The generalist
+  17060048 has been RUNNING since 13:06 on nova26-gpu-1 with 2 RTX PRO 6000 (the 2-GPU reshape fit under the cap):
+  epoch 26 at 15:45, 23 min/epoch, 4.5 h segments (next USR1 requeue ~17:36).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
