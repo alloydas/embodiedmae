@@ -700,6 +700,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   12:55 (user: "restart the sorghum row fine-tune with the fix"): 17070978 CANCELLED at epoch ~27; its run dir moved
   to `outputs/_stale/sorghum_row_ft_unscaled_depth_2026-10-22`; resubmitted as **17071886** `sorghum_row_ft` (same shape,
   scavenger, 4x (a100&NVLINK)|h200|rtxpro6000, fixed loader).
+  13:05 (user: "Can you try with 2 gpus instead of 4 GPUs?"): 17071886 (never started) cancelled; **17072337** `sorghum_row_ft`
+  = 2 GPUs (same 80 GB constraint), 16 CPU, 64G, `--batch_size 16` so the global batch stays 32 (per-GPU batch 16 vs the
+  maize row arms' 8: PointCloudEmbed's BatchNorm sees 16; the sorghum E2 arms trained at 16/GPU too).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
