@@ -821,6 +821,12 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   the four T1 transfer arms (2 GPUs x ~1 day each; sbatch lines in their config headers). Ledger v14 queue section
   refreshed. Remaining blanks with no job possible yet: E10 (no real scans), per-view E5 probe (not built), joint
   pretraining (Phase 2, needs the maize d2 images on Nova).
+- **2026-10-23 11:50 (user: "launch the T1 arms also"):** the four cross-species transfer arms submitted on
+  scavenger (2 GPUs, 16 CPU, 64G, 2 d, requeue + the scale-arm auto-resume; outputs on mech-ai via the symlinks):
+  **17082838** `sorghum_xfer_warm_d2` (init = maize_4m ep 600), **17082839** `sorghum_xfer_scratch_d2`, **17082840**
+  `maize_xfer_warm` (init = sorghum E1 ep 1000; MAIZE_CONDA_ENV=det_cu128), **17082841** `maize_xfer_scratch`.
+  150 epochs each (~12-20 h on 2 GPUs). Compare warm vs scratch per direction by probe at checkpoint_epoch_150
+  (`eval/linear_probe{,_maize}.py`), never against the 600-epoch arms (different cosine).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
