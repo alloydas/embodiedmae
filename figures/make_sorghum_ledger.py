@@ -79,7 +79,8 @@ def main():
         f = O/f'4m_distill_15k_{r}'/'training_history.json'
         if f.exists():
             h = json.load(open(f)); D['students'][r] = {'done': len(h['train']), 'train': [[e['epoch'], round(e['loss'], 5)] for e in h['train']], 'val': [[v['epoch'], v['mean_gen']] for v in h['val']], 'val_pc_chamfer_rgb': [[v['epoch'], v['per_source']['rgb']['pc_chamfer']] for v in h['val'] if 'rgb' in v['per_source']]}
-    D['probe'] = probe_rows([R/'probe_pr_600_d2_16930422.csv', R/'probe_pr_6168_d2_16928969.csv', R/'probe_pr_2024_d2_16928970.csv', R/'probe_pr_624_d2_16928971.csv'])
+    D['probe'] = probe_rows([R/'probe_pr_600_d2_16930422.csv', R/'probe_pr_6168_d2_16928969.csv', R/'probe_pr_2024_d2_16928970.csv', R/'probe_pr_624_d2_16928971.csv']
+                            + sorted(R.glob('probe_pr_e1_d2_*.csv')))
     D['probe_mean'] = probe_rows([R/'probe_pr_mean600_d2_16930423.csv'], 'mean')
     D['e8'] = probe_rows([R/'probe_e8_base_sorghum_d2_16930425.csv'], 'mean')
     D['e8']['e8_supervised_d2 (mean pool)'] = probe_rows([R/'probe_e8_score_d2_16930424_mean.csv'], 'mean')['e8_supervised_d2']
@@ -99,7 +100,9 @@ def main():
         for t in (0.005, 0.01, 0.02):
             f1 = g[f'f1_{t:g}']; fs.append({'run': run, 'split': split, 'epoch': int(g.epoch.iloc[0]), 'n_plants': len(g), 'tau': t, 'precision': round(g[f'precision_{t:g}'].mean(), 5), 'recall': round(g[f'recall_{t:g}'].mean(), 5), 'f1': round(f1.mean(), 5), 'f1_median': round(float(f1.median()), 5), 'f1_p10': round(float(f1.quantile(0.1)), 5), 'chamfer': round(g.chamfer.mean(), 6), 'scale_m': round(float(g.scale_m.median()), 3)})
     D['fscore'] = fs
-    pv = pd.read_csv(R/'pcview_16930426_probe.csv'); rc = pd.read_csv(R/'pcview_16930426_recon.csv'); cov = pd.read_csv(R/'pcview_16930426_coverage.csv')
+    pv = pd.concat([pd.read_csv(R/'pcview_16930426_probe.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_probe.csv'))])
+    rc = pd.concat([pd.read_csv(R/'pcview_16930426_recon.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_recon.csv'))])
+    cov = pd.read_csv(R/'pcview_16930426_coverage.csv')
     D['pcview'] = {'probe': [{k: r[k] for k in ('run','condition','fit','target','val_r2','test_r2')} for r in pv[pv.target.isin(['height','leaf_angle_roll','leaf_len_mean'])].to_dict('records')],
                    'recon': [{k: r[k] for k in ('run','condition','chamfer','echo_chamfer')} for r in rc.to_dict('records')],
                    'coverage': {r['condition']: r['mean'] for r in cov.groupby('condition')['mean'].mean().reset_index().to_dict('records')}}
@@ -119,6 +122,17 @@ def main():
         if (O/run/'training_history.json').exists():
             h = json.load(open(O/run/'training_history.json')); rows[run] = {'epochs': len(h['epoch']), 'val_chamfer': [[e, v] for e, v in zip(h['val_epoch'], h['val_pc_chamfer'])], 'val_chamfer_vs_input': [[e, v] for e, v in zip(h['val_epoch'], h['val_pc_chamfer_vs_input'])], 'val_leaf_mae': [[e, v] for e, v in zip(h['val_epoch'], h['val_leaf_mae_masked'])]}
     D['rows'] = rows
+    # cross-species probes (PLAN_cross_species.md Z1) + native anchors
+    xp = []
+    for f in sorted(R.glob('xprobe_*.csv')):
+        d = pd.read_csv(f); tag = Path(f).stem.rsplit('_', 1)[0].replace('xprobe_', '')
+        for r in d.to_dict('records'):
+            xp.append({'set': tag, 'run': r['run'], 'model_species': r['model_species'], 'data_species': r['data_species'],
+                       'target': r['target'], 'val_r2': r['val_r2'], 'test_r2': r['test_r2']})
+    nat = pd.read_csv(R/'probe_pm_e2_600_16669530.csv'); nat = nat[nat.feature == 'cls'] if 'feature' in nat.columns else nat
+    for r in nat.to_dict('records'):
+        xp.append({'set': 'native_maize_v1', 'run': r['run'], 'model_species': 'maize', 'data_species': 'maize', 'target': r['target'], 'val_r2': r['val_r2'], 'test_r2': r['test_r2']})
+    D['xprobe'] = xp
     D['images'] = {}
     if not a.no_images:
         for run in list(RUNS)[:12]:

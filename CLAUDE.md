@@ -832,6 +832,18 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   17082629 `r2pquant_d2_interim`, 17082826/7 `xrow_*`. The other two free GPUs went to labmates in the same minute,
   so those four wait on the cap (16/17). The 2-GPU T1 arms stay on scavenger so they do not block the 4-GPU
   maize E1 17082791 on the cap.
+- **2026-10-23 12:40: LEDGER v17 = final-data ledger + the September visual review (user: "see here are some results
+  and visualizations add them in the artifact and update artifact with new results", pointing at A6nkyfGFfnpy31dq9AdYWw).**
+  The old review page is carried across intact as a second page `review_v1.html` inside the ledger artifact (copy in
+  `figures/ledger_review_v1.html`; banner "first data release, superseded"; anchors `#viz-pc`, `#viz-params`,
+  `#viz-views`, `#viz-maize-pc`, `#viz-maize-views`, `#viz-maize-params`, `#viz-maize-recon`), and its 37 data/image
+  files (clouds*.js, views*.js, params*.js, view_*.jpg, maize_view_*.jpg, gen_before/after.png, maize_recon_*.jpg,
+  e9_*.png, tsne_maize_*.png) were copied SERVER-SIDE into the ledger (Artifact `files` with {artifact, path}); the
+  main page gained a "Visualizations" section (static figures + deep-link buttons to each 3D viewer), a
+  "Cross-species" section (Z1 probes both directions with native anchors and the depth-leak caveat), and the E1
+  probe + E1 partial-cloud rows now flow from `reports/probe_pr_e1_d2_*.csv` / `pcview_1708282*`. A republish from
+  `make_sorghum_ledger.py` keeps the copied files (files left out of a publish are kept); pass review_v1.html again
+  only if it changes.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

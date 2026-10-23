@@ -200,6 +200,49 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <div class="chartgrid"><div class="chart"><h3>Row training: validation Chamfer</h3><div class="sub">2,250 val plants, one yaw each; solid = against the target plant, dashed = against the input cloud (an echo detector: rising is good).</div><div id="ch_rows"></div></div></div>
   </section>
 
+  <section id="xspecies">
+    <div class="sechead"><span class="eyebrow">Cross-species</span><h2>One species' encoder on the other species' plants</h2></div>
+    <p>PLAN_cross_species.md, Z1. A frozen encoder trained on one species is probed on the other species' plants with that species' own targets, splits and ridge protocol. The recipe is never visible; depth is re-encoded from the data's render convention into the model's (<span class="mono">species_conventions.py</span>), RGB is served as the data ships it. Val R²; the native rows are the data species' own models through its own probe.</p>
+    <div class="note" id="xnote"></div>
+    <div class="toggle" role="group" aria-label="Direction" id="xtog"></div>
+    <div class="tablewrap"><table id="xtbl"></table></div>
+  </section>
+
+  <section id="viz">
+    <div class="sechead"><span class="eyebrow">Visualizations</span><h2>Reconstructions, coverage viewers and latents (first data release)</h2></div>
+    <div class="note"><strong>First-release material.</strong> These figures and interactive viewers come from the September progress review and were computed on the first sorghum and maize releases; final-data equivalents do not exist yet (the distillation they illustrate is re-running on the final data). Their numbers are superseded by the tables above. The interactive viewers live on the archived page: open them with the buttons.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px">
+      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-pc">3D viewer · sorghum points missed, before vs after distillation</a>
+      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-params">parameter browser · sorghum, every leaf</a>
+      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-views">ten-view gallery · sorghum photo → cloud</a>
+      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-maize-pc">3D viewer · maize 1k vs 10.5k plants</a>
+      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-maize-views">ten-view gallery · maize</a>
+      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-maize-params">parameter browser · maize</a>
+      <a class="pill queued" style="text-decoration:none;padding:6px 12px" href="review_v1.html">whole archived review</a>
+    </div>
+    <h3 style="margin-top:18px">Point cloud in, everything else generated: before and after distillation (sorghum)</h3>
+    <div class="imggrid">
+      <figure><img src="gen_before.png" alt="Generation grid at epoch 1: blurry generated RGB and depth from the input point cloud" loading="lazy"><figcaption><b>Before</b>, epoch 1 · Sorghum_10001_00 · the cloud is the input; read the generated RGB and depth</figcaption></figure>
+      <figure><img src="gen_after.png" alt="Generation grid at epoch 100: generated depth resolves leaf blades" loading="lazy"><figcaption><b>After</b>, epoch 100 of the first-release distillation · individual blades separate in the generated depth</figcaption></figure>
+    </div>
+    <h3 style="margin-top:18px">Maize reconstructions</h3>
+    <div class="imggrid">
+      <figure><img src="maize_recon_1k_final.jpg" alt="1,000-plant maize model reconstruction" loading="lazy"><figcaption><b>1,000 plants</b>, epoch 6,168 · plant_0034_00, identical masks</figcaption></figure>
+      <figure><img src="maize_recon_full_matched.jpg" alt="10,500-plant maize model reconstruction" loading="lazy"><figcaption><b>10,500 plants</b>, epoch 600 · same plant and masks; Chamfer 6.6 vs 1.0 ×10⁻³</figcaption></figure>
+      <figure><img src="maize_recon_ep1.jpg" alt="maize base model after epoch 1" loading="lazy"><figcaption>Base maize model, <b>epoch 1</b></figcaption></figure>
+      <figure><img src="maize_recon_ep600.jpg" alt="maize base model after epoch 600" loading="lazy"><figcaption>Base maize model, <b>epoch 600</b></figcaption></figure>
+    </div>
+    <p class="small muted" style="margin-top:8px">As in every reconstruction grid here, the depth outline and the per-patch RGB statistics come from the ground truth.</p>
+    <h3 style="margin-top:18px">Latent structure (E9, first release)</h3>
+    <div class="imggrid">
+      <figure><img src="e9_latent.png" alt="t-SNE panels of the sorghum PC+RGB+D latent" loading="lazy"><figcaption><b>Sorghum PC+RGB+D</b> · six factor panels; leaf count is the clean gradient</figcaption></figure>
+      <figure><img src="e9_latent_params.png" alt="t-SNE panels of the sorghum four-stream latent" loading="lazy"><figcaption><b>Sorghum four streams</b> · the leaf-count gradient interleaves (|r| 0.76 → 0.64)</figcaption></figure>
+      <figure><img src="e9_maize.png" alt="t-SNE panels of the maize base latent" loading="lazy"><figcaption><b>Maize base</b> · broad gradients for leaf count, angle, biomass; height and twist mixed</figcaption></figure>
+      <figure><img src="tsne_maize_1k.png" alt="t-SNE of the 1,000-plant maize latent" loading="lazy"><figcaption><b>Maize, 1,000 plants</b> · lobed, less locally organised</figcaption></figure>
+      <figure><img src="tsne_maize_large.png" alt="t-SNE of the large maize latent" loading="lazy"><figcaption><b>Maize, large model</b> · one rounded mass, smoothest leaf-count gradient</figcaption></figure>
+    </div>
+  </section>
+
   <section id="recon">
     <div class="sechead"><span class="eyebrow">Reconstructions</span><h2>E1 at epoch 980</h2></div>
     <p>The trainer's five-row grid: RGB, depth, point cloud and decoded recipe text, input against reconstruction, at mask ratio 0.80.</p>
@@ -216,7 +259,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script id="data" type="application/json">/*DATA*/</script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-23 13:00 CDT';
+const ASOF = '2026-10-23 12:30 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -246,7 +289,7 @@ const C=D.curves;
     ['best ablation arm','PC+RGB+D','probe height '+f3(D.probe.e2_pcrgbd_d2.targets.height.val_r2)+', F1 '+fb.f1.toFixed(3)],
     ['arms probed',String(PROBED.length)+' / 16','E5 probe queued'],
     ['distillation','2 running, 2 queued','generalist epoch '+D.distill.train.length+' / 100; RGB student epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)],
-    ['row (Regime III)',(D.rows&&D.rows.sorghum_row_ft?'fine-tune done':'0 / 3'),'zero-shot scored; control queued'],
+    ['row (Regime III)',(D.rows&&D.rows.ft?'fine-tune scored':'0 / 3'),'zero-shot + fine-tune scored; control training'],
   ];
   document.getElementById('strip').innerHTML=tiles.map(t=>`<div class="tile"><div class="k">${esc(t[0])}</div><div class="v">${esc(t[1])}</div><div class="s">${esc(t[2])}</div></div>`).join('');
 })();
@@ -254,7 +297,7 @@ const C=D.curves;
 // ---------- programme matrix
 (function(){
   const rows=[
-    ['E1','headline pretrain','done','4m_pretrain_15k_d2_sink: 1,000 epochs over all 105,000 views, global batch 256, QAL + 0.5 × Sinkhorn; finished 2026-10-21 14:28 on 4× RTX PRO 6000. Probe and partial-cloud row not run yet.'],
+    ['E1','headline pretrain','done','4m_pretrain_15k_d2_sink: 1,000 epochs over all 105,000 views, global batch 256, QAL + 0.5 × Sinkhorn; finished 2026-10-21 14:28 on 4× RTX PRO 6000. Probed (val height 0.983, leaf width 0.406, the best of any arm on size and both leaf traits) and partial-cloud row done.'],
     ['E2','modality value-add','done','PC / PC+RGB / PC+RGB+D / all four at 600 / 600; probed, E9, paired bootstraps, point-cloud F1.'],
     ['E2 control','parameter budget','done','The four-stream arm with the recipe tokens gated to 20 % (tg), 60 % (tg40) or 0 % visible (tg100, target only), so the sensor streams keep the three-stream arm\'s 117 visible tokens. Probed, CIs, F1.'],
     ['E3','data scaling','done','1k / 3k / 10k plants (6,169 / 2,100 / 631 epochs, 197,400 steps each), probed, E9, F1. Full-data point = the four-stream arm. Paired CIs not run.'],
@@ -263,11 +306,12 @@ const C=D.curves;
     ['E6','masking / noise','elsewhere','Collaborator (yongyun branch).'],
     ['E7','loss study','elsewhere','Collaborator. Its winner, QAL + Sinkhorn, is the loss of E1 and the distillations.'],
     ['E8','baselines','done','DINOv2 ViT-B/14, MultiMAE-B, Point-MAE, EmbodiedMAE-B, random init, supervised from scratch (600 ep); paired CIs.'],
-    ['Partial clouds','1 vs 3 cameras','running','Four E2 arms done (16930426). E1 row not run.'],
+    ['Partial clouds','1 vs 3 cameras','done','Four E2 arms (16930426) and E1 (17082822).'],
     ['P / R / F1','point-cloud quality','done','16 runs, val + test, 2,250 plants each (17071405).'],
     ['Distillation','single-sensor students','running','Generalist (all sources) at epoch '+D.distill.train.length+' / 100, now on the scavenger twin 17070513 (2× A100, 41 min/epoch; it took over from the nova copy at 01:45). RGB→cloud student with the source visible running since 22:12 (17061902, 2× A100, 41 min/epoch); the two 50 %-hidden students queued on nova. Quant generation after all four (17061909). None finishes before the 10-24 freeze at this pace.'],
     ['Regime III','rows: neighbours, occlusion','running','Row fine-tune from E1 done (17072337, 100 ep in 9 h on 2× RTX PRO 6000; test eval 17082259 running); zero-shot E1 on the test rows scored (17071869); isolated control 17073182 queued on nova. Depth encoding and cloud convention of the row renders differ from E1\'s training renders (see the rows section).'],
     ['E9','latent analysis','done','All probed arms, val and test.'],
+    ['Cross-species','one species\' encoder on the other\'s plants','running','Z1 probes both directions done (17082825); depth leak check 17083713 queued; cross rows and transfer arms queued (see the cross-species section).'],
     ['E10','real field data','blank','Nothing on real scans.'],
   ];
   document.getElementById('matrixtbl').innerHTML='<thead><tr><th>exp</th><th>question</th><th>state</th><th>runs and notes</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="lead">${r[0]}</td><td>${esc(r[1])}</td><td>${pill(r[2])}</td><td class="wrapc${r[2]==='blank'?' blankc':''}" style="text-align:left">${esc(r[3])}</td></tr>`).join('')+'</tbody>';
@@ -383,7 +427,7 @@ function renderProbe(mode){
   PROBED.forEach(r=>{h+=`<tr><td class="lead mono">${r}</td><td>${esc(SHORT[r])}</td><td class="n">${P[r].epoch}</td>`;
     TARGETS.forEach(t=>{const d=P[r].targets[t]; if(!d){h+='<td class="blankc"></td>';return;} if(mode==='mae'){const v=d.val_mae;h+=`<td class="n">${v<0.1?v.toFixed(4):v.toFixed(3)}</td>`;return;}
       const v=mode==='test'?d.test_r2:d.val_r2; const w=Math.max(0,Math.min(1,v))*100; const b=(v>=best[t]-1e-9)?' style="font-weight:600"':''; h+=`<td class="n heat"><div class="bar" style="width:${w.toFixed(0)}%"></div><span${b}>${v.toFixed(3)}</span></td>`;}); h+='</tr>';});
-  [['e5_topdown_d2 / e5_horizon_d2 / e5_single_d2','E5 arms · done at 600, probe queued (17060237)'],['4m_pretrain_15k_d2_sink','E1 · done, probe not run']].forEach(p=>{h+=`<tr><td class="lead mono">${p[0]}</td><td class="blankc" colspan="${TARGETS.length+2}">${esc(p[1])}</td></tr>`;});
+  [['e5_topdown_d2 / e5_horizon_d2 / e5_single_d2','E5 arms · done at 600, probe queued (17060237)']].concat(D.probe['4m_pretrain_15k_d2_sink']?[]:[['4m_pretrain_15k_d2_sink','E1 · probe not run']]).forEach(p=>{h+=`<tr><td class="lead mono">${p[0]}</td><td class="blankc" colspan="${TARGETS.length+2}">${esc(p[1])}</td></tr>`;});
   document.getElementById('probetbl').innerHTML=h+'</tbody>';
   ['val','test','mae'].forEach(m=>document.getElementById('tg_'+m).setAttribute('aria-pressed',m===mode?'true':'false'));
 }
@@ -431,8 +475,9 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   const PV=D.pcview; const conds=['full','3view','1view']; const cl={full:'full ('+(PV.coverage.full*100).toFixed(0)+' %)','3view':'3 cameras ('+(PV.coverage['3view']*100).toFixed(0)+' %)','1view':'1 camera ('+(PV.coverage['1view']*100).toFixed(0)+' %)'};
   const g=(r,fit,c,t,s)=>{const x=PV.probe.find(y=>y.run===r&&y.fit===fit&&y.condition===c&&y.target===t);return x?x[s+'_r2']:null;}; const rc=(r,c)=>{const x=PV.recon.find(y=>y.run===r&&y.condition===c);return x?x.chamfer*1e3:null;};
   let h='<thead><tr><th>arm</th>'+conds.map(c=>`<th class="n">matched height · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">transferred height · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">matched roll · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">chamfer ×10⁻³ · ${cl[c]}</th>`).join('')+'</tr></thead><tbody>';
-  E2.forEach(r=>{h+=`<tr><td class="lead">${esc(SHORT[r])}</td>`+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'transfer',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'leaf_angle_roll','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${rc(r,c)==null?'':rc(r,c).toFixed(2)}</td>`).join('')+'</tr>';});
-  h+=`<tr><td class="lead">E1</td><td class="blankc" colspan="12">not run</td></tr>`;
+  const PVR=E2.concat(PV.probe.some(y=>y.run==='4m_pretrain_15k_d2_sink')?['4m_pretrain_15k_d2_sink']:[]);
+  PVR.forEach(r=>{h+=`<tr><td class="lead">${esc(SHORT[r])}</td>`+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'transfer',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'leaf_angle_roll','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${rc(r,c)==null?'':rc(r,c).toFixed(2)}</td>`).join('')+'</tr>';});
+  if(!PVR.includes('4m_pretrain_15k_d2_sink')) h+=`<tr><td class="lead">E1</td><td class="blankc" colspan="12">not run</td></tr>`;
   document.getElementById('pcviewtbl').innerHTML=h+'</tbody>';
   const cov=c=>PV.coverage[c]*100;
   lineChart(document.getElementById('ch_pcview'), E2.flatMap(r=>[{name:SHORT[r]+' refit',color:COL[r],dots:true,points:conds.map(c=>[cov(c),g(r,'matched',c,'height','test')])},{name:SHORT[r]+' transferred',color:COL[r],dash:true,dots:true,points:conds.map(c=>[cov(c),g(r,'transfer',c,'height','test')])}]), {xlabel:'cloud coverage (% of the complete plant)',ylabel:'test height R²',y0:-0.1,y1:1,aria:'height R² against coverage'});
@@ -500,6 +545,31 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
     fig_rows_maize:'Regime III, maize rows (test). (a) Paired row vs isolated training and inputs; (b) error against row yaw.'};
   const keys=Object.keys(D.images).filter(k=>k.startsWith('paper_fig_'));
   document.getElementById('paperfiggrid').innerHTML=keys.map(k=>{const n=k.slice(6);return `<figure style="background:#fff"><img src="${D.images[k]}" alt="${esc(caps[n]||n)}" loading="lazy"><figcaption><span class="mono">${esc(n)}.pdf</span> · ${esc(caps[n]||'')}</figcaption></figure>`;}).join('');
+})();
+
+// ---------- cross-species
+(function(){
+  const X=D.xprobe||[]; if(!X.length){document.getElementById('xtbl').innerHTML='<tbody><tr><td class="blankc">not run</td></tr></tbody>';return;}
+  const dirs=[['maize','sorghum models on maize plants'],['sorghum','maize model on sorghum plants']];
+  const MT={maize:['height','leaf_count','biomass','leaf_angle','stem_radius','leaf_length','leaf_width','leaf_twist','leaf_curl','leaf_droop','tassel_droop'],sorghum:['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_width_mean']};
+  const LAB={'4m_pretrain_15k_d2_sink':'sorghum E1 (final data)','e2_pcrgbd_d2':'sorghum PC+RGB+D','maize_4m':'maize_4m (first release)','maize_e2_pcrgbd':'maize PC+RGB+D (first release)'};
+  const tog=document.getElementById('xtog');
+  tog.innerHTML=dirs.map((d,i)=>`<button data-i="${i}" aria-pressed="false">${esc(d[1])}</button>`).join('');
+  function render(i){const ds=dirs[i][0]; const T=MT[ds];
+    const rows=[]; const seen=new Set();
+    X.filter(x=>x.data_species===ds).forEach(x=>{const k=x.set+'|'+x.run; if(!seen.has(k)){seen.add(k); rows.push([x.set,x.run]);}});
+    if(ds==='sorghum'){['e2_pcrgbd_d2','4m_pretrain_15k_d2_sink'].forEach(r=>{if(D.probe[r])rows.push(['native_sorghum',r]);});}
+    const get=(set,run,t)=>{ if(set==='native_sorghum'){const d=D.probe[run]; return d&&d.targets[t]?d.targets[t].val_r2:null;} const x=X.find(y=>y.set===set&&y.run===run&&y.target===t); return x?x.val_r2:null;};
+    const order=r=>r[0].startsWith('native')?1:(r[0].includes('nodepth')?2:(r[0].includes('anchor')?1:0));
+    rows.sort((a,b)=>order(a)-order(b));
+    let h='<thead><tr><th>model</th><th>set</th>'+T.map(t=>`<th class="n">${esc(t.replace(/_/g,' '))}</th>`).join('')+'</tr></thead><tbody>';
+    rows.forEach(([set,run])=>{const kind=set.startsWith('native')||set.includes('anchor')?'native':(set.includes('nodepth')?'cross, depth hidden':'cross');
+      h+=`<tr><td class="lead">${esc(LAB[run]||run)}</td><td>${esc(kind)}</td>`+T.map(t=>{const v=get(set,run,t);if(v==null)return '<td class="blankc"></td>';const w=Math.max(0,Math.min(1,v))*100;return `<td class="n heat"><div class="bar" style="width:${w.toFixed(0)}%"></div><span>${v.toFixed(3)}</span></td>`;}).join('')+'</tr>';});
+    document.getElementById('xtbl').innerHTML=h+'</tbody>';
+    tog.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.i==String(i)?'true':'false'));}
+  tog.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>render(+b.dataset.i))); render(0);
+  const leak=X.some(x=>x.set.includes('nodepth'));
+  document.getElementById('xnote').innerHTML=leak?'<strong>Depth leak check is in:</strong> compare the "depth hidden" row with the cross row; if it falls to the native level, metric depth carried the size signal.':'<strong>Treat the sorghum-on-maize numbers as unverified.</strong> They beat every native maize model (height 0.83 against 0.58 for maize_4m on the same first-release data). The adapter hands the sorghum model METRIC depth, while native maize models only ever see depth normalised per plant, and the maize renderer frames each plant by its size, so absolute depth may leak height. The check (same probe with depth hidden, plus the native model through this harness) is job 17083713. The maize-on-sorghum direction shows no such anomaly: height 0.952 against 0.977 native.';
 })();
 
 // ---------- reconstructions
