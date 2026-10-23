@@ -867,6 +867,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (0.51), i.e. single-photo generation does not transfer. Interim quant (17082629, test): photograph -> cloud
   Chamfer E1 2.25e-3 -> generalist ep40 1.06 (depth source 0.82) -> rgb2pc student ep13 0.88. `xrow_s_on_m` 17082827
   failed (started before the recipe-width fix); resubmitted as **17084182**.
+- **2026-10-23 13:40: TWO-STREAM DISTILLATION (user: "For distillation I have to try two modality to one modality").**
+  `train_sorghum_4m_distill.py` now takes '+'-joined sources (`source_set`: 'rgb+depth' = both fully visible, the rest
+  masked; a single name is unchanged, so every running single-source arm is bit-identical). Applied in the training step,
+  the masked-token weight, the per-source val and the viz. CPU-tested on a small model (visible pair -> zero loss on both,
+  others generated; typos refused). Arms (nova, 2 GPUs any type, 24 CPU, 120G, 2 d, outputs on mech-ai via symlink):
+  **17084301** `4m_distill_15k_rgbd2pc_d2` = rgb2pc_full_d2 with source 'rgb+depth' (the RGB-D camera; pair it with the
+  RGB-only student to read what depth adds); **17084302** `4m_distill_15k_pairs_d2` = the generalist recipe with the six
+  pairs as sources, targets all (val reports each pair -> each stream). Quant: `eval_rgb2pc_quant.py --source rgb,depth`.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

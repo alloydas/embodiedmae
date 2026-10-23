@@ -86,6 +86,16 @@ MODALITIES = ['rgb', 'depth', 'pc', 'text']
 ALL_VISIBLE = set(MODALITIES)
 
 
+def source_set(source):
+    """A distillation source is one modality ('rgb') or a '+'-joined set of them
+    ('rgb+depth'): those streams are fully visible together, the rest are masked.
+    A single name gives {name}, so every single-source run is unchanged."""
+    parts = [x.strip() for x in str(source).split('+') if x.strip()]
+    assert parts and all(x in MODALITIES for x in parts) and len(set(parts)) == len(parts), \
+        f"bad distillation source {source!r}: use modalities from {MODALITIES}, joined with '+'"
+    return set(parts)
+
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 def load_config(path):
@@ -193,8 +203,12 @@ def config_to_namespace(c):
     ns.wandb_entity       = g('wandb', 'wandb_entity', None)
     ns.wandb_name         = g('wandb', 'wandb_name', None)
     # keep validated source list
-    ns.sources = [s for s in ns.sources if s in MODALITIES]
-    assert ns.sources, "distill.sources must contain at least one of rgb/depth/pc/text"
+    if isinstance(ns.sources, str):
+        ns.sources = [x for x in ns.sources.split(',') if x.strip()]
+    ns.sources = [s.strip() for s in ns.sources]
+    for _s in ns.sources:
+        source_set(_s)          # raises on an unknown modality, e.g. a typo
+    assert ns.sources, "distill.sources must contain at least one of rgb/depth/pc/text (or a '+' pair)"
     for _m in ns.targets:
         assert _m in MODALITIES, \
             f"distill.target entries must be in {MODALITIES}, got {_m}"
@@ -258,7 +272,7 @@ def masked_token_weight(model, source, device):
     sizes = token_block_sizes(model)
     w = []
     for name, n in zip(MODALITIES, sizes):
-        w.append(torch.zeros(n) if name == source else torch.ones(n))
+        w.append(torch.zeros(n) if name in source_set(source) else torch.ones(n))
     return torch.cat(w).to(device)
 
 
@@ -291,7 +305,7 @@ def feature_distill_loss(feats_s, feats_t, weight=None):
 
 def crossmodal_distill_step(student, teacher, batch_t, source, args, device):
     rgb, depth, pc, params, tv = batch_t
-    visible = {source}
+    visible = source_set(source)
 
     total_recon, (lr, ld, lp, lt), preds_s, _, (feats_s, cls_s) = student(
         rgb, depth, pc, params, tv, visible=visible, return_features=True,
@@ -463,7 +477,7 @@ def evaluate_crossmodal(student, loader, device, sources, target=None, max_batch
             params = params.to(device); tv = tv.to(device)
             total, (lr, ld, lp, lt), (pr, pd, ppc, pparam), \
                 (mr, md, mpc, mt) = m(
-                    rgb, depth, pc, params, tv, visible={src})
+                    rgb, depth, pc, params, tv, visible=source_set(src))
 
             acc['total'] += total.item()
             acc['rgb']   += lr.item()
@@ -539,7 +553,7 @@ def visualize_crossmodal(model, loader, device, epoch, save_dir, source,
     tv = tv[:num_samples].to(device); names = list(names[:num_samples])
 
     _, _, (pr, pd, ppc, pparam), _ = model_m(
-        rgb, depth, pc, params, tv, visible={source})
+        rgb, depth, pc, params, tv, visible=source_set(source))
     pr = _unnorm_pix(model_m, pr, rgb)
     pr_img = unpatchify(pr, model_m.patch_size, 3, model_m.img_size)
     pd_img = unpatchify(pd, model_m.patch_size, 1, model_m.img_size)
@@ -564,7 +578,7 @@ def visualize_crossmodal(model, loader, device, epoch, save_dir, source,
             ax.imshow(img if cmap is None else img, cmap=cmap); ax.axis('off')
             ax.set_title(title, fontsize=8, fontweight='bold')
 
-        is_in = lambda mod: '  ← INPUT' if mod == source else '  (generated)'
+        is_in = lambda mod: '  ← INPUT' if mod in source_set(source) else '  (generated)'
         panel(1, rgb_dn[i].transpose(1, 2, 0).clip(0, 1), f'GT RGB')
         panel(2, pr_dn[i].transpose(1, 2, 0).clip(0, 1), f'RGB{is_in("rgb")}')
         panel(3, depth_np[i, 0], 'GT Depth', cmap='viridis')
