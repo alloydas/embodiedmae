@@ -25,6 +25,7 @@ for a,b in [('sec:results','sec:experiments'),('sec:setup','sec:exp-setup'),('se
             ('sec:res-field','sec:exp-real'),('sec:res-repr','sec:exp-repr')]:
     s='\\label{%s}'%a; assert body.count(s)==1,a; body=body.replace(s,s+'\\label{%s}'%b)
 body=body.replace('{fig_view_elevation.png}','{Figures/fig_view_elevation.png}').replace('{fig_metrics.pdf}','{Figures/fig_metrics.pdf}')
+body=body.replace('{figs/fig_','{Figures/fig_')
 open(ov+'4_experiments.tex','w').write(hdr('results.tex')+fixrefs(fixcites(body)))
 d=open('discussion.tex').read()
 i=d.index('\\section{Discussion'); j=d.index('\\section{Conclusion}')
