@@ -210,7 +210,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script id="data" type="application/json">/*DATA*/</script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-23 10:40 CDT';
+const ASOF = '2026-10-23 12:00 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -283,6 +283,8 @@ const C=D.curves;
     ['17082825','cross-species probe + generation, both directions','scavenger','pending','PLAN_cross_species.md Z1 + Z2'],
     ['17082826 / 17082827','row models on the other species\' rows','scavenger','pending','Z3'],
     ['17082791','maize E1 on Nova (v1 data), 4 GPUs / 4 d','nova','pending (account cap)','the maize-side E1 teacher for the cross-species work'],
+    ['17082838 / 17082839','T1 sorghum transfer arms: warm (init maize_4m ep 600) / scratch','scavenger, 2 GPUs each','pending','150 ep; compare by probe at ep 150'],
+    ['17082840 / 17082841','T1 maize transfer arms: warm (init sorghum E1 ep 1000) / scratch','scavenger, 2 GPUs each','pending','150 ep'],
   ];
   document.getElementById('queuetbl').innerHTML='<thead><tr><th>job</th><th>name</th><th>where</th><th>state</th><th>what</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="mono">${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td><td class="wrapc" style="white-space:normal;min-width:200px">${esc(r[3])}</td><td class="wrapc" style="white-space:normal">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
 })();
