@@ -874,7 +874,11 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   others generated; typos refused). Arms (nova, 2 GPUs any type, 24 CPU, 120G, 2 d, outputs on mech-ai via symlink):
   **17084301** `4m_distill_15k_rgbd2pc_d2` = rgb2pc_full_d2 with source 'rgb+depth' (the RGB-D camera; pair it with the
   RGB-only student to read what depth adds); **17084302** `4m_distill_15k_pairs_d2` = the generalist recipe with the six
-  pairs as sources, targets all (val reports each pair -> each stream). Quant: `eval_rgb2pc_quant.py --source rgb,depth`.
+  pairs as sources, targets all. **Re-scoped 14:00 (user: "output will be only point clouds"), before either started:** only the
+  three pairs WITHOUT the cloud are distilled, all to pc with the RGB-student recipe (lr 3e-5, target pc): 17084301
+  `rgbd2pc` (rgb+depth), new **17084366** `dist_rgbt2pc_d2` (rgb+text), new **17084367** `dist_dt2pc_d2` (depth+text), and
+  17084302 (renamed `dist_pairs2pc_d2`; same config file, rewritten) = one student over all three pairs, output still
+  `outputs/4m_distill_15k_pairs_d2`. Quant: `eval_rgb2pc_quant.py --source rgb,depth`.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
