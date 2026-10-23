@@ -899,6 +899,11 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   only active_modalities changed (reconstruct all own streams). CPU-tested on small maize v2 models. Launch lines are in
   each config header (Delta: `slurm/delta/distill_maize.sbatch` with `DISTILL_CONFIG=`, `slurm/delta/train_maize_arm.sbatch
   <slug>`); the students need the maize E1 at epoch 1000 first. Wait for the user's go.
+- **2026-10-23 14:30: CROSS-SPECIES ROWS (Z3) DONE.** Row fine-tunes on the other species' test rows, Chamfer vs target,
+  1e-4 m^2, row/all: maize row model on SORGHUM rows 268 (native sorghum row model 30.7); sorghum row model on MAIZE rows
+  61.7 (native maize row model 6.5); i.e. row reconstruction does not transfer across species (9x and 9.5x the native
+  error). Reports `reports/row_sorghum_maize_row_ft_*_17083714.*`, `reports/row_maize_sorghum_row_ft_*_17084182.*`.
+  T1 sorghum transfer arms 17082838 / 17082839 started 14:05 / 14:26 on scavenger; maize T1 arms pending.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
