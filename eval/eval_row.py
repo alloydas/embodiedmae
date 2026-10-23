@@ -98,7 +98,11 @@ def _unpack(out):
 def predict(model, src, rgb, depth, pc, params, mask_ratio, seed):
     torch.manual_seed(seed)
     act = set(model.active_modalities)
-    zeros = torch.zeros_like(params)
+    # the recipe is never an input: zeros at the MODEL's width (a cross-species model has a different
+    # token count / field count than the data species' recipe tensor)
+    n_tok = model.pos_embed_text.shape[1] if hasattr(model, 'pos_embed_text') else params.shape[1]
+    n_par = model.param_embed.proj.in_features if hasattr(model, 'param_embed') else params.shape[2]
+    zeros = torch.zeros(params.shape[0], n_tok, n_par, device=params.device, dtype=params.dtype)
     if src == 'all':
         vis = {'rgb', 'depth', 'pc'} & act
         out = model.forward_encoder_select(rgb, depth, pc, zeros, visible=vis, source_mask_ratio=mask_ratio)

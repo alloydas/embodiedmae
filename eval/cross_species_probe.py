@@ -76,7 +76,7 @@ def plant_key(species, name):
 def extract(model, cfg, a, model_species, split):
     tag = (f'{Path(a.run_dir).name}__{Path(a.ckpt).stem}__on_{a.data_species}'
            f'__{split}__{a.feature}__seed{a.seed}__rep{a.repeats}'
-           + (f'__limit{a.limit}' if a.limit else ''))
+           + (f'__limit{a.limit}' if a.limit else '') + (('__drop-' + '-'.join(sorted(a.drop))) if a.drop else ''))
     cache = Path(a.cache_dir) / f'{tag}.npz'
     cache.parent.mkdir(parents=True, exist_ok=True)
     if cache.exists() and not a.refresh:
@@ -93,7 +93,7 @@ def extract(model, cfg, a, model_species, split):
                         persistent_workers=False, worker_init_fn=LP._worker_init)
     cross = model_species != a.data_species
     enc = SC.depth_encoder(SC.model_depth_convention(model_species, cfg)) if cross else None
-    visible = tuple(m for m in model.active_modalities if m != 'text')
+    visible = tuple(m for m in model.active_modalities if m != 'text' and m not in a.drop)
     assert visible, 'no non-text modality active'
     n_text = 1 + int(cfg.get('max_leaves', {'sorghum': 24, 'maize': 28}[model_species]))
 
@@ -139,6 +139,7 @@ def main():
     ap.add_argument('--rgb-file', default=None, help='data-side RGB file (default per species)')
     ap.add_argument('--rgb-gain', type=float, default=None, help='sorghum data only; None = as on disk')
     ap.add_argument('--feature', choices=('cls', 'mean'), default='cls')
+    ap.add_argument('--drop', nargs='*', default=[], help='modalities to hide at probe time, e.g. depth (leak / ablation checks)')
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--repeats', type=int, default=1)
     ap.add_argument('--batch-size', type=int, default=16)
