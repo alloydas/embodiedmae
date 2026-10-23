@@ -133,6 +133,22 @@ def main():
     for r in nat.to_dict('records'):
         xp.append({'set': 'native_maize_v1', 'run': r['run'], 'model_species': 'maize', 'data_species': 'maize', 'target': r['target'], 'val_r2': r['val_r2'], 'test_r2': r['test_r2']})
     D['xprobe'] = xp
+    # cross-species rows (Z3) and single-photo generation (Z2), with native anchors
+    def rowsum(f):
+        b = json.load(open(f))['by_mode_source']
+        return {k: round(v['chamfer_gt_m2']['mean'] * 1e4, 2) for k, v in b.items() if 'chamfer_gt_m2' in v}
+    xr = []
+    for lab, model, data, pat in (('maize row model on sorghum rows', 'maize', 'sorghum', 'row_sorghum_maize_row_ft_checkpoint_epoch_100_test_*.json'),
+                                  ('sorghum row model on sorghum rows (native)', 'sorghum', 'sorghum', 'row_sorghum_sorghum_row_ft_checkpoint_epoch_100_test_*.json'),
+                                  ('sorghum row model on maize rows', 'sorghum', 'maize', 'row_maize_sorghum_row_ft_checkpoint_epoch_100_test_*.json'),
+                                  ('maize row model on maize rows (native)', 'maize', 'maize', 'row_maize_maize_row_ft_checkpoint_epoch_100_test_*.json')):
+        rf = sorted(R.glob(pat))
+        if rf: xr.append({'label': lab, 'model': model, 'data': data, 'job': rf[-1].stem.rsplit('_', 1)[-1], 'c': rowsum(rf[-1])})
+    D['xrows'] = xr
+    xq = []
+    for f in sorted(R.glob('xquant_*.json')):
+        d = json.load(open(f)); xq.append({'tag': f.stem.rsplit('_', 1)[0].replace('xquant_', ''), 'chamfer': d['summary']['model']['symmetric']['mean'], 'skill': d['skill_vs_mean_plant'], 'epoch': d['epoch']})
+    D['xquant'] = xq
     D['images'] = {}
     if not a.no_images:
         for run in list(RUNS)[:12]:
