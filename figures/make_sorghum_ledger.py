@@ -126,6 +126,8 @@ def main():
             if p: D['images'][f'tsne_{run}'] = img_b64(p[0], 760, 72)
         for i, p in enumerate(sorted(glob.glob(str(O/'4m_pretrain_15k_d2_sink'/'visualizations'/'epoch_980_sample_*_00.png')))[:3]):
             D['images'][f'recon{i}'] = img_b64(p, 700, 72); D['images'][f'recon{i}_name'] = Path(p).stem.split('_', 4)[-1]
+        for f in sorted((REPO/'paper'/'figs').glob('fig_*.png')):
+            D['images']['paper_' + f.stem] = img_b64(f, 1400, 85)
     tpl = open(REPO/'figures'/'sorghum_ledger_template.html').read()
     html = tpl.replace('/*DATA*/', json.dumps(D, separators=(',', ':')))
     Path(a.out).write_text(html); print('wrote', a.out, len(html)//1024, 'KB; images', len(D['images']), '; fscore rows', len(fs), '; boot rows', len(D['boot']))

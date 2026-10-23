@@ -97,6 +97,12 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <div class="tablewrap"><table id="queuetbl"></table></div>
   </section>
 
+  <section id="paperfigs">
+    <div class="sechead"><span class="eyebrow">Paper</span><h2>Figures for the paper</h2></div>
+    <p>White-background figures sized for CVPR columns (8 pt text, vector PDF + 300 dpi PNG in <span class="mono">paper/figs/</span>, rebuilt by <span class="mono">figures/make_paper_figs_v2.py</span> from the same reports as this page). Not yet referenced in the .tex.</p>
+    <div id="paperfiggrid" style="display:grid;grid-template-columns:1fr;gap:14px;margin-top:14px"></div>
+  </section>
+
   <section id="curves">
     <div class="sechead"><span class="eyebrow">Training</span><h2>Validation curves</h2></div>
     <p>Every ablation arm trains 197,400 optimizer steps at global batch 32; E3 arms are drawn against steps because their epoch counts differ by 10× on purpose (1k plants = 32 steps/epoch, 3k = 94, 10k = 313, full = 329). E1 is 1,000 epochs over all ten views at global batch 256. Chamfer is the masked validation step, unit-sphere frame.</p>
@@ -210,7 +216,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script id="data" type="application/json">/*DATA*/</script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-23 12:00 CDT';
+const ASOF = '2026-10-23 13:00 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -482,6 +488,18 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   document.getElementById('rowtbl').innerHTML=h+'</tbody>';
   const ch=document.getElementById('ch_rows'); if(ch){const ser=[];['sorghum_row_ft','sorghum_row_iso'].forEach(r=>{if(RW[r]){ser.push({name:r+' · Chamfer vs target',color:r.endsWith('ft')?'var(--c1)':'var(--c3)',dots:true,points:RW[r].val_chamfer});ser.push({name:r+' · Chamfer vs input',color:r.endsWith('ft')?'var(--c1)':'var(--c3)',dash:true,points:RW[r].val_chamfer_vs_input});}});
     if(ser.length)lineChart(ch,ser,{xlabel:'epoch',ylabel:'val chamfer (normalised)',logy:true,aria:'row training curves'});else ch.innerHTML='<p class="muted small">no run yet</p>';}
+})();
+
+// ---------- paper figures
+(function(){
+  const caps={fig_e2_streams:'Streams. (a) Frozen-probe R² per sensor-stream combination; (b) reconstruction F1 at τ = 0.01 (test).',
+    fig_scaling:'Scaling. Probe R² against training plants at a fixed 197,400 steps (a) and against encoder size (b).',
+    fig_fscore:'Point-cloud quality. (a) F1 against distance threshold; (b) precision against recall: every model under-covers the plant.',
+    fig_partial_clouds:'Partial clouds. Height R² against camera coverage; solid = probe refit per condition, dashed = full-cloud probe transferred.',
+    fig_param_controls:'Recipe-stream controls. Probe R² with the recipe absent, a target only, or 20 / 58 / 60 % visible, at equal sensor tokens.',
+    fig_rows_maize:'Regime III, maize rows (test). (a) Paired row vs isolated training and inputs; (b) error against row yaw.'};
+  const keys=Object.keys(D.images).filter(k=>k.startsWith('paper_fig_'));
+  document.getElementById('paperfiggrid').innerHTML=keys.map(k=>{const n=k.slice(6);return `<figure style="background:#fff"><img src="${D.images[k]}" alt="${esc(caps[n]||n)}" loading="lazy"><figcaption><span class="mono">${esc(n)}.pdf</span> · ${esc(caps[n]||'')}</figcaption></figure>`;}).join('');
 })();
 
 // ---------- reconstructions
