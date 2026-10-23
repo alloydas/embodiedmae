@@ -738,6 +738,22 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   <file>` then publish with `url` set; the queue rows and the as-of date are hard-coded in the template's script
   (`ASOF`, the `queue` block) and must be edited by hand. Smoke-run of the script against a DOM stub (node) draws
   15/15 charts.
+- **2026-10-23 09:40 STATUS.** Overnight: **`sorghum_row_ft` DONE 100/100** (17072337 ran 17:27-02:41 on nova26-gpu-1,
+  2x RTX PRO 6000, 317 s/epoch; val Chamfer vs target 4.83e-3 (ep 1) -> 2.44e-3, vs input 9.5e-3 -> 12.9e-3, masked leaf
+  MAE 0.068 -> 0.052); test eval **17082259** `srow_eval_ft` queued (scavenger). **Zero-shot E1 on the test rows
+  (depth fix) 17071869 done**: STILL far above E1's standard-render numbers (normalised Chamfer isolated/all 19.7e-3,
+  row/all 20.5e-3, isolated/depth 11.7e-3, miss@5mm ~0.98; plant MAE 0.017-0.027). Second cause found: **the row
+  renderer's clouds are a PARTIAL capture**: 30-34 % of target/scene points are hidden behind nearer points along the
+  camera ray vs 67 % for the complete `_nc_cam.ply` E1 trained on (maize single-camera: 7 %). So the sorghum zero-shot
+  row number is also a partial-cloud test (cf. the 1-camera column of the partial-cloud study, ~11e-3); the fine-tune
+  adapts to the cloud convention as well as to the neighbours; row-trained vs isolated-trained on the same clouds stays
+  valid. (The yaw-alignment check against the original `_nc.ply` did not converge: the row renderer re-poses plants.)
+  **Distillation:** the scavenger twin 17070513 WON at 01:45 (cancelled the nova copy 17060048 as designed) and runs
+  the generalist on nova22-gpu-5 (2x A100, 41 min/epoch; epoch 39 at 09:15; ~10-25 03:00 to finish); the student
+  `rgb2pc_full_d2` 17061902 started 10-22 22:12 on nova21-gpu-4 (2x A100, 41 min/epoch, epoch 11; ~10-25 22:00);
+  smr50 / smr50b pending on the cap (est. 10:26). **None finishes before the 10-24 freeze.** `sorghum_row_iso`
+  17073182 pending on the cap. Ledger regenerated (rows section now data-driven from `reports/row_sorghum_*.json`,
+  `reports/row_sorghum_pair_*.csv`, row histories; student curves from their histories).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

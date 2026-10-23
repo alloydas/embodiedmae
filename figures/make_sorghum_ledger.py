@@ -74,6 +74,11 @@ def main():
     # generalist distillation (in progress)
     hd = json.load(open(O/'4m_distill_15k_all_d2'/'training_history.json'))
     D['distill'] = {'train': [[e['epoch'], round(e['loss'], 5)] for e in hd['train']], 'val': [{'epoch': v['epoch'], 'mean_gen': v['mean_gen'], 'per_source': {s: {k: v['per_source'][s][k] for k in ('pc_chamfer','param_mae_masked','total')} for s in v['per_source']}} for v in hd['val']], 'epochs': 100}
+    D['students'] = {}
+    for r in ('rgb2pc_full_d2', 'rgb2pc_smr50_d2', 'rgb2pc_smr50b_d2'):
+        f = O/f'4m_distill_15k_{r}'/'training_history.json'
+        if f.exists():
+            h = json.load(open(f)); D['students'][r] = {'done': len(h['train']), 'train': [[e['epoch'], round(e['loss'], 5)] for e in h['train']], 'val': [[v['epoch'], v['mean_gen']] for v in h['val']], 'val_pc_chamfer_rgb': [[v['epoch'], v['per_source']['rgb']['pc_chamfer']] for v in h['val'] if 'rgb' in v['per_source']]}
     D['probe'] = probe_rows([R/'probe_pr_600_d2_16930422.csv', R/'probe_pr_6168_d2_16928969.csv', R/'probe_pr_2024_d2_16928970.csv', R/'probe_pr_624_d2_16928971.csv'])
     D['probe_mean'] = probe_rows([R/'probe_pr_mean600_d2_16930423.csv'], 'mean')
     D['e8'] = probe_rows([R/'probe_e8_base_sorghum_d2_16930425.csv'], 'mean')
@@ -102,6 +107,18 @@ def main():
     for f in sorted(glob.glob(str(R/'quant_*_d2_*.json'))):
         d = json.load(open(f)); q[f'{d["label"]}|{d["split"]}'] = {'label': d['label'], 'split': d['split'], 'epoch': d['epoch'], 'chamfer': d['summary']['model']['symmetric']['mean'], 'skill': d['skill_vs_mean_plant']}
     D['quant'] = list(q.values())
+    rows = {}
+    for lab, pat in (('zs', 'row_sorghum_4m_pretrain_15k_d2_sink_checkpoint_epoch_1000_test_*.json'), ('ft', 'row_sorghum_sorghum_row_ft_checkpoint_epoch_100_test_*.json'), ('iso', 'row_sorghum_sorghum_row_iso_checkpoint_epoch_100_test_*.json')):
+        f = sorted(glob.glob(str(R/pat)))
+        if f:
+            d = json.load(open(f[-1])); rows[lab] = {'job': Path(f[-1]).stem.split('_')[-1], 'by_mode_source': {k: {m: v[m]['mean'] for m in v if v[m]} for k, v in d['by_mode_source'].items()},
+                                                   'by_theta': {t: v['chamfer_gt_m2']['mean'] for t, v in d['by_theta']['row/all'].items()}}
+    pair = sorted(glob.glob(str(R/'row_sorghum_pair_*.csv')))
+    if pair: rows['pair'] = pd.read_csv(pair[-1]).to_dict('records')
+    for run in ('sorghum_row_ft', 'sorghum_row_iso'):
+        if (O/run/'training_history.json').exists():
+            h = json.load(open(O/run/'training_history.json')); rows[run] = {'epochs': len(h['epoch']), 'val_chamfer': [[e, v] for e, v in zip(h['val_epoch'], h['val_pc_chamfer'])], 'val_chamfer_vs_input': [[e, v] for e, v in zip(h['val_epoch'], h['val_pc_chamfer_vs_input'])], 'val_leaf_mae': [[e, v] for e, v in zip(h['val_epoch'], h['val_leaf_mae_masked'])]}
+    D['rows'] = rows
     D['images'] = {}
     if not a.no_images:
         for run in list(RUNS)[:12]:

@@ -191,6 +191,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <p>Rover renders of a target plant between two bent neighbours at 0.15 m (rover 2.5 m from the row), ten yaws per plant; train 10,500 / val 2,250 / test 2,250 plants. The encoder sees the row; every loss and metric is against the target plant alone.</p>
     <div class="note" id="rownote"></div>
     <div class="tablewrap"><table id="rowtbl"></table></div>
+    <div class="chartgrid"><div class="chart"><h3>Row training: validation Chamfer</h3><div class="sub">2,250 val plants, one yaw each; solid = against the target plant, dashed = against the input cloud (an echo detector: rising is good).</div><div id="ch_rows"></div></div></div>
   </section>
 
   <section id="recon">
@@ -209,7 +210,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script id="data" type="application/json">/*DATA*/</script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-22 16:30 CDT';
+const ASOF = '2026-10-23 09:40 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -238,8 +239,8 @@ const C=D.curves;
     ['E1 F1 @ 0.01 (test)',f.f1.toFixed(3),'P '+f.precision.toFixed(2)+' · R '+f.recall.toFixed(2)],
     ['best ablation arm','PC+RGB+D','probe height '+f3(D.probe.e2_pcrgbd_d2.targets.height.val_r2)+', F1 '+fb.f1.toFixed(3)],
     ['arms probed',String(PROBED.length)+' / 16','E5 probe queued'],
-    ['distillation','1 running, 3 queued','generalist epoch '+D.distill.train.length+' / 100'],
-    ['row (Regime III)','0 / 3','fine-tune, control, zero-shot queued'],
+    ['distillation','2 running, 2 queued','generalist epoch '+D.distill.train.length+' / 100; RGB student epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)],
+    ['row (Regime III)',(D.rows&&D.rows.sorghum_row_ft?'fine-tune done':'0 / 3'),'zero-shot scored; control queued'],
   ];
   document.getElementById('strip').innerHTML=tiles.map(t=>`<div class="tile"><div class="k">${esc(t[0])}</div><div class="v">${esc(t[1])}</div><div class="s">${esc(t[2])}</div></div>`).join('');
 })();
@@ -258,8 +259,8 @@ const C=D.curves;
     ['E8','baselines','done','DINOv2 ViT-B/14, MultiMAE-B, Point-MAE, EmbodiedMAE-B, random init, supervised from scratch (600 ep); paired CIs.'],
     ['Partial clouds','1 vs 3 cameras','running','Four E2 arms done (16930426). E1 row not run.'],
     ['P / R / F1','point-cloud quality','done','16 runs, val + test, 2,250 plants each (17071405).'],
-    ['Distillation','single-sensor students','running','Generalist (all sources) at epoch '+D.distill.train.length+' / 100 on 2× RTX PRO 6000 (17060048, 4.5 h segments; scavenger twin 17070513). Three RGB→cloud students queued on nova (17061902-4). Quant generation after all four (17061909).'],
-    ['Regime III','rows: neighbours, occlusion','queued','Row fine-tune from E1 (17072337), isolated control (17073182) and zero-shot E1 on the test rows (17071869) queued. Depth-encoding mismatch of the row renders found and fixed 2026-10-22 (see the rows section).'],
+    ['Distillation','single-sensor students','running','Generalist (all sources) at epoch '+D.distill.train.length+' / 100, now on the scavenger twin 17070513 (2× A100, 41 min/epoch; it took over from the nova copy at 01:45). RGB→cloud student with the source visible running since 22:12 (17061902, 2× A100, 41 min/epoch); the two 50 %-hidden students queued on nova. Quant generation after all four (17061909). None finishes before the 10-24 freeze at this pace.'],
+    ['Regime III','rows: neighbours, occlusion','running','Row fine-tune from E1 done (17072337, 100 ep in 9 h on 2× RTX PRO 6000; test eval 17082259 running); zero-shot E1 on the test rows scored (17071869); isolated control 17073182 queued on nova. Depth encoding and cloud convention of the row renders differ from E1\'s training renders (see the rows section).'],
     ['E9','latent analysis','done','All probed arms, val and test.'],
     ['E10','real field data','blank','Nothing on real scans.'],
   ];
@@ -268,15 +269,14 @@ const C=D.curves;
 
 // ---------- queue
 (function(){
-  document.getElementById('queuenote').innerHTML='<strong>Distillation: 1 running, 3 queued.</strong> Reshaping every job to 2 GPUs let the generalist back under the account\'s 17-GPU cap on 10-22 13:06; everything else on nova waits on that cap (labmates hold the rest until 10-27 to 10-31); the zero-shot row eval waits on scavenger priority. Slurm start times are worst cases.';
+  document.getElementById('queuenote').innerHTML='<strong>Distillation: 2 running, 2 queued</strong> (10-23 09:40). The generalist\'s scavenger twin took over at 01:45 (the nova copy was cancelled by the race); the first RGB→cloud student started on nova at 22:12 once labmates\' GPUs freed. Both run on 2× A100 at 41 min/epoch, so the generalist finishes ~10-25 03:00 and that student ~10-25 22:00; the other two students have not started. Slurm start times are worst cases.';
   const rows=[
-    ['17060048','distill_d2 (generalist)','nova, 2× RTX PRO 6000','running since 13:06, 23 min/epoch, 4.5 h segments that requeue','all-source generalist, teacher = E1 ep 1000'],
-    ['17070513','distill_d2_scav','scavenger, 2 GPUs','pending (twin; exits if the nova copy holds the lock)','same run'],
-    ['17061902 / 3 / 4','dist_rgb2pc_{full,smr50,smr50b}_d2','nova, 2 GPUs each','pending, account cap (est. 21:41)','RGB→cloud students: source visible; 50 % hidden ×2'],
-    ['17072337','sorghum_row_ft','nova, 2 GPUs','pending, account cap','row fine-tune from E1, batch 16 per GPU'],
+    ['17070513','distill_d2_scav (generalist)','scavenger, 2× A100','running since 01:45, epoch '+D.distill.train.length+' / 100, 41 min/epoch','all-source generalist, teacher = E1 ep 1000; the nova copy 17060048 was cancelled by the race at 01:45'],
+    ['17061902','dist_rgb2pc_full_d2','nova, 2× A100','running since 10-22 22:12, epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:'?')+' / 100, 41 min/epoch','RGB→cloud student, source fully visible'],
+    ['17061903 / 4','dist_rgb2pc_smr50{,b}_d2','nova, 2 GPUs each','pending, account cap (est. 10:26)','RGB→cloud students, 50 % of source tokens hidden'],
+    ['17082259','srow_eval_ft','scavenger, 1 GPU','pending','test eval of the finished sorghum row fine-tune'],
     ['17073182','sorghum_row_iso','nova, 2 GPUs','pending, account cap','isolated control'],
-    ['17071869','srow_eval_zs','scavenger, 1 GPU','pending (est. 10-24)','zero-shot E1 on the test rows, depth fix'],
-    ['17060237 → 17060238','pr_e5_d2 → pairboot_e5','nova','after the generalist','E5 probe, then pair bootstrap vs the all-view arm'],
+    ['17060237 → 17060238','pr_e5_d2 → pairboot_e5','nova','after the generalist twin','E5 probe, then pair bootstrap vs the all-view arm'],
     ['17061909','r2pquant_d2','nova, 1 GPU','after all four distillations','photograph → cloud quant for every student'],
   ];
   document.getElementById('queuetbl').innerHTML='<thead><tr><th>job</th><th>name</th><th>where</th><th>state</th><th>what</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="mono">${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td><td class="wrapc" style="white-space:normal;min-width:200px">${esc(r[3])}</td><td class="wrapc" style="white-space:normal">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
@@ -437,12 +437,14 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
 // ---------- distillation
 (function(){
   const d=D.distill; const srcs=['rgb','depth','pc','text']; const scol={rgb:'var(--c2)',depth:'var(--c3)',pc:'var(--c1)',text:'var(--c5)'};
-  lineChart(document.getElementById('ch_distill'), [{name:'val mean generation loss',color:'var(--c1)',dots:true,points:d.val.map(v=>[v.epoch,v.mean_gen])},{name:'train loss',color:'var(--c8)',width:1.2,points:d.train}], {xlabel:'epoch (of 100)',ylabel:'loss',aria:'generalist distillation'});
+  const ser=[{name:'generalist · val mean generation loss',color:'var(--c1)',dots:true,points:d.val.map(v=>[v.epoch,v.mean_gen])},{name:'generalist · train loss',color:'var(--c8)',width:1.2,points:d.train}];
+  Object.keys(D.students).forEach((r,i)=>{ser.push({name:r+' · val RGB→cloud chamfer ×10',color:['var(--c2)','var(--c3)','var(--c5)'][i],dots:true,points:D.students[r].val_pc_chamfer_rgb.map(p=>[p[0],p[1]*10])});});
+  lineChart(document.getElementById('ch_distill'), ser, {xlabel:'epoch (of 100)',ylabel:'loss',aria:'distillation progress'});
   lineChart(document.getElementById('ch_distill_src'), srcs.map(s=>({name:'source '+s,color:scol[s],dots:true,points:d.val.map(v=>[v.epoch,v.per_source[s]?v.per_source[s].pc_chamfer:null])})), {xlabel:'epoch',ylabel:'val chamfer (cloud from one source)',logy:true,aria:'per-source chamfer'});
   const first=d.val[0], last=d.val[d.val.length-1];
   let h='<thead><tr><th>student</th><th>source</th><th class="n">chamfer ×10⁻³, epoch '+first.epoch+'</th><th class="n">chamfer ×10⁻³, epoch '+last.epoch+'</th><th class="n">recipe MAE, epoch '+first.epoch+'</th><th class="n">recipe MAE, epoch '+last.epoch+'</th><th class="n">epochs</th></tr></thead><tbody>';
   srcs.forEach(s=>{const a=first.per_source[s],b=last.per_source[s];h+=`<tr><td class="lead">generalist</td><td>${s}</td><td class="n">${(a.pc_chamfer*1e3).toFixed(2)}</td><td class="n">${(b.pc_chamfer*1e3).toFixed(2)}</td><td class="n">${a.param_mae_masked.toFixed(4)}</td><td class="n">${b.param_mae_masked.toFixed(4)}</td><td class="n">${d.train.length} / ${d.epochs} <span class="pill running">running</span></td></tr>`;});
-  [['source fully visible','RGB'],['50 % of source tokens hidden, run 1','RGB'],['50 % of source tokens hidden, run 2','RGB']].forEach(x=>{h+=`<tr><td class="lead">${esc(x[0])}</td><td>${x[1]}</td><td class="blankc" colspan="4">queued (nova 17061902-4)</td><td class="n">0 / 100</td></tr>`;});
+  [['rgb2pc_full_d2','source fully visible'],['rgb2pc_smr50_d2','50 % of source tokens hidden, run 1'],['rgb2pc_smr50b_d2','50 % of source tokens hidden, run 2']].forEach(x=>{const st=D.students[x[0]]; if(st&&st.val_pc_chamfer_rgb.length){const a=st.val_pc_chamfer_rgb[0],b=st.val_pc_chamfer_rgb[st.val_pc_chamfer_rgb.length-1]; h+=`<tr><td class="lead">${esc(x[1])}</td><td>RGB</td><td class="n">${(a[1]*1e3).toFixed(2)} <span class="muted">(ep ${a[0]})</span></td><td class="n">${(b[1]*1e3).toFixed(2)} <span class="muted">(ep ${b[0]})</span></td><td class="blankc" colspan="2">cloud-only student</td><td class="n">${st.done} / 100 <span class="pill running">running</span></td></tr>`;} else h+=`<tr><td class="lead">${esc(x[1])}</td><td>RGB</td><td class="blankc" colspan="4">queued (nova)</td><td class="n">0 / 100</td></tr>`;});
   document.getElementById('distilltbl').innerHTML=h+'</tbody>';
   const q=D.quant; const get=(l,s)=>q.find(x=>x.label===l&&x.split===s);
   let hq='<thead><tr><th>model</th><th>source</th><th class="n">val chamfer ×10⁻³</th><th class="n">test chamfer ×10⁻³</th><th class="n">skill vs mean plant (test)</th><th class="n">runs</th></tr></thead><tbody>';
@@ -454,12 +456,25 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
 
 // ---------- rows
 (function(){
-  document.getElementById('rownote').innerHTML='<strong>Depth encoding (found 2026-10-22).</strong> The row renderer stores depth as (z − 0.05) / (4.5 − 0.05), about 0.4–0.7 on the plant; the training renders store about (z − 0.024) / 50, about 0.03–0.07. Depth is fed to the encoder unnormalised, so every sorghum model saw it ~10× out of range: the first zero-shot E1 run scored Chamfer 42 ×10⁻³ even on clean isolated inputs. The loader now decodes the row depth to metres with each shot\'s near / far and re-encodes it in the training convention (row foreground mean 0.036 vs 0.039 on the originals); the fine-tune that had started on the unscaled depth was cancelled at epoch 27 and resubmitted. RGB, clouds and plant scale match the originals. The recipe is read from the data-v2 split file by plant id, because the renderer ships the pre-width YAML.';
+  const RW=D.rows||{};
+  document.getElementById('rownote').innerHTML='<strong>Two things differ from E1\'s training renders, found 2026-10-22/23.</strong> (1) Depth encoding: the row renderer stores (z − 0.05) / (4.5 − 0.05), about 0.4–0.7 on the plant; the training renders store about (z − 0.024) / 50. The loader now decodes the row depth to metres with each shot\'s near / far and re-encodes it in the training convention; the first fine-tune, started before the fix, was cancelled at epoch 27 and rerun. (2) Cloud convention: E1 trained on the COMPLETE plant cloud (67 % of points hidden behind nearer points along the camera ray), while the row renderer\'s target and scene clouds are a partial capture (30–34 % hidden; a single-camera maize capture is 7 %). The zero-shot E1 row is therefore also a partial-cloud test (compare the one-camera column of the partial-cloud section), and the row fine-tune adapts to the cloud convention as well as to the neighbours. Row-trained vs isolated-trained, both on row clouds, is unaffected. The recipe is read from the data-v2 split file by plant id, because the renderer ships the pre-width YAML.';
   const blank='<td class="blankc"></td>';
-  const rows=[['zero-shot E1 (epoch 1,000) on the test rows · 17071869 queued',['row input, all streams','isolated input, all streams']],['row fine-tune from E1 (sorghum_row_ft, 100 ep, 2 GPUs) · 17072337 queued',['row input, all streams','row input, depth only']],['isolated control (sorghum_row_iso) · 17073182 queued',['isolated input, all streams','row input (zero-shot to rows)']],['paired deltas over plants',['cost of the row regime (row-trained on rows − isolated-trained on isolated)','gain from row fine-tuning (row-trained − isolated-trained, both on rows)']]];
+  const cell=(d,k,key,f)=>{const v=d&&d.by_mode_source[k]&&d.by_mode_source[k][key];return v==null?blank:`<td class="n">${f(v)}</td>`;};
+  const line=(label,d,k)=>`<tr><td>${esc(label)}</td>${cell(d,k,'chamfer_gt_m2',v=>(v*1e4).toFixed(2))}${cell(d,k,'chamfer_gt',v=>(v*1e3).toFixed(2))}${cell(d,k,'miss_5mm',v=>v.toFixed(3))}${cell(d,k,'plant_mae',v=>v.toFixed(4))}${cell(d,k,'leaf_mae',v=>v.toFixed(4))}</tr>`;
+  const grp=(label)=>`<tr><td class="lead" colspan="6" style="background:var(--accent-soft)">${esc(label)}</td></tr>`;
   let h='<thead><tr><th>model / input</th><th class="n">Chamfer vs target, 10⁻⁴ m²</th><th class="n">normalised ×10⁻³</th><th class="n">miss @ 5 mm</th><th class="n">plant MAE</th><th class="n">leaf MAE</th></tr></thead><tbody>';
-  rows.forEach(g=>{h+=`<tr><td class="lead" colspan="6" style="background:var(--accent-soft)">${esc(g[0])}</td></tr>`;g[1].forEach(r=>{h+=`<tr><td>${esc(r)}</td>${blank.repeat(5)}</tr>`;});});
+  h+=grp('zero-shot E1 (epoch 1,000) on the test rows'+(RW.zs?' · job '+RW.zs.job:' · queued'));
+  h+=line('row input, all streams',RW.zs,'row/all')+line('row input, depth only',RW.zs,'row/depth')+line('isolated input, all streams',RW.zs,'isolated/all')+line('isolated input, depth only',RW.zs,'isolated/depth');
+  h+=grp('row fine-tune from E1 (sorghum_row_ft, 100 ep, 2 GPUs)'+(RW.ft?' · job '+RW.ft.job:(RW.sorghum_row_ft?' · training done, test eval running':' · queued')));
+  h+=line('row input, all streams',RW.ft,'row/all')+line('row input, depth only',RW.ft,'row/depth')+line('isolated input, all streams',RW.ft,'isolated/all');
+  h+=grp('isolated control (sorghum_row_iso)'+(RW.iso?' · job '+RW.iso.job:' · queued'));
+  h+=line('isolated input, all streams',RW.iso,'isolated/all')+line('row input (zero-shot to rows), all streams',RW.iso,'row/all');
+  h+=grp('paired deltas over plants (bootstrap)');
+  const pr=k=>{if(!RW.pair)return blank.repeat(5);const g=m=>{const x=RW.pair.find(r=>r.comparison===k&&r.source==='all'&&r.metric===m);return x?`<td class="n">${(x.delta*(m.includes('m2')?1e4:1)).toFixed(3)} <span class="muted">[${(x.lo*(m.includes('m2')?1e4:1)).toFixed(3)}, ${(x.hi*(m.includes('m2')?1e4:1)).toFixed(3)}]</span></td>`:blank;};return g('chamfer_gt_m2')+blank+g('miss_5mm')+g('plant_mae')+g('leaf_mae');};
+  h+=`<tr><td>cost of the row regime (row-trained on rows − isolated-trained on isolated)</td>${pr('ft_row_vs_iso_isolated')}</tr><tr><td>gain from row fine-tuning (row-trained − isolated-trained, both on rows)</td>${pr('ft_row_vs_iso_row')}</tr>`;
   document.getElementById('rowtbl').innerHTML=h+'</tbody>';
+  const ch=document.getElementById('ch_rows'); if(ch){const ser=[];['sorghum_row_ft','sorghum_row_iso'].forEach(r=>{if(RW[r]){ser.push({name:r+' · Chamfer vs target',color:r.endsWith('ft')?'var(--c1)':'var(--c3)',dots:true,points:RW[r].val_chamfer});ser.push({name:r+' · Chamfer vs input',color:r.endsWith('ft')?'var(--c1)':'var(--c3)',dash:true,points:RW[r].val_chamfer_vs_input});}});
+    if(ser.length)lineChart(ch,ser,{xlabel:'epoch',ylabel:'val chamfer (normalised)',logy:true,aria:'row training curves'});else ch.innerHTML='<p class="muted small">no run yet</p>';}
 })();
 
 // ---------- reconstructions
