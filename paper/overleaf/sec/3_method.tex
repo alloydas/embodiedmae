@@ -63,10 +63,10 @@ We formulate this task as feed-forward prediction:
 where $\phi$ denotes the network parameters, $\hat\theta$ is the predicted
 plant description, and $\hat x^m$ denotes the reconstructed sensor modalities.
 The procedural output $G(\hat\theta)$ supports geometric reconstruction and
-trait analysis within the same representation. Unlike per-instance fitting
-of a procedural model to a scan~\cite{hadadi2026vlmmaize}, this formulation
-learns a shared inverse mapping that is applied to each new observation in a
-single forward pass.
+trait analysis within the same representation. Per-instance fitting of a
+procedural model to a scan~\cite{hadadi2026vlmmaize} solves an optimization
+for every plant; we instead learn a shared inverse mapping that is applied to
+each new observation in a single forward pass.
 
 The procedural generator provides both the training observations and their
 exact parameter targets. This allows us to supervise parameter recovery
@@ -105,7 +105,7 @@ keeping the sensor-token budget fixed (Sec.~\ref{sec:param-stream}).
   \end{tabular}
   \caption{\FieldProc{} dataset configuration. The parameter dimension
   includes plant-level attributes and a fixed number of leaf slots. Every
-  row has one main plant from the split and two neighbours at a 0.15\,m
+  row has one main plant from the split and two neighbors at a 0.15\,m
   stem spacing, widened only when the contact solver needs it
   (Supp.~\ref{app:data}). \todo{Confirm the maize leaf-count range and the
   real-data splits~\cite{maizefield3d2025}.}}
@@ -116,13 +116,13 @@ keeping the sensor-token budget fixed (Sec.~\ref{sec:param-stream}).
 We construct \FieldProc{} using species-specific generators for maize and
 sorghum, 15{,}000 plants each. Plant $i$ is generated with random seed $i$ and
 is paired with its exact procedural parameters. Maize traits are drawn from
-Gaussians (e.g.\ height $0.83\pm0.10$\,m, leaf count $12.4\pm2.6$, leaf angle
-$44^\circ\pm10^\circ$) coupled through four latent traits (vigour, slenderness,
+Gaussians (for example, height $0.83\pm0.10$\,m, leaf count $12.4\pm2.6$, leaf angle
+$44^\circ\pm10^\circ$) coupled through four latent traits (vigor, slenderness,
 posture, texture), with canopy-position curves and per-leaf jitter; the plants
 are 0.62--1.44\,m tall. Sorghum plants come from the EvoEngine sorghum
 generator, which draws the heading, stem tilt, leaf count and internode length
 per plant and evaluates per-leaf curves for insertion point, length, width,
-roll (alternating sides), branching angle and bending; they carry 4--35 leaves
+roll (alternating sides), branching angle and bending; the sorghum plants have 4--35 leaves
 (mean 19.5) on stems of 0.19--1.74\,m. The populations therefore span
 continuous variations in morphology rather than discrete genotype classes,
 and we evaluate phenotype representations through regression. The generators
@@ -137,10 +137,9 @@ generator's correlations.
 For each plant, we render ten views with \texttt{pyrender} at $1024\times1024$
 and a $40^\circ$ vertical field of view, each with an RGB image, a depth image
 stored losslessly as a packed 32-bit value, and the camera pose. Three fixed
-directional lights are aimed at the plant's bounding-box centre. Images are
-rendered on a grey background; in the final release it is made transparent
-and composited over black. The
-two species are captured differently. Sorghum views follow one fixed
+directional lights are aimed at the plant's bounding-box center. Images are
+rendered on a gray background; in the final release the background is made
+transparent and composited over black. Sorghum views follow one fixed
 Fibonacci-sphere rig at 2.5\,m, five directions above and five below the
 horizon (elevations $-64^\circ$ to $+64^\circ$), so every plant is seen from
 the same ten directions, and the per-view cloud is the complete,
@@ -148,29 +147,29 @@ occlusion-free plant cloud expressed in the camera frame. Maize views are ten
 directions drawn uniformly on the sphere per plant, at a distance fitted to
 the plant's bounding box, with an extra light at the camera; the per-view
 cloud is 8{,}192 points back-projected from that view's depth image, so it
-holds only the surface the camera sees. At 2.5\,m the lens covers about
+holds only the surface visible to the camera. At 2.5\,m the lens covers about
 1.8\,m of height, so the top or base of the tallest sorghum plants can fall
 outside the frame.
 
 \paragraph{Row observations.}
-The row sets place each plant of a split, as the \emph{main} plant, between two
-neighbours from the same split (one row per plant), with 0.15\,m between stem
-bases. Each row is rendered at ten orientations: the main plant is turned
-about its stem by $0^\circ,10^\circ,\dots,90^\circ$ and each neighbour by the
-same angle plus a uniform offset in $\pm15^\circ$; sorghum neighbours are also
+In the row sets, each plant of a split is placed, as the \emph{main} plant,
+between two neighbors from the same split (one row per plant), with 0.15\,m
+between stem bases. Each row is rendered at ten orientations: the main plant is turned
+about its stem by $0^\circ,10^\circ,\dots,90^\circ$ and each neighbor by the
+same angle plus a uniform offset in $\pm15^\circ$; sorghum neighbors are also
 tilted so their stems run parallel to the main stem. Before rendering, a
 contact solver makes the three plants free of intersections while keeping
 them close to their grown shapes: each leaf blade is a chain of 8\,cm
 segments whose joints bend along circular arcs, so blades stay smooth, keep
 their length and stay attached, while stems, sheaths and tassels stay rigid.
 A leaf that would cross another plant bends by the smallest clearing angle at
-the joint before the contact; neighbours give way first, and a main-plant leaf
-bends only where a neighbour cannot move. Contacts are decided by exact
+the joint before the contact; neighbors bend first, and a main-plant leaf
+bends only where a neighbor cannot move. Contacts are decided by exact
 triangle--triangle tests, so leaves may touch but never intersect. When no
 layout exists under the bend limits, the limits are loosened in stages and
 then the spacing is widened; in maize, 76--79\,\% of orientations are solved at
-0.15\,m and none needs more than 0.33\,m. A rover camera, level and aimed at
-the main plant's bounding-box centre from 1.0\,m (maize) or 2.5\,m (sorghum),
+0.15\,m and none requires more than 0.33\,m. A rover camera, level and aimed at
+the main plant's bounding-box center from 1.0\,m (maize) or 2.5\,m (sorghum),
 takes one shot per orientation, rendered twice: the input with all three
 plants (RGBA, depth, and a 24{,}576-point cloud of every visible plant) and the
 ground truth with the main plant alone, in its bent shape, from the same
@@ -178,10 +177,10 @@ camera (8{,}192 points). The parameter record describes the grown plant, so
 the target geometry departs from it only where the solver had to bend a
 main-plant leaf.
 Occlusion is measured per shot from the two depth maps (maize, 120 train
-rows): the fraction of the main plant's own pixels hidden behind a neighbour is
+rows): the fraction of the main plant's own pixels hidden behind a neighbor is
 9\,\% on average, 13\,\% at $0^\circ$, where the generator's single leaf plane
 lies along the row, falling to 1\,\% at $90^\circ$ (90th percentile 17\,\%),
-and the neighbours supply 59--68\,\% of the plant pixels in the frame and two
+and the neighbors account for 59--68\,\% of the plant pixels in the frame and two
 thirds of the input cloud. \todo{Same measures for the sorghum rows.}
 
 \paragraph{Data partitioning.}
@@ -190,11 +189,11 @@ ratio by plant, so all views and rows of a main plant fall in one split, and
 we bias the held-out sets toward unusual morphologies. For maize, each plant is
 scored by its Mahalanobis distance~\cite{mahalanobis2018generalized} from the
 median over 19 robustly standardized parameter features, and the most extreme
-plants are dealt alternately to test and validation, a pure tail split. For
+plants are assigned alternately to test and validation, a pure tail split. For
 sorghum, the extremeness is the Mahalanobis distance from the mean over six
 features (leaf count, stem length, mean and maximum leaf length, mean and
 standard deviation of leaf roll), and the probability of being held out rises
-steadily with its rank, from 0.3\,\% in the least extreme 5\,\% of plants to
+steadily with a plant's extremeness rank, from 0.3\,\% in the least extreme 5\,\% of plants to
 70\,\% in the most extreme 5\,\%; validation and test share one distribution.
 \todo{The sorghum selection rule is inferred from the released assignment;
 confirm it against the script that wrote it.}
@@ -342,10 +341,10 @@ visible budget
   \label{eq:visible-budget}
 \end{equation}
 which is 122 tokens for sorghum ($L=613$) and 123 for maize ($L=617$). At
-each training step, a sample from $\mathrm{Dirichlet}(\mathbf{1})$ allocates
-this budget across the four streams, the parameter stream included. Integer
-allocations preserve the exact budget, retain at least one token per stream,
-and mask at least 25\% of each stream. Token counts are shared across a batch,
+each training step, this budget is allocated across the four streams, the
+parameter stream included, by a sample from $\mathrm{Dirichlet}(\mathbf{1})$.
+The allocation is rounded to integers that sum to the budget, with at least
+one visible token and at least 25\% masked tokens per stream. Token counts are shared across a batch,
 while visible positions are sampled independently for each example. The
 procedural parameters are therefore both an encoder input and a decoder
 target in the headline model: because the parameter stream is short, it is on
@@ -365,7 +364,8 @@ ratio $\rho_\theta$:
  \label{eq:parameter-visibility}
 \end{equation}
 with the Dirichlet budget then allocated over the three sensor streams alone
-($V=117$). This keeps the sensor masks identical across matched three- and
+($V=117$). Allocating the budget over the sensor streams alone keeps the sensor
+masks identical across matched three- and
 four-stream arms under the same seed. $\rho_\theta=1$ makes the parameters a
 reconstruction target only, never an encoder input. Parameters are never an
 input at deployment, where only sensor streams are available.
@@ -386,9 +386,9 @@ The RGB loss is MSE on patch-normalized targets~\cite{he2022mae}, while the
 depth loss is MSE after per-image min--max normalization. Both are evaluated
 at masked positions during pretraining. The parameter loss is Smooth-L1 over
 masked, valid parameter tokens. For point clouds, the loss compares the full
-predicted set $\hat P$ with the target set $P$. Motivated by the limitations of
-nearest-neighbor geometry objectives~\cite{wu2021dcd,song2026structural}, we
-use a sigmoid-weighted Chamfer objective:
+predicted set $\hat P$ with the target set $P$. We use a sigmoid-weighted
+Chamfer objective, motivated by the limitations of nearest-neighbor geometry
+objectives~\cite{wu2021dcd,song2026structural}:
 \begin{equation}
  \begin{split}
   \ell_{\mathrm{pc}}={}&
@@ -403,12 +403,13 @@ weight of small residuals relative to larger reconstruction errors.
 % The original formula used N in both directions. Set-specific cardinalities
 % above clarify the mean reduction when prediction and target sizes differ.
 Both directions are averaged over their own set and then over the batch.
-Clouds are centred on their centroid and scaled so the farthest point lies on
+Clouds are centered on their centroid and scaled so the farthest point lies on
 the unit sphere, so $\tau$ is relative to the plant: one percent of its radius,
 about 7\,mm on a 1.4\,m plant.
-Nearest-neighbour losses let many predicted points share one target point at
-no cost, so the folding head can collapse a token's points into a clump and
-still score well. The headline model therefore adds an optimal-transport term
+Nearest-neighbor losses let many predicted points share one target point
+without penalty, so the folding head can collapse a token's points into a clump
+and still score well. For the headline model, we therefore add an
+optimal-transport term
 that matches the two clouds as distributions, the debiased Sinkhorn
 divergence~\cite{feydy2019sinkhorn},
 \begin{equation}
@@ -418,10 +419,10 @@ divergence~\cite{feydy2019sinkhorn},
 \end{equation}
 with $p{=}2$ and blur $\varepsilon{=}0.02$ in the unit-sphere frame, computed
 between random 1{,}024-point subsets of prediction and target that are redrawn
-at every step. The term rewards coverage of the whole cloud directly, and the
+at every step. The term rewards coverage of the whole cloud, and the
 subsets keep its cost matrix at $B\times1024^2$. The ablation arms of
 Sec.~\ref{sec:experiments} were trained with Eq.~\eqref{eq:point-loss} alone;
-the Sinkhorn term enters the headline model and the distillation.
+the Sinkhorn term is used only for the headline model and the distillation.
 \todo{Report the ablation of this term (E7).}
 We train with AdamW, $\beta=(0.9,0.95)$, weight decay 0.05, linear warm-up,
 cosine learning-rate decay, and gradient clipping at 1.0. The main schedule
@@ -438,13 +439,13 @@ rate of $1.5\times10^{-4}$ and a warm-up of 40 epochs at the full-data scale
 \subsection{A full-modality teacher, single-sensor students}
 \label{sec:distill}\label{sec:method-distill}
 
-Pretraining retains visible tokens from every sensor stream. Consequently,
+During pretraining, every sensor stream keeps some visible tokens.
+Consequently,
 single-sensor inference introduces a missing-modality configuration that the
 encoder has not encountered during this stage. We address this gap through
 teacher--student distillation~\cite{hinton2015distillation}. The teacher is
-the pretrained four-stream model, frozen: for sorghum the checkpoint with the
-lowest validation loss (epoch 960 of 1{,}000), for maize the final epoch-600
-checkpoint. It receives RGB, depth, point clouds, and the procedural
+the pretrained four-stream model, frozen: for sorghum the final checkpoint
+(epoch 1{,}000), and for maize the final epoch-600 checkpoint. It receives RGB, depth, point clouds, and the procedural
 parameters, the same four streams it was pretrained on, so the parameters act
 as privileged information that the students will not have. For sorghum every
 token of every stream is visible to the teacher; for maize we retain half the
@@ -453,7 +454,7 @@ fully visible input. We assess the
 teacher's reconstruction quality under the selected mask before distillation.
 The teacher provides a CLS representation $c^T\in\R^{768}$ and final normalized
 decoder features $F^T\in\R^{L\times512}$, where $L=613$ for sorghum and 617
-for maize. The fixed decoder layout gives a direct correspondence between
+for maize. The fixed decoder layout gives a one-to-one correspondence between
 teacher and student features at every output position.
 % Original teacher diagnostics for experiments/supplement:
 % Sorghum Chamfer: 4.8e-4 fully visible vs. 3.5e-4 at 50% visibility.
@@ -466,7 +467,9 @@ probability 0.8 or ordinary masked pretraining with probability 0.2. In a
 single-source step, the source $s$ is cycled deterministically over all four
 streams (RGB, depth, point cloud, and parameters), and only its tokens enter
 the encoder; optionally, half these tokens are also
-masked for regularization. The objective combines ground-truth reconstruction
+masked for regularization. For the two-stream students, $s$ is a pair of
+streams whose tokens enter the encoder together, and only the point cloud
+is reconstructed. The objective combines ground-truth reconstruction
 with decoder- and encoder-level feature matching:
 \begin{equation}
  \begin{split}
@@ -479,8 +482,9 @@ with decoder- and encoder-level feature matching:
 \end{equation}
 where $\mathcal{J}_{\neg s}$ contains the decoder positions belonging to
 non-source streams, including the procedural parameters. We use
-$\lambda_F=1$ and $\lambda_c=0.5$. Thus, the teacher's privileged information
-supervises the outputs that the student must infer from the available sensor.
+$\lambda_F=1$ and $\lambda_c=0.5$. Through these terms, the outputs that the
+student must infer from the available sensor are supervised by the teacher's
+privileged information.
 The student does see parameter tokens during training: on the
 parameter-source steps, which train it to regenerate the plant from its
 program alone, and on the interleaved ordinary masked steps, which use the
@@ -531,22 +535,23 @@ validation and test sets. To assess partial observations, we ray-cast the
 plant mesh from the rendering viewpoints and construct one-camera and
 three-camera clouds in addition to complete clouds. We evaluate probes both
 by refitting under each visibility condition and by transferring a probe
-trained on complete clouds. These protocols distinguish recoverable trait
+trained on complete clouds. Comparing the two protocols separates recoverable trait
 information from sensitivity to a change in input coverage. Partial-cloud
 reconstruction uses masked input to remain closer to the pretraining regime.
 
 \paragraph{Row protocol.}
-Models meet the rows in two ways. \emph{Zero-shot}: the isolated-plant model
+Models are evaluated on the rows in two ways. \emph{Zero-shot}: the isolated-plant model
 is fed the row observation as it is. \emph{Row fine-tuning}: the pretraining
 objective is kept but its target changes. The encoder sees the masked row
-streams (RGB, depth, the scene cloud with both neighbours in it, the recipe in
+streams (RGB, depth, the scene cloud with both neighbors in it, the recipe in
 its usual budget) and the decoders are supervised with the main plant alone,
 its RGB, depth and cloud placed in the scene cloud's frame, and its recipe, so
-the model learns to reconstruct the plant behind its neighbours rather than to
-copy the scene; one orientation per plant per epoch, 100 epochs at
-$10^{-4}$ and global batch 32 from the isolated checkpoint. The control arm
-runs the same schedule on the isolated twins. Evaluation (Sec.~\ref{sec:regime3})
-scores every held-out item under both inputs with the recipe never an input:
+the model learns to reconstruct the plant behind its neighbors rather than to
+copy the scene. Training uses one orientation per plant per epoch and runs 100
+epochs at a learning rate of $10^{-4}$ and global batch 32, starting from the
+isolated checkpoint. The control arm
+runs the same schedule on the isolated twins. In the evaluation (Sec.~\ref{sec:regime3}),
+every held-out item is scored under both inputs, with the recipe never an input:
 Chamfer of the generated cloud against the main plant \emph{and} against the
 input cloud (a model that merely echoes the scene scores well on the second and
 badly on the first), recipe error on the real parameter columns, both by
@@ -558,16 +563,16 @@ difference per plant with a bootstrap interval.
 % evaluation mask ratio and distinguish this pretrained-model protocol from
 % unmasked-source evaluation of distilled students above.
 
-For real-field evaluation, procedural reference models are obtained
+For real-field evaluation, procedural reference models will be obtained
 independently from scan-based reconstruction, using the maize pipeline and
-dataset described in~\cite{hadadi2026vlmmaize,maizefield3d2025}. We compare
-predicted parameters and re-rendered geometry with these reconstructed
-references. Unlike synthetic parameter labels, these references are fitted
-estimates and may inherit uncertainty from incomplete scans. The evaluation
-includes the effect of neighboring-plant occlusion and compares real-data
-transfer with the controlled partial-cloud experiments. The latter isolate a
-visibility shift; they do not by themselves quantify all sources of the
-simulation-to-real gap. \todo{Finalize real-data splits and species coverage,
+dataset described in~\cite{hadadi2026vlmmaize,maizefield3d2025}. We will
+compare predicted parameters and re-rendered geometry with these
+reconstructed references. Unlike synthetic parameter labels, these references
+are fitted estimates and may contain errors from incomplete scans. The
+evaluation will include the effect of neighboring-plant occlusion and will
+compare real-data transfer with the controlled partial-cloud experiments.
+The partial-cloud experiments isolate a visibility shift; they do not by
+themselves quantify all sources of the simulation-to-real gap. \todo{Finalize real-data splits and species coverage,
 including sorghum reference provenance, plant segmentation/matting,
 camera-frame alignment, row-plot inclusion, and treatment of unobserved leaves.}
 

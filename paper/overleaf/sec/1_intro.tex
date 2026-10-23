@@ -16,8 +16,8 @@
   of field-practical modalities (a single photograph, a depth frame, or
   a point cloud truncated by row neighbors), \method{} recovers the full
   procedural representation of the plant: a kilobyte-scale, physiologically
-  interpretable parameter set that re-renders to complete geometry, feeds
-  simulation, and supports trait analytics at field scale.
+  interpretable parameter set that can be re-rendered to complete geometry,
+  used as simulation input, and used for trait analytics at field scale.
   \todo{replace box with figure}}
   \label{fig:teaser}
 \end{figure}
@@ -25,18 +25,18 @@
 % P1 — Goal. (GPS: goal)
 Accurate three-dimensional models of individual crop plants enable
 high-throughput phenotyping of morphological traits such as leaf angle,
-internode length, and canopy architecture, and they underpin emerging
-agricultural digital twins that run breeding trials \emph{in
+internode length, and canopy architecture, and they are the basis of emerging
+agricultural digital twins in which breeding trials run \emph{in
 silico}~\citep{hadadi2025procedural, maizefield3d2025}. The representation
 best suited to these uses is procedural: a compact set of biologically
 interpretable parameters that a generator expands into complete,
 editable, simulation-ready geometry~\citep{prusin1990abop,
 floraforge2026}. A procedural plant occupies a few kilobytes where a
-laser scan occupies megabytes, every parameter corresponds to a trait an
-agronomist works with, and the model can be edited, re-rendered, and
+laser scan occupies megabytes, every parameter corresponds to a trait used by
+agronomists, and the model can be edited, re-rendered, and
 perturbed in ways that unstructured geometry does not support.
 % (fix 2: vision hook — delete the next sentence if unwanted)
-Field crops also instantiate a problem of general interest in 3D
+Field crops also instantiate a challenge of general interest in 3D
 computer vision: recovering a parametric model of a thin, heavily
 occluded object from partial multimodal observations.
 
@@ -51,14 +51,14 @@ vision-language model and fits a procedural descriptor to
 isolated plant and roughly ten minutes of computation per
 plant~\citep{hadadi2026vlmmaize}. Per-scene optimization methods search
 generator parameters against multi-view imagery~\citep{cropcraft2026},
-and recent learned models infer parametric plants directly, but only
+and recent learned models infer parametric plants, but only
 from a clean, complete point cloud~\citep{demeter2025,
-ghrer2025paramplants}. A phenotyping campaign supplies the opposite:
+ghrer2025paramplants}. A phenotyping campaign produces the opposite:
 thousands of plants per day, each observed by whichever sensor was
-practical: a camera, a depth frame, or a partial scan.
+practical (a camera, a depth frame, or a partial scan).
 
 % P3 — Problem, part 2: the geometric frontier. (GPS: problem, sharpened)
-A second, geometric barrier compounds the practical one. Crop plants
+In addition, crop plants
 are slender: a maize blade is centimeters wide, millimeters thick, and
 up to a meter long. In a planted row, each plant is further occluded by
 its neighbors, whose leaves interleave with the target; in our field
@@ -94,45 +94,41 @@ plants, rendered in simulated rows in which neighboring leaves bend on
 contact. Because random modality subsets are masked during pretraining,
 a single model learns to complete any subset at inference. A
 full-modality teacher is then distilled~\citep{hinton2015distillation}
-into the single-sensor students that deployment requires. Distillation
-improves cross-modal generation by \oldnum{19.1\%} on average, by
-\oldnum{27.5\%} when conditioning on a point cloud alone, and parameter
-recovery from that point cloud by \oldnum{43.8\%}.
+into single-sensor students for deployment. Distillation
+improves cross-modal generation by \oldnum{19.1\%} on average and by
+\oldnum{27.5\%} when conditioning on a point cloud alone, and it improves
+parameter recovery from that point cloud by \oldnum{43.8\%}.
 
 % P5 — Finding 1: parameters belong at the output.
-The framework also answers a design question that any model with access
-to generative structure must face: where should the parameter stream
-enter? Our controlled ablations give a precise answer: the parameters
-are valuable prediction targets, and a liability as a
-representation-learning modality.
-With token budgets matched, adding the parameter stream to the encoder
-degrades the frozen representation on every sorghum phenotype target and
-on most maize targets; the result survives budget-restoring control arms,
-replicates across both species, and holds even when the parameters serve
-only as a reconstruction target for the decoder. Supervising parameters
-as a generation target is nevertheless what makes the distilled
-generalist outperform a parameter-only specialist at parameter
-regression itself. One interpretation, consistent with modality
-competition~\citep{peng2022ogm} and negative
-transfer~\citep{yu2020pcgrad}, is that a stream that already contains
-the answer suppresses learning in the streams that must supply it at
-test time.
+We also address a design question that arises for any model with access
+to generative structure: where should the parameter stream enter? In our
+controlled ablations, the parameters are valuable prediction targets but
+harm the representation when used as an encoder input. With token budgets
+matched, adding the parameter stream to the encoder degrades the frozen
+representation on every sorghum phenotype target, and on maize the paired
+comparison is a draw. In sorghum, the loss persists in control arms that
+restore the sensor-token budget, and it persists even when the parameters
+serve only as a reconstruction target for the decoder. Supervising
+parameters as a generation target, however, lets the distilled generalist
+outperform a parameter-only specialist at parameter regression. One
+interpretation, consistent with modality competition~\citep{peng2022ogm}
+and negative transfer~\citep{yu2020pcgrad}, is that a stream that already
+contains the answer suppresses learning in the streams that must provide the
+trait information at test time.
 
 % P6 — Finding 2: metrics.
-Evaluating these models exposed a metric disagreement with consequences
-beyond plants. Chamfer distance ranks depth as the most valuable input
+Chamfer distance ranks depth as the most valuable input
 modality (\oldnum{$-32\%$}), whereas a linear probe on the frozen
-representation, read out on the phenotypic traits the application
-needs, ranks depth within noise and identifies RGB as the carrier of
-trait information. On slender geometry the two metrics measure
+representation, read out on phenotypic traits, ranks depth within noise
+and identifies RGB as the main source of trait information. On slender geometry the two metrics measure
 different quantities, surface proximity and recovered structure, and we
 adopt the probe as the deciding metric for modality
 decisions~\citep{chen2020simclr,wu2021dcd}.
 
 % P7 — Claim + validation + contributions.
-The claim of this work is that fragmentary field sensing suffices to
+We claim that fragmentary field sensing suffices to
 recover a complete, interpretable procedural plant, provided the
-generator supplies both the training data and the output
+generator is used for both the training data and the output
 representation. We
 validate this claim on real field
 scans of maize and sorghum with independently reconstructed ground
@@ -156,7 +152,7 @@ The key contributions of this work are:
   \item \textbf{An evaluation protocol for slender geometry.} A
   demonstration that Chamfer distance and downstream phenotype probes
   disagree systematically on slender organs, and a frozen-latent probe
-  protocol that resolves modality decisions where Chamfer is blind.
+  protocol that resolves modality decisions where Chamfer is insensitive.
   \item \textbf{A benchmark.} \dataset{}, a two-species procedural
   field benchmark of \todo{N} plants spanning \todo{diversity axes:
   phenotypes / generator configurations / occlusion severities}, with

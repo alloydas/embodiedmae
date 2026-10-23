@@ -22,16 +22,14 @@ and parameter recovery from a point cloud alone by \oldnum{44\%}.
 Controlled ablations, replicated across both species, show that the
 procedural parameters are valuable prediction targets but do not help
 as a pretraining modality: exposing them to the encoder degrades
-phenotype recovery on every target we measure. We further show that Chamfer distance and linear probes on
+phenotype recovery on every sorghum target and does not improve it in maize. We further show that Chamfer distance and linear probes on
 the frozen representation rank input modalities differently on slender
 geometry, and we adopt the probe as the deciding metric. On real field
 scans with independently reconstructed ground truth, \method{}
 \todo{matches/approaches} the accuracy of a staged annotation pipeline
-and reduces the cost of procedural reconstruction from hours of manual
+and reduces the time required for procedural reconstruction from hours of manual
 specification, or minutes of pipeline computation, to milliseconds per
-plant. We release \dataset{}, the \todo{N}-plant, two-species benchmark
+plant. We will release \dataset{}, the \todo{N}-plant, two-species benchmark
 behind these experiments, which pairs multimodal field captures under
-simulated row occlusion with exact procedural ground truth. These
-results establish a practical route from fragmentary field sensing to
-simulation-ready 3D crop field assets at the acre scale.
+simulated row occlusion with exact procedural ground truth.
 \end{abstract}

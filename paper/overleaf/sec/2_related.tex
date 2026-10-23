@@ -8,7 +8,7 @@ Inverse procedural modeling has a long history for woody plants:
 parameters of tree generators have been recovered by stochastic
 search~\citep{stava2014ipmtrees}, by Markov chain Monte Carlo
 inference~\citep{talton2011metropolis}, and by inferring L-systems
-directly from point clouds~\citep{guo2020ipmlsys,latentlsys2023}. These
+from point clouds~\citep{guo2020ipmlsys,latentlsys2023}. These
 methods optimize or infer per instance. Recent systems address crops
 specifically. Demeter learns a parametric morphology model from soybean
 point clouds~\citep{demeter2025}, Ghrer et al.\ infer grammar-style
@@ -39,7 +39,7 @@ should be visible to the encoder at all.
 Learned point cloud completion has progressed from folding-based
 decoders~\citep{yuan2018pcn} to geometry-aware
 transformers~\citep{yu2021pointr,yu2023adapointr,cai2024einet}, trained
-on benchmarks of compact, largely convex objects that contain no
+on benchmarks that contain compact, largely convex objects and no
 slender-under-occlusion category. Completion of thin plant organs under
 occlusion has emerged recently~\citep{lee2026occ}, and reconstruction
 of thin structures from clean multi-view data is an active
@@ -56,12 +56,12 @@ Masked autoencoding~\citep{he2022mae} extends to multiple modalities in
 MultiMAE~\citep{bachmann2022multimae}, to any-to-any generation over
 tokenized modalities in 4M~\citep{mizrahi2023fourm,bachmann2024fourm21},
 to point clouds in Point-MAE~\citep{pang2022pointmae}, and to combined
-RGB, depth, and point cloud inputs in EmbodiedMAE, from which our
-architecture derives~\citep{dong2025embodiedmae}. Robustness to missing
+RGB, depth, and point cloud inputs in EmbodiedMAE, on which our
+architecture is based~\citep{dong2025embodiedmae}. Robustness to missing
 modalities is a recognized concern~\citep{wang2024robustmissing}, and
 distillation from multi-sensor teachers to single-sensor students is
 established for discriminative tasks~\citep{hinton2015distillation}. We
-extend this machinery in two ways: we add a structured generative
+extend these methods in two ways: we add a structured generative
 modality, encoded with continuous number tokens~\citep{golkar2023xval},
 and we distill a generative full-modality teacher for structured
 parameter regression.
@@ -70,13 +70,13 @@ parameter regression.
 Pretraining on purely synthetic data is viable, from abstract
 fractals~\citep{kataoka2020fractaldb} to procedurally generated
 scenes~\citep{raistrick2023infinigen,greff2022kubric}, with domain
-randomization bridging the gap to real
+randomization reducing the gap to real
 data~\citep{tobin2017domainrand} and with the value of synthetic data
 known to depend on the downstream task~\citep{fan2023intriguing}. Our
 setting is the favorable case for this strategy: the procedural
 generator defines the output representation, spans the morphology of
 the target crop, and is paired with real field evaluation
-data~\citep{maizefield3d2025}. Our results add one caveat to the
-recipe: the generator's parameters are valuable as data and as targets,
-but exposing them to the encoder costs representation quality
+data~\citep{maizefield3d2025}. Our results add one caveat to this
+strategy: the generator's parameters are valuable as data and as targets,
+but exposing them to the encoder reduces representation quality
 (Sec.~\ref{sec:exp-params}).
