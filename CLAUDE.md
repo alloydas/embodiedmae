@@ -904,6 +904,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   61.7 (native maize row model 6.5); i.e. row reconstruction does not transfer across species (9x and 9.5x the native
   error). Reports `reports/row_sorghum_maize_row_ft_*_17083714.*`, `reports/row_maize_sorghum_row_ft_*_17084182.*`.
   T1 sorghum transfer arms 17082838 / 17082839 started 14:05 / 14:26 on scavenger; maize T1 arms pending.
+- **2026-10-23 14:50: GENERALIST MOVED TO NOVA (user: "move the generalist distillation to NOVA").** 17070513 was preempted on
+  scavenger at epoch 47 (Restarts=2) and was moved in place to nova / mech-ai / normal (2 GPUs, `(a100&NVLINK)|h200|rtxpro6000`,
+  2 d); it resumes from `checkpoint_epoch_46.pth`. The E5 probe and final quant chains still wait on it (afterany).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
