@@ -856,6 +856,17 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   read by the generator from `outputs/4m_distill_15k_all_d2/visualizations`). Maize and first-release viewers stay on
   `review_v1.html`. **When the distillation finishes: rerun the exporter on its final checkpoint, republish with the
   three .js files.**
+- **2026-10-23 13:05: CROSS-SPECIES DEPTH CHECK DONE (17083713).** Sorghum E1 on maize plants, val R2, cross with metric
+  depth / cross with depth HIDDEN / native maize_4m through the same harness: height 0.827 / 0.512 / 0.576, biomass 0.941 /
+  0.786 / 0.768, leaf length 0.889 / 0.688 / 0.690, leaf count 0.901 / 0.880 / 0.887, leaf width 0.890 / 0.789 / 0.739,
+  curl 0.393 / 0.417 / 0.113, leaf angle 0.757 / 0.713 / 0.864. So the "too good" sorghum-on-maize numbers were METRIC
+  DEPTH: the maize renderer frames each plant by size and its per-plant near/far encoding hides absolute scale from
+  native maize models; given metric depth, size traits jump. With depth hidden the sorghum encoder transfers at about
+  the native level (size traits within 0.06, leaf width and curl better, leaf angle worse). Report both rows. Cross
+  generation (17082825): maize model on sorghum photos Chamfer 27.8e-3 (skill 0.44), sorghum E1 on maize 57.8e-3
+  (0.51), i.e. single-photo generation does not transfer. Interim quant (17082629, test): photograph -> cloud
+  Chamfer E1 2.25e-3 -> generalist ep40 1.06 (depth source 0.82) -> rgb2pc student ep13 0.88. `xrow_s_on_m` 17082827
+  failed (started before the recipe-width fix); resubmitted as **17084182**.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
