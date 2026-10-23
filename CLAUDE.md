@@ -879,6 +879,17 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `rgbd2pc` (rgb+depth), new **17084366** `dist_rgbt2pc_d2` (rgb+text), new **17084367** `dist_dt2pc_d2` (depth+text), and
   17084302 (renamed `dist_pairs2pc_d2`; same config file, rewritten) = one student over all three pairs, output still
   `outputs/4m_distill_15k_pairs_d2`. Quant: `eval_rgb2pc_quant.py --source rgb,depth`.
+- **2026-10-23 14:30: FOUR MORE E2 ARMS (user: "in the same way do the same for E2", "put them in NOVA", "In E2 output
+  should not be only point cloud keep that in the previous way").** Completes every stream set containing the point
+  cloud: `configs/config_e2_{pcd,pct,pcrgbt,pcdt}_d2.yaml` = `config_e2_pcrgbd_d2.yaml` with only `active_modalities`
+  changed (pc,depth / pc,text / pc,rgb,text / pc,depth,text); ordinary MAE pretraining that reconstructs ALL active
+  streams (the point-cloud-only target is for the distillation students, not E2). CPU-smoked (forward + backward, small
+  model, only active streams in the loss). Jobs on nova / mech-ai, 2 GPUs `a100|l40s|h200|rtxpro6000`, 32 CPU, 160G, 2 d,
+  `e2_arm_blackwell.sbatch <arm>_d2 --num_workers 14` (batch 16/GPU = global 32, auto-resume), outputs on mech-ai:
+  **17084395** `e2_pcd_d2`, **17084396** `e2_pct_d2`, **17084397** `e2_pcrgbt_d2`, **17084398** `e2_pcdt_d2`. ~24 h each
+  once started. Then `CKPT=checkpoints/checkpoint_epoch_600.pth E9_SPLITS="val test" sbatch slurm/linear_probe.sbatch
+  e2_pcd_d2 e2_pct_d2 e2_pcrgbt_d2 e2_pcdt_d2` (the probe zeroes the recipe; the text-arms are probed on their non-text
+  streams), `eval/pc_fscore.py`, and the pair bootstrap against the existing E2 arms.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

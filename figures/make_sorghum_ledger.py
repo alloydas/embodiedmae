@@ -75,10 +75,10 @@ def main():
     hd = json.load(open(O/'4m_distill_15k_all_d2'/'training_history.json'))
     D['distill'] = {'train': [[e['epoch'], round(e['loss'], 5)] for e in hd['train']], 'val': [{'epoch': v['epoch'], 'mean_gen': v['mean_gen'], 'per_source': {s: {k: v['per_source'][s][k] for k in ('pc_chamfer','param_mae_masked','total')} for s in v['per_source']}} for v in hd['val']], 'epochs': 100}
     D['students'] = {}
-    for r in ('rgb2pc_full_d2', 'rgb2pc_smr50_d2', 'rgb2pc_smr50b_d2'):
+    for r in ('rgb2pc_full_d2', 'rgb2pc_smr50_d2', 'rgb2pc_smr50b_d2', 'rgbd2pc_d2', 'rgbt2pc_d2', 'dt2pc_d2', 'pairs_d2'):
         f = O/f'4m_distill_15k_{r}'/'training_history.json'
         if f.exists():
-            h = json.load(open(f)); D['students'][r] = {'done': len(h['train']), 'train': [[e['epoch'], round(e['loss'], 5)] for e in h['train']], 'val': [[v['epoch'], v['mean_gen']] for v in h['val']], 'val_pc_chamfer_rgb': [[v['epoch'], v['per_source']['rgb']['pc_chamfer']] for v in h['val'] if 'rgb' in v['per_source']]}
+            h = json.load(open(f)); D['students'][r] = {'done': len(h['train']), 'train': [[e['epoch'], round(e['loss'], 5)] for e in h['train']], 'val': [[v['epoch'], v['mean_gen']] for v in h['val']], 'val_pc_chamfer_rgb': [[v['epoch'], v['per_source']['rgb']['pc_chamfer']] for v in h['val'] if 'rgb' in v['per_source']], 'val_pc_chamfer': {src: [[v['epoch'], v['per_source'][src]['pc_chamfer']] for v in h['val'] if src in v['per_source']] for src in (h['val'][-1]['per_source'] if h['val'] else {})}}
     D['probe'] = probe_rows([R/'probe_pr_600_d2_16930422.csv', R/'probe_pr_6168_d2_16928969.csv', R/'probe_pr_2024_d2_16928970.csv', R/'probe_pr_624_d2_16928971.csv']
                             + sorted(R.glob('probe_pr_e1_d2_*.csv')))
     D['probe_mean'] = probe_rows([R/'probe_pr_mean600_d2_16930423.csv'], 'mean')
