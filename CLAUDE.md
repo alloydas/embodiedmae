@@ -827,6 +827,11 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `maize_xfer_warm` (init = sorghum E1 ep 1000; MAIZE_CONDA_ENV=det_cu128), **17082841** `maize_xfer_scratch`.
   150 epochs each (~12-20 h on 2 GPUs). Compare warm vs scratch per direction by probe at checkpoint_epoch_150
   (`eval/linear_probe{,_maize}.py`), never against the 600-epoch arms (different cosine).
+- **2026-10-23 11:25 (user: "move some jobs to NOVA"):** with 3 account GPUs free, the five pending 1-GPU evals
+  moved in place to nova: 17082821 `pr_e1_d2` (started at once on nova26-gpu-1), 17082822 `pcview_e1_d2`,
+  17082629 `r2pquant_d2_interim`, 17082826/7 `xrow_*`. The other two free GPUs went to labmates in the same minute,
+  so those four wait on the cap (16/17). The 2-GPU T1 arms stay on scavenger so they do not block the 4-GPU
+  maize E1 17082791 on the cap.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
