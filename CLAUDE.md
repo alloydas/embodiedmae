@@ -890,6 +890,15 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   once started. Then `CKPT=checkpoints/checkpoint_epoch_600.pth E9_SPLITS="val test" sbatch slurm/linear_probe.sbatch
   e2_pcd_d2 e2_pct_d2 e2_pcrgbt_d2 e2_pcdt_d2` (the probe zeroes the recipe; the text-arms are probed on their non-text
   streams), `eval/pc_fscore.py`, and the pair bootstrap against the existing E2 arms.
+- **2026-10-23 14:50: MAIZE TWINS WRITTEN, NOT LAUNCHED (user: "write the same code for maize also and push them to github
+  I will let you know when to run them").** `train_maize_4m_distill.py` gained the same `source_set` ('+' pair sources;
+  single sources unchanged) in the step, masked-token weight, val and viz. Configs (Delta paths, teacher = student init =
+  maize E1 d2 epoch 1000, `expect_init_epoch: 1000`, the maize teacher regime, target [pc], lr 3e-5, 100 ep, global 128):
+  `config_maize_distill_{rgb2pc,rgbd2pc,rgbt2pc,dt2pc,pairs2pc}_e1_d2.yaml` (rgb2pc = the single-stream reference twin,
+  which maize did not have). E2: `config_maize_e2_{pcd,pct,pcrgbt,pcdt}_d2.yaml` = `config_maize_e2_pcrgbd_d2.yaml` with
+  only active_modalities changed (reconstruct all own streams). CPU-tested on small maize v2 models. Launch lines are in
+  each config header (Delta: `slurm/delta/distill_maize.sbatch` with `DISTILL_CONFIG=`, `slurm/delta/train_maize_arm.sbatch
+  <slug>`); the students need the maize E1 at epoch 1000 first. Wait for the user's go.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
