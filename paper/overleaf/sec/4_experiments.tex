@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit b60b429).
+% Synced from the embodiedmae repo (paper/results.tex, commit b81793b).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -14,18 +14,19 @@ the variable; arms that change the number of training plants keep the step
 budget by changing their epoch count (Sec.~\ref{sec:method-pretrain}). The headline
 model differs in schedule (1{,}000 epochs over all ten views at global batch
 256) and in its point-cloud loss, which adds the Sinkhorn term of
-Sec.~\ref{sec:method-pretrain}. Like the four-stream ablation arm, it takes the
-parameter stream as an encoder input under the shared masking budget; the
-teacher and every student of Sec.~\ref{sec:res-distill} descend from it. \todo{The headline-derived numbers
+Sec.~\ref{sec:method-pretrain}. The headline model, like the four-stream ablation arm,
+takes the parameter stream as an encoder input under the shared masking budget,
+and the teacher and every student of Sec.~\ref{sec:res-distill} are initialized
+from its weights. \todo{The headline-derived numbers
 in this draft are from the first-release, Chamfer-only headline run; the
-final-release Sinkhorn run and its distillation replace them.} A maize
+final-release Sinkhorn run and its distillation will replace them.} A maize
 headline model on the same schedule and loss is queued.
 
 \paragraph{Metrics.}
-Geometry is symmetric Chamfer distance in the unit-sphere frame
-($\times10^{-3}$; a plant spans $\approx$1.4\,m, so 1.0 is about 7\,mm), on
-the masked validation step for pretrained arms and with the source unmasked
-for students. Parameters are mean absolute error on the normalized $[0,1]$
+We measure geometry by the symmetric Chamfer distance in the unit-sphere frame
+($\times10^{-3}$; a plant spans $\approx$1.4\,m, so 1.0 is about 7\,mm), computed
+on the masked validation step for pretrained arms and with the source unmasked
+for students. Parameter error is the mean absolute error on the normalized $[0,1]$
 fields of hidden, non-padding leaf tokens; where a per-field number is more
 telling we report \emph{skill}, $1-\mathrm{MAE}/\mathrm{MAE}_{\text{mean}}$,
 so that 1 is exact and $\le 0$ is no better than the average plant. Phenotype
@@ -36,8 +37,8 @@ unless stated) with paired bootstrap intervals over plants (2{,}000 resamples).
 A difference is a \emph{win} only when its interval excludes zero on val
 \emph{and} test. Sorghum's four named traits have rank two by construction
 (height and leaf count are one generator variable, $r{=}0.994$, and the biomass
-proxy is that variable again), so we add the independent axes the generator
-varies, leaf roll and leaf length; maize exposes eleven largely independent
+proxy is that variable again), so we add the independent axes varied by the
+generator, leaf roll and leaf length. Maize has eleven largely independent
 traits (Sec.~\ref{sec:method-data}). Implementation details, per-trait tables and
 intervals are in the supplement.
 
@@ -79,28 +80,28 @@ intervals are in the supplement.
   against the complete plant cloud, val. $^\ast$Mean skill over the four
   leaf fields with any skill (insertion height, branching angle, length,
   roll), on an 8-plant sample of the first release; the three waviness fields
-  of that release sit at zero skill from every source and were dropped from the
+  of that release have zero skill from every source and were dropped from the
   final generator. \todo{Fill leaf-count accuracy, height error, F-score and
   the 3-view and two-stage rows from the \FieldProc{} evaluation script; maize
   numbers are from the 55-epoch first-release student.}}
   \label{tab:regime1}
 \end{table*}
 
-Table~\ref{tab:regime1} is the deployment case the title promises: one
-photograph, one depth frame or one cloud of an isolated plant, and the model
-returns the recipe and the other streams in one pass. On sorghum a single
-photograph yields the complete cloud at Chamfer $0.88$ (test $0.79$), a depth
-frame at $0.62$, and the cloud itself, asked to produce the recipe, at $1.22$;
-the full-modality teacher reaches $0.35$. As skill against the mean plant of
-the split, the photograph-to-cloud student stands at $0.984$. The recipe comes
-out organ by organ: on the first-release fields, insertion height and
-branching angle are recovered from a cloud at skill $0.95$ and $0.93$, leaf
-length at $0.67$ and roll at $0.50$, and from a photograph at $0.90$ / $0.85$ /
-$0.66$ / $0.33$; geometry in, geometry out, with the cloud ahead of the image
-on every field that carries skill and widest on roll. The three waviness fields
-of that release were unrecoverable from any source (skill $-0.04$ to $0.02$):
-the head emitted the population mean, and a single aggregate MAE averaged a
-constant into a real result. They are gone from the final generator.
+Table~\ref{tab:regime1} covers deployment on an isolated plant: from one
+photograph, one depth frame or one cloud, the model returns the recipe and the
+other streams in one forward pass. On sorghum, the cloud generated from a single
+photograph has Chamfer $0.88$ (test $0.79$), the cloud generated from a depth
+frame has $0.62$, and the cloud regenerated from the input cloud has $1.22$. The
+full-modality teacher reaches $0.35$. The photograph-to-cloud student has skill
+$0.984$ against the mean plant of the split. On the first-release leaf fields, a
+cloud gives skill $0.95$ for insertion height, $0.93$ for branching angle,
+$0.67$ for leaf length and $0.50$ for roll, and a photograph gives $0.90$,
+$0.85$, $0.66$ and $0.33$. The cloud is ahead of the photograph on every field
+with nonzero skill, and the gap is widest on roll. The three waviness fields of
+that release were unrecoverable from any source (skill $-0.04$ to $0.02$): the
+head emitted the population mean, and a single aggregate MAE would have averaged
+these constant predictions with the fields that have skill. The final generator
+does not include these fields.
 \todo{Fig.~3: qualitative grid (input, generated cloud, re-rendered recipe
 against ground truth) for one held-out plant per species, plus the edit demo:
 change one recovered parameter and re-render.}
@@ -111,14 +112,15 @@ change one recovered parameter and re-render.}
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_view_elevation.png}
-  \caption{\textbf{Viewpoint sets the difficulty.} (A) Photograph-to-cloud
+  \caption{\textbf{Viewpoint determines the difficulty.} (A) Photograph-to-cloud
   Chamfer of every test plant by camera elevation (208--244 plants per view;
   the target cloud is the same at every view, so only the image changes). The
-  undistilled model and three students trace one U, symmetric about the
-  horizon; elevation explains $\eta^2 = 0.24$--$0.31$ of the per-plant
-  variance, the plant's own shape $|\rho| \le 0.06$. (B) The gain from hiding
-  half the source's tokens during distillation, by quartile of the control's
-  error: the hard plants take it. \todo{Add the camera-rig schematic; replace
+  undistilled model and three students follow the same U-shaped curve,
+  symmetric about the horizon; elevation explains $\eta^2 = 0.24$--$0.31$ of the
+  per-plant variance, and no shape measure of the plant correlates beyond
+  $|\rho| = 0.06$. (B) The gain from hiding half the source's tokens during
+  distillation, by quartile of the control's error: the gain is concentrated on
+  the hardest plants. \todo{Add the camera-rig schematic; replace
   with final-release students.}}
   \label{fig:views}
 \end{figure}
@@ -127,25 +129,27 @@ change one recovered parameter and re-render.}
 % reports/quant_*_test.json); eval/analyze_rgb2pc_difficulty.py;
 % reports/PROGRESS_REVIEW_2026-09-18.md sec. 1c (one plant, ten views)
 \paragraph{Viewpoint.}
-The ten cameras of a plant form an exact elevation ladder
-($\sin\text{elev} = -0.9 + 0.2\,i$) while every view shares one cloud and one
-recipe, so the view index changes the input and nothing about the answer.
-Figure~\ref{fig:views}A shows what that costs. Photograph-to-cloud error is a U
-in elevation, best side-on and worst looking steeply down \emph{or} up (the
-common intuition that top-down views are the hard ones is half right), and the
-U is the same curve for the pretrained model and every student: distillation
-lowers it by $28\,\%$ on average, improves nine of ten views, and does not
-flatten it (best-to-worst ratio $2.35\to2.49$). Across the 2{,}250 test plants
-the camera's distance from the horizon explains $\eta^2 = 0.24$--$0.31$ of the
-per-plant error, and no measure of the plant itself (leaf count, stem length,
-slenderness or extent of the cloud) correlates beyond $|\rho| = 0.06$. In this
-regime the view, not the morphology, decides how well a photograph can be
-inverted. The recipe is the more view-stable output: ten photographs of one
-plant move its recovered insertion heights by $0.08$ of the between-leaf spread
-and its branching angles by $0.12$, and distillation halves their error
-($-59$ and $-60\,\%$); the zero-skill waviness fields went the other way
-(error flat, view spread $0.18\to0.26$), i.e.\ a field nothing can predict is
-not free to carry.
+The ten cameras of a plant form an elevation ladder
+($\sin\text{elev} = -0.9 + 0.2\,i$), and every view shares one cloud and one
+recipe, so the view index changes the input but not the target.
+Figure~\ref{fig:views}A shows the photograph-to-cloud error by elevation. The
+error is U-shaped in elevation, lowest for side-on views and highest for views
+looking steeply down \emph{or} up (top-down views are hard, but so are
+bottom-up ones). The curve has the same shape for the pretrained model and every
+student. Distillation lowers the error by $28\,\%$ on average and improves nine
+of ten views, but does not flatten the curve (best-to-worst ratio
+$2.35\to2.49$). Across the 2{,}250 test plants the camera's distance from the
+horizon explains $\eta^2 = 0.24$--$0.31$ of the per-plant error, and no measure
+of the plant itself (leaf count, stem length, slenderness or extent of the
+cloud) correlates beyond $|\rho| = 0.06$. In this regime, the view rather than
+the morphology determines how accurately a photograph can be inverted. The
+recipe is the more view-stable output: the recovered insertion heights of one
+plant vary by $0.08$ of the between-leaf spread across its ten photographs, and
+the recovered branching angles vary by $0.12$. Distillation halves the error of
+both fields ($-59$ and $-60\,\%$). The zero-skill waviness fields did not
+improve: their error stayed flat and their view spread grew from $0.18$ to
+$0.26$, so a field that no input can predict is not neutral, because it becomes
+more view-dependent under distillation.
 
 % reports/pcview_16930426_{coverage,recon,probe,bootstrap}.csv (sorghum, final release); E1 row: job 17082822
 \begin{table*}[t]
@@ -166,7 +170,7 @@ not free to carry.
     \bottomrule
   \end{tabular}
   \caption{\textbf{Self-occlusion: what one or three cameras see (sorghum,
-  test).} Every model trained on complete clouds; at evaluation the cloud is
+  test).} Every model was trained on complete clouds; at evaluation the cloud is
   cut to the points visible from camera 0, or cameras 0--2, by ray-casting
   against the mesh. Matched: probe refit per condition. Transferred: the
   full-cloud probe applied as is. Chamfer against the complete cloud, masked
@@ -178,39 +182,39 @@ not free to carry.
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_partial_clouds.pdf}
   \caption{\textbf{The information survives partial clouds; a fixed readout
-  does not.} Height $R^2$ (test) against the share of the plant one or three
-  cameras see. Solid: probe refit per condition. Dashed: the full-cloud probe
+  does not.} Height $R^2$ (test) against the share of the plant visible to one or
+  three cameras. Solid: probe refit per condition. Dashed: the full-cloud probe
   transferred as is. Sorghum, final release.}
   \label{fig:partial}
 \end{figure}
 
 \paragraph{Self-occlusion.}
-Training clouds are complete; a rig's are not. Table~\ref{tab:views} scores
-each model on the subset of points one or three cameras actually see, which
-is half or three quarters of a sorghum plant. The information survives: refit
-per condition, a model that sees RGB loses only $0.015$ to $0.03$ of height
-$R^2$ at one camera and under $0.01$ at three (PC-only $-0.12$ and $-0.05$);
-roll loses $0.06$ to $0.11$ and leaf length $0.04$ to $0.05$ at one camera.
-Depth matters more on a partial cloud than on a complete one (at one camera
-PC+RGB loses $-0.029\ [-0.033,-0.026]$ on height, PC+RGB+D
-$-0.020\ [-0.022,-0.017]$). But the latent moves with coverage
-(Fig.~\ref{fig:partial}): a readout fitted on complete clouds and transferred
-to one-camera clouds collapses (PC+RGB height $0.977 \to 0.624 \to 0.001$),
-and refitting recovers $0.948$. The decoder does not complete either: at one
-camera the distance from the true cloud to the prediction is $11.4$ to $12.8$
-against $4.1$ for echoing the partial input,
-so the model reproduces what it is given rather than hallucinating the hidden
-half. Both facts set the real-data protocol of Sec.~\ref{sec:res-field}: the
-probe is refit on scans, and the transfer gap is reported as the predicted
-sim-to-real penalty.
+Training clouds are complete; a rig's are not. In Tab.~\ref{tab:views}, each
+model is scored on the points visible to one or three cameras, about half or
+three quarters of a sorghum plant. A model that sees RGB, with the probe refit
+per condition, loses $0.015$ to $0.03$ of height $R^2$ at one camera and under
+$0.01$ at three, against $-0.12$ and $-0.05$ for PC-only. At one camera, roll
+loses $0.06$ to $0.11$ and leaf length loses $0.04$ to $0.05$. Depth matters
+more on a partial cloud than on a complete one: at one camera, PC+RGB loses
+$-0.029\ [-0.033,-0.026]$ on height and PC+RGB+D loses
+$-0.020\ [-0.022,-0.017]$. However, the latent representation shifts with
+coverage (Fig.~\ref{fig:partial}): a readout fitted on complete clouds and
+transferred to one-camera clouds collapses (PC+RGB height
+$0.977 \to 0.624 \to 0.001$), and refitting recovers $0.948$. The decoder also
+does not complete the hidden part of the plant: at one camera, the distance from
+the true cloud to the prediction is $11.4$ to $12.8$ against $4.1$ for echoing
+the partial input, so the model reproduces what it is given rather than
+hallucinating the hidden half. The real-data protocol of Sec.~\ref{sec:res-field}
+follows from these results: the probe will be refit on scans, and the transfer
+gap will be reported as the predicted sim-to-real penalty.
 
 \paragraph{Morphological complexity.}
 The held-out splits are enriched with unusual morphologies by construction
 (Sec.~\ref{sec:method-data}), and across them neither reconstruction nor the probe
 degrades with plant complexity: the per-plant photograph-to-cloud error is
 uncorrelated with leaf count and stem length ($|\rho| \le 0.06$ above), and
-the probe's residuals on the extreme-enriched plants are what the intervals in
-every table already integrate over. \todo{Fig.~4 companion: error by leaf-count
+the bootstrap intervals in every table are computed over these
+extreme-enriched plants. \todo{Fig.~4 companion: error by leaf-count
 decile for both species from the \FieldProc{} evaluation; maize self-occlusion
 rows of Tab.~\ref{tab:views}.}
 
@@ -256,7 +260,7 @@ rows of Tab.~\ref{tab:views}.}
   target between two bent neighbors (Sec.~\ref{sec:method-data}). Each input set alone,
   the recipe never an input; maize test split, $2{,}250$ plants $\times$ 10
   yaws. Chamfer in metric units, because the row and isolated clouds are
-  normalised to different extents. $\Delta$ = row minus isolated, paired per
+  normalized to different extents. $\Delta$ = row minus isolated, paired per
   plant, bootstrap over plants. The row fine-tune reconstructs the target plant
   from the row streams; the control is the same schedule on the isolated twins.
   The zero-shot model predicts the first-release recipe layout, so its recipe is
@@ -265,36 +269,36 @@ rows of Tab.~\ref{tab:views}.}
 \end{table}
 
 The row data pairs every observation with an isolated twin (Sec.~\ref{sec:method-data}),
-so Tab.~\ref{tab:rows} is a within-plant comparison: the only thing that
-changes between its two columns is the neighbors. Three questions it answers.
-How much does the zero-shot model lose when a third of its pixels and two
-thirds of its cloud belong to other plants (the echo test: Chamfer against the
-input cloud tells whether it reconstructs the target or the scene)? Does
-training against the target plant behind its neighbors recover it, and does
-the isolated control, which sees the same plants without neighbors, gain the
-same (which would make the gain a data effect, not an occlusion effect)? And
-does the cost follow the occlusion measure, by yaw ($13\,\%$ of the target
-hidden broadside against $1\,\%$ edge-on) and by quartile? Two predictions from
-Sec.~\ref{sec:regime2}: inputs that already see RGB lose least, and the
-decoder will not complete a hidden blade, so the recipe, which re-renders the
-whole plant, is the output that survives. \todo{Fig.~5: one plant isolated and
+so Tab.~\ref{tab:rows} compares each plant with itself: only the neighbors
+change between its isolated and row columns. The table answers three
+questions. How much does the zero-shot model lose when a third of its pixels and
+two thirds of its cloud belong to other plants (the echo test: Chamfer against
+the input cloud indicates whether the model reconstructs the target or the
+scene)? Does training against the target plant behind its neighbors recover the
+lost accuracy, and does the isolated control, which sees the same plants without
+neighbors, improve by the same amount (which would make the gain a data effect,
+not an occlusion effect)? And does the error follow the occlusion measure, by
+yaw ($13\,\%$ of the target hidden broadside against $1\,\%$ edge-on) and by
+quartile? From Sec.~\ref{sec:regime2} we predict that inputs including RGB lose
+least and that the decoder will not complete a hidden blade, so the recipe,
+which describes the whole plant, should be the least affected output. \todo{Fig.~5: one plant isolated and
 in the row at $0^\circ$ and $90^\circ$, neighbor pixels marked, with the
 generated cloud and re-rendered recipe under each.}
 
 \paragraph{What the rows cost.}
-Measured on maize (Tab.~\ref{tab:rows}, Fig.~\ref{fig:rows}), neighbors are
-expensive only to a model that has never seen them. The isolated-plant model
-read on rows is eight times worse than on its own clean inputs ($33.1$
+On maize (Tab.~\ref{tab:rows}, Fig.~\ref{fig:rows}), neighbors cause a large
+error only for a model that was not trained on rows. The isolated-plant model
+evaluated on rows is eight times worse than on its own clean inputs ($33.1$
 against $4.0\times10^{-4}\,$m$^2$), and $91\,\%$ of that penalty disappears
 once the model is trained against the target plant behind its neighbors: the
 row-trained model on rows beats the isolated-trained model on rows by
-$-26.5\ [-26.9, -26.1]$, and sits only
-$+2.6\ [+2.5, +2.7]$ above the clean
-regime, with leaf-recipe error up by $0.005$. Its Chamfer against the input
-scene rises during training while its Chamfer against the target falls, so it
-reconstructs the plant, not the row. Depth alone is its best single input, the
-scene cloud alone fails for every model, and the error grows toward end-on
-yaws, where the neighbors overlap the target in the image.
+$-26.5\ [-26.9, -26.1]$, and its error is only $+2.6\ [+2.5, +2.7]$ above the
+isolated-trained model on clean inputs, with the leaf-recipe error higher by
+$0.005$. The row-trained model's Chamfer against the input scene rises during
+training while its Chamfer against the target falls, so the model reconstructs
+the target plant, not the row. Depth alone is the best single input for the
+row-trained model, the scene cloud alone fails for every model, and the error
+grows toward end-on yaws, where the neighbors overlap the target in the image.
 
 \begin{figure*}[t]
   \centering
@@ -302,7 +306,7 @@ yaws, where the neighbors overlap the target in the image.
   \caption{\textbf{Regime III on maize rows (test).} (a) Chamfer against the
   target plant for the isolated-trained model on clean and on row inputs, the
   row-trained model on rows, and the zero-shot model on rows. (b) The same by
-  row yaw. Row training removes most of the cost of the neighbors.}
+  row yaw. Training on rows removes most of the error added by the neighbors.}
   \label{fig:rows}
 \end{figure*}
 
@@ -341,8 +345,8 @@ yaws, where the neighbors overlap the target in the image.
   that input alone, the others absent, generating the rest (val). Before = the
   pretrained model used zero-shot (the student's warm start, epoch 0); after =
   the distilled generalist. The teacher sees all four streams, the parameters
-  included; the student is trained on all four sources, and each row feeds it
-  that source alone (Sec.~\ref{sec:distill}). $^\S$The frozen sorghum teacher
+  included; the student is trained on all four sources, and in each row it
+  receives that source alone (Sec.~\ref{sec:distill}). $^\S$The frozen sorghum teacher
   with every token of all four streams visible / with 50\,\% of each stream
   visible; not a before/after pair. $\theta$ MAE on
   hidden real leaf tokens. $^\ddagger$the collapse of an unmasked cloud
@@ -354,28 +358,30 @@ yaws, where the neighbors overlap the target in the image.
 The pretrained model already generates across modalities without any
 single-sensor training: in sorghum a photograph alone yields the cloud at
 Chamfer $1.04$ and the recipe at MAE $0.034$, and the same holds in maize
-($1.80$, $0.078$). Distillation against the full-modality teacher then improves
-every source, and concentrates the gain where the source was weakest
-(Tab.~\ref{tab:anysubset}). The mean generation loss falls $19.1\,\%$ in sorghum;
-RGB and depth, already strong, gain $11\,\%$ ($-15$ and $-23\,\%$ in Chamfer),
-while the cloud as the only input gains $27.5\,\%$, its Chamfer $-56.6\,\%$ and
-its recipe error $-43.8\,\%$ ($0.062 \to 0.035$); from the recipe alone the
-cloud improves $-62\,\%$. Maize repeats the pattern at $-20.7\,\%$ after 55
-epochs, with the cloud-only row the largest move ($51.7 \to 1.97$): that
-before-number is the collapse of a model fed an unmasked cloud it never saw in
-pretraining, the failure the teacher protocol of Sec.~\ref{sec:distill} was
-designed around, and the reason per-source numbers are reported rather than
-only the mean.
+($1.80$, $0.078$). Distillation against the full-modality teacher then improves every source,
+and concentrates the gain where the source was weakest
+(Tab.~\ref{tab:anysubset}). The mean generation loss falls by $19.1\,\%$ in
+sorghum. RGB and depth, already strong inputs, improve by $11\,\%$ (Chamfer
+$-15$ and $-23\,\%$). With the cloud as the only input, the generation loss,
+the Chamfer and the recipe error fall by $27.5$, $56.6$ and $43.8\,\%$
+($0.062 \to 0.035$). From the recipe alone, the generated cloud's Chamfer falls
+by $62\,\%$. Maize shows the same pattern, a $20.7\,\%$ fall after 55 epochs,
+and its cloud-only row changes most ($51.7 \to 1.97$). That maize before-value
+reflects a collapse: the pretrained model never received an unmasked cloud
+during pretraining. The teacher protocol of Sec.~\ref{sec:distill} was designed
+to avoid this collapse, and the collapse is also why we report per-source
+numbers rather than only the mean.
 
-Three controls bound the result. Two seeds of the RGB-only student agree to the
+Two seeds of the RGB-only student agree to the
 third digit (test $1.00 \to 0.79$ for both; val $1.01 \to 0.80$). Hiding half
 of the source's own tokens during distillation beats full visibility
-($0.80$ vs.\ $0.85$ val), and Fig.~\ref{fig:views}B shows where: the easiest
-quartile of plants loses $3\,\%$, the hardest gains $12\,\%$, so the
-regularizer buys robustness, not average-case polish. And a specialist
-distilled on the recipe alone from the cloud reaches MAE $0.039$ ($-37\,\%$),
-the four-target generalist $0.035$ ($-44\,\%$): the other heads act as auxiliary
-supervision for parameter regression rather than competing with it
+($0.80$ vs.\ $0.85$, val). Figure~\ref{fig:views}B shows the gain by plant
+difficulty: the easiest quartile of plants loses $3\,\%$ and the hardest gains
+$12\,\%$, so the regularizer improves robustness on hard plants rather than
+average-case accuracy. A specialist distilled to predict the recipe from the
+cloud alone reaches MAE $0.039$ ($-37\,\%$), and the four-target generalist
+reaches $0.035$ ($-44\,\%$), so the other heads act as auxiliary supervision
+for parameter regression rather than competing with it
 (\todo{the two ran at different learning rates, $3\!\times\!10^{-5}$ vs.\
 $10^{-4}$; the matched-LR specialist is queued}).
 
@@ -436,70 +442,73 @@ $10^{-4}$; the matched-LR specialist is queued}).
   \end{tabular}
   \caption{\textbf{Token-budget control (sorghum).} The four-stream arm
   re-trained with the parameter tokens outside the shared Dirichlet budget, so
-  the three sensor streams see exactly the three-stream arm's visible-token
-  count (117.0; seed-matched masks identical in 5{,}000 of 5{,}000 draws), at
+  the three sensor streams see the same visible-token count as the three-stream
+  arm (117.0; seed-matched masks identical in 5{,}000 of 5{,}000 draws), at
   three parameter visibilities. ``Target only'' never encodes a parameter
   token. The target-only and 60\,\% arms lose all nine learnable targets to
-  PC+RGB+D on both splits, the 20\,\% arm eight (maximum leaf length a draw);
-  intervals in the supplement. Fig.~\ref{fig:controls} plots the same rows.}
+  PC+RGB+D on both splits, and the 20\,\% arm loses eight (maximum leaf length
+  is a draw). Intervals are in the supplement. Fig.~\ref{fig:controls} plots the same rows.}
   \label{tab:control}
 \end{table}
 
-Table~\ref{tab:e2} and Fig.~\ref{fig:streams} isolate each stream at equal compute. Three facts hold in
-both species. \textbf{RGB is where the phenotype arrives:} adding the
-photograph to the cloud is the largest move in every column (sorghum height
+Table~\ref{tab:e2} and Fig.~\ref{fig:streams} compare the stream sets at equal
+compute. \textbf{RGB adds the most phenotype information:} adding the
+photograph to the cloud is the largest gain in every column (sorghum height
 $0.895\!\to\!0.979$, roll $0.39\!\to\!0.81$; maize height $0.17\!\to\!0.62$,
-stem radius $0.29\!\to\!0.75$). A cloud carries the silhouette but not the
-shading, overlap and texture cues that place organs on the stem.
-\textbf{Depth is a reconstruction win and a phenotype wash:} it lowers sorghum
-Chamfer by $28\,\%$ and maize by $25\,\%$, but on sorghum it moves the probe
-by thousandths, paired over plants a loss on size ($-0.002$ to $-0.004$) and the
-two angles and a gain only on leaf length ($+0.05$); on maize (final release,
-paired over plants) depth wins no trait and loses three on both splits, tassel
-droop ($-0.10$ to $-0.12$), curl ($-0.06$ to $-0.10$) and twist ($-0.03$), with
-the other eight ties within $0.015$.
+stem radius $0.29\!\to\!0.75$). A cloud records the silhouette but not the
+shading, overlap and texture cues from which organs can be located on the stem.
+\textbf{Depth improves reconstruction but not the phenotype readout:} depth
+lowers the Chamfer by $28\,\%$ in sorghum and by $25\,\%$ in maize. On sorghum,
+it changes the probe by thousandths: paired over plants, it loses on size
+($-0.002$ to $-0.004$) and on the two angles, and gains only on leaf length
+($+0.05$). On maize (final release, paired over plants), depth wins no trait and
+loses three on both splits, namely tassel droop ($-0.10$ to $-0.12$), curl
+($-0.06$ to $-0.10$) and twist ($-0.03$), and the other eight traits tie within
+$0.015$.
 \textbf{The parameter stream, used as an input, does not help.} On sorghum the
 four-stream arm loses to PC+RGB+D on all nine learnable targets on both splits
 (size $-0.015$ to $-0.018$, branch $-0.038$, roll $-0.017$, leaf length
-$-0.075$, leaf width $-0.14$; every interval excludes zero), and its Chamfer
-gives back what depth gained ($2.53$ against $1.85$).
-On the first maize release the same arm lost 10 of 11 traits; on the final
-release the paired comparison is a draw (PC+RGB+D wins droop $+0.04$ to
-$+0.07$, loses curl $-0.04$ to $-0.07$ and twist $-0.035$, and the eight
-remaining traits tie within $0.02$: height $0.635$ vs.\ $0.633$, stem radius
-$0.743$ vs.\ $0.760$) while the four-stream arm wins the Chamfer; against
-PC+RGB it loses droop ($-0.05$) and tassel droop ($-0.13$) and ties the rest. Either way, the stream that
-encodes the answer verbatim in training is not the stream that makes the
-frozen feature better at deployment, where it is absent.
+$-0.075$, leaf width $-0.14$; every interval excludes zero), and its Chamfer,
+$2.53$ against $1.85$, loses the improvement that depth brought. On the first
+maize release, the same arm lost 10 of 11 traits. On the final release, the
+paired comparison is a draw: PC+RGB+D wins droop ($+0.04$ to $+0.07$), loses
+curl ($-0.04$ to $-0.07$) and twist ($-0.035$), and ties the eight remaining
+traits within $0.02$ (height $0.635$ vs.\ $0.633$, stem radius $0.743$ vs.\
+$0.760$), while the four-stream arm has the better Chamfer. Against PC+RGB, the
+four-stream arm loses droop ($-0.05$) and tassel droop ($-0.13$) and ties the
+rest. Either way, the stream that encodes the answer verbatim in training is not
+the stream that makes the frozen feature better at deployment, where it is
+absent.
 
 A fourth stream at mask ratio $0.8$ splits the visible budget four ways, so
-Tab.~\ref{tab:e2} alone cannot separate a token-budget handicap from a
-representational one: as trained, the four-stream arm's sensors see $107.4$
-visible tokens against $117.0$ and its parameter tokens are $58\,\%$ visible.
-Table~\ref{tab:control} removes the handicap. Restoring the sensor budget does
-not recover the three-stream probe at any parameter visibility; the trend with
-visibility is monotone on the size targets ($60\,\% < 20\,\% < 0\,\%$ visible),
-and making the parameters a pure reconstruction target still costs $-0.011$ on
-size, $-0.07$ on roll, $-0.10$ on leaf length and $-0.15$ on leaf width. The two traits the leaf
-tokens spell out per leaf lose most, which is consistent with the encoder
-routing them through tokens that will not exist in the field, and the
-target-only result says the reconstruction pressure alone does part of the
-damage. The headline model and its teacher were nevertheless trained with the
-parameters in the encoder's shared budget (Sec.~\ref{sec:method-pretrain}), as in the
-four-stream arm of Tab.~\ref{tab:e2}; the ablations predict that its frozen
-representation is weaker than a three-stream or $\rho_\theta{=}1$ model would
-give, which we have not tested at the headline scale. Supervising the
-parameters as a target is, in turn, what makes the generalist beat the
-parameter specialist (Sec.~\ref{sec:res-distill}).
+the comparison in Tab.~\ref{tab:e2} alone cannot separate a token-budget
+handicap from a representational one: as trained, the four-stream arm's sensors
+see $107.4$ visible tokens against $117.0$, and its parameter tokens are
+$58\,\%$ visible. In the control arms of Tab.~\ref{tab:control}, the handicap
+is removed. Restoring the sensor budget does not recover the three-stream arm's
+probe scores at any parameter visibility; the trend with visibility is monotone
+on the size targets ($60\,\% < 20\,\% < 0\,\%$ visible), and making the
+parameters a pure reconstruction target still loses $0.011$ on size, $0.07$ on
+roll, $0.10$ on leaf length and $0.15$ on leaf width. The per-leaf traits stored
+in the parameter tokens (roll, leaf length and leaf width) lose the most. The
+pattern is consistent with the encoder routing these traits through tokens that
+do not exist in the field, and the target-only result shows that the
+reconstruction pressure alone accounts for part of the loss. The headline model
+was nevertheless trained with the parameters in the encoder's shared budget
+(Sec.~\ref{sec:method-pretrain}), as in the four-stream arm of Tab.~\ref{tab:e2}. From
+the ablations, we expect the headline model's frozen representation to be weaker
+than that of a three-stream or $\rho_\theta{=}1$ model; we have not tested this
+at the headline scale. Supervising the parameters as a target, in turn, lets
+the generalist beat the parameter specialist (Sec.~\ref{sec:res-distill}).
 
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_e2_streams.pdf}
   \caption{\textbf{What each stream adds (sorghum, final release).} (a) Frozen-probe
   $R^2$ (val) of the four stream arms on five traits; size traits saturate once
-  RGB is present, the leaf traits separate the arms. (b) Reconstruction F1 at
-  $\tau{=}0.01$ (about 1\,cm), test: depth is the reconstruction gain, the
-  parameter stream gives it back.}
+  RGB is present; the leaf traits separate the arms. (b) Reconstruction F1 at
+  $\tau{=}0.01$ (about 1\,cm), test: depth improves reconstruction, and the
+  parameter stream reverses that gain.}
   \label{fig:streams}
 \end{figure*}
 
@@ -507,8 +516,9 @@ parameter specialist (Sec.~\ref{sec:res-distill}).
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_param_controls.pdf}
   \caption{\textbf{Where the parameter stream belongs.} Probe $R^2$ (val) with the
-  recipe stream absent, a reconstruction target only, or 20, 58 (as trained)
-  and 60\,\% visible during pretraining, at an equal 117 visible sensor tokens.
+  recipe stream absent, as a reconstruction target only, or 20 and 60\,\% visible
+  during pretraining at an equal 117 visible sensor tokens, against the arm as
+  trained (58\,\% visible, 107.4 sensor tokens).
   No variant reaches the three-stream arm on any trait (Tab.~\ref{tab:control}).}
   \label{fig:controls}
 \end{figure*}
@@ -523,53 +533,50 @@ parameter specialist (Sec.~\ref{sec:res-distill}).
   (streams, parameter controls, training plants, model sizes; val). The
   metrics agree on the gross order and disagree on the decisions: depth
   (PC+RGB $\to$ PC+RGB+D) moves Chamfer $-32\,\%$ and height $R^2$ by
-  $+0.003$; more plants (1k $\to$ 10k) moves Chamfer $-20\,\%$ and the
-  probe not at all; the parameter stream returns the Chamfer of PC+RGB with a
-  worse probe.}
+  $+0.003$; more plants (1k $\to$ 10k) moves Chamfer $-20\,\%$ and does not
+  change the probe; the parameter stream brings the Chamfer back to that of
+  PC+RGB, with a worse probe.}
   \label{fig:metrics}
 \end{figure}
 
 % figures/make_metric_fig.py from the tables above
 Chamfer and the probe rank the arms alike only in the coarse sense
 (Fig.~\ref{fig:metrics}; Spearman $-0.57$ to $-0.88$ across twelve arms), and
-every design decision in this paper falls in the region where they part.
+they disagree on every design decision in this paper.
 Depth is the clearest case: $-28\,\%$ Chamfer in sorghum, $-25\,\%$ in maize,
 and a probe that does not move (Sec.~\ref{sec:param-stream}). Data is the
 second: sorghum Chamfer keeps improving from 1{,}000 to 10{,}000 plants
 ($-21\,\%$) while the size targets stay within $0.93$--$0.96$ and are not
-even monotone (Tab.~\ref{tab:scaling}), and in maize Chamfer falls fourfold while the
+monotone (Tab.~\ref{tab:scaling}), and in maize Chamfer falls fourfold while the
 probe is not even monotone. The parameter stream is the third: on the final
 maize release it gives the best Chamfer of the four arms and no probe gain. And
 the partial clouds of Tab.~\ref{tab:views} are the fourth, in the other
 direction: at one camera Chamfer is $2.6$ to $6.5\times$ worse while the refit probe
-loses at most $0.03$ on height. Point-MAE closes the list from outside: it beats our
-PC-only arm on every sorghum trait under the probe (Tab.~\ref{tab:e8}), so our
-lead is not a better cloud encoder but the fusion of a photograph with geometry.
+loses at most $0.03$ on height. Point-MAE, an external baseline, beats our PC-only arm on every sorghum trait
+under the probe (Tab.~\ref{tab:e8}), so our advantage comes from fusing a
+photograph with geometry, not from a better cloud encoder.
 
-The two quantities differ in what they can see. A nearest-neighbour distance
-is satisfied by surface proximity and lets many predicted points share one
-target point, so it rewards a decoder that lands on the bulk of a slender plant
-and is nearly blind to a missing or merged blade~\cite{wu2021dcd,song2026structural};
-the probe reads the structure the encoder kept, which is what a trait pipeline
-consumes. We therefore make the probe the deciding metric for modality and data
-decisions, report Chamfer as the decoder's surface error that it is, and
-answer the training-side half of the problem with the Sinkhorn term of
-Sec.~\ref{sec:method-pretrain}, which matches the two clouds as distributions and
-cannot be satisfied by a clump. \todo{Add the E7 ablation of that term, and
+A nearest-neighbor distance is minimized by surface proximity and allows many
+predicted points to match one target point, so it rewards a decoder that places
+points on the bulk of a slender plant and barely penalizes a missing or merged
+blade~\cite{wu2021dcd,song2026structural}. The probe instead measures the
+structure retained by the encoder, which is the input to a trait pipeline. We
+therefore use the probe to decide between modality and data choices and report
+Chamfer as the decoder's surface error. On the training side, we add the
+Sinkhorn term of Sec.~\ref{sec:method-pretrain}, which matches the two clouds as
+distributions and is not minimized by a clump of points. \todo{Add the E7 ablation of that term, and
 F-score at 1\,cm beside Chamfer in Tabs.~\ref{tab:regime1} and
 \ref{tab:anysubset} (student F-scores queued).}
 
 \paragraph{F-score.}
-Precision and recall at a distance threshold make the failure Chamfer hides
-visible (Fig.~\ref{fig:fscore}). For every model precision runs far ahead of
-recall: the headline model places $51\,\%$ of
-its points within 1\,cm of the plant but covers only
-$32\,\%$ of the plant's points (F1
-$0.39$; $0.72$ at 2\,cm). The
-reconstruction is right where it puts points and misses whole regions, the
-thin blades a nearest-neighbour distance barely penalises. The F1 ranking of
-the ablation arms is the Chamfer ranking, so F1 adds a readable unit, not a
-different decision.
+Precision and recall at a distance threshold expose the failure hidden by
+Chamfer (Fig.~\ref{fig:fscore}). For every model, precision is far higher than
+recall: the headline model places $51\,\%$ of its points within 1\,cm of the
+plant but covers only $32\,\%$ of the plant's points (F1 $0.39$; $0.72$ at
+2\,cm). The reconstruction is accurate where it places points but misses whole
+regions, namely the thin blades that a nearest-neighbor distance barely
+penalizes. The ablation arms rank the same under F1 as under Chamfer, so F1 adds
+an interpretable unit but does not change any decision.
 
 \begin{figure*}[t]
   \centering
@@ -623,11 +630,11 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
     \CropCode{} four streams                           & 0.965 & 0.968 & 0.888 & 0.779 & 0.288 & & 0.597 & 0.880 & 0.150 & \textbf{0.757} \\
     \bottomrule
   \end{tabular}
-  \caption{\textbf{Frozen-encoder baselines (E8).} Published checkpoints read
-  the same held-out plants through the same ridge probe; mean pooling for
-  every model, the one pooling all share. The supervised row trains our
-  architecture end to end on the probe targets and is read through the same
-  frozen probe. Sorghum on the final release; maize rows on the first maize release; the maize PC-only
+  \caption{\textbf{Frozen-encoder baselines (E8).} Published checkpoints are
+  evaluated on the same held-out plants with the same ridge probe; mean pooling
+  for every model, the only pooling available for all of them. For the
+  supervised row, our architecture is trained end to end on the probe targets
+  and evaluated with the same frozen probe. Sorghum on the final release; maize rows on the first maize release; the maize PC-only
   and PC+RGB+D rows use the CLS token. \todo{maize mean-pooled rows and a maize
   supervised row.}}
   \label{tab:e8}
@@ -660,15 +667,15 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
   197{,}400 steps; epochs differ so that steps do not. Chamfer $\times10^{-3}$
   and probe $R^2$ (val) of the four-stream arm. The 10{,}000- and
   10{,}500-plant rows differ by 5\,\% in data and are the run-to-run error bar.
-  Sorghum and maize E3 are on the final releases, maize E4 on the first, so the
-  maize base row is not the E3 full-data row. Fig.~\ref{fig:scaling} plots the
+  Sorghum and maize E3 are on the final releases and maize E4 is on the first,
+  so the maize base row is not the E3 full-data row. Fig.~\ref{fig:scaling} plots the
   sorghum rows.}
   \label{tab:scaling}
 \end{table*}
 
 \paragraph{Against published encoders.}
-Table~\ref{tab:e8} reads four public checkpoints and a supervised network
-through the same probe. On sorghum the three-stream \CropCode{} beats every
+In Tab.~\ref{tab:e8}, four public checkpoints and a supervised network are
+read through the same probe. On sorghum the three-stream \CropCode{} beats every
 published encoder on every trait in Tab.~\ref{tab:e8}; against the strongest,
 EmbodiedMAE-B, it wins eight of nine paired over plants: $+0.004$ to $+0.007$
 on size (tight intervals at a $0.98$ ceiling), $+0.03$ on branch, $+0.04$ on
@@ -678,37 +685,39 @@ parameter-stream penalty of Sec.~\ref{sec:param-stream} measured against an
 external model. A network of our architecture trained from scratch on the probe
 targets reaches $0.974$ height and $0.767$ roll through its own head; the
 frozen three-stream feature beats it on seven of nine traits and loses none
-(paired, CLS; mean pooling hands it branch),
-while the frozen four-stream feature loses size and branch. Pretraining pays
-without the parameter stream; with it, the frozen feature is slightly worse
-than no pretraining. On the first maize release \CropCode{} beats EmbodiedMAE-B
+(paired, CLS token; under mean pooling the supervised network wins branch),
+while the frozen four-stream feature loses size and branch. Pretraining helps
+without the parameter stream; with it, the frozen feature is slightly worse than
+training from scratch. On the first maize release \CropCode{} beats EmbodiedMAE-B
 on 9 of 11 traits and the best baseline per trait on 5, losing leaf count and
 curl to Point-MAE and tassel droop to DINOv2, the one trait where every
 EmbodiedMAE-design encoder is below zero.
 
 \paragraph{Camera pose, a forensic note.}
 Point-MAE given each view's full camera pose beats our camera-frame four-stream
-arm on 8 of 11 maize traits (height $0.720$ vs.\ $0.597$). Most of that is a
-generator artefact: the maize renderer puts every plant's leaf plane in the
-same world plane, so a full pose rotation hands the encoder a canonical plant
-azimuth no rig provides. With gravity only (the camera levelled, its azimuth
-kept, what a calibrated rig knows), Point-MAE's height falls to $0.588$ and
-camera-frame PC+RGB+D wins five traits (height, biomass, twist, width, stem
-radius $+0.23$) and loses four (leaf angle, leaf count, curl $-0.18$, tassel
-droop $-0.21$). Our fused arms gain nothing from levelled clouds; PC-only
-gains five. A generator's unintended regularities are a benchmark hazard, and
-this one was found only because the baseline was too good.
+arm on 8 of 11 maize traits (height $0.720$ vs.\ $0.597$). Most of this
+advantage is a generator artifact: the maize renderer puts every plant's leaf
+plane in the same world plane, so a full pose rotation gives the encoder a
+canonical plant azimuth that no real rig provides. With gravity only (the camera
+leveled and its azimuth kept, the information a calibrated rig provides),
+Point-MAE's height falls to $0.588$ and camera-frame PC+RGB+D wins five traits
+(height, biomass, twist, width, stem radius $+0.23$) and loses four (leaf angle,
+leaf count, curl $-0.18$, tassel droop $-0.21$). Our fused arms do not improve
+with leveled clouds, and the PC-only arm improves on five traits. A generator's
+unintended regularities are a benchmark hazard, and this one was found only
+because the baseline scored suspiciously well.
 
 \paragraph{Data, capacity, and the noise floor.}
 Two near-duplicate runs, 10{,}000 and 10{,}500 training plants, differ by
-$2\,\%$ in Chamfer and at most $0.011$ in probe $R^2$; we take that as the
-floor. Against it (Tab.~\ref{tab:scaling}, Fig.~\ref{fig:scaling}), sorghum
-reconstruction improves steadily with data ($3.13 \to 2.86 \to 2.48$), while
-the probe is flat and not even monotone: height $0.952 / 0.932 / 0.962$, the
-3{,}000-plant dip larger than the floor. Model size inverts the usual story on
-the probe: paired over plants, the small encoder beats base on five traits and
-loses none (roll $+0.050$, leaf length $+0.040$, leaf width $+0.047$), and
-large loses five (size $-0.015$, roll $-0.046$), while Chamfer prefers base
+$2\,\%$ in Chamfer and at most $0.011$ in probe $R^2$; we take this difference
+as the noise floor. Relative to this floor (Tab.~\ref{tab:scaling},
+Fig.~\ref{fig:scaling}), sorghum reconstruction improves steadily with data
+($3.13 \to 2.86 \to 2.48$), while the probe is flat and not even monotone:
+height is $0.952 / 0.932 / 0.962$, and the dip at 3{,}000 plants exceeds the
+floor. Model size reverses the usual trend on the probe: paired over plants,
+the small encoder beats base on five traits and loses none (roll $+0.050$, leaf
+length $+0.040$, leaf width $+0.047$), and the large encoder loses five (size
+$-0.015$, roll $-0.046$), while base has the lowest Chamfer
 ($2.86 / 2.53 / 2.68$). At this step budget a bigger encoder reconstructs no
 better and encodes the leaf traits worse.
 
@@ -717,19 +726,19 @@ better and encodes the leaf traits worse.
   \includegraphics[width=\linewidth]{Figures/fig_scaling.pdf}
   \caption{\textbf{Data and model scaling at equal steps (sorghum, final
   release).} Probe $R^2$ (val) against training plants (a) and encoder size (b),
-  every point $197{,}400$ steps. Neither more plants nor more parameters lifts
+  every point $197{,}400$ steps. Neither more plants nor more parameters improves
   the probe at this budget.}
   \label{fig:scaling}
 \end{figure*}
  Maize is noisier: Chamfer
 falls fourfold with data but the probe is not monotone (height $0.39 / 0.52 /
-0.43 / 0.64$), and the three sizes are within $0.05$ on every trait. The
-paired bootstrap says the dip is not sampling noise: every reduced arm loses
+0.43 / 0.64$), and the three sizes are within $0.05$ on every trait. According
+to the paired bootstrap, the dip is not sampling noise: every reduced arm loses
 to the full-data arm on 10 of 11 traits on both splits (twist ties), by $0.03$
 to $0.24$, and the 3{,}000-plant arm beats the 10{,}000-plant arm on height
 ($+0.10$), leaf length ($+0.10$) and leaf count ($+0.04$) while losing stem
 radius ($-0.10$), each interval excluding zero on val and test. With one seed
-per arm the remaining candidate is run-to-run variance of the arm itself.
+per arm, the remaining explanation is run-to-run variance of the arm itself.
 \todo{A second seed of the maize 10k arm.}
 
 \paragraph{What the latent encodes.}
@@ -739,20 +748,21 @@ continuous distribution, so a clustered latent would be a defect, not a
 finding. The frozen CLS space is a continuum (best silhouette $0.15$ to $0.24$
 at $k{=}2$, adjusted Rand index $\approx 0$ against shape deciles, t-SNE
 trustworthiness $0.95$ to $0.99$) of low effective dimension: participation
-ratio $4.4$ to $6.3$ of 768 in sorghum and $6.7$ to $11.3$ in maize, 14 to 15
-principal components for $90\,\%$ of the variance once RGB is present in
-sorghum and 18 to 19 in maize, in step with maize's more independent generative
-factors. In sorghum its leading direction is the plant's size (first component
-vs.\ leaf count $|r| = 0.73$ to $0.94$ across the arms); in maize no single
-component carries a trait (best single-component correlation with leaf count
-$|r| \le 0.17$ in every arm, although the probe reads leaf count at $R^2 = 0.91$
-from the same features), so the maize traits are spread over many directions.
-The parameter stream bends the sorghum geometry the way the probe predicts: the gated arms are the least size-aligned ($|r|$ $0.48$ and
-$0.34$) and most isotropic (participation ratio $8.5$ and $14.3$), the
-target-only arm the most size-dominated of the five (first component $43\,\%$
-of variance, $|r| = 0.95$). Linear decodability also dissociates from local
-embedding structure: roll reads at $R^2$ $0.81$ from a latent in which it is
-barely locally organized, which is why we treat the probe, not t-SNE
-smoothness, as the instrument for representation claims on a continuous
-generator. \todo{E9 figure: t-SNE of the three- and four-stream latents colored
+ratio is $4.4$ to $6.3$ (of 768) in sorghum and $6.7$ to $11.3$ in maize. Once
+RGB is present, the number of principal components needed for $90\,\%$ of the
+variance is 14 to 15 in sorghum and 18 to 19 in maize, consistent with maize's
+more independent generative factors. In sorghum, the leading latent direction is
+the plant's size (first component vs.\ leaf count $|r| = 0.73$ to $0.94$ across
+the arms); in maize, no single component aligns with a trait (best
+single-component correlation with leaf count $|r| \le 0.17$ in every arm,
+although the probe reads leaf count at $R^2 = 0.91$ from the same features), so
+the maize traits are spread over many directions. The parameter stream changes
+the sorghum latent geometry in the way the probe results predict: the gated arms
+are the least aligned with size ($|r|$ $0.48$ and $0.34$) and the most isotropic
+(participation ratio $8.5$ and $14.3$), and the target-only arm is the most
+dominated by size of the five (first component $43\,\%$ of variance,
+$|r| = 0.95$). Linear decodability is also distinct from local embedding
+structure: the probe reads roll at $R^2$ $0.81$ from a latent in which roll is
+barely organized locally, so we use the probe, not t-SNE smoothness, as the
+measure for representation claims on a continuous generator. \todo{E9 figure: t-SNE of the three- and four-stream latents colored
 by leaf count and by roll.}

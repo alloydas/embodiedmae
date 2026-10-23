@@ -13,96 +13,99 @@
 
 \paragraph{Why a stream that holds the answer hurts.}
 The parameter stream is the only input that states the phenotype verbatim, and
-it is the one input the field never provides. Every arm that let the encoder
-see it learned a worse sensor representation, and the loss grew with how often
-it was visible (Tab.~\ref{tab:control}); even as a pure decoder target it cost
-roll and leaf length, the two traits the leaf tokens spell out per leaf. The
-reading consistent with modality competition and negative transfer is that a
-privileged stream lets the encoder route a trait through tokens it will not
-have at test time, and the reconstruction pressure of a per-leaf target then
-pulls the latent toward the plant's size, the direction its first principal
-component already carries. The practical rule the ablations support is that a
-generative modality belongs in the data and in the targets rather than in the
-encoder. Our headline model does not yet follow it: it was pretrained, and its
-teacher distilled, with the parameters as an encoder input, so its frozen
-representation is the one the four-stream arm measures, and a headline run at
-$\rho_\theta{=}1$ is the direct test. We expect the rule to transfer to any
-multimodal model with access to a program, a CAD sketch, or a simulator state,
-and the gated ratio $\rho_\theta$ is a one-line way to test it.
+it is the one input never available in the field. Every arm in which the encoder
+saw the parameter stream learned a worse sensor representation, and on the size
+traits the loss grew with the stream's visibility (Tab.~\ref{tab:control}).
+Even as a pure decoder target, the parameter stream lowered roll, leaf length
+and leaf width, the traits stored per leaf in the parameter tokens. One
+explanation, consistent with modality competition and negative transfer, is that
+a privileged stream lets the encoder route a trait through tokens that are
+absent at test time, and the reconstruction pressure of a per-leaf target then
+shifts the latent toward the plant's size, which is already the direction of its
+first principal component. The ablations support a practical rule: a generative
+modality belongs in the data and in the targets, not in the encoder input. Our
+headline model does not yet follow this rule: it was pretrained with the
+parameters as an encoder input, and its distillation used the same model as
+teacher, so its frozen representation corresponds to the four-stream arm. A
+headline run at $\rho_\theta{=}1$ would be the direct test. We expect the rule
+to transfer to any multimodal model with access to a program, a CAD sketch, or a
+simulator state, and the gated ratio $\rho_\theta$ is a one-line way to test
+it.
 
 \paragraph{Which metric decides.}
 Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on
-the decisions a designer has to make (Fig.~\ref{fig:metrics}): depth, more
-training plants, and the parameter stream each move Chamfer by tens of percent
-and the probe by nothing, while a half-visible cloud moves Chamfer fivefold and
-the probe by $0.03$. On slender geometry the two measure different things,
-surface proximity and recovered structure, and we let the probe decide and
-report Chamfer as the decoder's surface error. The probe has its own costs: it
-needs labels and a held-out split, its $R^2$ is comparable between models on
-one split but is not a portable absolute (our held-out plants are
-extreme-enriched), and sorghum's four named traits collapse to two generator
-variables, which is why maize is the species on which the claims about
-independent traits rest. Training-side, the Sinkhorn term is our response to
-Chamfer's blindness to a missing blade; its ablation is pending
+the design decisions (Fig.~\ref{fig:metrics}): depth, more training plants, and
+the parameter stream each move Chamfer by tens of percent and leave the probe
+nearly unchanged, while a partial cloud from one camera raises Chamfer by 2.6 to
+6.5 times but changes the probe by at most $0.03$. On slender geometry, Chamfer
+measures surface proximity and the probe measures recovered structure, so we use
+the probe to make decisions and report Chamfer as the decoder's surface error.
+The probe has its own limitations: it requires labels and a held-out split, and
+its $R^2$ is comparable between models on one split but is not an absolute
+measure across datasets (our held-out plants are extreme-enriched). Sorghum's
+four named traits also reduce to two generator variables, so our claims about
+independent traits rely on maize. On the training side, we added the Sinkhorn
+term because Chamfer barely penalizes a missing blade; its ablation is pending
 (\todo{E7}).
 
 \paragraph{From complete clouds to a camera.}
 Every sorghum model was pretrained on complete clouds of isolated plants, and
-Sec.~\ref{sec:regime2} shows what that leaves out. \todo{Maize is the other
-case: a maize \texttt{pointcloud\_cam.ply} is the surface its own camera sees
+Sec.~\ref{sec:regime2} measures the effect of partial clouds. \todo{Maize is the other
+case: a maize \texttt{pointcloud\_cam.ply} is the surface visible to its own camera
 (2\,\% of a cloud's points hidden from that camera, 25\,\% from another; the
 depth image back-projects to within 1\,mm), so every maize model trained on
 single-camera clouds. The maize study inverts the question (what three and ten
-fused cameras add; \texttt{eval/pc\_view\_eval\_maize.py}) and is queued.} The information survives a
-single camera's view, but the latent moves with coverage, so a readout
-calibrated on complete scans is wrong on partial ones and must be refit; the
-decoder reproduces what it is given and does not hallucinate the hidden half;
-and viewpoint, not morphology, sets the difficulty of inverting a photograph.
-The recipe is the output that tolerates this best: ten photographs of one plant
-move its recovered insertion heights by a tenth of their spread, and a
-re-rendered recipe is complete even where the cloud is not. The row-occluded
-regime and the real scans (Secs.~\ref{sec:regime3} and \ref{sec:res-field})
-are the two evaluations this paper still owes, and the one-camera transfer gap
-is our stated prediction for the sim-to-real penalty before they land. A
-generator also carries regularities nobody intended, such as the fixed leaf
-azimuth that handed a pose-aware baseline a canonical orientation; benchmark
-users should expect more of these.
+fused cameras add; \texttt{eval/pc\_view\_eval\_maize.py}) and is queued.} The phenotype information survives a
+single camera's view, but the latent shifts with coverage, so a readout
+calibrated on complete scans is wrong on partial ones and must be refit. The
+decoder reproduces what it is given and does not hallucinate the hidden half.
+Viewpoint, not morphology, determines the difficulty of inverting a photograph.
+The recipe tolerates partial views best: the recovered insertion heights of one
+plant vary by a tenth of their spread across its ten photographs, and a
+re-rendered recipe is complete even where the cloud is not. The sorghum row
+evaluation and the real scans (Secs.~\ref{sec:regime3} and \ref{sec:res-field})
+are not yet complete; until they are, the one-camera transfer gap is our
+prediction for the sim-to-real penalty. A generator also contains unintended
+regularities, such as the fixed leaf azimuth that gave a pose-aware baseline a
+canonical orientation, and benchmark users should expect more of them.
 
 \paragraph{What distillation does and does not buy.}
-A full-modality teacher improves every single-sensor student and concentrates
-the gain on the weakest sources and the hardest plants
+Distillation from a full-modality teacher improves every single-sensor student
+and concentrates the gain on the weakest sources and the hardest plants
 (Tab.~\ref{tab:anysubset}, Fig.~\ref{fig:views}B), and supervising all four
-targets beats a parameter specialist at parameter regression. It does not make
-the model view-robust: the elevation curve moves down and keeps its shape, so
-view robustness needs a different lever, most plausibly views as an explicit
-augmentation axis during pretraining. It also showed that a field nothing can
-predict is not free: the three waviness parameters of the first sorghum release
-stayed at zero skill and grew more view-dependent under distillation, and the
-final generator drops them. A parameterization meant to be regressed should be
-pruned to what its sensors can determine.
+targets beats a parameter specialist at parameter regression. Distillation does
+not make the model view-robust: the elevation curve moves down and keeps its
+shape, so view robustness requires a different method, most plausibly treating
+views as an explicit augmentation axis during pretraining. Distillation also
+showed that an unpredictable field is not neutral: the three waviness parameters
+of the first sorghum release stayed at zero skill and became more view-dependent
+under distillation, and the final generator does not include them. A
+parameterization meant to be regressed should be restricted to the fields that
+the sensors can determine.
 
 \paragraph{Scope and compute.}
-The ablations use one seed per arm; the run-to-run floor comes from a single
-near-duplicate pair (3\,\% Chamfer, $0.004$ $R^2$), and the maize scaling
-results are within it. Two generators and two species-specific models are
-studied, and the 1{,}000-epoch headline model is trained once per species.
-The procedural prior that makes inversion tractable also bounds it: a plant
-the generator cannot express cannot be recovered, and an organ class the
-generator renders without variation (tassel droop in maize is below zero for
-every encoder of this design) is a limit of the data as much as of the model.
-Row occlusion, real scans, and the \FieldProc{} release at 10K--100K plants
-remain \todo{in progress}.
+The ablations use one seed per arm. The run-to-run floor comes from a single
+near-duplicate pair (2\,\% in Chamfer, at most $0.011$ in $R^2$), and the maize
+scaling differences, although significant under the paired bootstrap, could
+still be run-to-run variance (Sec.~\ref{sec:res-repr}). Two generators and two
+species-specific models are studied, and the 1{,}000-epoch headline model is
+trained once per species. The procedural prior that makes inversion tractable
+also limits it: a plant that the generator cannot express cannot be recovered,
+and an organ class that the generator renders without variation (tassel droop in
+maize is below zero for every encoder of this design) limits the data as much as
+the model. Sorghum row occlusion, real scans, and the \FieldProc{} release at
+10K--100K plants remain \todo{in progress}.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-\CropCode{} recovers a complete, editable procedural plant from whichever
-sensor a field campaign produced, in one forward pass, by letting the generator
-supply both the training data and the output representation. Two findings
-from its ablations should outlast the application: the generator's parameters
-are valuable targets but harmful encoder inputs, and on slender
-geometry a downstream probe, not Chamfer distance, is the metric that decides
-what a modality is worth. The remaining distance to the field is measured, not
-guessed: a single camera's partial view costs a refit readout and a known
-transfer gap, and the row-occluded and real-scan evaluations will say whether
-the generator's prior pays for the rest. \todo{Sharpen once E10 lands.}
+\CropCode{} recovers a complete, editable procedural plant from the data of
+whichever sensor a field campaign used, in one forward pass, by using the
+generator for both the training data and the output representation. Two
+findings from its ablations apply beyond plants: the generator's parameters are
+valuable targets but harmful encoder inputs, and on slender geometry a
+downstream probe, not Chamfer distance, should decide what a modality is worth.
+A single camera's partial view requires refitting the readout and leaves a
+measured transfer gap; the row-occluded and real-scan evaluations will show
+whether the generator's prior covers the remaining difference to field data.
+\todo{Sharpen once E10 lands.}
