@@ -1,0 +1,74 @@
+# MAIZE E1 ON NOVA (launched 2026-10-23, user: "launch Maize E1 with 4GPUS for 4days").
+# The Nova twin of Delta's maize E1 (config_maize_4m_pretrain_15k_d2.yaml) on the data NOVA
+# HOLDS: maize v1 (rgb.png with background, full-XML schema v1) -- the d2 renders (rgba.png,
+# trimmed XML) exist only on Delta, where the d2 E1 runs under the other session. Same recipe
+# otherwise: 1000 epochs over all 105,000 views (view_sampling false), global batch 256
+# (16/GPU x GPUs x accum, the launcher sets accum = 16 / GPUs), lr 6e-4, QAL + 0.5 x Sinkhorn.
+# Built for the cross-species programme (PLAN_cross_species.md): the maize-side E1 teacher on
+# the machine that also holds the sorghum E1 and both row datasets.
+#
+#   NUM_WORKERS=10 sbatch --job-name=maize_e1_nova --partition=nova --account=mech-ai --qos=normal \
+#     --gres=gpu:4 --constraint='a100|l40s|h200|rtxpro6000' --cpus-per-task=48 --mem=180G \
+#     --time=4-00:00:00 --time-min=04:00:00 --signal=B:USR1@600 --requeue \
+#     slurm/pretrain_maize_e1_nova.sbatch
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/Maize
+  img_size: 224
+  num_points: 8192          # a pointcloud_cam.ply holds EXACTLY 8192 points
+  view_sampling: false      # E1 reads all 105,000 views per epoch
+  view_seed: 42
+  rgb_file: rgb.png         # DATA V1: the only maize render set on Nova
+  param_schema: v1
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_sinkhorn_weight: 0.5
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28
+
+training:
+  batch_size: 16            # per GPU; global 256 = 16 x 4 x accum 4 (launcher sets accum)
+  accum_steps: 4
+  epochs: 1000
+  lr: 6.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 20
+  val_freq: 20
+  test_freq: 0
+
+checkpointing:
+  output_dir: /work/mech-ai/alloydas/embodiedmae_outputs/maize_4m_pretrain_15k_v1nova
+  save_freq: 5
+  keep_last: 3
+  keep_every: 100
+  resume: null
+
+visualization:
+  viz_freq: 20
+  num_viz_samples: 12
+
+distributed:
+  world_size: 4
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 10
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_4m_pretrain_15k_v1nova

@@ -798,6 +798,19 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
     loads 289 tensors (114.0 M), 0 left at init. Configs (outputs on mech-ai, sbatch lines in the headers):
     `config_{sorghum_xfer_warm_d2, sorghum_xfer_scratch_d2, maize_xfer_warm, maize_xfer_scratch}.yaml` (150 epochs,
     global batch 32, PC+RGB+D; warm inits: maize_4m ep600 -> sorghum, sorghum E1 ep1000 -> maize). NOT launched.
+- **2026-10-23 11:20: MAIZE E1 ON NOVA LAUNCHED (user: "keep them in memory And launch Maize E1 with 4GPUS for
+  4days").** The cross-species plan + output policy are in the session memory (project_cross_species.md,
+  project_output_policy.md). Delta is NOT reachable from Nova (ssh key refused: gssapi/password only), so the Delta
+  d2 maize E1 stays the other session's (already 4-GPU there, 23135087 behind the 2-GPU segment). Launched instead
+  **17082791** `maize_e1_nova` = the maize E1 on the data Nova holds (V1: rgb.png + schema v1 -- the d2 renders are
+  Delta-only): `configs/config_maize_4m_pretrain_15k_v1nova.yaml` + `slurm/pretrain_maize_e1_nova.sbatch` (the
+  sorghum E1 launcher with the maize trainer, GPU-switched env, accum = 16/NPROC so global batch 256 = 16 x 4 x 4).
+  nova / mech-ai, 4x (a100|l40s|h200|rtxpro6000), 48 CPU, 180G, 4 d with `--time-min 4h`, USR1 self-requeue,
+  `--requeue`; output `/work/mech-ai/alloydas/embodiedmae_outputs/maize_4m_pretrain_15k_v1nova` (symlinked under
+  outputs/). 1000 epochs over all 105k views; Delta pace was 14-17 min/epoch on 4x A100-40 -> expect ~2-3x faster
+  loading on Nova maize (small folders) but plan for one self-requeue past the 4-day wall. Purpose: the maize-side
+  E1 teacher ON THIS MACHINE for the cross-species programme (warm starts, Z-evals, joint work). Pending on
+  Priority behind the account cap at submit.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
