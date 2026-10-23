@@ -210,7 +210,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script id="data" type="application/json">/*DATA*/</script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-23 09:40 CDT';
+const ASOF = '2026-10-23 10:40 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -269,15 +269,20 @@ const C=D.curves;
 
 // ---------- queue
 (function(){
-  document.getElementById('queuenote').innerHTML='<strong>Distillation: 2 running, 2 queued</strong> (10-23 09:40). The generalist\'s scavenger twin took over at 01:45 (the nova copy was cancelled by the race); the first RGB→cloud student started on nova at 22:12 once labmates\' GPUs freed. Both run on 2× A100 at 41 min/epoch, so the generalist finishes ~10-25 03:00 and that student ~10-25 22:00; the other two students have not started. Slurm start times are worst cases.';
+  document.getElementById('queuenote').innerHTML='<strong>10-23 morning:</strong> scratch hit 100 % full at 09:40; five jobs died at launch (no log file) and were resubmitted; 923 GB of intermediate checkpoints were pruned (finished runs keep final + every 100th + best) and new runs now write to /work/mech-ai. Every blank cell on this page now has a job: the E1 probe and partial-cloud rows, the isolated-control eval (chained), student F1 (chained after the distillations) and the cross-species evaluations are queued.';
   const rows=[
-    ['17070513','distill_d2_scav (generalist)','scavenger, 2× A100','running since 01:45, epoch '+D.distill.train.length+' / 100, 41 min/epoch','all-source generalist, teacher = E1 ep 1000; the nova copy 17060048 was cancelled by the race at 01:45'],
-    ['17061902','dist_rgb2pc_full_d2','nova, 2× A100','running since 10-22 22:12, epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:'?')+' / 100, 41 min/epoch','RGB→cloud student, source fully visible'],
-    ['17061903 / 4','dist_rgb2pc_smr50{,b}_d2','nova, 2 GPUs each','pending, account cap (est. 10:26)','RGB→cloud students, 50 % of source tokens hidden'],
-    ['17082259','srow_eval_ft','scavenger, 1 GPU','pending','test eval of the finished sorghum row fine-tune'],
-    ['17073182','sorghum_row_iso','nova, 2 GPUs','pending, account cap','isolated control'],
-    ['17060237 → 17060238','pr_e5_d2 → pairboot_e5','nova','after the generalist twin','E5 probe, then pair bootstrap vs the all-view arm'],
-    ['17061909','r2pquant_d2','nova, 1 GPU','after all four distillations','photograph → cloud quant for every student'],
+    ['17070513','generalist distillation (scavenger twin)','2× A100','running, epoch '+D.distill.train.length+' / 100, 41 min/epoch','teacher = E1 ep 1000; E5 probe 17060237 → 17060238 chained after it'],
+    ['17061902','RGB→cloud student, source visible','nova, 2× A100','running since 10-22 22:12','41 min/epoch'],
+    ['17082625 / 17082626','RGB→cloud students, 50 % hidden','nova, 2 GPUs each','run 1 running; run 2 pending (cap)','final quant 17061909 chained after all four'],
+    ['17082627 → 17082823','sorghum row isolated control → its test eval','nova 2 GPUs → scavenger','training → chained','fills the Regime III control rows'],
+    ['17082628','row fine-tune test eval','scavenger','running','fills the Regime III fine-tune rows'],
+    ['17082629','interim photograph→cloud quant (generalist ep 35, student ep 8)','scavenger','running','marked _interim; final numbers from 17061909'],
+    ['17082821','E1 probe + E9 at epoch 1000','scavenger','pending','fills the E1 probe cells'],
+    ['17082822','E1 partial-cloud row','scavenger','pending','fills the E1 row of the partial-cloud table'],
+    ['17082824','P / R / F1 of the four distilled students','scavenger','chained after the distillations',''],
+    ['17082825','cross-species probe + generation, both directions','scavenger','pending','PLAN_cross_species.md Z1 + Z2'],
+    ['17082826 / 17082827','row models on the other species\' rows','scavenger','pending','Z3'],
+    ['17082791','maize E1 on Nova (v1 data), 4 GPUs / 4 d','nova','pending (account cap)','the maize-side E1 teacher for the cross-species work'],
   ];
   document.getElementById('queuetbl').innerHTML='<thead><tr><th>job</th><th>name</th><th>where</th><th>state</th><th>what</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="mono">${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td><td class="wrapc" style="white-space:normal;min-width:200px">${esc(r[3])}</td><td class="wrapc" style="white-space:normal">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
 })();

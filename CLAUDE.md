@@ -811,6 +811,16 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   loading on Nova maize (small folders) but plan for one self-requeue past the 4-day wall. Purpose: the maize-side
   E1 teacher ON THIS MACHINE for the cross-species programme (warm starts, Z-evals, joint work). Pending on
   Priority behind the account cap at submit.
+- **2026-10-23 11:40: EVERY LEDGER BLANK NOW HAS A JOB (user: "any other jobs to send?", "check from artifact").**
+  Queued on scavenger (1 GPU each unless said): **17082821** `pr_e1_d2` (E1 probe + E9 at ep 1000 -> the E1 probe
+  cells), **17082822** `pcview_e1_d2` (the E1 partial-cloud row), **17082823** `srow_eval_iso` (afterok:17082627, the
+  isolated control's test eval), **17082824** `pcfscore_students` (P/R/F1 of the four distilled students'
+  best_model, afterany the four distillations), **17082825** `xspecies_eval` (`slurm/xspecies_eval.sbatch`: Z1 cross
+  probes both directions + Z2 cross generation both directions, test split, 2,250 plants), **17082826/7**
+  `xrow_{m_on_s,s_on_m}` (Z3: each row fine-tune on the other species' test rows, `--model-species`). NOT queued:
+  the four T1 transfer arms (2 GPUs x ~1 day each; sbatch lines in their config headers). Ledger v14 queue section
+  refreshed. Remaining blanks with no job possible yet: E10 (no real scans), per-view E5 probe (not built), joint
+  pretraining (Phase 2, needs the maize d2 images on Nova).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
