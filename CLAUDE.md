@@ -844,6 +844,18 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   probe + E1 partial-cloud rows now flow from `reports/probe_pr_e1_d2_*.csv` / `pcview_1708282*`. A republish from
   `make_sorghum_ledger.py` keeps the copied files (files left out of a publish are kept); pass review_v1.html again
   only if it changes.
+- **2026-10-23 13:10: FINAL-DATA VIEWERS ON THE LEDGER'S MAIN PAGE (user: "Update the visualizations with v2 results and
+  keep them in main page"; ledger v18).** `export/export_viz_v2.py --student-ckpt <ckpt> --out-dir <dir>` writes the three
+  viewer data files in the September schemas: `clouds_v2.js` (8 val plants, view 0, GT cloud coloured by distance to the
+  cloud generated from the PHOTOGRAPH ALONE: E1 ep 1000 vs the distilled generalist), `views_v2.js` + `view_v2_*.jpg`
+  (Sorghum_10001, ten views, student from RGB alone), `params_v2.js` (student recipe from PC alone / RGB alone, final
+  leaf layout incl. width). Run on CPU in ~10 min against a SNAPSHOT of the student (epoch 42 now; the trainer prunes
+  checkpoints). Copies in `outputs/_viz_v2/`. Numbers at ep 42: mean Chamfer from the photograph 2.74e-3 (E1) ->
+  1.52e-3 (student), better on 7 of 8 plants; missed at 0.02: 41.0 % -> 37.1 %. The template embeds the three viewers
+  (scoped `#viz` CSS, three.js r128 from cdnjs) plus the distillation's own src-pc generation grids (epoch 1 vs latest,
+  read by the generator from `outputs/4m_distill_15k_all_d2/visualizations`). Maize and first-release viewers stay on
+  `review_v1.html`. **When the distillation finishes: rerun the exporter on its final checkpoint, republish with the
+  three .js files.**
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

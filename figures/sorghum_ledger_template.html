@@ -209,38 +209,97 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
   </section>
 
   <section id="viz">
-    <div class="sechead"><span class="eyebrow">Visualizations</span><h2>Reconstructions, coverage viewers and latents (first data release)</h2></div>
-    <div class="note"><strong>First-release material.</strong> These figures and interactive viewers come from the September progress review and were computed on the first sorghum and maize releases; final-data equivalents do not exist yet (the distillation they illustrate is re-running on the final data). Their numbers are superseded by the tables above. The interactive viewers live on the archived page: open them with the buttons.</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px">
-      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-pc">3D viewer · sorghum points missed, before vs after distillation</a>
-      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-params">parameter browser · sorghum, every leaf</a>
-      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-views">ten-view gallery · sorghum photo → cloud</a>
-      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-maize-pc">3D viewer · maize 1k vs 10.5k plants</a>
-      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-maize-views">ten-view gallery · maize</a>
-      <a class="pill done" style="text-decoration:none;padding:6px 12px" href="review_v1.html#viz-maize-params">parameter browser · maize</a>
-      <a class="pill queued" style="text-decoration:none;padding:6px 12px" href="review_v1.html">whole archived review</a>
+    <div class="sechead"><span class="eyebrow">Visualizations</span><h2>From a photograph to a plant: what the models generate (final data)</h2></div>
+    <p>Each model is handed <b>one photograph</b> (the final-data RGB, background removed) with every other stream masked and the recipe zeroed, and generates the point cloud and the recipe. <b>Before</b> is the Sinkhorn E1 at epoch 1,000, used as is; <b>after</b> is the distilled generalist student, which is still training (<span id="vz-stepoch"></span>; its viewers are rebuilt when it finishes). Eight held-out plants, view 0.</p>
+    <style>
+      #viz .vz-box{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-top:14px}
+      #viz .vz-ctrls{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+      #viz .vz-ctrl{display:flex;flex-direction:column;gap:5px;min-width:0}
+      #viz .vz-ctrl>span{font-size:.68rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+      #viz .vz-segs{display:flex;flex-wrap:wrap;gap:4px}
+      #viz .vz-segs button{font:inherit;font-size:.8rem;padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+      #viz .vz-segs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+      #viz .vz-segs button:focus-visible,#viz input[type=range]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+      #viz input[type=range]{width:170px;max-width:44vw;accent-color:var(--accent)}
+      #viz .vz-rd{font-family:var(--font-mono);font-size:.85rem;font-weight:600}
+      #viz .vz-panes{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}
+      @media(min-width:680px){#viz .vz-panes{grid-template-columns:1fr 1fr}}
+      #viz .vz-pane{background:var(--surface);display:flex;flex-direction:column;min-width:0}
+      #viz .vz-pane canvas,#viz .vz-trio canvas{display:block;width:100%;height:clamp(300px,52vh,560px);touch-action:none;cursor:grab;background:var(--surface)}
+      #viz .vz-lab{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--line);font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+      #viz .vz-lab b{font-family:var(--font-mono);font-size:.82rem;color:var(--fg);text-transform:none;letter-spacing:0}
+      #viz .vz-key{display:flex;flex-wrap:wrap;gap:6px 18px;padding:9px 16px;border-top:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+      #viz .vz-key i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+      #viz .vz-strip{display:grid;grid-template-columns:repeat(10,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+      @media(max-width:820px){#viz .vz-strip{grid-template-columns:repeat(5,1fr)}}
+      #viz .vz-strip button{border:0;padding:0;background:var(--surface);cursor:pointer;position:relative;line-height:0}
+      #viz .vz-strip img{width:100%;height:auto;display:block;opacity:.55}
+      #viz .vz-strip button[aria-pressed="true"] img{opacity:1}
+      #viz .vz-strip button[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px;z-index:1}
+      #viz .vz-strip span{position:absolute;left:0;right:0;bottom:0;font-family:var(--font-mono);font-size:10px;line-height:1.5;color:#fff;background:rgba(10,18,22,.68)}
+      #viz .vz-trio{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}
+      @media(min-width:900px){#viz .vz-trio{grid-template-columns:1fr 1fr 1fr}}
+      #viz .vz-trio>div{background:var(--surface);display:flex;flex-direction:column;min-width:0}
+      #viz .vz-trio img{width:100%;height:clamp(300px,52vh,560px);object-fit:contain;background:#000;display:block}
+      #viz .vz-ptbl{max-height:520px;overflow:auto}
+      #viz .vz-ptbl td.v{font-family:var(--font-mono);font-size:.78rem;line-height:1.3;text-align:right}
+      #viz .vz-ptbl td.v s{display:block;text-decoration:none;color:var(--muted);font-size:.72rem}
+      #viz .vz-ptbl td.v b{display:block;font-weight:600}
+      #viz .vz-ptbl tr.plantrow td{background:var(--accent-soft);font-weight:600;white-space:normal}
+      #viz .vz-nojs{padding:16px;color:var(--c4)}
+    </style>
+
+    <h3 style="margin-top:18px">Which points of the plant each model reaches</h3>
+    <p class="small muted">Drag to rotate, scroll to zoom; both panes share one camera. Every dot is a <b>ground-truth</b> point: green when the generated cloud has a point within the threshold, red when it does not. 0.01 in this frame is about 1 cm.</p>
+    <div class="vz-box">
+      <div class="vz-ctrls">
+        <div class="vz-ctrl"><span>Plant (8 held-out)</span><div class="vz-segs" id="vz-plant"></div></div>
+        <div class="vz-ctrl"><span>Miss threshold</span><input type="range" id="vz-thr" min="2" max="80" step="1" value="20" aria-label="miss threshold"></div>
+        <div class="vz-ctrl"><span>Distance</span><div class="vz-rd" id="vz-thr-rd">0.020</div></div>
+        <div class="vz-ctrl"><span>Point size</span><input type="range" id="vz-psz" min="4" max="26" step="1" value="11" aria-label="point size"></div>
+      </div>
+      <div class="vz-panes">
+        <div class="vz-pane"><canvas id="vz-cv0"></canvas><div class="vz-lab"><span id="vz-lab0">before</span><b id="vz-pct0">—</b></div></div>
+        <div class="vz-pane"><canvas id="vz-cv1"></canvas><div class="vz-lab"><span id="vz-lab1">after</span><b id="vz-pct1">—</b></div></div>
+      </div>
+      <div class="vz-key"><span><i style="background:#e0493c"></i>missed: no generated point within the threshold</span><span><i style="background:#34a35c"></i>reached</span><span id="vz-summary"></span></div>
+      <div class="vz-nojs" id="vz-fb" hidden>The 3D viewer could not load.</div>
     </div>
-    <h3 style="margin-top:18px">Point cloud in, everything else generated: before and after distillation (sorghum)</h3>
-    <div class="imggrid">
-      <figure><img src="gen_before.png" alt="Generation grid at epoch 1: blurry generated RGB and depth from the input point cloud" loading="lazy"><figcaption><b>Before</b>, epoch 1 · Sorghum_10001_00 · the cloud is the input; read the generated RGB and depth</figcaption></figure>
-      <figure><img src="gen_after.png" alt="Generation grid at epoch 100: generated depth resolves leaf blades" loading="lazy"><figcaption><b>After</b>, epoch 100 of the first-release distillation · individual blades separate in the generated depth</figcaption></figure>
+
+    <h3 style="margin-top:22px">Ten photographs of one plant, and the cloud each one produced</h3>
+    <p class="small muted">The distilled student generates from each photograph alone. Left: the image it was given. Middle: the generated cloud, coloured by height, opened in that camera's pose. Right: the ground truth coloured by coverage. The ten views are an elevation ladder, from 64° looking down (view 0) to 64° looking up (view 9).</p>
+    <div class="vz-box">
+      <div class="vz-strip" id="vg2-strip"></div>
+      <div class="vz-ctrls">
+        <div class="vz-ctrl"><span>Miss threshold</span><input type="range" id="vg2-thr" min="2" max="80" step="1" value="20" aria-label="miss threshold"></div>
+        <div class="vz-ctrl"><span>Distance</span><div class="vz-rd" id="vg2-thr-rd">0.020</div></div>
+        <div class="vz-ctrl"><span>Coverage, this view</span><div class="vz-rd" id="vg2-cov">—</div></div>
+        <div class="vz-ctrl"><span>Orientation</span><div class="vz-segs"><button type="button" id="vg2-reset">Back to camera view</button></div></div>
+      </div>
+      <div class="vz-trio">
+        <div><img id="vg2-img" alt="input photograph for the selected view"><div class="vz-lab"><span>Input photograph</span><b id="vg2-elev">—</b></div></div>
+        <div><canvas id="vg2-pred"></canvas><div class="vz-lab"><span>Generated from RGB alone</span><b id="vg2-cd">—</b></div></div>
+        <div><canvas id="vg2-gt"></canvas><div class="vz-lab"><span>Ground truth, coverage</span><b id="vg2-gtpct">—</b></div></div>
+      </div>
+      <div class="vz-nojs" id="vg2-fb" hidden>The view gallery could not load.</div>
     </div>
-    <h3 style="margin-top:18px">Maize reconstructions</h3>
-    <div class="imggrid">
-      <figure><img src="maize_recon_1k_final.jpg" alt="1,000-plant maize model reconstruction" loading="lazy"><figcaption><b>1,000 plants</b>, epoch 6,168 · plant_0034_00, identical masks</figcaption></figure>
-      <figure><img src="maize_recon_full_matched.jpg" alt="10,500-plant maize model reconstruction" loading="lazy"><figcaption><b>10,500 plants</b>, epoch 600 · same plant and masks; Chamfer 6.6 vs 1.0 ×10⁻³</figcaption></figure>
-      <figure><img src="maize_recon_ep1.jpg" alt="maize base model after epoch 1" loading="lazy"><figcaption>Base maize model, <b>epoch 1</b></figcaption></figure>
-      <figure><img src="maize_recon_ep600.jpg" alt="maize base model after epoch 600" loading="lazy"><figcaption>Base maize model, <b>epoch 600</b></figcaption></figure>
+
+    <h3 style="margin-top:22px">What the recipe head recovers from one stream</h3>
+    <p class="small muted">The distilled student's recipe from the point cloud alone or the photograph alone. Each cell: ground truth (grey) above the prediction; the tint is the error relative to that field's spread over the leaves shown.</p>
+    <div class="vz-box">
+      <div class="vz-ctrls">
+        <div class="vz-ctrl"><span>Plant</span><div class="vz-segs" id="pm2-plant"></div></div>
+        <div class="vz-ctrl"><span>Conditioned on</span><div class="vz-segs" id="pm2-src"><button type="button" data-src="pc" aria-pressed="true">Point cloud</button><button type="button" data-src="rgb" aria-pressed="false">Photograph</button></div></div>
+        <div class="vz-ctrl"><span>Mean |error| (in field spreads)</span><div class="vz-rd" id="pm2-mae">—</div></div>
+      </div>
+      <div class="vz-ptbl"><table id="pm2-tbl"><thead id="pm2-head"></thead><tbody id="pm2-body"></tbody></table></div>
+      <div class="vz-nojs" id="pm2-fb" hidden>The parameter browser could not load.</div>
     </div>
-    <p class="small muted" style="margin-top:8px">As in every reconstruction grid here, the depth outline and the per-patch RGB statistics come from the ground truth.</p>
-    <h3 style="margin-top:18px">Latent structure (E9, first release)</h3>
-    <div class="imggrid">
-      <figure><img src="e9_latent.png" alt="t-SNE panels of the sorghum PC+RGB+D latent" loading="lazy"><figcaption><b>Sorghum PC+RGB+D</b> · six factor panels; leaf count is the clean gradient</figcaption></figure>
-      <figure><img src="e9_latent_params.png" alt="t-SNE panels of the sorghum four-stream latent" loading="lazy"><figcaption><b>Sorghum four streams</b> · the leaf-count gradient interleaves (|r| 0.76 → 0.64)</figcaption></figure>
-      <figure><img src="e9_maize.png" alt="t-SNE panels of the maize base latent" loading="lazy"><figcaption><b>Maize base</b> · broad gradients for leaf count, angle, biomass; height and twist mixed</figcaption></figure>
-      <figure><img src="tsne_maize_1k.png" alt="t-SNE of the 1,000-plant maize latent" loading="lazy"><figcaption><b>Maize, 1,000 plants</b> · lobed, less locally organised</figcaption></figure>
-      <figure><img src="tsne_maize_large.png" alt="t-SNE of the large maize latent" loading="lazy"><figcaption><b>Maize, large model</b> · one rounded mass, smoothest leaf-count gradient</figcaption></figure>
-    </div>
+
+    <h3 style="margin-top:22px">Point cloud in, everything else generated: during distillation</h3>
+    <div class="imggrid" id="vz-gen"></div>
+
+    <div class="note" style="margin-top:16px">The maize viewers and the first-release sorghum viewers are on the <a href="review_v1.html">archived September review</a>: the final-data maize models live on the Delta cluster and are not on this machine yet.</div>
   </section>
 
   <section id="recon">
@@ -257,6 +316,10 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 </div>
 
 <script id="data" type="application/json">/*DATA*/</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="clouds_v2.js"></script>
+<script src="views_v2.js"></script>
+<script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
 const ASOF = '2026-10-23 12:30 CDT';
@@ -570,6 +633,68 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   tog.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>render(+b.dataset.i))); render(0);
   const leak=X.some(x=>x.set.includes('nodepth'));
   document.getElementById('xnote').innerHTML=leak?'<strong>Depth leak check is in:</strong> compare the "depth hidden" row with the cross row; if it falls to the native level, metric depth carried the size signal.':'<strong>Treat the sorghum-on-maize numbers as unverified.</strong> They beat every native maize model (height 0.83 against 0.58 for maize_4m on the same first-release data). The adapter hands the sorghum model METRIC depth, while native maize models only ever see depth normalised per plant, and the maize renderer frames each plant by its size, so absolute depth may leak height. The check (same probe with depth hidden, plus the native model through this harness) is job 17083713. The maize-on-sorghum direction shows no such anomaly: height 0.952 against 0.977 native.';
+})();
+
+// ---------- visualizations (final data)
+(function(){
+  const gen=document.getElementById('vz-gen');
+  if(gen){gen.innerHTML=[['gen_v2_ep1','epoch 1 of the distillation'],['gen_v2_last','latest epoch of the distillation']].filter(k=>D.images[k[0]]).map(k=>`<figure style="background:#fff"><img src="${D.images[k[0]]}" alt="${esc(k[1])}" loading="lazy"><figcaption>${esc(k[1])} · ${esc(D.images[k[0]+'_name']||'')}</figcaption></figure>`).join('');}
+  const C2=window.CLOUD_DATA_V2, V2=window.VIEW_DATA_V2, P2=window.PARAM_DATA_V2;
+  const se=document.getElementById('vz-stepoch'); if(se&&C2) se.textContent='at '+C2.samples[0].clouds[1].label.replace('distilled student ','');
+  const hasT=typeof THREE!=='undefined';
+  function orbit(cv,view,draw){let last=null;
+    cv.addEventListener('pointerdown',e=>{last={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);});
+    cv.addEventListener('pointermove',e=>{if(!last)return;view.theta-=(e.clientX-last.x)*0.008;view.phi=Math.min(Math.PI-0.05,Math.max(0.05,view.phi-(e.clientY-last.y)*0.008));last={x:e.clientX,y:e.clientY};draw();});
+    cv.addEventListener('pointerup',()=>{last=null;});cv.addEventListener('pointercancel',()=>{last=null;});
+    cv.addEventListener('wheel',e=>{e.preventDefault();view.r=Math.min(7,Math.max(1.1,view.r*(1+Math.sign(e.deltaY)*0.1)));draw();},{passive:false});}
+  function rig(id,size){const cv=document.getElementById(id);const r=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});r.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    const s=new THREE.Scene(),c=new THREE.PerspectiveCamera(45,1,0.01,100),g=new THREE.BufferGeometry();s.add(new THREE.Points(g,new THREE.PointsMaterial({size:size,vertexColors:true,sizeAttenuation:true})));return {cv,r,s,c,g};}
+  function render(rs,view){const sp=Math.sin(view.phi);rs.forEach(x=>{const w=x.cv.clientWidth||1,h=x.cv.clientHeight||1;x.r.setSize(w,h,false);x.c.aspect=w/h;x.c.position.set(view.r*sp*Math.cos(view.theta),view.r*Math.cos(view.phi),view.r*sp*Math.sin(view.theta));x.c.lookAt(0,0,0);x.c.updateProjectionMatrix();x.r.render(x.s,x.c);});}
+  const COV=hasT?new THREE.Color('#34a35c'):null, MISS=hasT?new THREE.Color('#e0493c'):null;
+  function cover(x,xyz,nn,t){const col=new Float32Array(xyz.length);let bad=0;for(let k=0;k<nn.length;k++){const c=nn[k]>t?MISS:COV;if(nn[k]>t)bad++;col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;}
+    x.g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(xyz),3));x.g.setAttribute('color',new THREE.BufferAttribute(col,3));return bad/nn.length;}
+  // 1. coverage viewer
+  (function(){ if(!C2||!hasT){document.getElementById('vz-fb').hidden=false;return;}
+    const view={theta:0.9,phi:1.25,r:2.7}; const psz=document.getElementById('vz-psz'), thr=document.getElementById('vz-thr');
+    const rs=[rig('vz-cv0',psz.value/1000),rig('vz-cv1',psz.value/1000)]; let si=0;
+    const draw=()=>render(rs,view); rs.forEach(x=>orbit(x.cv,view,draw));
+    function load(){const t=thr.value/1000; document.getElementById('vz-thr-rd').textContent=t.toFixed(3);
+      const smp=C2.samples[si]; smp.clouds.forEach((cl,i)=>{const bad=cover(rs[i],cl.xyz,cl.nn,t);document.getElementById('vz-lab'+i).textContent=cl.label;
+        document.getElementById('vz-pct'+i).innerHTML=`<span style="color:#34a35c">${(100*(1-bad)).toFixed(1)}% reached</span> · ${(100*bad).toFixed(1)}% missed`;});
+      const mean=i=>C2.samples.reduce((a,s)=>{const nn=s.clouds[i].nn;let b=0;for(const v of nn) if(v>t)b++;return a+b/nn.length;},0)/C2.samples.length;
+      document.getElementById('vz-summary').textContent=`all 8 plants at ${t.toFixed(3)}: ${(100*mean(0)).toFixed(1)}% missed before, ${(100*mean(1)).toFixed(1)}% after`; draw();}
+    const seg=document.getElementById('vz-plant'); C2.samples.forEach((s,idx)=>{const b=document.createElement('button');b.type='button';b.textContent=s.name.replace('Sorghum_','').replace(/_\d+$/,'');b.setAttribute('aria-pressed',idx===0?'true':'false');
+      b.addEventListener('click',()=>{si=idx;[...seg.children].forEach((o,j)=>o.setAttribute('aria-pressed',j===idx?'true':'false'));load();});seg.appendChild(b);});
+    thr.addEventListener('input',load); psz.addEventListener('input',()=>{rs.forEach(x=>x.s.children[0].material.size=psz.value/1000);draw();}); window.addEventListener('resize',draw); load();})();
+  // 2. ten-view gallery
+  (function(){ if(!V2||!hasT){document.getElementById('vg2-fb').hidden=false;return;}
+    const CAM={theta:Math.PI/2,phi:Math.PI/2,r:2.62}; const view={...CAM}; const rs=[rig('vg2-pred',0.013),rig('vg2-gt',0.013)]; let vi=0;
+    const draw=()=>render(rs,view); rs.forEach(x=>orbit(x.cv,view,draw)); const thr=document.getElementById('vg2-thr');
+    const elev=i=>-0.9+0.2*i;
+    function ramp(tt){return new THREE.Color().setHSL(0.75-0.60*tt,0.62,0.30+0.28*tt);}
+    function setCloud(x,flat){const xyz=new Float32Array(flat),n=xyz.length/3;let lo=Infinity,hi=-Infinity;for(let k=0;k<n;k++){const y=xyz[k*3+1];if(y<lo)lo=y;if(y>hi)hi=y;}
+      const col=new Float32Array(xyz.length),sp=(hi-lo)||1;for(let k=0;k<n;k++){const c=ramp((xyz[k*3+1]-lo)/sp);col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;}
+      x.g.setAttribute('position',new THREE.BufferAttribute(xyz,3));x.g.setAttribute('color',new THREE.BufferAttribute(col,3));}
+    function tint(){const v=V2.views[vi],t=thr.value/1000;document.getElementById('vg2-thr-rd').textContent=t.toFixed(3);const bad=cover(rs[1],v.gt,v.nn,t);
+      document.getElementById('vg2-gtpct').innerHTML=`<span style="color:#34a35c">${(100*(1-bad)).toFixed(1)}% reached</span> · ${(100*bad).toFixed(1)}% missed`;document.getElementById('vg2-cov').textContent=`${(100*(1-bad)).toFixed(1)}% / ${(100*bad).toFixed(1)}%`;}
+    function show(i){vi=i;const v=V2.views[i];[...strip.children].forEach((o,j)=>o.setAttribute('aria-pressed',j===i?'true':'false'));document.getElementById('vg2-img').src=v.img;
+      const e=elev(+v.view);document.getElementById('vg2-elev').textContent=`view ${v.view} · sin(elev) ${(e>=0?'+':'')+e.toFixed(2)}`;document.getElementById('vg2-cd').textContent='Chamfer '+(v.chamfer*1e3).toFixed(2)+' ×10⁻³';setCloud(rs[0],v.pred);tint();draw();}
+    const strip=document.getElementById('vg2-strip'); V2.views.forEach((v,i)=>{const b=document.createElement('button');b.type='button';const e=elev(+v.view);b.setAttribute('aria-pressed',i===0?'true':'false');b.setAttribute('aria-label','view '+v.view);
+      b.innerHTML=`<img src="${v.img}" alt="photograph from view ${v.view}"><span>${v.view} ${(e>=0?'+':'')+e.toFixed(2)}</span>`;b.addEventListener('click',()=>show(i));strip.appendChild(b);});
+    thr.addEventListener('input',()=>{tint();draw();}); document.getElementById('vg2-reset').addEventListener('click',()=>{Object.assign(view,CAM);draw();}); window.addEventListener('resize',draw); show(0);})();
+  // 3. parameter browser
+  (function(){ if(!P2){document.getElementById('pm2-fb').hidden=false;return;}
+    const F=P2.leaf_fields,U=P2.leaf_units,all=[];P2.plants.forEach(p=>p.leaves.forEach(l=>all.push(l.gt)));
+    const sd=F.map((_,i)=>{const v=all.map(r=>r[i]);const m=v.reduce((a,b)=>a+b,0)/v.length;return Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length)||1;});
+    let pi=0,src='pc'; const fmt=(x,i)=>{const a=Math.abs(x);return (a>=100?x.toFixed(1):a>=1?x.toFixed(2):x.toFixed(3))+(U[i]||'');};
+    function cell(gt,pv,i){const e=Math.min(1,Math.abs(pv-gt)/sd[i]);const tt=e<0.08?0:0.10+0.65*e;return `<td class="v" style="background:color-mix(in srgb, var(--c4) ${(tt*100).toFixed(0)}%, transparent)"><s>${fmt(gt,i)}</s><b>${fmt(pv,i)}</b></td>`;}
+    function render(){const p=P2.plants[pi];document.getElementById('pm2-head').innerHTML='<tr><th>leaf</th>'+F.map(f=>`<th class="n">${esc(f.replace(/_/g,' '))}</th>`).join('')+'</tr>';
+      let h=`<tr class="plantrow"><td>plant</td><td colspan="${F.length}">stem length ${p.plant.gt[0].toFixed(3)} → ${p.plant[src][0].toFixed(3)} (generator units) · ${p.n} leaves</td></tr>`,tot=0,n=0;
+      p.leaves.forEach(l=>{h+=`<tr><td class="lead">${l.i}</td>`;F.forEach((_,i)=>{h+=cell(l.gt[i],l[src][i],i);tot+=Math.abs(l[src][i]-l.gt[i])/sd[i];n++;});h+='</tr>';});
+      document.getElementById('pm2-body').innerHTML=h;document.getElementById('pm2-mae').textContent=(tot/n).toFixed(3)+' sd';}
+    const seg=document.getElementById('pm2-plant');P2.plants.forEach((p,idx)=>{const b=document.createElement('button');b.type='button';b.textContent=p.name.replace('Sorghum_','').replace(/_\d+$/,'');b.setAttribute('aria-pressed',idx===0?'true':'false');
+      b.addEventListener('click',()=>{pi=idx;[...seg.children].forEach((o,j)=>o.setAttribute('aria-pressed',j===idx?'true':'false'));render();});seg.appendChild(b);});
+    document.querySelectorAll('#pm2-src button').forEach(b=>b.addEventListener('click',()=>{src=b.dataset.src;document.querySelectorAll('#pm2-src button').forEach(o=>o.setAttribute('aria-pressed',o===b?'true':'false'));render();}));render();})();
 })();
 
 // ---------- reconstructions

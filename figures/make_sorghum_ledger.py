@@ -140,6 +140,10 @@ def main():
             if p: D['images'][f'tsne_{run}'] = img_b64(p[0], 760, 72)
         for i, p in enumerate(sorted(glob.glob(str(O/'4m_pretrain_15k_d2_sink'/'visualizations'/'epoch_980_sample_*_00.png')))[:3]):
             D['images'][f'recon{i}'] = img_b64(p, 700, 72); D['images'][f'recon{i}_name'] = Path(p).stem.split('_', 4)[-1]
+        gv = sorted((O/'4m_distill_15k_all_d2'/'visualizations').glob('epoch_*_src-pc_sample_1_*.png'))
+        if gv:
+            D['images']['gen_v2_ep1'] = img_b64(gv[0], 1100, 80); D['images']['gen_v2_ep1_name'] = gv[0].stem
+            D['images']['gen_v2_last'] = img_b64(gv[-1], 1100, 80); D['images']['gen_v2_last_name'] = gv[-1].stem
         for f in sorted((REPO/'paper'/'figs').glob('fig_*.png')):
             D['images']['paper_' + f.stem] = img_b64(f, 1400, 85)
     tpl = open(REPO/'figures'/'sorghum_ledger_template.html').read()
