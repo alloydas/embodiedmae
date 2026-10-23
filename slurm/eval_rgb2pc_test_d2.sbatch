@@ -61,7 +61,11 @@ RUNS=(
 for SPLIT in test val; do
   for R in "${RUNS[@]}"; do
     IFS='|' read -r LABEL CKPT SRC <<< "$R"
-    OUT="${OUTDIR}/quant_${LABEL}_${SPLIT}.json"
+    if [ -n "${LABEL_SUFFIX:-}" ] && [ "${LABEL}" != "teacher_undistilled_d2" ]; then
+      # interim run: snapshot the live best_model.pth so a concurrent save cannot change it under us
+      SNAP="${OUTDIR}/_snap_${LABEL}${LABEL_SUFFIX}.pth"; cp "$CKPT" "$SNAP" 2>/dev/null && CKPT="$SNAP"
+    fi
+    OUT="${OUTDIR}/quant_${LABEL}${LABEL_SUFFIX:-}_${SPLIT}.json"   # LABEL_SUFFIX=_interim for a mid-training snapshot
     if [ -f "$OUT" ]; then
       echo ">>> SKIP ${LABEL} / ${SPLIT} (already have ${OUT})"
       continue
@@ -70,7 +74,7 @@ for SPLIT in test val; do
     echo ">>> ${LABEL}  split=${SPLIT}  source=${SRC}"
     python eval_rgb2pc_quant.py \
       --checkpoint "$CKPT" \
-      --label "$LABEL" \
+      --label "${LABEL}${LABEL_SUFFIX:-}" \
       --split "$SPLIT" \
       --n_plants "$N_PLANTS" \
       --batch_size 4 \

@@ -754,6 +754,12 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   smr50 / smr50b pending on the cap (est. 10:26). **None finishes before the 10-24 freeze.** `sorghum_row_iso`
   17073182 pending on the cap. Ledger regenerated (rows section now data-driven from `reports/row_sorghum_*.json`,
   `reports/row_sorghum_pair_*.csv`, row histories; student curves from their histories).
+- **2026-10-23 10:00 (user: "queue the interim quant evaluation"):** `slurm/eval_rgb2pc_test_d2.sbatch` takes
+  `LABEL_SUFFIX` (reports become `quant_<label><suffix>_<split>.json`; student checkpoints are snapshotted to
+  `reports/_snap_*.pth` before scoring so a concurrent save cannot change them). **17082357** `r2pquant_d2_interim`
+  (scavenger, 1 GPU, `LABEL_SUFFIX=_interim`) scores the CURRENT `best_model.pth` of the generalist (~epoch 35-40) and
+  of `rgb2pc_full_d2` (~epoch 10) on val + test (the teacher row is skipped: it exists); the two unstarted students
+  fail-and-continue. The final job 17061909 (afterany all four) writes the un-suffixed names when the runs end.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
