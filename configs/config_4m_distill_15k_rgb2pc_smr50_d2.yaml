@@ -50,7 +50,7 @@ training:
   max_steps: 0
   accum_steps: 2
 checkpointing:
-  output_dir: ./outputs/4m_distill_15k_rgb2pc_smr50_d2
+  output_dir: /work/mech-ai/alloydas/embodiedmae_outputs/4m_distill_15k_rgb2pc_smr50_d2   # scratch hit 100 % on 2026-10-23; new runs write to /work/mech-ai
   save_freq: 2
   keep_last: 2
   resume: null

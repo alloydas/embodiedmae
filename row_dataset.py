@@ -150,7 +150,7 @@ class RowDataset(Dataset):
     def __init__(self, root, split='val', species='maize', mode='row', img_size=224, num_points=None,
                  max_leaves=None, thetas=None, shots=None, sample_per_plant=False, seed=0,
                  deterministic=False, plants=None, occlusion_stats=True, rgb_gain=None, gt_points=None,
-                 recipe_root=None):
+                 recipe_root=None, depth_encode=None):
         """
         root/split      : the row data root and split folder
         species         : 'maize' | 'sorghum' (recipe parser, defaults)
@@ -175,6 +175,11 @@ class RowDataset(Dataset):
         self.recipe_root = recipe_root if recipe_root is not None else self.sp.get('recipe_root')
         self._recipe_cache = {}
         self._pose_cache = {}
+        # depth_encode: a species_conventions convention name ('sorghum_std' / 'maize_std' /
+        # 'maize_row') that OVERRIDES the species default -- used when another species' model
+        # reads these rows (PLAN_cross_species.md Z3). None = the species default (sorghum rows
+        # re-encode to sorghum_std; maize rows stay in the renderer's own encoding).
+        self.depth_encode = depth_encode
         self.species, self.root, self.split, self.mode = species, Path(root), split, mode
         self.img_size = int(img_size)
         self.num_points = int(num_points or self.sp['num_points'])
@@ -262,6 +267,16 @@ class RowDataset(Dataset):
     def load_depth(self, path):
         with Image.open(path) as im:
             d = decode_depth(np.asarray(im))
+        if self.depth_encode is not None:
+            import species_conventions as _SC
+            cp = self._camera_pose(Path(path).parent)
+            near, far = float(cp.get('near', 0.05)), float(cp.get('far', 4.5))
+            enc = _SC.depth_encoder(self.depth_encode)
+            fg = d > 0
+            z = d[fg] * (far - near) + near
+            d = d.copy(); d[fg] = np.clip(enc(z), 1e-6, None).astype(np.float32)
+            t = torch.from_numpy(np.ascontiguousarray(d)).unsqueeze(0)
+            return TF.resize(t, [self.img_size, self.img_size], interpolation=InterpolationMode.BILINEAR, antialias=True)
         fn = self.sp.get('depth_reencode')
         if fn is not None:
             # row encoding -> metres (per-shot near / far) -> the species' training encoding; background stays 0

@@ -1,0 +1,52 @@
+# T1 cross-species transfer: the maize PC+RGB+D arm (Nova maize v1 data: rgb.png, schema v1) at a
+# SHORT matched budget (150 epochs, global batch 32), from scratch: the schedule-matched control.
+#   export MAIZE_CONDA_ENV=/work/mech-ai-scratch/alloy/.conda/envs/det_cu128
+#   sbatch --job-name=maize_xfer_scratch --partition=nova --account=mech-ai --qos=normal --gres=gpu:2 \n#     --constraint='(a100&NVLINK)|h200|rtxpro6000' --cpus-per-task=16 --mem=64G --time=2-00:00:00 \n#     slurm/scale_arm_maize.sbatch maize_xfer_scratch --num_workers 7
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/Maize
+  img_size: 224
+  num_points: 8192
+  view_sampling: true
+  view_seed: 42
+model:
+  active_modalities: pc,rgb,depth
+  model_size: base
+  mask_ratio: 0.8
+  loss_name: qal_loss
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28
+training:
+  batch_size: 16
+  epochs: 150
+  lr: 0.00015
+  weight_decay: 0.05
+  warmup_epochs: 10
+  val_freq: 10
+  test_freq: 0
+checkpointing:
+  output_dir: /work/mech-ai/alloydas/embodiedmae_outputs/maize_xfer_scratch
+  save_freq: 25
+  resume: null
+  keep_last: 3
+  keep_every: 50
+visualization:
+  viz_freq: 25
+  num_viz_samples: 6
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+system:
+  num_workers: 14
+  device: cuda
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_xfer_scratch

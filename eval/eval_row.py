@@ -180,6 +180,10 @@ def main():
     ap.add_argument('--batch-size', type=int, default=16)
     ap.add_argument('--num-workers', type=int, default=8)
     ap.add_argument('--mask-ratio', type=float, default=None, help="'all' source masking; default the run's")
+    ap.add_argument('--model-species', choices=('sorghum', 'maize'), default=None,
+                    help='the species the RUN is, when it differs from --species (the data): cross-species '
+                         'zero-shot (PLAN_cross_species.md Z3). Depth is re-encoded into the model convention; '
+                         'the recipe is never scored across schemas.')
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     ap.add_argument('--out', required=True, help='prefix: writes <out>.csv and <out>.json')
@@ -189,10 +193,17 @@ def main():
     a.root = a.root or DEFAULT_ROOT[a.species]
     sp = species_info(a.species)
     run_dir = REPO / 'outputs' / a.run if not Path(a.run).exists() else Path(a.run)
-    model, cfg, epoch = build_model(run_dir, a.ckpt, device, a.species)
+    model_species = a.model_species or a.species
+    model, cfg, epoch = build_model(run_dir, a.ckpt, device, model_species)
+    cross = model_species != a.species
+    depth_encode = None
+    if cross:
+        import species_conventions as SC
+        depth_encode = SC.model_depth_convention(model_species, cfg)
+        print(f'CROSS: {model_species} model on {a.species} rows; row depth re-encoded to {depth_encode}; recipe not scored')
     schema = (cfg.get('param_schema') or 'v1') if a.species == 'maize' else \
         ('width' if 'width' in (cfg.get('leaf_fields') or []) else 'waviness')
-    recipe = recipe_scored(cfg, a.species, model)
+    recipe = recipe_scored(cfg, a.species, model) and not cross
     rgb_gain = float(cfg.get('rgb_brighten_gain', 1.0)) if a.species == 'sorghum' else None
     mask_ratio = a.mask_ratio if a.mask_ratio is not None else float(cfg.get('mask_ratio', 0.8))
     modes = [m for m in a.modes.split(',') if m]
@@ -206,9 +217,10 @@ def main():
     t0 = time.time()
     for mode in modes:
         ds = RowDataset(a.root, a.split, a.species, mode, cfg.get('img_size', 224),
-                        a.num_points or cfg.get('num_points', sp['num_points']), cfg.get('max_leaves', sp['max_leaves']),
-                        thetas=thetas, rgb_gain=rgb_gain,
-                        gt_points=cfg.get('gt_points', cfg.get('num_points', sp['num_points'])))
+                        a.num_points or cfg.get('num_points', sp['num_points']), sp['max_leaves'],
+                        thetas=thetas, rgb_gain=rgb_gain, depth_encode=depth_encode,
+                        gt_points=(cfg.get('gt_points', cfg.get('num_points', sp['num_points'])) if not cross
+                                   else sp['num_points']))
         if a.n_plants:
             keep = set(ds.plant_ids[:a.n_plants])
             ds.items = [it for it in ds.items if it[0] in keep]

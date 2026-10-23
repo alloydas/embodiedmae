@@ -762,6 +762,42 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (scavenger, 1 GPU, `LABEL_SUFFIX=_interim`) scores the CURRENT `best_model.pth` of the generalist (~epoch 35-40) and
   of `rgb2pc_full_d2` (~epoch 10) on val + test (the teacher row is skipped: it exists); the two unstarted students
   fail-and-continue. The final job 17061909 (afterany all four) writes the un-suffixed names when the runs end.
+- **2026-10-23 10:30: DISK FULL INCIDENT + OUTPUT POLICY + CROSS-SPECIES CODE (user: "So many job failed check
+  them", "delete unwanted checkpoints", "Ok save output in mech-ai").** `/work/mech-ai-scratch` hit 100 % (0 bytes
+  free) at ~09:40. Five jobs that were ALLOCATED nodes at 09:43-09:44 died in <= 3 s with exit 0:53 and NO log file
+  (slurmd could not create stdout); the running trainers survived (files already open). Freed: smoke dirs, the stale
+  unscaled-depth row run, stale brightened probe caches, wandb run dirs > 7 days (~90 GB), then (user's instruction)
+  **923 GB of intermediate checkpoints: every finished run keeps final + every 100th epoch + {6168, 2024, 624} +
+  best_model** (606 files deleted; running/queued runs and `4m_pretrain_15k_d2_sink` untouched; the E3 arms keep only
+  their final + best). **NEW OUTPUT POLICY: new runs write to `/work/mech-ai/alloydas/embodiedmae_outputs/<run>`**
+  (5 T free there), with symlinks `outputs/<run> -> ...` so every repo-relative path keeps working; the three pending
+  configs (smr50, smr50b, sorghum_row_iso) are repointed; the two RUNNING distillations stay on scratch. Resubmitted
+  (disk victims): **17082625** `dist_rgb2pc_smr50_d2`, **17082626** `dist_rgb2pc_smr50b_d2` (nova 2 GPUs each),
+  **17082627** `sorghum_row_iso` (nova 2 GPUs, batch 16), **17082628** `srow_eval_ft`, **17082629**
+  `r2pquant_d2_interim` (scavenger); the final quant 17061909 now waits afterany:17070513:17061902:17082625:17082626.
+  The generalist twin was preempted at 01:01 and requeued itself cleanly (running on nova22-gpu-5 since 01:45).
+- **2026-10-23 11:00: CROSS-SPECIES CODE (PLAN_cross_species.md phases 0-1; user: "Write code for 1 and 2").**
+  - `species_conventions.py` (root): the four depth conventions (sorghum_std (z-0.0238)/50; maize_std per-plant
+    near/far, fg band [0.26, 0.74]; maize_row (z-0.05)/2.95; sorghum_row decode-only), `depth_decoder` /
+    `depth_encoder` / `reencode_depth` (background-preserving, edge-bleed clipped) and `model_depth_convention(species,
+    run_cfg)` (sorghum models always sorghum_std; maize row models maize_row; other maize models maize_std band).
+  - **Z1** `eval/cross_species_probe.py`: species A's frozen encoder on species B's plants; B's own splits, targets and
+    ridge protocol (imports both probe modules); depth re-encoded, recipe zeroed at the MODEL's width, RGB as the data
+    ships it; caches in `outputs/_probe_cache_xspecies/`. CPU smoke (8 plants) passed both directions. Run (1 GPU):
+    `python eval/cross_species_probe.py --model-run e2_pcrgbd_d2 4m_pretrain_15k_d2_sink:checkpoints/checkpoint_epoch_1000.pth --data-species maize --out reports/xprobe_sorghum_on_maize.csv`
+    and `--model-run maize_4m:checkpoints/checkpoint_epoch_600.pth --data-species sorghum`; anchor = same species.
+  - **Z2** `eval_rgb2pc_quant.py` gained `--model_species / --data_species / --target_points`: cross feeds re-encoded
+    depth and a model-width zero recipe; maize data defaults to `/work/mech-ai-scratch/alloy/Maize` (v1: rgb.png,
+    8192 pts). CPU smoke both directions passed.
+  - **Z3** `eval/eval_row.py --model-species` + `RowDataset(depth_encode=...)`: another species' model on these rows;
+    depth re-encoded into the model's convention (checked: sorghum rows serve fg 0.038 native, 0.60 as maize_row,
+    0.36 as maize_std), recipe never scored across schemas, gt at the data species' native size. E.g.
+    `SPECIES=sorghum sbatch slurm/eval_row.sbatch maize_row_ft checkpoints/checkpoint_epoch_100.pth test --model-species maize`.
+  - **T1** both trainers gained `init.checkpoint` / `--init_checkpoint` (warm start, strict-filtered: shape-matched
+    tensors only; resume always wins so requeues never re-warm-start). Verified: sorghum E1 -> maize PC+RGB+D arm
+    loads 289 tensors (114.0 M), 0 left at init. Configs (outputs on mech-ai, sbatch lines in the headers):
+    `config_{sorghum_xfer_warm_d2, sorghum_xfer_scratch_d2, maize_xfer_warm, maize_xfer_scratch}.yaml` (150 epochs,
+    global batch 32, PC+RGB+D; warm inits: maize_4m ep600 -> sorghum, sorghum E1 ep1000 -> maize). NOT launched.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

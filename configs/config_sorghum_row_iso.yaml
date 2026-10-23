@@ -64,7 +64,7 @@ training:
   val_freq: 5
 
 checkpointing:
-  output_dir: ./outputs/sorghum_row_iso
+  output_dir: /work/mech-ai/alloydas/embodiedmae_outputs/sorghum_row_iso   # scratch hit 100 % on 2026-10-23; new runs write to /work/mech-ai
   save_freq: 5
   keep_last: 3
   keep_every: 25

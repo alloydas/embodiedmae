@@ -1,0 +1,53 @@
+# T1 cross-species transfer (PLAN_cross_species.md): the sorghum PC+RGB+D arm at a SHORT matched
+# budget (150 epochs = 49,350 steps, global batch 32 = 16 x 2), from scratch: the schedule-matched
+# control for the warm twin (do NOT compare against e2_pcrgbd_d2@150: its cosine spans 600 epochs).
+#   sbatch --job-name=sorghum_xfer_scratch_d2 --partition=nova --account=mech-ai --qos=normal --gres=gpu:2 \n#     --constraint='(a100&NVLINK)|h200|rtxpro6000' --cpus-per-task=16 --mem=64G --time=2-00:00:00 \n#     slurm/scale_arm_blackwell.sbatch sorghum_xfer_scratch_d2 --num_workers 7
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K
+  rgb_file: rgb_nobg.png
+  img_size: 224
+  num_points: 8196
+  view_sampling: true
+  view_seed: 42
+model:
+  active_modalities: pc,rgb,depth
+  model_size: base
+  mask_ratio: 0.8
+  loss_name: qal_loss
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 24
+training:
+  batch_size: 16
+  epochs: 150
+  lr: 0.00015
+  weight_decay: 0.05
+  warmup_epochs: 10
+  val_freq: 10
+  test_freq: 0
+checkpointing:
+  output_dir: /work/mech-ai/alloydas/embodiedmae_outputs/sorghum_xfer_scratch_d2
+  save_freq: 25
+  resume: null
+  keep_last: 3
+  keep_every: 50
+visualization:
+  viz_freq: 0
+  num_viz_samples: 6
+distributed:
+  world_size: 2
+  dist_backend: nccl
+  dist_url: env://
+system:
+  num_workers: 14
+  device: cuda
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-sorghum
+  wandb_entity: null
+  wandb_name: sorghum_xfer_scratch_d2

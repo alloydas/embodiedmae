@@ -209,6 +209,8 @@ def config_to_namespace(config):
     ns.keep_last          = config['checkpointing'].get('keep_last', None)
     ns.keep_every         = config['checkpointing'].get('keep_every', None)
     ns.resume             = config['checkpointing'].get('resume', None)
+    # init.checkpoint: warm-start weights (strict=False, cross-species capable); see below
+    ns.init_checkpoint    = (config.get('init') or {}).get('checkpoint', None)
     ns.viz_freq           = config['visualization'].get('viz_freq', 50)
     ns.num_viz_samples    = config['visualization'].get('num_viz_samples', 6)
     ns.world_size         = config['distributed'].get('world_size', 1)
@@ -993,6 +995,30 @@ def train_worker(rank, world_size, args):
         }
     history = empty_history()
 
+    if getattr(args, 'init_checkpoint', None) and not (args.resume and os.path.exists(args.resume)):
+        # Warm start: weights only, epoch stays 1 (checkpointing.resume wins when both are set,
+        # so a requeued job resumes instead of re-warm-starting). Cross-species transfer
+        # (PLAN_cross_species.md): 114.2 of 114.3 M parameters are shape-identical between the
+        # species models; recipe-stream tensors (param embed, its pos tables, the param head
+        # tail) differ in shape and are skipped, as are source tensors absent from this
+        # architecture (e.g. text modules when this arm has no text stream).
+        ickpt = torch.load(args.init_checkpoint, map_location=device, weights_only=False)
+        isd = ickpt.get('model_state_dict', ickpt)
+        tgt = model.state_dict()
+        has_mod = next(iter(isd)).startswith('module.')
+        want_mod = next(iter(tgt)).startswith('module.')
+        if has_mod and not want_mod: isd = {k[7:]: v for k, v in isd.items()}
+        if want_mod and not has_mod: isd = {'module.' + k: v for k, v in isd.items()}
+        dropped = [k for k in isd if k not in tgt]
+        skipped = [k for k in isd if k in tgt and tgt[k].shape != isd[k].shape]
+        isd = {k: v for k, v in isd.items() if k in tgt and tgt[k].shape == v.shape}
+        missing, _ = model.load_state_dict(isd, strict=False)
+        if is_main:
+            print(f"🔥 warm start from {args.init_checkpoint} (epoch {ickpt.get('epoch')}): "
+                  f"loaded {len(isd)} tensors; shape-skipped {len(skipped)}, "
+                  f"absent-here {len(dropped)}, left-at-init {len(missing)}")
+        del ickpt, isd
+
     if args.resume and os.path.exists(args.resume):
         if is_main: print(f"\n📂 Resuming from {args.resume}")
         ckpt = torch.load(args.resume, map_location=device, weights_only=False)
@@ -1242,6 +1268,8 @@ def main():
     parser.add_argument('--output_dir',         type=str,   default=None)
     parser.add_argument('--save_freq',          type=int,   default=None)
     parser.add_argument('--resume',             type=str,   default=None)
+    parser.add_argument('--init_checkpoint',    type=str,   default=None,
+                        help='warm-start weights (strict=False); ignored when resuming')
     parser.add_argument('--world_size',         type=int,   default=None)
     parser.add_argument('--dist_backend',       type=str,   default=None)
     parser.add_argument('--dist_url',           type=str,   default=None)
@@ -1265,6 +1293,8 @@ def main():
                 f"{PC_FRAME}-frame point clouds. pc_frame: gravity runs through "
                 f"train_maize_4m_gravity.py.")
         cfg = config_to_namespace(merge_config_with_args(raw, args))
+        if getattr(args, 'init_checkpoint', None):
+            cfg.init_checkpoint = args.init_checkpoint
     else:
         # No silent fallback. Sorghum's entry point has a built-in default config
         # here; copying it to maize would mean a typo'd --config path quietly
