@@ -193,10 +193,11 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
   </section>
 
   <section id="rows">
-    <div class="sechead"><span class="eyebrow">Regime III</span><h2>Rows: neighbours and occlusion</h2></div>
-    <p>Rover renders of a target plant between two bent neighbours at 0.15 m (rover 2.5 m from the row), ten yaws per plant; train 10,500 / val 2,250 / test 2,250 plants. The encoder sees the row; every loss and metric is against the target plant alone.</p>
+    <div class="sechead"><span class="eyebrow">Regime III</span><h2>Rows: neighbors and occlusion</h2></div>
+    <p>Rover renders of a target plant between two bent neighbors at 0.15 m (rover 2.5 m from the row), ten yaws per plant; train 10,500 / val 2,250 / test 2,250 plants. The encoder sees the row; every loss and metric is against the target plant alone.</p>
     <div class="note" id="rownote"></div>
     <div class="tablewrap"><table id="rowtbl"></table></div>
+    <div class="imggrid" id="rowfigs" style="grid-template-columns:1fr"></div>
     <div class="chartgrid"><div class="chart"><h3>Row training: validation Chamfer</h3><div class="sub">2,250 val plants, one yaw each; solid = against the target plant, dashed = against the input cloud (an echo detector: rising is good).</div><div id="ch_rows"></div></div></div>
   </section>
 
@@ -613,7 +614,8 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
     fig_fscore:'Point-cloud quality. (a) F1 against distance threshold; (b) precision against recall: every model under-covers the plant.',
     fig_partial_clouds:'Partial clouds. Height R² against camera coverage; solid = probe refit per condition, dashed = full-cloud probe transferred.',
     fig_param_controls:'Recipe-stream controls. Probe R² with the recipe absent, a target only, or 20 / 58 / 60 % visible, at equal sensor tokens.',
-    fig_rows_maize:'Regime III, maize rows (test). (a) Paired row vs isolated training and inputs; (b) error against row yaw.'};
+    fig_rows:'Regime III, both species (test). (a, c) Chamfer by training regime and input; (b, d) error against row yaw. Row training removes 91 % (maize) and 85 % (sorghum) of the neighbor penalty.',
+    fig_rows_examples:'Regime III examples: three held-out plants per species at yaw 0° and 90°. Row photograph, the target plant, and each model\'s prediction (color) over the target (gray); titles give Chamfer in 10⁻⁴ m².'};
   const keys=Object.keys(D.images).filter(k=>k.startsWith('paper_fig_'));
   document.getElementById('paperfiggrid').innerHTML=keys.map(k=>{const n=k.slice(6);return `<figure style="background:#fff"><img src="${D.images[k]}" alt="${esc(caps[n]||n)}" loading="lazy"><figcaption><span class="mono">${esc(n)}.pdf</span> · ${esc(caps[n]||'')}</figcaption></figure>`;}).join('');
 })();
@@ -641,6 +643,14 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   tog.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>render(+b.dataset.i))); render(0);
   const leak=X.some(x=>x.set.includes('nodepth'));
   document.getElementById('xnote').innerHTML=leak?'<strong>The check is in: metric depth explains the sorghum-on-maize gain.</strong> With depth hidden, the sorghum E1 falls from height 0.827 to 0.512, biomass 0.941 to 0.786 and leaf length 0.889 to 0.688, i.e. to the native maize model\'s level (0.576 / 0.768 / 0.690). The maize renderer frames each plant by its size and encodes depth per plant, so native maize models never see absolute scale; metric depth hands it over. Without depth the sorghum encoder transfers at about the native level: size traits within 0.06, leaf width (0.79 vs 0.74) and curl (0.42 vs 0.11) better, leaf angle worse (0.71 vs 0.86). Single-photograph generation does not transfer across species (Chamfer 28 to 58 ×10⁻³).':'<strong>Treat the sorghum-on-maize numbers as unverified.</strong> They beat every native maize model (height 0.83 against 0.58 for maize_4m on the same first-release data). The adapter hands the sorghum model METRIC depth, while native maize models only ever see depth normalised per plant, and the maize renderer frames each plant by its size, so absolute depth may leak height. The check (same probe with depth hidden, plus the native model through this harness) is job 17083713. The maize-on-sorghum direction shows no such anomaly: height 0.952 against 0.977 native.';
+})();
+
+// ---------- row figures
+(function(){
+  const el=document.getElementById('rowfigs'); if(!el) return;
+  const items=[['paper_fig_rows','Both species, test: Chamfer by training regime and input (a, c) and by row yaw (b, d). Sorghum error does not depend on yaw; maize error grows toward end-on yaws.'],
+               ['paper_fig_rows_examples','Three held-out plants per species at yaw 0° (broadside) and 90° (end-on): the row photograph the model saw, the target plant, the row-trained model\'s prediction (blue) and the isolated-trained control\'s prediction (orange) over the target (gray). The control reconstructs neighbor leaves as part of the plant.']];
+  el.innerHTML=items.filter(i=>D.images[i[0]]).map(i=>`<figure style="background:#fff"><img src="${D.images[i[0]]}" alt="${esc(i[1])}" loading="lazy"><figcaption>${esc(i[1])}</figcaption></figure>`).join('');
 })();
 
 // ---------- cross-species generation (Z2 / Z3)

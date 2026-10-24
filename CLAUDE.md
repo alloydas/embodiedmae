@@ -918,6 +918,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   rgbd2pc (30), pairs2pc (28), rgbt2pc (1); pending on the cap = generalist 17070513 (ep 47), smr50b (ep 15, requeued once),
   dt2pc, four E2 arms, maize E1; all four T1 arms preempted and pending on scavenger (warm 21 / scratch 7 sorghum; maize
   warm 1 / scratch 107). Ledger v23. Paper `tab:rows` sorghum rows not yet filled.
+- **2026-10-24 18:40: SORGHUM ROWS IN THE PAPER + ROW FIGURES (user: "update the tex file with sorghum rows and visualization
+  in artifact").** `paper/results.tex` `tab:rows` now has the three sorghum blocks (zero-shot E1, row fine-tune, isolated
+  control) x four inputs with within-model row-minus-isolated deltas (`eval/row_pair_bootstrap.py --ft X --iso X`), a sorghum
+  paragraph (85 % of the penalty removed; yaw-independent; zero-shot E1 is also a partial-cloud test), the figure switched to
+  `figs/fig_rows.pdf` (both species, 2x2) and the discussion updated; Overleaf re-synced. `figures/make_paper_figs_v2.py`
+  `fig_rows()` writes `fig_rows` + per-species copies. New `figures/make_row_gallery.py` -> `paper/figs/fig_rows_examples.{pdf,png}`
+  (CPU, ~10 min): 3 test plants per species at yaw 0/90, row photo / target / row-trained / isolated-trained prediction; not
+  yet placed in the tex (the `\todo{Fig.~5}` qualitative figure could use it). Ledger v24 shows both in the Regime III section.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

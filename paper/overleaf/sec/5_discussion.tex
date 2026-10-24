@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/discussion.tex, commit b81793b).
+% Synced from the embodiedmae repo (paper/discussion.tex, commit 1e56199).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Discussion and Limitations}
 \label{sec:discussion}
@@ -54,10 +54,11 @@ decoder reproduces what it is given and does not hallucinate the hidden half.
 Viewpoint, not morphology, determines the difficulty of inverting a photograph.
 The recipe tolerates partial views best: the recovered insertion heights of one
 plant vary by a tenth of their spread across its ten photographs, and a
-re-rendered recipe is complete even where the cloud is not. The sorghum row
-evaluation and the real scans (Secs.~\ref{sec:regime3} and \ref{sec:res-field})
-are not yet complete; until they are, the one-camera transfer gap is our
-prediction for the sim-to-real penalty. A generator also contains unintended
+re-rendered recipe is complete even where the cloud is not. In both species,
+training on rows removes most of the neighbor penalty (91\,\% in maize and
+85\,\% in sorghum, Sec.~\ref{sec:regime3}). The real scans
+(Sec.~\ref{sec:res-field}) are not yet evaluated; until they are, the
+one-camera transfer gap is our prediction for the sim-to-real penalty. A generator also contains unintended
 regularities, such as the fixed leaf azimuth that gave a pose-aware baseline a
 canonical orientation, and benchmark users should expect more of them.
 
@@ -85,5 +86,5 @@ trained once per species. The procedural prior that makes inversion tractable
 also limits it: a plant that the generator cannot express cannot be recovered,
 and an organ class that the generator renders without variation (tassel droop in
 maize is below zero for every encoder of this design) limits the data as much as
-the model. Sorghum row occlusion, real scans, and the \FieldProc{} release at
+the model. Real scans and the \FieldProc{} release at
 10K--100K plants remain \todo{in progress}.

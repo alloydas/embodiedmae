@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit b81793b).
+% Synced from the embodiedmae repo (paper/results.tex, commit 1e56199).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -223,7 +223,9 @@ rows of Tab.~\ref{tab:views}.}
 
 % maize rows: /work/mech-ai/alloydas/maize_row (train 10,500 + test 2,250 plants, 10 yaws each);
 % eval/eval_row.py -> reports/row_<species>_<run>_<ckpt>_<split>_<job>.{csv,json}: maize ft 17059822,
-% control 17064411, zero-shot 17059823; cross-model pairs reports/row_maize_pair_ft17059822_iso17064411.csv
+% control 17064411, zero-shot 17059823; cross-model pairs reports/row_maize_pair_ft17059822_iso17064411.csv;
+% sorghum rows /work/mech-ai/alloydas/sorghum_row: ft 17082628, control 17082823, zero-shot (E1 ep 1000) 17071869;
+% pairs eval/row_pair_bootstrap.py -> reports/row_sorghum_pair_ft17082628_iso17082823.csv (within-model deltas: --ft X --iso X)
 \begin{table}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.0pt}
@@ -251,20 +253,36 @@ rows of Tab.~\ref{tab:views}.}
     & point cloud & 93.3 & 97.7 & $+4.4$\,{\tiny[$+3.7$, $+5.0$]} & 0.074 & 0.083 & $+0.009$\,{\tiny[$+0.008$, $+0.009$]} \\
     & all three   & 4.0 & 33.1 & $+29.1$\,{\tiny[$+28.7$, $+29.5$]} & 0.055 & 0.095 & $+0.040$\,{\tiny[$+0.039$, $+0.041$]} \\
     \midrule
-    \multicolumn{8}{l}{\emph{Sorghum}} \\
-    & all three   &  &  &  &  &  &  \\
+    \multicolumn{8}{l}{\emph{Sorghum, zero-shot (headline model, epoch 1{,}000)}} \\
+    & RGB         & 163.1 & 218.5 & $+55.4$\,{\tiny[$+52.6$, $+58.4$]} & 0.129 & 0.135 & $+0.006$\,{\tiny[$+0.006$, $+0.006$]} \\
+    & depth       & 106.2 & 207.2 & $+101.0$\,{\tiny[$+98.0$, $+104.2$]} & 0.070 & 0.109 & $+0.039$\,{\tiny[$+0.039$, $+0.040$]} \\
+    & point cloud & 177.7 & 231.4 & $+53.8$\,{\tiny[$+52.2$, $+55.4$]} & 0.114 & 0.127 & $+0.013$\,{\tiny[$+0.012$, $+0.013$]} \\
+    & all three   & 174.3 & 230.5 & $+56.2$\,{\tiny[$+53.9$, $+58.5$]} & 0.108 & 0.114 & $+0.006$\,{\tiny[$+0.006$, $+0.006$]} \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Sorghum, row fine-tune}} \\
+    & RGB         & 34.8 & 29.8 & $-5.0$\,{\tiny[$-5.4$, $-4.7$]} & 0.094 & 0.097 & $+0.003$\,{\tiny[$+0.003$, $+0.004$]} \\
+    & depth       & 24.4 & 18.6 & $-5.8$\,{\tiny[$-6.1$, $-5.5$]} & 0.078 & 0.055 & $-0.022$\,{\tiny[$-0.023$, $-0.022$]} \\
+    & point cloud & 46.0 & 70.8 & $+24.8$\,{\tiny[$+24.4$, $+25.2$]} & 0.074 & 0.082 & $+0.007$\,{\tiny[$+0.007$, $+0.007$]} \\
+    & all three   & 38.7 & 30.7 & $-8.0$\,{\tiny[$-8.5$, $-7.6$]} & 0.073 & 0.061 & $-0.012$\,{\tiny[$-0.013$, $-0.011$]} \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Sorghum, isolated control}} \\
+    & RGB         & 15.7 & 133.2 & $+117.5$\,{\tiny[$+115.8$, $+119.3$]} & 0.094 & 0.114 & $+0.020$\,{\tiny[$+0.020$, $+0.021$]} \\
+    & depth       & 6.6 & 171.9 & $+165.3$\,{\tiny[$+162.9$, $+167.8$]} & 0.042 & 0.100 & $+0.059$\,{\tiny[$+0.058$, $+0.060$]} \\
+    & point cloud & 30.9 & 100.9 & $+70.0$\,{\tiny[$+68.8$, $+71.3$]} & 0.065 & 0.083 & $+0.018$\,{\tiny[$+0.018$, $+0.019$]} \\
+    & all three   & 13.1 & 133.8 & $+120.8$\,{\tiny[$+119.5$, $+122.1$]} & 0.049 & 0.096 & $+0.047$\,{\tiny[$+0.046$, $+0.048$]} \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Regime III: the same plants isolated and in a row.} Every
   held-out plant at ten yaws under the rover camera, the target alone and the
   target between two bent neighbors (Sec.~\ref{sec:method-data}). Each input set alone,
-  the recipe never an input; maize test split, $2{,}250$ plants $\times$ 10
-  yaws. Chamfer in metric units, because the row and isolated clouds are
+  the recipe never an input; test split of each species, $2{,}250$ plants
+  $\times$ 10 yaws. Chamfer in metric units, because the row and isolated clouds are
   normalized to different extents. $\Delta$ = row minus isolated, paired per
   plant, bootstrap over plants. The row fine-tune reconstructs the target plant
   from the row streams; the control is the same schedule on the isolated twins.
-  The zero-shot model predicts the first-release recipe layout, so its recipe is
-  not scored. \todo{Sorghum rows: fine-tune, control and zero-shot jobs queued.}}
+  The maize zero-shot model predicts the first-release recipe layout, so its
+  recipe is not scored; the sorghum zero-shot model is the headline model and
+  uses the final layout.}
   \label{tab:rows}
 \end{table}
 
@@ -300,13 +318,27 @@ the target plant, not the row. Depth alone is the best single input for the
 row-trained model, the scene cloud alone fails for every model, and the error
 grows toward end-on yaws, where the neighbors overlap the target in the image.
 
+Sorghum repeats the result at a larger scale. The isolated-plant model is ten
+times worse on rows than on its own clean inputs ($133.8$ against
+$13.1\times10^{-4}\,$m$^2$), and row training removes $85\,\%$ of that
+penalty: the row-trained model on rows beats the isolated-trained model on rows
+by $-103.1\ [-104.3, -102.0]$, and its error is $+17.6\ [+17.4, +17.8]$ above
+the isolated-trained model on clean inputs, with the leaf-recipe error higher
+by $0.013$. Depth alone is again the best single input ($18.6$). Unlike maize,
+the sorghum error does not depend on yaw (Fig.~\ref{fig:rows}d). The zero-shot
+headline model is worse than the isolated control even on isolated inputs
+($174.3$ against $13.1$), because the row renderer's clouds are partial
+captures while the headline model trained on complete clouds; this row is
+therefore also a partial-cloud test, as in Tab.~\ref{tab:views}.
+
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_rows_maize.pdf}
-  \caption{\textbf{Regime III on maize rows (test).} (a) Chamfer against the
-  target plant for the isolated-trained model on clean and on row inputs, the
-  row-trained model on rows, and the zero-shot model on rows. (b) The same by
-  row yaw. Training on rows removes most of the error added by the neighbors.}
+  \includegraphics[width=\linewidth]{Figures/fig_rows.pdf}
+  \caption{\textbf{Regime III on maize (a, b) and sorghum (c, d) rows, test.}
+  (a, c) Chamfer against the target plant for the isolated-trained model on
+  clean and on row inputs, the row-trained model on rows, and the zero-shot
+  model on rows. (b, d) The same by row yaw. Training on rows removes most of
+  the error added by the neighbors in both species.}
   \label{fig:rows}
 \end{figure*}
 

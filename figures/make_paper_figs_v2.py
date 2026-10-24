@@ -1,4 +1,4 @@
-"""Paper figures on the final sorghum data (and the maize row study), white background.
+"""Paper figures on the final sorghum data (and the row study of both species), white background.
 
   python figures/make_paper_figs_v2.py            # writes paper/figs/fig_*.{pdf,png}
 
@@ -129,25 +129,37 @@ def fig_controls():
     a.legend(ncol=4, loc='upper right', bbox_to_anchor=(1.0, 1.13))
     save(fig, 'fig_param_controls')
 
-# ---------------- Fig 6: maize rows (Regime III) ----------------
-def fig_rows():
+# ---------------- Fig 6: rows (Regime III), both species ----------------
+ROWS = {'maize': ('row_maize_maize_row_ft_*_test_17059822.json', 'row_maize_maize_row_iso_*_test_17064411.json', 'row_maize_maize_4m_*_test_17059823.json'),
+        'sorghum': ('row_sorghum_sorghum_row_ft_*_test_17082628.json', 'row_sorghum_sorghum_row_iso_*_test_17082823.json', 'row_sorghum_4m_pretrain_15k_d2_sink_*_test_17071869.json')}
+
+def _rows_panels(a, b, species, letters):
     load = lambda p: json.load(open(sorted(glob.glob(str(R/p)))[-1]))
-    ft, iso, zs = load('row_maize_maize_row_ft_*_test_17059822.json'), load('row_maize_maize_row_iso_*_test_17064411.json'), load('row_maize_maize_4m_*_test_17059823.json')
+    ft, iso, zs = (load(p) for p in ROWS[species])
     m = lambda d, k: d['by_mode_source'][k]['chamfer_gt_m2']['mean'] * 1e4
-    fig, (a, b) = plt.subplots(1, 2, figsize=(6.9, 2.3), gridspec_kw={'width_ratios': [1.1, 1], 'wspace': 0.42})
     rows = [('isolated-trained,\nclean input', m(iso, 'isolated/all'), C['aqua']), ('row-trained,\nrow input', m(ft, 'row/all'), C['blue']),
             ('isolated-trained,\nrow input', m(iso, 'row/all'), C['orange']), ('zero-shot,\nrow input', m(zs, 'row/all'), C['yellow'])]
+    vmax = max(v for _, v, _ in rows)
     a.barh(range(len(rows))[::-1], [v for _, v, _ in rows], color=[c for *_, c in rows], height=0.62, edgecolor='white')
-    for i, (lab, v, _) in enumerate(rows): a.text(v + 0.6, len(rows) - 1 - i, f'{v:.1f}', va='center', fontsize=7, color=INK)
+    for i, (lab, v, _) in enumerate(rows): a.text(v + 0.015 * vmax * 1.15, len(rows) - 1 - i, f'{v:.1f}', va='center', fontsize=7, color=INK)
     a.set_yticks(range(len(rows))[::-1]); a.set_yticklabels([l for l, *_ in rows], fontsize=6.8)
-    a.set_xlim(0, 38); a.set_xlabel('Chamfer vs target plant (10⁻⁴ m², test)'); a.grid(axis='y', visible=False)
-    a.set_title('a  Neighbours cost little once trained for', loc='left')
+    a.set_xlim(0, vmax * 1.15); a.set_xlabel('Chamfer vs target plant (10⁻⁴ m², test)'); a.grid(axis='y', visible=False)
+    a.set_title(f'{letters[0]}  {species.capitalize()}: Chamfer by training and input', loc='left')
     th = sorted(ft['by_theta']['row/all'], key=int); xs = [int(t) for t in th]
     for d, lab, col, mk in ((ft, 'row-trained', C['blue'], 'o'), (iso, 'isolated-trained', C['orange'], 's'), (zs, 'zero-shot', C['yellow'], 'D')):
         b.plot(xs, [d['by_theta']['row/all'][t]['chamfer_gt_m2']['mean'] * 1e4 for t in th], color=col, marker=mk, label=lab)
     b.set_xlabel('row yaw θ (°; 0 broadside, 90 end-on)'); b.set_ylabel('Chamfer (10⁻⁴ m²)'); b.set_xticks([0, 30, 60, 90])
-    b.legend(loc='upper left'); b.set_title('b  By row orientation', loc='left')
-    save(fig, 'fig_rows_maize')
+    b.set_title(f'{letters[1]}  {species.capitalize()}: by row orientation', loc='left')
+    return b
+
+def fig_rows():
+    fig, ax = plt.subplots(2, 2, figsize=(6.9, 4.6), gridspec_kw={'width_ratios': [1.1, 1], 'wspace': 0.42, 'hspace': 0.62})
+    _rows_panels(ax[0, 0], ax[0, 1], 'maize', 'ab').legend(loc='upper left')
+    _rows_panels(ax[1, 0], ax[1, 1], 'sorghum', 'cd')
+    save(fig, 'fig_rows')
+    for sp in ('maize', 'sorghum'):
+        f, (a, b) = plt.subplots(1, 2, figsize=(6.9, 2.3), gridspec_kw={'width_ratios': [1.1, 1], 'wspace': 0.42})
+        _rows_panels(a, b, sp, 'ab').legend(loc='upper left'); save(f, f'fig_rows_{sp}')
 
 if __name__ == '__main__':
     fig_e2(); fig_scaling(); fig_fscore(); fig_pcview(); fig_controls(); fig_rows()
