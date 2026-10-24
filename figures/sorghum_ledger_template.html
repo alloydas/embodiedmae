@@ -182,7 +182,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 
   <section id="distill">
     <div class="sechead"><span class="eyebrow">Distillation</span><h2>Single-sensor generation</h2></div>
-    <p>Teacher = student init = E1 (epoch 1,000). <b>Nine distillation runs in total: 2 running, 7 queued.</b> The generalist was preempted on scavenger at epoch 47 and is queued on nova (it resumes from epoch 46). The generalist sees one source at a time and regenerates all four streams. Three single-stream students map RGB → point cloud. Four <b>two-stream</b> students (added 10-23) map a pair of streams → point cloud: RGB + depth (an RGB-D camera), RGB + recipe, depth + recipe, and one student trained on all three pairs. Pairs that already contain the point cloud are not distilled, since their output is one of their inputs. Every student uses the RGB student's recipe (lr 3 × 10⁻⁵, 100 epochs, global batch 128), so the two-stream rows compare directly with the RGB-only one. Before = E1 used zero-shot; after = the distilled student.</p>
+    <p>Teacher = student init = E1 (epoch 1,000). <b>Nine distillation runs in total: 5 running, 4 queued.</b> The generalist was preempted on scavenger at epoch 47 and is queued on nova (it resumes from epoch 46). The generalist sees one source at a time and regenerates all four streams. Three single-stream students map RGB → point cloud. Four <b>two-stream</b> students (added 10-23) map a pair of streams → point cloud: RGB + depth (an RGB-D camera), RGB + recipe, depth + recipe, and one student trained on all three pairs. Pairs that already contain the point cloud are not distilled, since their output is one of their inputs. Every student uses the RGB student's recipe (lr 3 × 10⁻⁵, 100 epochs, global batch 128), so the two-stream rows compare directly with the RGB-only one. Before = E1 used zero-shot; after = the distilled student.</p>
     <div class="chartgrid">
       <div class="chart"><h3>Generalist: validation mean generation loss</h3><div class="sub">Running; every 5 epochs.</div><div id="ch_distill"></div></div>
       <div class="chart"><h3>Generalist: cloud Chamfer per source</h3><div class="sub">Source alone → full cloud, validation. Log scale.</div><div id="ch_distill_src"></div></div>
@@ -326,7 +326,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-23 15:00 CDT';
+const ASOF = '2026-10-24 18:00 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -355,7 +355,7 @@ const C=D.curves;
     ['E1 F1 @ 0.01 (test)',f.f1.toFixed(3),'P '+f.precision.toFixed(2)+' · R '+f.recall.toFixed(2)],
     ['best ablation arm','PC+RGB+D','probe height '+f3(D.probe.e2_pcrgbd_d2.targets.height.val_r2)+', F1 '+fb.f1.toFixed(3)],
     ['arms probed',String(PROBED.length)+' / 16','E5 probe queued'],
-    ['distillation','2 running, 7 queued','generalist epoch '+D.distill.train.length+' / 100; RGB student epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)],
+    ['distillation','5 running, 4 queued','generalist epoch '+D.distill.train.length+' / 100; RGB student epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)],
     ['row (Regime III)',(D.rows&&D.rows.ft?'fine-tune scored':'0 / 3'),'zero-shot + fine-tune scored; control training'],
   ];
   document.getElementById('strip').innerHTML=tiles.map(t=>`<div class="tile"><div class="k">${esc(t[0])}</div><div class="v">${esc(t[1])}</div><div class="s">${esc(t[2])}</div></div>`).join('');
@@ -390,19 +390,18 @@ const C=D.curves;
   const rows=[
     ['17070513','generalist distillation','nova, 2 GPUs','pending (account cap); preempted on scavenger at epoch 47, resumes from 46','teacher = E1 ep 1000; E5 probe 17060237 → 17060238 and final quant 17061909 chained after it'],
     ['17061902','RGB→cloud student, source visible','nova, 2× A100','running, epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)+' / 100','41 min/epoch'],
-    ['17082625 / 17082626','RGB→cloud students, 50 % hidden','nova, 2 GPUs each','run 1 running (epoch '+(D.students.rgb2pc_smr50_d2?D.students.rgb2pc_smr50_d2.done:0)+'); run 2 pending (cap)',''],
-    ['17084301','RGB + depth → point cloud student','nova, 2 GPUs','pending (account cap)','the RGB-D camera; twin of the RGB-only student'],
-    ['17084366','RGB + recipe → point cloud student','nova, 2 GPUs','pending (account cap)',''],
+    ['17082625 / 17082626','RGB→cloud students, 50 % hidden','nova, 2 GPUs each','run 1 running (epoch '+(D.students.rgb2pc_smr50_d2?D.students.rgb2pc_smr50_d2.done:0)+'); run 2 at epoch '+(D.students.rgb2pc_smr50b_d2?D.students.rgb2pc_smr50b_d2.done:0)+', requeued, pending (cap)',''],
+    ['17084301','RGB + depth → point cloud student','nova, 2 GPUs','running, epoch '+(D.students.rgbd2pc_d2?D.students.rgbd2pc_d2.done:0)+' / 100','the RGB-D camera; twin of the RGB-only student'],
+    ['17084366','RGB + recipe → point cloud student','nova, 2 GPUs','running, epoch '+(D.students.rgbt2pc_d2?D.students.rgbt2pc_d2.done:0)+' / 100',''],
     ['17084367','depth + recipe → point cloud student','nova, 2 GPUs','pending (account cap)',''],
-    ['17084302','one student over all three pairs → point cloud','nova, 2 GPUs','pending (account cap)','val reports cloud Chamfer per pair'],
+    ['17084302','one student over all three pairs → point cloud','nova, 2 GPUs','running, epoch '+(D.students.pairs_d2?D.students.pairs_d2.done:0)+' / 100','val reports cloud Chamfer per pair'],
     ['17084395 / 17084396','E2 arms: PC + depth / PC + recipe','nova, 2 GPUs each','pending (account cap)','600 epochs, 197,400 steps; reconstruct all their own streams'],
     ['17084397 / 17084398','E2 arms: PC + RGB + recipe / PC + depth + recipe','nova, 2 GPUs each','pending (account cap)','completes the stream sets that contain the point cloud'],
-    ['17082627 → 17082823','sorghum row isolated control → its test eval','nova 2 GPUs → scavenger','running, epoch '+(D.rows&&D.rows.sorghum_row_iso?D.rows.sorghum_row_iso.epochs:0)+' / 100 → chained','fills the Regime III control rows'],
     ['17082824','P / R / F1 of the four distilled students','scavenger','chained after the distillations',''],
     ['17082791','maize E1 on Nova (first-release data), 4 GPUs / 4 d','nova','pending (account cap)','the maize-side E1 teacher for the cross-species work'],
-    ['17082838 / 17082839','T1 sorghum transfer arms: warm (init maize_4m ep 600) / scratch','scavenger, 2 GPUs each','warm running; scratch preempted at epoch 4, requeued','150 ep; compare by probe at ep 150'],
-    ['17082840 / 17082841','T1 maize transfer arms: warm (init sorghum E1 ep 1000) / scratch','scavenger, 2 GPUs each','pending','150 ep'],
-    ['done today','row fine-tune test eval (17082628), E1 probe (17082821), E1 partial clouds (17082822), cross-species probe + generation (17082825), depth check (17083713), cross rows (17083714, 17084182), interim quant (17082629)','',  'completed','results on this page'],
+    ['17082838 / 17082839','T1 sorghum transfer arms: warm (init maize_4m ep 600) / scratch','scavenger, 2 GPUs each','warm at epoch 21, scratch at epoch 7; both preempted, pending (nodes held by other jobs)','150 ep; compare by probe at ep 150'],
+    ['17082840 / 17082841','T1 maize transfer arms: warm (init sorghum E1 ep 1000) / scratch','scavenger, 2 GPUs each','warm at epoch 1, scratch at epoch 107; both preempted, pending','150 ep'],
+    ['done today','row fine-tune test eval (17082628), E1 probe (17082821), E1 partial clouds (17082822), cross-species probe + generation (17082825), depth check (17083713), cross rows (17083714, 17084182), interim quant (17082629); 10-24: sorghum row control (17082627) and its test eval (17082823)','',  'completed','results on this page'],
   ];
   document.getElementById('queuetbl').innerHTML='<thead><tr><th>job</th><th>name</th><th>where</th><th>state</th><th>what</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="mono">${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td><td class="wrapc" style="white-space:normal;min-width:200px">${esc(r[3])}</td><td class="wrapc" style="white-space:normal">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
 })();
@@ -592,7 +591,7 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   const cell=(d,k,key,f)=>{const v=d&&d.by_mode_source[k]&&d.by_mode_source[k][key];return v==null?blank:`<td class="n">${f(v)}</td>`;};
   const line=(label,d,k)=>`<tr><td>${esc(label)}</td>${cell(d,k,'chamfer_gt_m2',v=>(v*1e4).toFixed(2))}${cell(d,k,'chamfer_gt',v=>(v*1e3).toFixed(2))}${cell(d,k,'miss_5mm',v=>v.toFixed(3))}${cell(d,k,'plant_mae',v=>v.toFixed(4))}${cell(d,k,'leaf_mae',v=>v.toFixed(4))}</tr>`;
   const grp=(label)=>`<tr><td class="lead" colspan="6" style="background:var(--accent-soft)">${esc(label)}</td></tr>`;
-  let h='<thead><tr><th>model / input</th><th class="n">Chamfer vs target, 10⁻⁴ m²</th><th class="n">normalised ×10⁻³</th><th class="n">miss @ 5 mm</th><th class="n">plant MAE</th><th class="n">leaf MAE</th></tr></thead><tbody>';
+  let h='<thead><tr><th>model / input</th><th class="n">Chamfer vs target, 10⁻⁴ m²</th><th class="n">normalized ×10⁻³</th><th class="n">miss @ 5 mm</th><th class="n">plant MAE</th><th class="n">leaf MAE</th></tr></thead><tbody>';
   h+=grp('zero-shot E1 (epoch 1,000) on the test rows'+(RW.zs?' · job '+RW.zs.job:' · queued'));
   h+=line('row input, all streams',RW.zs,'row/all')+line('row input, depth only',RW.zs,'row/depth')+line('isolated input, all streams',RW.zs,'isolated/all')+line('isolated input, depth only',RW.zs,'isolated/depth');
   h+=grp('row fine-tune from E1 (sorghum_row_ft, 100 ep, 2 GPUs)'+(RW.ft?' · job '+RW.ft.job:(RW.sorghum_row_ft?' · training done, test eval running':' · queued')));

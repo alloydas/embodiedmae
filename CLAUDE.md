@@ -909,6 +909,15 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
 - **2026-10-23 14:50: GENERALIST MOVED TO NOVA (user: "move the generalist distillation to NOVA").** 17070513 was preempted on
   scavenger at epoch 47 (Restarts=2) and was moved in place to nova / mech-ai / normal (2 GPUs, `(a100&NVLINK)|h200|rtxpro6000`,
   2 d); it resumes from `checkpoint_epoch_46.pth`. The E5 probe and final quant chains still wait on it (afterany).
+- **2026-10-24 18:00: SORGHUM REGIME III COMPLETE.** Isolated control 17082627 finished 10-23 22:11 (100/100, 12 h on 2 GPUs);
+  its test eval 17082823 done. `eval/row_pair_bootstrap.py` (new; reproduces the maize pair deltas to 1e-16) ->
+  `reports/row_sorghum_pair_ft17082628_iso17082823.csv`. Chamfer vs target, 1e-4 m^2, all streams: isolated-trained on
+  isolated 13.1, isolated-trained on rows 133.8, row-trained on rows 30.7, zero-shot E1 on rows 230.5. Row fine-tuning
+  removes 85 % of the row penalty (maize 91 %): gain -103.1 [-104.3, -102.0], residual cost +17.6 [+17.4, +17.8], leaf MAE
+  +0.013. Best single input for the row model is depth (18.6). Queue at 17:50: running = rgb2pc_full (ep 59), smr50 (47),
+  rgbd2pc (30), pairs2pc (28), rgbt2pc (1); pending on the cap = generalist 17070513 (ep 47), smr50b (ep 15, requeued once),
+  dt2pc, four E2 arms, maize E1; all four T1 arms preempted and pending on scavenger (warm 21 / scratch 7 sorghum; maize
+  warm 1 / scratch 107). Ledger v23. Paper `tab:rows` sorghum rows not yet filled.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
