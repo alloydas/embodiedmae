@@ -24,6 +24,9 @@ RUNS = {  # slug -> short label
  'e3_1k_d2':'1k', 'e3_3k_d2':'3k', 'e3_10k_d2':'10k', 'e4_small_d2':'small', 'e4_large_d2':'large',
  'e5_topdown_d2':'E5 top-down', 'e5_horizon_d2':'E5 horizon', 'e5_single_d2':'E5 single',
  '4m_pretrain_15k_d2_sink':'E1', 'e8_supervised_d2':'supervised',
+ 'e2_pcd_d2':'PC+D', 'e2_pct_d2':'PC+recipe', 'e2_pcrgbt_d2':'PC+RGB+recipe', 'e2_pcdt_d2':'PC+D+recipe',
+ 'sorghum_xfer_warm_d2':'sorghum, warm from maize', 'sorghum_xfer_scratch_d2':'sorghum, scratch',
+ 'maize_xfer_warm':'maize, warm from sorghum E1', 'maize_xfer_scratch':'maize, scratch',
 }
 CKPT = {'e3_1k_d2':6168, 'e3_3k_d2':2024, 'e3_10k_d2':624, '4m_pretrain_15k_d2_sink':1000}
 TARGETS = ['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_len_max','leaf_width_mean','leaf_width_max']

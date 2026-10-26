@@ -107,7 +107,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <div class="sechead"><span class="eyebrow">Training</span><h2>Validation curves</h2></div>
     <p>Every ablation arm trains 197,400 optimizer steps at global batch 32; E3 arms are drawn against steps because their epoch counts differ by 10× on purpose (1k plants = 32 steps/epoch, 3k = 94, 10k = 313, full = 329). E1 is 1,000 epochs over all ten views at global batch 256. Chamfer is the masked validation step, unit-sphere frame.</p>
     <div class="chartgrid">
-      <div class="chart"><h3>E2 arms: validation chamfer</h3><div class="sub">Which token streams exist. Log scale.</div><div id="ch_e2_cham"></div></div>
+      <div class="chart"><h3>E2 arms: validation chamfer</h3><div class="sub">Which token streams exist. Solid = the original four; dashed = the four arms added 10-23 (PC + depth and PC + recipe done; the other two still training). Log scale.</div><div id="ch_e2_cham"></div></div>
       <div class="chart"><h3>Parameter-budget controls: validation chamfer</h3><div class="sub">The four-stream arm with the recipe tokens inside the budget (as trained), gated to 20 % or 60 % visible, or as a target only. Log scale.</div><div id="ch_tg_cham"></div></div>
       <div class="chart"><h3>E3 arms: validation chamfer vs optimizer steps</h3><div class="sub">Log scale.</div><div id="ch_e3_cham"></div></div>
       <div class="chart"><h3>E4 and E5 arms: validation chamfer</h3><div class="sub">Model size, and the view band the train draw was restricted to (val scores view 0). Log scale.</div><div id="ch_e45_cham"></div></div>
@@ -182,7 +182,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 
   <section id="distill">
     <div class="sechead"><span class="eyebrow">Distillation</span><h2>Single-sensor generation</h2></div>
-    <p>Teacher = student init = E1 (epoch 1,000). <b>Nine distillation runs in total: 5 running, 4 queued.</b> The generalist was preempted on scavenger at epoch 47 and is queued on nova (it resumes from epoch 46). The generalist sees one source at a time and regenerates all four streams. Three single-stream students map RGB → point cloud. Four <b>two-stream</b> students (added 10-23) map a pair of streams → point cloud: RGB + depth (an RGB-D camera), RGB + recipe, depth + recipe, and one student trained on all three pairs. Pairs that already contain the point cloud are not distilled, since their output is one of their inputs. Every student uses the RGB student's recipe (lr 3 × 10⁻⁵, 100 epochs, global batch 128), so the two-stream rows compare directly with the RGB-only one. Before = E1 used zero-shot; after = the distilled student.</p>
+    <p>Teacher = student init = E1 (epoch 1,000). <b>Eight distillation runs in total: 2 running, 6 queued.</b> Four students hit their 2-day limit on 10-24/25 and requeued themselves; two of them were moved to scavenger on 10-26. The generalist (epoch 47) waits on nova. The generalist sees one source at a time and regenerates all four streams. Three single-stream students map RGB → point cloud. Four <b>two-stream</b> students (added 10-23) map a pair of streams → point cloud: RGB + depth (an RGB-D camera), RGB + recipe, depth + recipe, and one student trained on all three pairs. Pairs that already contain the point cloud are not distilled, since their output is one of their inputs. Every student uses the RGB student's recipe (lr 3 × 10⁻⁵, 100 epochs, global batch 128), so the two-stream rows compare directly with the RGB-only one. Before = E1 used zero-shot; after = the distilled student.</p>
     <div class="chartgrid">
       <div class="chart"><h3>Generalist: validation mean generation loss</h3><div class="sub">Running; every 5 epochs.</div><div id="ch_distill"></div></div>
       <div class="chart"><h3>Generalist: cloud Chamfer per source</h3><div class="sub">Source alone → full cloud, validation. Log scale.</div><div id="ch_distill_src"></div></div>
@@ -211,6 +211,11 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <p class="small muted">Row fine-tunes (Regime III) scored on the other species' test rows (2,250 plants × 10 yaws), Chamfer against the target plant in 10⁻⁴ m², recipe not scored across schemas; depth re-encoded into the model's convention. Below them, the photograph-to-cloud generation of each species' model on the other species' test plants (normalized Chamfer ×10⁻³).</p>
     <div class="tablewrap"><table id="xrowtbl"></table></div>
     <div class="tablewrap" style="margin-top:10px"><table id="xquanttbl"></table></div>
+    <h3 style="margin-top:18px">Transfer arms (T1): does starting from the other species' model help?</h3>
+    <p class="small muted">PC + RGB + depth, 150 epochs at global batch 32, warm-started from the other species' model or trained from scratch; all four finished 10-25/26. Validation Chamfer by epoch (maize arms on the first maize release, the data on this machine). The deciding comparison is the frozen probe at epoch 150, queued (jobs 17113708 sorghum, 17113709 maize).</p>
+    <div class="chartgrid"><div class="chart"><h3>Sorghum: warm start from maize vs scratch</h3><div class="sub">Validation Chamfer, log scale.</div><div id="ch_t1_s"></div></div>
+      <div class="chart"><h3>Maize: warm start from sorghum E1 vs scratch</h3><div class="sub">Validation Chamfer, log scale.</div><div id="ch_t1_m"></div></div></div>
+    <div class="tablewrap"><table id="t1tbl"></table></div>
   </section>
 
   <section id="viz">
@@ -327,7 +332,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-24 18:00 CDT';
+const ASOF = '2026-10-26 12:00 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -336,8 +341,8 @@ const E4=['e4_small_d2','e2_pcrgbdt_d2','e4_large_d2'];
 const E5=['e5_topdown_d2','e5_horizon_d2','e5_single_d2','e2_pcrgbdt_d2'];
 const ALL=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2','e3_1k_d2','e3_3k_d2','e3_10k_d2','e4_small_d2','e4_large_d2','e5_topdown_d2','e5_horizon_d2','e5_single_d2','4m_pretrain_15k_d2_sink'];
 const PROBED=ALL.filter(r=>D.probe[r]);
-const SHORT={e2_pc_d2:'PC',e2_pcrgb_d2:'PC+RGB',e2_pcrgbd_d2:'PC+RGB+D',e2_pcrgbdt_d2:'all four',e2_pcrgbdt_tg_d2:'tg 20 %',e2_pcrgbdt_tg40_d2:'tg 60 %',e2_pcrgbdt_tg100_d2:'target only',e3_1k_d2:'1k plants',e3_3k_d2:'3k plants',e3_10k_d2:'10k plants',e4_small_d2:'small 25 M',e4_large_d2:'large 332 M',e5_topdown_d2:'E5 top-down',e5_horizon_d2:'E5 horizon',e5_single_d2:'E5 single view','4m_pretrain_15k_d2_sink':'E1',e8_supervised_d2:'supervised'};
-const COL={e2_pc_d2:'var(--c4)',e2_pcrgb_d2:'var(--c2)',e2_pcrgbd_d2:'var(--c3)',e2_pcrgbdt_d2:'var(--c1)',e2_pcrgbdt_tg_d2:'var(--c5)',e2_pcrgbdt_tg40_d2:'var(--c6)',e2_pcrgbdt_tg100_d2:'var(--c7)',e3_1k_d2:'var(--c5)',e3_3k_d2:'var(--c6)',e3_10k_d2:'var(--c7)',e4_small_d2:'var(--c2)',e4_large_d2:'var(--c4)',e5_topdown_d2:'var(--c3)',e5_horizon_d2:'var(--c4)',e5_single_d2:'var(--c2)','4m_pretrain_15k_d2_sink':'var(--c8)'};
+const SHORT={e2_pc_d2:'PC',e2_pcrgb_d2:'PC+RGB',e2_pcrgbd_d2:'PC+RGB+D',e2_pcrgbdt_d2:'all four',e2_pcrgbdt_tg_d2:'tg 20 %',e2_pcrgbdt_tg40_d2:'tg 60 %',e2_pcrgbdt_tg100_d2:'target only',e3_1k_d2:'1k plants',e3_3k_d2:'3k plants',e3_10k_d2:'10k plants',e4_small_d2:'small 25 M',e4_large_d2:'large 332 M',e5_topdown_d2:'E5 top-down',e5_horizon_d2:'E5 horizon',e5_single_d2:'E5 single view','4m_pretrain_15k_d2_sink':'E1',e8_supervised_d2:'supervised',e2_pcd_d2:'PC+D',e2_pct_d2:'PC+recipe',e2_pcrgbt_d2:'PC+RGB+recipe',e2_pcdt_d2:'PC+D+recipe',sorghum_xfer_warm_d2:'warm start (from maize)',sorghum_xfer_scratch_d2:'from scratch',maize_xfer_warm:'warm start (from sorghum E1)',maize_xfer_scratch:'from scratch'};
+const COL={e2_pc_d2:'var(--c4)',e2_pcrgb_d2:'var(--c2)',e2_pcrgbd_d2:'var(--c3)',e2_pcrgbdt_d2:'var(--c1)',e2_pcrgbdt_tg_d2:'var(--c5)',e2_pcrgbdt_tg40_d2:'var(--c6)',e2_pcrgbdt_tg100_d2:'var(--c7)',e3_1k_d2:'var(--c5)',e3_3k_d2:'var(--c6)',e3_10k_d2:'var(--c7)',e4_small_d2:'var(--c2)',e4_large_d2:'var(--c4)',e5_topdown_d2:'var(--c3)',e5_horizon_d2:'var(--c4)',e5_single_d2:'var(--c2)','4m_pretrain_15k_d2_sink':'var(--c8)',e2_pcd_d2:'var(--c5)',e2_pct_d2:'var(--c6)',e2_pcrgbt_d2:'var(--c7)',e2_pcdt_d2:'var(--c8)',sorghum_xfer_warm_d2:'var(--c1)',sorghum_xfer_scratch_d2:'var(--c4)',maize_xfer_warm:'var(--c1)',maize_xfer_scratch:'var(--c4)'};
 const STEPS={e3_1k_d2:32,e3_3k_d2:94,e3_10k_d2:313,e2_pcrgbdt_d2:329};
 const TARGETS=['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_len_max','leaf_width_mean','leaf_width_max'];
 const TLAB={height:'height',leaf_count:'leaf count',biomass:'biomass',leaf_angle:'leaf angle',leaf_angle_roll:'roll',leaf_len_mean:'leaf len mean',leaf_len_max:'leaf len max',leaf_width_mean:'leaf width mean',leaf_width_max:'leaf width max'};
@@ -356,7 +361,7 @@ const C=D.curves;
     ['E1 F1 @ 0.01 (test)',f.f1.toFixed(3),'P '+f.precision.toFixed(2)+' · R '+f.recall.toFixed(2)],
     ['best ablation arm','PC+RGB+D','probe height '+f3(D.probe.e2_pcrgbd_d2.targets.height.val_r2)+', F1 '+fb.f1.toFixed(3)],
     ['arms probed',String(PROBED.length)+' / 16','E5 probe queued'],
-    ['distillation','5 running, 4 queued','generalist epoch '+D.distill.train.length+' / 100; RGB student epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)],
+    ['distillation','2 running, 6 queued','generalist epoch '+D.distill.train.length+' / 100; RGB student epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)],
     ['row (Regime III)',(D.rows&&D.rows.ft?'fine-tune scored':'0 / 3'),'zero-shot + fine-tune scored; control training'],
   ];
   document.getElementById('strip').innerHTML=tiles.map(t=>`<div class="tile"><div class="k">${esc(t[0])}</div><div class="v">${esc(t[1])}</div><div class="s">${esc(t[2])}</div></div>`).join('');
@@ -366,7 +371,7 @@ const C=D.curves;
 (function(){
   const rows=[
     ['E1','headline pretrain','done','4m_pretrain_15k_d2_sink: 1,000 epochs over all 105,000 views, global batch 256, QAL + 0.5 × Sinkhorn; finished 2026-10-21 14:28 on 4× RTX PRO 6000. Probed (val height 0.983, leaf width 0.406, the best of any arm on size and both leaf traits) and partial-cloud row done.'],
-    ['E2','modality value-add','done','PC / PC+RGB / PC+RGB+D / all four at 600 / 600; probed, E9, paired bootstraps, point-cloud F1. Four more arms queued on nova 10-23 to complete every stream set that contains the point cloud: PC + depth (17084395), PC + recipe (17084396), PC + RGB + recipe (17084397), PC + depth + recipe (17084398); each reconstructs all of its own streams, as the original four do.'],
+    ['E2','modality value-add','done','PC / PC+RGB / PC+RGB+D / all four at 600 / 600; probed, E9, paired bootstraps, point-cloud F1. Four more arms (added 10-23) complete every stream set that contains the point cloud, each reconstructing all of its own streams: PC + depth and PC + recipe done at 600 / 600 (probe 17113707 queued), PC + RGB + recipe at '+(D.curves.e2_pcrgbt_d2?D.curves.e2_pcrgbt_d2.done:0)+' and PC + depth + recipe at '+(D.curves.e2_pcdt_d2?D.curves.e2_pcdt_d2.done:0)+' (running).'],
     ['E2 control','parameter budget','done','The four-stream arm with the recipe tokens gated to 20 % (tg), 60 % (tg40) or 0 % visible (tg100, target only), so the sensor streams keep the three-stream arm\'s 117 visible tokens. Probed, CIs, F1.'],
     ['E3','data scaling','done','1k / 3k / 10k plants (6,169 / 2,100 / 631 epochs, 197,400 steps each), probed, E9, F1. Full-data point = the four-stream arm. Paired CIs not run.'],
     ['E4','model scaling','done','small (25 M) / large (332 M) at 600; base = the four-stream arm. Probed, CIs, F1.'],
@@ -379,7 +384,7 @@ const C=D.curves;
     ['Distillation','single-sensor students','running','Generalist (all sources) at epoch '+D.distill.train.length+' / 100; preempted on scavenger at 14:40 and moved to nova (17070513, pending on the account cap; resumes from epoch 46). RGB→cloud student with the source visible running since 22:12 (17061902, 2× A100, 41 min/epoch); 50 %-hidden run 1 running (17082625), run 2 queued. Four two-stream → point-cloud students queued on nova (17084301 RGB + depth, 17084366 RGB + recipe, 17084367 depth + recipe, 17084302 all three pairs). Quant generation after all four (17061909). None finishes before the 10-24 freeze at this pace.'],
     ['Regime III','rows: neighbours, occlusion','running','Row fine-tune from E1 done (17072337, 100 ep in 9 h on 2× RTX PRO 6000; test eval 17082259 running); zero-shot E1 on the test rows scored (17071869); isolated control 17073182 queued on nova. Depth encoding and cloud convention of the row renders differ from E1\'s training renders (see the rows section).'],
     ['E9','latent analysis','done','All probed arms, val and test.'],
-    ['Cross-species','one species\' encoder on the other\'s plants','running','Probes both directions done (17082825); the depth check (17083713) shows metric depth explains the sorghum-on-maize gain. Single-photo generation (17082825) and row reconstruction (17083714, 17084182) do not transfer: about 9× the native error. Transfer arms (T1): sorghum warm-start running, the rest queued on scavenger.'],
+    ['Cross-species','one species\' encoder on the other\'s plants','running','Probes both directions done (17082825); the depth check (17083713) shows metric depth explains the sorghum-on-maize gain. Single-photo generation (17082825) and row reconstruction (17083714, 17084182) do not transfer: about 9× the native error. Transfer arms (T1): all four done at 150 / 150 (10-25/26); probes 17113708 / 17113709 queued.'],
     ['E10','real field data','blank','Nothing on real scans.'],
   ];
   document.getElementById('matrixtbl').innerHTML='<thead><tr><th>exp</th><th>question</th><th>state</th><th>runs and notes</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="lead">${r[0]}</td><td>${esc(r[1])}</td><td>${pill(r[2])}</td><td class="wrapc${r[2]==='blank'?' blankc':''}" style="text-align:left">${esc(r[3])}</td></tr>`).join('')+'</tbody>';
@@ -389,20 +394,18 @@ const C=D.curves;
 (function(){
   document.getElementById('queuenote').innerHTML='<strong>10-23 morning:</strong> scratch hit 100 % full at 09:40; five jobs died at launch (no log file) and were resubmitted; 923 GB of intermediate checkpoints were pruned (finished runs keep final + every 100th + best) and new runs now write to /work/mech-ai. Every blank cell on this page now has a job: the E1 probe and partial-cloud rows, the isolated-control eval (chained), student F1 (chained after the distillations) and the cross-species evaluations are queued.';
   const rows=[
-    ['17070513','generalist distillation','nova, 2 GPUs','pending (account cap); preempted on scavenger at epoch 47, resumes from 46','teacher = E1 ep 1000; E5 probe 17060237 → 17060238 and final quant 17061909 chained after it'],
-    ['17061902','RGB→cloud student, source visible','nova, 2× A100','running, epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)+' / 100','41 min/epoch'],
-    ['17082625 / 17082626','RGB→cloud students, 50 % hidden','nova, 2 GPUs each','run 1 running (epoch '+(D.students.rgb2pc_smr50_d2?D.students.rgb2pc_smr50_d2.done:0)+'); run 2 at epoch '+(D.students.rgb2pc_smr50b_d2?D.students.rgb2pc_smr50b_d2.done:0)+', requeued, pending (cap)',''],
-    ['17084301','RGB + depth → point cloud student','nova, 2 GPUs','running, epoch '+(D.students.rgbd2pc_d2?D.students.rgbd2pc_d2.done:0)+' / 100','the RGB-D camera; twin of the RGB-only student'],
-    ['17084366','RGB + recipe → point cloud student','nova, 2 GPUs','running, epoch '+(D.students.rgbt2pc_d2?D.students.rgbt2pc_d2.done:0)+' / 100',''],
-    ['17084367','depth + recipe → point cloud student','nova, 2 GPUs','pending (account cap)',''],
-    ['17084302','one student over all three pairs → point cloud','nova, 2 GPUs','running, epoch '+(D.students.pairs_d2?D.students.pairs_d2.done:0)+' / 100','val reports cloud Chamfer per pair'],
-    ['17084395 / 17084396','E2 arms: PC + depth / PC + recipe','nova, 2 GPUs each','pending (account cap)','600 epochs, 197,400 steps; reconstruct all their own streams'],
-    ['17084397 / 17084398','E2 arms: PC + RGB + recipe / PC + depth + recipe','nova, 2 GPUs each','pending (account cap)','completes the stream sets that contain the point cloud'],
-    ['17082824','P / R / F1 of the four distilled students','scavenger','chained after the distillations',''],
+    ['17070513','generalist distillation','nova, 2 GPUs','pending (account cap) at epoch '+D.distill.train.length+'; resumes from its last checkpoint','E5 probe 17060237 → 17060238 and final quant 17061909 chained after it'],
+    ['17061902','RGB→cloud student, source visible','scavenger, 2 GPUs (moved 10-26)','epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)+' / 100; requeued at its 2-day wall, pending',''],
+    ['17082625','RGB→cloud student, 50 % hidden, run 1','scavenger, 2 GPUs (moved 10-26)','epoch '+(D.students.rgb2pc_smr50_d2?D.students.rgb2pc_smr50_d2.done:0)+' / 100; requeued at its 2-day wall, pending',''],
+    ['17082626','RGB→cloud student, 50 % hidden, run 2','nova, 2 GPUs','epoch '+(D.students.rgb2pc_smr50b_d2?D.students.rgb2pc_smr50b_d2.done:0)+' / 100; pending (account cap)',''],
+    ['17084301 / 17084302','RGB + depth → cloud; three-pair student','nova, 2 GPUs each','epochs '+(D.students.rgbd2pc_d2?D.students.rgbd2pc_d2.done:0)+' / '+(D.students.pairs_d2?D.students.pairs_d2.done:0)+'; requeued at the 2-day wall, pending (account cap)',''],
+    ['17084366 / 17084367','RGB + recipe → cloud; depth + recipe → cloud','nova, 2 GPUs each','running, epochs '+(D.students.rgbt2pc_d2?D.students.rgbt2pc_d2.done:0)+' / '+(D.students.dt2pc_d2?D.students.dt2pc_d2.done:0),''],
+    ['17084397 / 17084398','E2 arms: PC + RGB + recipe / PC + depth + recipe','nova, 2 GPUs each','running, epochs '+(D.curves.e2_pcrgbt_d2?D.curves.e2_pcrgbt_d2.done:0)+' / '+(D.curves.e2_pcdt_d2?D.curves.e2_pcdt_d2.done:0)+' of 600',''],
+    ['17113707','probe + E9: E2 PC + depth, PC + recipe (vs PC + RGB + D)','scavenger, 1 GPU','pending',''],
+    ['17113708 / 17113709','probe + E9: T1 transfer arms, sorghum / maize, epoch 150','scavenger, 1 GPU each','pending','warm start vs scratch'],
+    ['17082824','P / R / F1 of the distilled students','scavenger','chained after the distillations',''],
     ['17082791','maize E1 on Nova (first-release data), 4 GPUs / 4 d','nova','pending (account cap)','the maize-side E1 teacher for the cross-species work'],
-    ['17082838 / 17082839','T1 sorghum transfer arms: warm (init maize_4m ep 600) / scratch','scavenger, 2 GPUs each','warm at epoch 21, scratch at epoch 7; both preempted, pending (nodes held by other jobs)','150 ep; compare by probe at ep 150'],
-    ['17082840 / 17082841','T1 maize transfer arms: warm (init sorghum E1 ep 1000) / scratch','scavenger, 2 GPUs each','warm at epoch 1, scratch at epoch 107; both preempted, pending','150 ep'],
-    ['done today','row fine-tune test eval (17082628), E1 probe (17082821), E1 partial clouds (17082822), cross-species probe + generation (17082825), depth check (17083713), cross rows (17083714, 17084182), interim quant (17082629); 10-24: sorghum row control (17082627) and its test eval (17082823)','',  'completed','results on this page'],
+    ['done 10-24 to 10-26','sorghum row control + its test eval; E2 PC + depth and PC + recipe (600 / 600); all four T1 transfer arms (150 / 150)','',  'completed','results on this page'],
   ];
   document.getElementById('queuetbl').innerHTML='<thead><tr><th>job</th><th>name</th><th>where</th><th>state</th><th>what</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="mono">${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td><td class="wrapc" style="white-space:normal;min-width:200px">${esc(r[3])}</td><td class="wrapc" style="white-space:normal">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
 })();
@@ -447,7 +450,7 @@ function barChart(el, groups, cats, catCol, opt){ // groups: [{name, values:[...
 
 // ---------- curves
 (function(){
-  lineChart(document.getElementById('ch_e2_cham'), E2.map(r=>({name:SHORT[r],color:COL[r],points:C[r].val_chamfer})), {xlabel:'epoch',ylabel:'val chamfer',logy:true,aria:'E2 validation chamfer'});
+  lineChart(document.getElementById('ch_e2_cham'), E2.map(r=>({name:SHORT[r],color:COL[r],points:C[r].val_chamfer})).concat(['e2_pcd_d2','e2_pct_d2','e2_pcrgbt_d2','e2_pcdt_d2'].filter(r=>C[r]).map(r=>({name:SHORT[r]+' ('+C[r].done+'/600)',color:COL[r],dash:true,points:C[r].val_chamfer}))), {xlabel:'epoch',ylabel:'val chamfer',logy:true,aria:'E2 validation chamfer'});
   lineChart(document.getElementById('ch_tg_cham'), TG.map(r=>({name:SHORT[r],color:COL[r],points:C[r].val_chamfer})), {xlabel:'epoch',ylabel:'val chamfer',logy:true,aria:'control validation chamfer'});
   lineChart(document.getElementById('ch_e3_cham'), E3.map(r=>({name:SHORT[r]+(r==='e2_pcrgbdt_d2'?' (full, 10.5k)':''),color:COL[r],points:C[r].val_chamfer.map(p=>[p[0]*STEPS[r],p[1]])})), {xlabel:'optimizer steps',ylabel:'val chamfer',logy:true,aria:'E3 validation chamfer'});
   lineChart(document.getElementById('ch_e45_cham'), ['e4_small_d2','e4_large_d2','e5_topdown_d2','e5_single_d2','e5_horizon_d2','e2_pcrgbdt_d2'].map(r=>({name:SHORT[r]+(r==='e2_pcrgbdt_d2'?' (base, all views)':''),color:COL[r],points:C[r].val_chamfer,dash:r.startsWith('e5')})), {xlabel:'epoch',ylabel:'val chamfer',logy:true,aria:'E4 and E5 validation chamfer'});
@@ -643,6 +646,20 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   tog.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>render(+b.dataset.i))); render(0);
   const leak=X.some(x=>x.set.includes('nodepth'));
   document.getElementById('xnote').innerHTML=leak?'<strong>The check is in: metric depth explains the sorghum-on-maize gain.</strong> With depth hidden, the sorghum E1 falls from height 0.827 to 0.512, biomass 0.941 to 0.786 and leaf length 0.889 to 0.688, i.e. to the native maize model\'s level (0.576 / 0.768 / 0.690). The maize renderer frames each plant by its size and encodes depth per plant, so native maize models never see absolute scale; metric depth hands it over. Without depth the sorghum encoder transfers at about the native level: size traits within 0.06, leaf width (0.79 vs 0.74) and curl (0.42 vs 0.11) better, leaf angle worse (0.71 vs 0.86). Single-photograph generation does not transfer across species (Chamfer 28 to 58 ×10⁻³).':'<strong>Treat the sorghum-on-maize numbers as unverified.</strong> They beat every native maize model (height 0.83 against 0.58 for maize_4m on the same first-release data). The adapter hands the sorghum model METRIC depth, while native maize models only ever see depth normalised per plant, and the maize renderer frames each plant by its size, so absolute depth may leak height. The check (same probe with depth hidden, plus the native model through this harness) is job 17083713. The maize-on-sorghum direction shows no such anomaly: height 0.952 against 0.977 native.';
+})();
+
+// ---------- T1 transfer arms
+(function(){
+  const C=D.curves||{};
+  [['ch_t1_s',['sorghum_xfer_warm_d2','sorghum_xfer_scratch_d2']],['ch_t1_m',['maize_xfer_warm','maize_xfer_scratch']]].forEach(([id,rs])=>{
+    const el=document.getElementById(id); if(!el) return; const ser=rs.filter(r=>C[r]).map(r=>({name:SHORT[r],color:COL[r],dots:true,dash:r.includes('scratch'),points:C[r].val_chamfer}));
+    if(ser.length) lineChart(el,ser,{xlabel:'epoch (of 150)',ylabel:'val chamfer',logy:true,aria:id}); else el.innerHTML='<p class="muted small">not run</p>';});
+  const tb=document.getElementById('t1tbl'); if(!tb) return;
+  const rows=[['sorghum','sorghum_xfer_warm_d2'],['sorghum','sorghum_xfer_scratch_d2'],['maize','maize_xfer_warm'],['maize','maize_xfer_scratch']].filter(x=>C[x[1]]);
+  const first=r=>C[r].val_chamfer.length?C[r].val_chamfer[0]:null;
+  let h='<thead><tr><th>species</th><th>start</th><th class="n">epochs</th><th class="n">val Chamfer ×10⁻³, first val</th><th class="n">val Chamfer ×10⁻³, final</th><th class="n">val loss, final</th><th>probe at ep 150</th></tr></thead><tbody>';
+  rows.forEach(([sp,r])=>{const f=C[r].final,a=first(r);h+=`<tr><td>${sp}</td><td class="lead">${esc(SHORT[r])}</td><td class="n">${C[r].done} / ${C[r].epochs}</td><td class="n">${a?(a[1]*1e3).toFixed(2)+' <span class="muted">(ep '+a[0]+')</span>':''}</td><td class="n">${f.val_pc_chamfer!=null?(f.val_pc_chamfer*1e3).toFixed(2):''}</td><td class="n">${f.val_loss!=null?f.val_loss.toFixed(4):''}</td><td class="blankc">queued</td></tr>`;});
+  tb.innerHTML=h+'</tbody>';
 })();
 
 // ---------- row figures

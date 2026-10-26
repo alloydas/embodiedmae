@@ -933,6 +933,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   still pending on the cap. Probes on scavenger: **17113707** `pr_e2more_d2` (e2_pcd/pct + e2_pcrgbd at ep 600, E9 val+test),
   **17113708** `pr_xfer_sorghum` (warm vs scratch at ep 150), **17113709** `pr_xfer_maize` (SPECIES=maize, ep 150). Then pair bootstraps:
   E2 new arms vs e2_pcrgbd_d2 and e2_pcrgbdt_d2; T1 warm vs scratch per species.
+- **2026-10-26 12:15: TWO STUDENTS TO SCAVENGER + LEDGER v25 (user: "update the artifact with the new results and put 2 jobs
+  to scavenger").** Moved in place to scavenger (mech-ai-scavenger / QOS scavenger, Requeue=1): 17061902 `dist_rgb2pc_full_d2`
+  (ep 65) and 17082625 `dist_rgb2pc_smr50_d2` (ep 72), the two closest to done; the generalist stays on nova (the user moved it
+  there to avoid preemption). T1 val Chamfer (x1e-3, first val -> final at ep 150): sorghum warm-from-maize 5.35 -> 2.29 vs
+  scratch 15.52 -> 3.38; maize warm-from-sorghum-E1 5.03 -> 0.85 vs scratch 25.03 -> 2.55 (warm start wins on reconstruction
+  in both directions; probes 17113708/9 decide the representation). New E2 arms val Chamfer (x1e-3): PC+D 2.45 (PC 5.00,
+  PC+RGB 2.57, PC+RGB+D 1.85), PC+recipe 4.84. Ledger: the eight new runs in RUNS, E2 chart dashed arms, T1 charts + table in
+  the cross-species section, queue rewritten; corrected "nine" distillation runs to eight (1 generalist + 3 RGB + 4 two-stream).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
