@@ -926,6 +926,13 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `fig_rows()` writes `fig_rows` + per-species copies. New `figures/make_row_gallery.py` -> `paper/figs/fig_rows_examples.{pdf,png}`
   (CPU, ~10 min): 3 test plants per species at yaw 0/90, row photo / target / row-trained / isolated-trained prediction; not
   yet placed in the tex (the `\todo{Fig.~5}` qualitative figure could use it). Ledger v24 shows both in the Regime III section.
+- **2026-10-26 11:50 STATUS + PROBES QUEUED.** All four T1 transfer arms finished 150/150 (10-25 20:04 to 10-26 06:14, scavenger);
+  E2 `e2_pcd_d2` / `e2_pct_d2` finished 600/600 (10-26 06:36 / 10:21); `e2_pcrgbt_d2` at 377, `e2_pcdt_d2` at 35 (running).
+  Distillation students rgb2pc_full (65), smr50 (72), rgbd2pc (54), pairs2pc (57) hit their 2-day wall and self-requeued
+  (USR1, Restarts=1), now pending on the cap; rgbt2pc (39) and dt2pc (34) running; generalist (47), smr50b (15), maize E1
+  still pending on the cap. Probes on scavenger: **17113707** `pr_e2more_d2` (e2_pcd/pct + e2_pcrgbd at ep 600, E9 val+test),
+  **17113708** `pr_xfer_sorghum` (warm vs scratch at ep 150), **17113709** `pr_xfer_maize` (SPECIES=maize, ep 150). Then pair bootstraps:
+  E2 new arms vs e2_pcrgbd_d2 and e2_pcrgbdt_d2; T1 warm vs scratch per species.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
