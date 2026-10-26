@@ -941,6 +941,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   in both directions; probes 17113708/9 decide the representation). New E2 arms val Chamfer (x1e-3): PC+D 2.45 (PC 5.00,
   PC+RGB 2.57, PC+RGB+D 1.85), PC+recipe 4.84. Ledger: the eight new runs in RUNS, E2 chart dashed arms, T1 charts + table in
   the cross-species section, queue rewritten; corrected "nine" distillation runs to eight (1 generalist + 3 RGB + 4 two-stream).
+- **2026-10-26 13:30: NO FAILURES; PROBES DONE.** Only two `interactive` sessions failed (10-25 05:28; not ours to rerun).
+  Probes completed 12:10-12:16: `reports/probe_pr_e2more_d2_17113707.csv`, `probe_pr_xfer_sorghum_17113708.csv`,
+  `probe_pr_xfer_maize_17113709.csv` (+ E9 dirs). Val R2: E2 PC+D ~= PC+RGB+D on size (0.976 / 0.977) and roll (0.798 / 0.781),
+  lower leaf width (0.274 / 0.317); PC+recipe 0.860 height, roll 0.481 (barely above PC). T1 warm beats scratch on every
+  printed target: sorghum height 0.972 vs 0.939, roll 0.766 vs 0.595, width 0.269 vs 0.096; maize height 0.594 vs 0.460,
+  leaf count 0.911 vs 0.755, stem radius 0.756 vs 0.408, curl 0.509 vs 0.041. Paired bootstraps not yet run; ledger not yet
+  showing these. 17061902 preempted twice on scavenger since the move (Restarts=3, at epoch 65); rgbt2pc 17084366 hit its 2-day
+  wall and requeued (pending on the cap).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
