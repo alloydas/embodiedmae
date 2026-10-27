@@ -949,6 +949,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   leaf count 0.911 vs 0.755, stem radius 0.756 vs 0.408, curl 0.509 vs 0.041. Paired bootstraps not yet run; ledger not yet
   showing these. 17061902 preempted twice on scavenger since the move (Restarts=3, at epoch 65); rgbt2pc 17084366 hit its 2-day
   wall and requeued (pending on the cap).
+- **2026-10-27 09:30 STATUS.** E2 `e2_pcrgbt_d2` (10-26 19:50) and `e2_pcdt_d2` (10-27 07:21) finished 600/600: all eight E2 arms
+  done. Probe **17124249** `pr_e2more2_d2` (scavenger; pcrgbt + pcdt with pcrgbd / pcrgbdt references, E9 val+test). Generalist
+  17070513 running on nova since 10-26 ~14:50 (epoch 72); smr50b 17082626 running (17); dt2pc hit its 2-day wall and requeued
+  (pending, epoch 43); the two scavenger students 17061902 (67) / 17082625 (72) pending on Priority.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
