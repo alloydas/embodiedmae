@@ -4,7 +4,7 @@
 # (rgba.png + trimmed XML; the plant sets of train/val/test match Maize/ exactly). It resumes
 # the Delta checkpoints copied into outputs/maize_4m_pretrain_15k_d2 (epoch 240).
 #   E1_CONFIG=configs/config_maize_4m_pretrain_15k_d2_nova.yaml NUM_WORKERS=11 \
-#     sbatch --job-name=maize_e1_d2_nova --gres=gpu:4 --constraint="a100|l40s|h200|rtxpro6000" \
+#     sbatch --job-name=maize_e1_nova --gres=gpu:4 --constraint="a100|l40s|h200|rtxpro6000" \
 #     --cpus-per-task=48 --mem=180G --time=4-00:00:00 slurm/pretrain_maize_e1_nova.sbatch
 #
 # MAIZE E1 -- the headline 4M pretrain, DATA VERSION 2 (2026-10-13). The maize twin
