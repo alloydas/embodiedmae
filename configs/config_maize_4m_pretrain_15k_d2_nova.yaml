@@ -1,0 +1,97 @@
+# MAIZE E1, DATA VERSION 2, ON NOVA (2026-10-27, user: "resume maize E1 from
+# outputs/maize_4m_pretrain_15k_d2/ here"). Identical to config_maize_4m_pretrain_15k_d2.yaml
+# (the Delta run) except data_root: /work/mech-ai-scratch/alloy/Maize_1 is the same v2 tree
+# (rgba.png + trimmed XML; the plant sets of train/val/test match Maize/ exactly). It resumes
+# the Delta checkpoints copied into outputs/maize_4m_pretrain_15k_d2 (epoch 240).
+#   E1_CONFIG=configs/config_maize_4m_pretrain_15k_d2_nova.yaml NUM_WORKERS=11 \
+#     sbatch --job-name=maize_e1_d2_nova --gres=gpu:4 --constraint="a100|l40s|h200|rtxpro6000" \
+#     --cpus-per-task=48 --mem=180G --time=4-00:00:00 slurm/pretrain_maize_e1_nova.sbatch
+#
+# MAIZE E1 -- the headline 4M pretrain, DATA VERSION 2 (2026-10-13). The maize twin
+# of configs/config_4m_pretrain15k_d2.yaml (sorghum E1): the SAME recipe, 1000 epochs
+# over ALL 105,000 training views (no view_sampling), global batch 256, lr 6.0e-4,
+# warmup 20, mask 0.80, qal_loss, pruned checkpoints. The model and data keys are
+# config_maize_4m_d2.yaml's (14 params x 28 leaf slots, 8192 points, rgba.png, v2 XML).
+#
+# Run with train_maize_4m.py through slurm/delta/pretrain_maize_e1.sbatch, which sets
+# accum_steps = 256 / (16 x GPUs) so the global batch is 256 on any GPU count.
+#
+# WHAT DIFFERS FROM THE SORGHUM E1, and why:
+#   batch_size 16/GPU x accum 4 (not 32/GPU x 8 GPUs): Delta's gpuA100x4 cards are
+#     40 GB; the base model at batch 16 peaks at 22.4 GiB, batch 32 does not fit.
+#     Global batch, lr and steps per epoch (105,000 / 256 -> 411) are the sorghum
+#     E1's; PointCloudEmbed's unsynced BatchNorm sees 16 per rank instead of 32.
+#   test_freq 0: as every maize config, the held-out split is scored by the probe.
+#   view_sampling false: E1 reads every view every epoch (plan 6.1's all-views
+#     pretrain); every other maize arm samples one view per plant per epoch.
+#
+# 1000 epochs x 411 steps = 411,000 optimiser steps, 10.5x the 600-epoch arms'
+# 197,400 at 8x the batch. It is comparable to the sorghum E1 only; never put it
+# on the E3/E4 curves (those are 197,400-step points).
+
+data:
+  data_root: /work/mech-ai-scratch/alloy/Maize_1
+  img_size: 224
+  num_points: 8192         # exact point count in pointcloud_cam.ply
+  view_sampling: false     # ALL views, every epoch: 105,000 items
+  view_seed: 42
+  rgb_file: rgba.png       # data v2: transparent background, composited over black
+  param_schema: v2         # data v2: trimmed spline XML
+
+model:
+  active_modalities: "pc,rgb,depth,text"
+  model_size: base
+  mask_ratio: 0.80
+  loss_name: "qal_loss"
+  qal_threshold: 0.01
+  qal_alpha: 100.0
+  qal_use_squared: false
+  # QAL + Sinkhorn: the yongyun branch's E7 winner (2026-10-14, user: "update E1 and
+  # distill with new loss"). Adds weight x the debiased Sinkhorn divergence (geomloss,
+  # p=2, blur 0.02 in unit-sphere units, random 1024-point subsets) to the QAL term;
+  # pc_loss_weight 1.0 multiplies the sum, so 0.5 is the effective weight, as in
+  # the branch's config_{sm,maize}_scene_mix_sink.yaml. It rewards coverage: QAL
+  # alone lets the folding head clump points (branch CLAUDE.md, E7).
+  pc_sinkhorn_weight: 0.5
+  pc_sinkhorn_points: 1024
+  pc_sinkhorn_blur: 0.02
+  pc_loss_weight: 1.0
+  depth_norm_type: minmax
+  spline_loss_weight: 5.0
+  max_leaves: 28           # 1 plant token + 28 leaf slots = 29 text tokens
+
+training:
+  batch_size: 16           # per-GPU (40 GB A100); the launcher passes it too
+  accum_steps: 4           # 16 x 4 GPUs x 4 = 256; the launcher recomputes it
+  epochs: 1000
+  lr: 6.0e-4               # sorghum E1: 1.5e-4 x (256 / 64), the linear scaling rule
+  weight_decay: 0.05
+  warmup_epochs: 20
+  val_freq: 20
+  test_freq: 0
+
+checkpointing:
+  output_dir: ./outputs/maize_4m_pretrain_15k_d2
+  save_freq: 5             # preempt partition: keep the resume point close
+  keep_last: 3             # prune: newest 3 + every 100th epoch
+  keep_every: 100
+  resume: null
+
+visualization:
+  viz_freq: 20
+  num_viz_samples: 12
+
+distributed:
+  world_size: 4            # ignored under torchrun, which infers it from nproc
+  dist_backend: nccl
+  dist_url: env://
+
+system:
+  num_workers: 15          # 64 CPUs / 4 ranks - 1; the launcher recomputes it
+  device: cuda
+
+wandb:
+  use_wandb: true
+  wandb_project: embodied-mae-maize
+  wandb_entity: null
+  wandb_name: maize_4m_pretrain_15k_d2
