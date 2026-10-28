@@ -958,7 +958,7 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (scratch, not a mech-ai symlink). Nova holds the v2 maize tree as `/work/mech-ai-scratch/alloy/Maize_1` (rgba.png + trimmed
   XML; train/val/test plant sets equal `Maize/`'s), so `configs/config_maize_4m_pretrain_15k_d2_nova.yaml` = the Delta config
   with only data_root changed. Job **17126487** `maize_e1_nova` (submitted as maize_e1_d2_nova, renamed; THIS is "maize_e1_nova") (nova, 4 GPUs a100|l40s|h200|rtxpro6000, 48 CPU, 180G,
-  4 d, USR1 self-requeue, `NUM_WORKERS=11`, accum 4, global 256) resumes at epoch 240. The v1 Nova job 17082791 was cancelled at the user's request ("delete the old one"; it never started, empty output dir removed). If Delta's 23135087 still runs, the two runs diverge in separate dirs.
+  4 d, USR1 self-requeue, `NUM_WORKERS=11`, accum 4, global 256) resumes at epoch 240 (10-28 10:40: the user copied the newer Delta state, checkpoint_epoch_300, into the dir; the epoch-240 copy moved to `outputs/_stale/maize_4m_pretrain_15k_d2_ep240_2026-10-28`; the job, still pending, now resumes at 300). The v1 Nova job 17082791 was cancelled at the user's request ("delete the old one"; it never started, empty output dir removed). If Delta's 23135087 still runs, the two runs diverge in separate dirs.
   Intermediate checkpoints of the finished runs were pruned again the same morning (82 files, ~104 GB).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
