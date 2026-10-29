@@ -969,7 +969,13 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `maize_e1_nova_rtx`: same launcher/config, nova, 4x rtx_pro_6000, 64 CPU, 240G, `NUM_WORKERS=15`, 4 d with `--time-min 12h`,
   `REPLACE_JOB=17126487` (new opt-in block in `slurm/pretrain_maize_e1_nova.sbatch`: at start it scancels that job, waits up to
   20 min for it to leave the queue, exits 4 otherwise, then resumes from the newest checkpoint; the A100 run loses at most the
-  epochs since its last save_freq-5 checkpoint). If the twin never starts, the A100 run simply continues.
+  epochs since its last save_freq-5 checkpoint). If the twin never starts, the A100 run simply continues. Then (user: "stop E1 in A100") 17126487 cancelled; the twin ran from 315.
+  **10-29 09:50: resumed from the newer Delta state (user copied it in, epoch 365, history 368; user: "resume from latest checkpoint
+  with 4 RTX 6000 pro for 4 days").** 17146860 cancelled, the Nova 305-315 branch moved to
+  `outputs/_stale/maize_4m_pretrain_15k_d2_nova_ep315_2026-10-29` (9.1 GB), Delta's dir put in place. **17146887** `maize_e1_nova_4d`
+  runs from 365 on nova26-gpu-2 (4x RTX PRO 6000) but backfill cut it to 13:25 (the launcher header's `--time-min=04:00:00`
+  applied); **17146992** `maize_e1_nova_4d_full` (`--time=4-00:00:00 --time-min=4-00:00:00`, REPLACE_JOB=17146887) waits for a
+  true 4-day slot and takes over when it starts. Override the header's time-min explicitly whenever a full limit is wanted.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
