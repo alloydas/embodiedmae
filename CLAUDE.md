@@ -979,6 +979,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   cancelled (its REPLACE_JOB pointed at the cancelled job); **17147019** `maize_e1_nova` (13:22 limit, resumes from 365, USR1
   self-requeue keeps the id) runs on nova26-gpu-2, and **17147020** `maize_e1_nova_4d_full` (true 4 d, REPLACE_JOB=17147019,
   Slurm estimate Nov 1 09:35) takes over when it starts.
+- **2026-10-29 10:00 (user: "move jobs from scavenger to nova so that they will finish fast"):** 17082625 `dist_rgb2pc_smr50_d2`
+  (ep 72; started at once on nova21-gpu-14), 17061902 `dist_rgb2pc_full_d2` (ep 69; pending AssocGrpGRES, account at 16/17) and
+  17082824 `pcfscore_students` (chained) moved in place to nova / mech-ai / normal. Nothing of ours is on scavenger now.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
