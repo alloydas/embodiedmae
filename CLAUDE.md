@@ -982,6 +982,14 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
 - **2026-10-29 10:00 (user: "move jobs from scavenger to nova so that they will finish fast"):** 17082625 `dist_rgb2pc_smr50_d2`
   (ep 72; started at once on nova21-gpu-14), 17061902 `dist_rgb2pc_full_d2` (ep 69; pending AssocGrpGRES, account at 16/17) and
   17082824 `pcfscore_students` (chained) moved in place to nova / mech-ai / normal. Nothing of ours is on scavenger now.
+- **2026-10-29 12:45: smr50 HAD BEEN RETRAINING FROM SCRATCH SINCE 10-26 (found on a progress check).** 17082625 first started 10-23
+  09:57 writing to the scratch dir `outputs/4m_distill_15k_rgb2pc_smr50_d2` (reached epoch 72 on 10-25); at 10:16 that day its config's
+  output_dir was repointed to /work/mech-ai (output policy), so its first requeue (10-26) re-read the config, found the new dir empty and
+  restarted from the E1 warm start (epoch 11 by 10-29). Fix: `scontrol requeuehold`, the fresh-restart dir moved to
+  `/work/mech-ai/alloydas/embodiedmae_outputs/_stale/4m_distill_15k_rgb2pc_smr50_d2_restart_ep10_2026-10-29`, the epoch-72 run copied
+  to the configured path (md5 identical), the scratch original moved to `outputs/_stale/4m_distill_15k_rgb2pc_smr50_d2_scratch_copy_ep72`
+  and replaced by a symlink, job released: it resumes from checkpoint_epoch_72. Lesson: never repoint output_dir of a job that has
+  STARTED; a requeue re-reads the config. The other students were checked: their config and folder agree.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
