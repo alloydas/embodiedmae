@@ -146,7 +146,9 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
       <div class="chart"><h3>E3: data scaling (val R²)</h3><div class="sub">Plants in the train split, log x. Full data = the four-stream arm.</div><div id="ch_e3_probe"></div></div>
       <div class="chart"><h3>Parameter budget: the controls (val R²)</h3><div class="sub">Same vision tokens, recipe visible 58 % / 20 % / 60 % / 0 %.</div><div id="ch_tg_probe"></div></div>
       <div class="chart"><h3>E4: model size (val R²)</h3><div class="sub">25 M / 114 M / 332 M parameters, same steps.</div><div id="ch_e4_probe"></div></div>
+      <div class="chart"><h3>E5: view band of the train draw (val R²)</h3><div class="sub">Scored on view 0, which is inside the top-down and single-view bands and outside the horizon band.</div><div id="ch_e5_probe"></div></div>
     </div>
+    <div class="note"><strong>Read E5 with care.</strong> The probe scores view 0 (64° above the horizon) for every arm. The single-view arm trained only on view 0 and the top-down arm on views 0-1, so both are tested on views they trained on; the horizon arm never saw view 0, and the all-view reference saw it one time in ten. The E5 wins and losses therefore measure train/test view overlap as much as the view regime itself. A probe on held-out views is not built yet.</div>
   </section>
 
   <section id="boot">
@@ -335,7 +337,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-10-28 10:30 CDT';
+const ASOF = '2026-10-29 10:30 CDT';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -363,8 +365,8 @@ const C=D.curves;
     ['E1 test chamfer',(e1.final.test_pc_chamfer*1e3).toFixed(2)+' ×10⁻³','trainer protocol; recipe MAE '+e1.final.test_param_mae.toFixed(3)],
     ['E1 F1 @ 0.01 (test)',f.f1.toFixed(3),'P '+f.precision.toFixed(2)+' · R '+f.recall.toFixed(2)],
     ['best ablation arm','PC+RGB+D','probe height '+f3(D.probe.e2_pcrgbd_d2.targets.height.val_r2)+', F1 '+fb.f1.toFixed(3)],
-    ['arms probed',String(PROBED.length)+' / '+ALL.length,'E5 probe queued (17060237)'],
-    ['distillation','1 done, 4 running, 3 queued','generalist 100 / 100; two-stream students at '+['rgbt2pc_d2','pairs_d2','dt2pc_d2','rgbd2pc_d2'].map(k=>D.students[k]?D.students[k].done:0).join(' / ')],
+    ['arms probed',String(PROBED.length)+' / '+ALL.length,'every arm probed, val and test'],
+    ['distillation','4 done, 3 running, 1 queued','generalist and three two-stream students at 100 / 100; RGB + depth at '+(D.students.rgbd2pc_d2?D.students.rgbd2pc_d2.done:0)],
     ['row (Regime III)',(D.rows&&D.rows.ft?'fine-tune scored':'0 / 3'),'zero-shot + fine-tune scored; control training'],
   ];
   document.getElementById('strip').innerHTML=tiles.map(t=>`<div class="tile"><div class="k">${esc(t[0])}</div><div class="v">${esc(t[1])}</div><div class="s">${esc(t[2])}</div></div>`).join('');
@@ -378,13 +380,13 @@ const C=D.curves;
     ['E2 control','parameter budget','done','The four-stream arm with the recipe tokens gated to 20 % (tg), 60 % (tg40) or 0 % visible (tg100, target only), so the sensor streams keep the three-stream arm\'s 117 visible tokens. Probed, CIs, F1.'],
     ['E3','data scaling','done','1k / 3k / 10k plants (6,169 / 2,100 / 631 epochs, 197,400 steps each), probed, E9, F1. Full-data point = the four-stream arm. Paired CIs not run.'],
     ['E4','model scaling','done','small (25 M) / large (332 M) at 600; base = the four-stream arm. Probed, CIs, F1.'],
-    ['E5','view regime','running','Train draw restricted to a band of the ten-view elevation ladder: top-down (views 0-1), horizon (4-5), single (view 0). Three arms done at 600; probe 17060237 (released when the generalist finished; pending on the account cap) and pair bootstrap 17060238 after it. Val and test score view 0.'],
+    ['E5','view regime','done','Train draw restricted to a band of the ten-view elevation ladder: top-down (views 0-1), horizon (4-5), single (view 0); reference = all ten views. Probed + E9 (17060237) and paired bootstrap (17060238) against the all-view arm: horizon loses 6 of 9 traits (roll −0.065 test), top-down wins 3 and ties size, single view wins 6 (roll +0.061, leaf length +0.069). Caveat: the probe scores view 0, inside the single and top-down training bands and outside the horizon band, so these deltas mix the view regime with train/test view overlap. A held-out-view probe is not built.'],
     ['E6','masking / noise','elsewhere','Collaborator (yongyun branch).'],
     ['E7','loss study','elsewhere','Collaborator. Its winner, QAL + Sinkhorn, is the loss of E1 and the distillations.'],
     ['E8','baselines','done','DINOv2 ViT-B/14, MultiMAE-B, Point-MAE, EmbodiedMAE-B, random init, supervised from scratch (600 ep); paired CIs.'],
     ['Partial clouds','1 vs 3 cameras','done','Four E2 arms (16930426) and E1 (17082822).'],
     ['P / R / F1','point-cloud quality','done','16 runs, val + test, 2,250 plants each (17071405).'],
-    ['Distillation','single-sensor students','running','Generalist (all sources) DONE 100 / 100 (17070513, 10-28 05:19); final viewers rebuilt from it. Four two-stream → point-cloud students running on nova (17084366 RGB + recipe, 17084302 all three pairs, 17084367 depth + recipe, 17084301 RGB + depth). RGB→cloud students: source visible (17061902, epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)+') and 50 %-hidden run 1 (17082625) pending on scavenger; run 2 (17082626) pending on the account cap. Quant generation (17061909) and student F1 (17082824) run after the students.'],
+    ['Distillation','single-sensor students','running','Generalist (all sources) done 100 / 100 (17070513, 10-28); final viewers rebuilt from it. Two-stream → point-cloud students: RGB + recipe (17084366, 10-28 17:27), the three-pair student (17084302, 10-28 22:34) and depth + recipe (17084367, 10-29 08:50) done 100 / 100; RGB + depth (17084301) at epoch '+(D.students.rgbd2pc_d2?D.students.rgbd2pc_d2.done:0)+'. RGB→cloud students all on nova since 10-29: source visible (17061902, epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)+', pending on the account cap), 50 % hidden run 1 (17082625, epoch '+(D.students.rgb2pc_smr50_d2?D.students.rgb2pc_smr50_d2.done:0)+') and run 2 (17082626, epoch '+(D.students.rgb2pc_smr50b_d2?D.students.rgb2pc_smr50b_d2.done:0)+') running. Every pair that includes the recipe ends at 0.36-0.40 ×10⁻³ point-cloud Chamfer, RGB + depth at about 0.60, RGB alone at about 0.9. Quant generation (17061909) and student F1 (17082824) run after the last student, expected Oct 31.'],
     ['Regime III','rows: neighbours, occlusion','running','Row fine-tune from E1 done (17072337, 100 ep in 9 h on 2× RTX PRO 6000; test eval 17082259 running); zero-shot E1 on the test rows scored (17071869); isolated control 17073182 queued on nova. Depth encoding and cloud convention of the row renders differ from E1\'s training renders (see the rows section).'],
     ['E9','latent analysis','done','All probed arms, val and test.'],
     ['Cross-species','one species\' encoder on the other\'s plants','running','Probes both directions done (17082825); the depth check (17083713) shows metric depth explains the sorghum-on-maize gain. Single-photo generation (17082825) and row reconstruction (17083714, 17084182) do not transfer: about 9× the native error. Transfer arms (T1): all four done at 150 / 150 (10-25/26); probed (17113708 / 17113709): the warm start beats scratch on every trait shown, in both directions.'],
@@ -397,16 +399,14 @@ const C=D.curves;
 (function(){
   document.getElementById('queuenote').innerHTML='<strong>10-23 morning:</strong> scratch hit 100 % full at 09:40; five jobs died at launch (no log file) and were resubmitted; 923 GB of intermediate checkpoints were pruned (finished runs keep final + every 100th + best) and new runs now write to /work/mech-ai. Every blank cell on this page now has a job: the E1 probe and partial-cloud rows, the isolated-control eval (chained), student F1 (chained after the distillations) and the cross-species evaluations are queued.';
   const rows=[
-    ['17084366 / 17084302','RGB + recipe → cloud; three-pair student','nova, 2 GPUs each','running, epochs '+(D.students.rgbt2pc_d2?D.students.rgbt2pc_d2.done:0)+' / '+(D.students.pairs_d2?D.students.pairs_d2.done:0)+' (about 8 h left)',''],
-    ['17084367 / 17084301','depth + recipe → cloud; RGB + depth → cloud','nova, 2 GPUs each','running, epochs '+(D.students.dt2pc_d2?D.students.dt2pc_d2.done:0)+' / '+(D.students.rgbd2pc_d2?D.students.rgbd2pc_d2.done:0)+' (about 1 and 1.5 days left)',''],
-    ['17061902','RGB→cloud student, source visible','scavenger, 2 GPUs','epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)+' / 100; pending (Priority)',''],
-    ['17082625','RGB→cloud student, 50 % hidden, run 1','scavenger, 2 GPUs','epoch '+(D.students.rgb2pc_smr50_d2?D.students.rgb2pc_smr50_d2.done:0)+' / 100; pending (Priority)',''],
-    ['17082626','RGB→cloud student, 50 % hidden, run 2','nova, 2 GPUs','epoch '+(D.students.rgb2pc_smr50b_d2?D.students.rgb2pc_smr50b_d2.done:0)+' / 100; requeued at the 2-day wall, pending (account cap)',''],
-    ['17060237 → 17060238','E5 probe + E9, then its pair bootstrap','nova, 1 GPU','pending (account cap)','released when the generalist finished'],
+    ['17084301','RGB + depth → cloud','nova, 2 GPUs','running, epoch '+(D.students.rgbd2pc_d2?D.students.rgbd2pc_d2.done:0)+' / 100; 2-day wall 10-29 15:07, then requeues','expected 10-30'],
+    ['17082625','RGB→cloud student, 50 % hidden, run 1','nova, 2 GPUs (moved from scavenger 10-29)','running, epoch '+(D.students.rgb2pc_smr50_d2?D.students.rgb2pc_smr50_d2.done:0)+' / 100','expected 10-30'],
+    ['17082626','RGB→cloud student, 50 % hidden, run 2','nova, 2 GPUs','running, epoch '+(D.students.rgb2pc_smr50b_d2?D.students.rgb2pc_smr50b_d2.done:0)+' / 100','expected 10-31'],
+    ['17061902','RGB→cloud student, source visible','nova, 2 GPUs (moved from scavenger 10-29)','epoch '+(D.students.rgb2pc_full_d2?D.students.rgb2pc_full_d2.done:0)+' / 100; pending (account cap)','expected 10-30 / 10-31'],
     ['17061909','quant generation, photograph → cloud, all students','nova, 1 GPU','chained after the students',''],
-    ['17082824','P / R / F1 of the distilled students','scavenger','chained after the distillations',''],
-    ['17126487','maize E1 (data v2) on Nova, resumed from the Delta run at epoch 240, 4 GPUs / 4 d','nova','pending (account cap)','the maize-side E1 teacher; the first-release maize E1 job 17082791 was cancelled'],
-    ['done 10-27 to 10-28','generalist distillation 100 / 100 (17070513); probe + E9 of the last two E2 arms (17124249)','','completed','results on this page'],
+    ['17082824','P / R / F1 of the distilled students','nova, 1 GPU','chained after the students',''],
+    ['17147019','maize E1 (data v2), resumed from the Delta run at epoch 365, 4× RTX PRO 6000','nova','running, about 8 min/epoch; 13 h segments that requeue themselves','epoch 1000 around Nov 2-4; 4-day twin 17147020 takes over when a 4-day slot opens'],
+    ['done 10-28 to 10-29','three two-stream students 100 / 100 (17084366, 17084302, 17084367); E5 probe + E9 (17060237) and its paired bootstrap (17060238)','','completed','results on this page'],
   ];
   document.getElementById('queuetbl').innerHTML='<thead><tr><th>job</th><th>name</th><th>where</th><th>state</th><th>what</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="mono">${esc(r[0])}</td><td class="mono">${esc(r[1])}</td><td>${esc(r[2])}</td><td class="wrapc" style="white-space:normal;min-width:200px">${esc(r[3])}</td><td class="wrapc" style="white-space:normal">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
 })();
@@ -499,7 +499,7 @@ function renderProbe(mode){
   PROBED.forEach(r=>{h+=`<tr><td class="lead mono">${r}</td><td>${esc(SHORT[r])}</td><td class="n">${P[r].epoch}</td>`;
     TARGETS.forEach(t=>{const d=P[r].targets[t]; if(!d){h+='<td class="blankc"></td>';return;} if(mode==='mae'){const v=d.val_mae;h+=`<td class="n">${v<0.1?v.toFixed(4):v.toFixed(3)}</td>`;return;}
       const v=mode==='test'?d.test_r2:d.val_r2; const w=Math.max(0,Math.min(1,v))*100; const b=(v>=best[t]-1e-9)?' style="font-weight:600"':''; h+=`<td class="n heat"><div class="bar" style="width:${w.toFixed(0)}%"></div><span${b}>${v.toFixed(3)}</span></td>`;}); h+='</tr>';});
-  [['e5_topdown_d2 / e5_horizon_d2 / e5_single_d2','E5 arms · done at 600, probe queued (17060237)']].concat(D.probe['4m_pretrain_15k_d2_sink']?[]:[['4m_pretrain_15k_d2_sink','E1 · probe not run']]).forEach(p=>{h+=`<tr><td class="lead mono">${p[0]}</td><td class="blankc" colspan="${TARGETS.length+2}">${esc(p[1])}</td></tr>`;});
+  (D.probe['4m_pretrain_15k_d2_sink']?[]:[['4m_pretrain_15k_d2_sink','E1 · probe not run']]).forEach(p=>{h+=`<tr><td class="lead mono">${p[0]}</td><td class="blankc" colspan="${TARGETS.length+2}">${esc(p[1])}</td></tr>`;});
   document.getElementById('probetbl').innerHTML=h+'</tbody>';
   ['val','test','mae'].forEach(m=>document.getElementById('tg_'+m).setAttribute('aria-pressed',m===mode?'true':'false'));
 }
@@ -510,6 +510,7 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   barChart(document.getElementById('ch_e2_probe'), E2.map(r=>({name:SHORT[r],values:vals(r)})), tg.map(t=>TLAB[t]), tcol, {xlabel:'E2 arm (val R², CLS probe, epoch 600)',aria:'E2 probe bars'});
   lineChart(document.getElementById('ch_e3_probe'), tg.map((t,j)=>({name:TLAB[t],color:tcol[j],dots:true,points:[['e3_1k_d2',1000],['e3_3k_d2',3000],['e3_10k_d2',10000],['e2_pcrgbdt_d2',10500]].map(x=>[x[1],P[x[0]].targets[t].val_r2])})), {xlabel:'plants in train split',ylabel:'val R²',logx:true,y0:0,y1:1,aria:'E3 probe scaling'});
   barChart(document.getElementById('ch_tg_probe'), [['e2_pcrgbd_d2','PC+RGB+D'],['e2_pcrgbdt_d2','58 % (as trained)'],['e2_pcrgbdt_tg_d2','20 %'],['e2_pcrgbdt_tg40_d2','60 %'],['e2_pcrgbdt_tg100_d2','target only']].map(x=>({name:x[1],values:vals(x[0])})), tg.map(t=>TLAB[t]), tcol, {xlabel:'recipe visibility during pretraining (val R²)',aria:'control probe bars'});
+  if(D.probe.e5_single_d2) barChart(document.getElementById('ch_e5_probe'), [['e2_pcrgbdt_d2','all ten views'],['e5_topdown_d2','top-down (0-1)'],['e5_single_d2','single (0)'],['e5_horizon_d2','horizon (4-5)']].map(x=>({name:x[1],values:vals(x[0])})), tg.map(t=>TLAB[t]), tcol, {xlabel:'train-view band (val R²)',aria:'E5 probe bars'});
   barChart(document.getElementById('ch_e4_probe'), E4.map(r=>({name:SHORT[r]==='all four'?'base 114 M':SHORT[r],values:vals(r)})), tg.map(t=>TLAB[t]), tcol, {xlabel:'model size (val R²)',aria:'E4 probe bars'});
 })();
 
@@ -584,7 +585,7 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
     if(fv||ft){hq+=`<tr><td class="lead">${esc(x[0])}</td><td>${x[1]}</td><td class="n">${fv?(fv.chamfer*1e3).toFixed(2):'—'}</td><td class="n">${ft?(ft.chamfer*1e3).toFixed(2):'—'}</td><td class="n">${ft?ft.skill.toFixed(3):'—'}</td><td class="n">${x[2]}</td></tr>`;}
     else if(iv||it){const ep=(it||iv).epoch;hq+=`<tr><td class="lead">${esc(x[0])} <span class="pill running">interim, epoch ${ep}</span></td><td>${x[1]}</td><td class="n">${iv?(iv.chamfer*1e3).toFixed(2):'—'}</td><td class="n">${it?(it.chamfer*1e3).toFixed(2):'—'}</td><td class="n">${it?it.skill.toFixed(3):'—'}</td><td class="n">${x[2]}</td></tr>`;}
     else hq+=`<tr><td class="lead">${esc(x[0])}</td><td>${x[1]}</td><td class="blankc" colspan="3">after job 17061909</td><td class="n">${x[2]}</td></tr>`;});
-  [['RGB + depth','17084301'],['RGB + recipe','17084366'],['depth + recipe','17084367']].forEach(x=>{hq+=`<tr><td class="lead">two-stream student</td><td>${x[0]}</td><td class="blankc" colspan="3">student training (job ${x[1]}); scored by 17061909</td><td class="n">1</td></tr>`;});
+  [['RGB + depth','17084301'],['RGB + recipe','17084366'],['depth + recipe','17084367']].forEach(x=>{hq+=`<tr><td class="lead">two-stream student</td><td>${x[0]}</td><td class="blankc" colspan="3">student ${x[1]}; scored by 17061909 after the last student</td><td class="n">1</td></tr>`;});
   document.getElementById('quanttbl').innerHTML=hq+'</tbody>';
 })();
 

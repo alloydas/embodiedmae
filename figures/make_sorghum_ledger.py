@@ -83,7 +83,7 @@ def main():
         if f.exists():
             h = json.load(open(f)); D['students'][r] = {'done': len(h['train']), 'train': [[e['epoch'], round(e['loss'], 5)] for e in h['train']], 'val': [[v['epoch'], v['mean_gen']] for v in h['val']], 'val_pc_chamfer_rgb': [[v['epoch'], v['per_source']['rgb']['pc_chamfer']] for v in h['val'] if 'rgb' in v['per_source']], 'val_pc_chamfer': {src: [[v['epoch'], v['per_source'][src]['pc_chamfer']] for v in h['val'] if src in v['per_source']] for src in (h['val'][-1]['per_source'] if h['val'] else {})}}
     D['probe'] = probe_rows([R/'probe_pr_600_d2_16930422.csv', R/'probe_pr_6168_d2_16928969.csv', R/'probe_pr_2024_d2_16928970.csv', R/'probe_pr_624_d2_16928971.csv']
-                            + sorted(R.glob('probe_pr_e1_d2_*.csv')) + sorted(R.glob('probe_pr_e2more*_d2_*.csv')))
+                            + sorted(R.glob('probe_pr_e1_d2_*.csv')) + sorted(R.glob('probe_pr_e2more*_d2_*.csv')) + sorted(R.glob('probe_pr_e5_d2_*.csv')))
     # T1 transfer arms: probe at epoch 150 (sorghum on the sorghum targets, maize on its own)
     D['probe_t1'] = {}
     for sp, pat in (('sorghum', 'probe_pr_xfer_sorghum_*.csv'), ('maize', 'probe_pr_xfer_maize_*.csv')):
@@ -95,11 +95,11 @@ def main():
     D['e8'] = probe_rows([R/'probe_e8_base_sorghum_d2_16930425.csv'], 'mean')
     D['e8']['e8_supervised_d2 (mean pool)'] = probe_rows([R/'probe_e8_score_d2_16930424_mean.csv'], 'mean')['e8_supervised_d2']
     D['e8']['e8_supervised_d2 (own head)'] = probe_rows([R/'probe_e8_score_d2_16930424_head.csv'], None)['e8_supervised_d2_head']
-    boot = pd.concat([pd.read_csv(f) for f in sorted(glob.glob(str(R/'*_delta_d2_16950816.csv')))])
+    boot = pd.concat([pd.read_csv(f) for f in sorted(glob.glob(str(R/'*_delta_d2_16950816.csv'))) + sorted(glob.glob(str(R/'e5_delta_d2_*.csv')))])
     boot = boot[boot.target.isin(TARGETS)]
     D['boot'] = [{k: (round(float(v), 4) if isinstance(v, (float, np.floating)) else v) for k, v in r.items()} for r in boot[['a','b','feature','target','split','r2_a','r2_b','delta','lo','hi']].to_dict('records')]
     e9 = {}
-    for d in [R/'e9_pr_600_d2_16930422', R/'e9_pr_6168_d2_16928969', R/'e9_pr_2024_d2_16928970', R/'e9_pr_624_d2_16928971'] + sorted(R.glob('e9_pr_e2more*_d2_*')):
+    for d in [R/'e9_pr_600_d2_16930422', R/'e9_pr_6168_d2_16928969', R/'e9_pr_2024_d2_16928970', R/'e9_pr_624_d2_16928971'] + sorted(R.glob('e9_pr_e2more*_d2_*')) + sorted(R.glob('e9_pr_e5_d2_*')):
         for sp in ('val','test'):
             for r in pd.read_csv(d/f'e9_latent_summary_{sp}.csv').to_dict('records'):
                 e9.setdefault(r['run'], {})[sp] = {k: (None if (isinstance(v, float) and np.isnan(v)) else v) for k, v in r.items()}
