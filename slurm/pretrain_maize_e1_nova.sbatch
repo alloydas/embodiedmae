@@ -94,6 +94,23 @@ case "${NPROC}" in
 esac
 echo "GPUs ${NPROC} x batch 32 x accum ${ACCUM} = global batch 256"
 
+# REPLACE_JOB=<jobid> (opt-in, user 2026-10-29): this job is a twin on other GPUs. Once it has
+# started, cancel the running copy and wait until it has left the queue (so the two never write
+# the same run dir at once), then resume from the newest checkpoint below. Checkpoint saves are
+# atomic (temp + os.replace), so a cancel mid-save leaves the previous checkpoint intact.
+if [ -n "${REPLACE_JOB:-}" ] && [ "${REPLACE_JOB}" != "${SLURM_JOB_ID}" ]; then
+  echo "$(date) replacing job ${REPLACE_JOB}: scancel"
+  scancel "${REPLACE_JOB}" || true
+  for i in $(seq 1 120); do
+    st=$(squeue -h -j "${REPLACE_JOB}" -o %T 2>/dev/null || true)
+    [ -z "${st}" ] && break
+    sleep 10
+  done
+  st=$(squeue -h -j "${REPLACE_JOB}" -o %T 2>/dev/null || true)
+  if [ -n "${st}" ]; then echo "job ${REPLACE_JOB} still ${st} after 20 min; refusing to share the run dir"; exit 4; fi
+  echo "$(date) job ${REPLACE_JOB} gone"
+fi
+
 # newest checkpoint by epoch; train_sorghum_4m.resolve_resume walks an unreadable one down
 RESUME_ARG=""
 if [ -d "${CKPT_DIR}" ]; then
