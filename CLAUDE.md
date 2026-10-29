@@ -975,7 +975,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   `outputs/_stale/maize_4m_pretrain_15k_d2_nova_ep315_2026-10-29` (9.1 GB), Delta's dir put in place. **17146887** `maize_e1_nova_4d`
   runs from 365 on nova26-gpu-2 (4x RTX PRO 6000) but backfill cut it to 13:25 (the launcher header's `--time-min=04:00:00`
   applied); **17146992** `maize_e1_nova_4d_full` (`--time=4-00:00:00 --time-min=4-00:00:00`, REPLACE_JOB=17146887) waits for a
-  true 4-day slot and takes over when it starts. Override the header's time-min explicitly whenever a full limit is wanted.
+  true 4-day slot and takes over when it starts. Override the header's time-min explicitly whenever a full limit is wanted. Then (user: "cancel 13 hour job", then "ok start with 13 hour job"): 17146887 cancelled at epoch 366 and 17146992
+  cancelled (its REPLACE_JOB pointed at the cancelled job); **17147019** `maize_e1_nova` (13:22 limit, resumes from 365, USR1
+  self-requeue keeps the id) runs on nova26-gpu-2, and **17147020** `maize_e1_nova_4d_full` (true 4 d, REPLACE_JOB=17147019,
+  Slurm estimate Nov 1 09:35) takes over when it starts.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
