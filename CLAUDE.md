@@ -1006,7 +1006,7 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   the account cap, as the sorghum students did. Not yet built for maize: the quant / F1 evaluation chain.
 - **2026-10-30 11:00 (user: "move two jobs to scavenger"):** the sorghum RGB students 17082626 `dist_rgb2pc_smr50b_d2` (ep 54, the
   slowest) and 17061902 `dist_rgb2pc_full_d2` (ep 73) moved in place to scavenger (both had been pending on the cap); 17082625 smr50
-  (ep 79) stays on nova. The final-data warm-start evals for the paper's any-subset table (`eval/eval_warmstart.py <config> [sources]`,
+  (ep 79) stays on nova. Then (user: "no keep this jobs in nova") both moved BACK to nova before starting; all three RGB students are on nova. The final-data warm-start evals for the paper's any-subset table (`eval/eval_warmstart.py <config> [sources]`,
   now config-driven) first failed OOM on 32 GB V100s (17161745/6); resubmitted with `--constraint=a100|l40s|h200|rtxpro6000` as
   17162455 (`config_4m_distill_15k_all_d2`) / 17162456 (`pairs_d2`) -> logs/evalwarm_<job>.out.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm

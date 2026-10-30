@@ -95,9 +95,19 @@ def main():
     D['e8'] = probe_rows([R/'probe_e8_base_sorghum_d2_16930425.csv'], 'mean')
     D['e8']['e8_supervised_d2 (mean pool)'] = probe_rows([R/'probe_e8_score_d2_16930424_mean.csv'], 'mean')['e8_supervised_d2']
     D['e8']['e8_supervised_d2 (own head)'] = probe_rows([R/'probe_e8_score_d2_16930424_head.csv'], None)['e8_supervised_d2_head']
-    boot = pd.concat([pd.read_csv(f) for f in sorted(glob.glob(str(R/'*_delta_d2_16950816.csv'))) + sorted(glob.glob(str(R/'e5_delta_d2_*.csv')))])
+    bootfiles = sorted(glob.glob(str(R/'*_delta_d2_16950816.csv'))) + sorted(glob.glob(str(R/'e5_delta_d2_*.csv'))) + sorted(glob.glob(str(R/'e2more_*_d2.csv'))) + sorted(glob.glob(str(R/'t1_warm_vs_scratch_sorghum.csv')))
+    boot = pd.concat([pd.read_csv(f) for f in bootfiles])
     boot = boot[boot.target.isin(TARGETS)]
     D['boot'] = [{k: (round(float(v), 4) if isinstance(v, (float, np.floating)) else v) for k, v in r.items()} for r in boot[['a','b','feature','target','split','r2_a','r2_b','delta','lo','hi']].to_dict('records')]
+    # epoch-0 warm start of the final-data distillation (eval/eval_warmstart.py logs), per source
+    D['warmstart'] = {}
+    for f in sorted(glob.glob('logs/evalwarm_*.out')):
+        txt = open(f).read()
+        if 'EVAL_DONE' not in txt or '_d2.yaml' not in txt: continue
+        for m in re.finditer(r'src=(\S+)\s+total ([\d.]+)\s+pc_loss [\d.]+\s+text_loss [\d.]+\s+pc_chamfer ([\d.]+)\s+param_mae ([\d.]+)', txt):
+            D['warmstart'][m.group(1)] = {'pc_chamfer': float(m.group(3)), 'param_mae_masked': float(m.group(4)), 'log': Path(f).name}
+        mm = re.search(r'MEAN generation metric: ([\d.]+)', txt)
+        if mm and 'all_d2' in txt: D['warmstart']['_mean_all'] = float(mm.group(1))
     e9 = {}
     for d in [R/'e9_pr_600_d2_16930422', R/'e9_pr_6168_d2_16928969', R/'e9_pr_2024_d2_16928970', R/'e9_pr_624_d2_16928971'] + sorted(R.glob('e9_pr_e2more*_d2_*')) + sorted(R.glob('e9_pr_e5_d2_*')):
         for sp in ('val','test'):

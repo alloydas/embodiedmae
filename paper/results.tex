@@ -188,6 +188,21 @@ improve: their error stayed flat and their view spread grew from $0.18$ to
 $0.26$, so a field that no input can predict is not neutral, because it becomes
 more view-dependent under distillation.
 
+% reports/probe_pr_e5_d2_17060237.csv, reports/e5_delta_d2_17060238.csv (final release)
+\paragraph{Training views.}
+We restricted the pretraining draw of the four-stream arm to a band of the
+elevation ladder at equal steps: views 0--1 (top-down), views 4--5 (near the
+horizon, the height of a tractor-mounted camera) or view 0 alone, against all
+ten views. The probe scores view 0 for every arm. Paired over plants against
+the all-view arm, the horizon arm loses six of the nine learnable targets on
+both splits (test: roll $-0.065$, leaf angle $-0.024$, size $-0.010$ to
+$-0.013$). The top-down arm wins three targets and ties on size, and the
+single-view arm wins six (test: roll $+0.061$, leaf length $+0.069$, size
+$+0.008$). View 0 lies inside the training band of the top-down and single-view
+arms and outside the band of the horizon arm, so these differences measure the
+overlap between training and test views as much as the breadth of the training
+draw. \todo{A probe on held-out views separates the two.}
+
 % reports/pcview_16930426_{coverage,recon,probe,bootstrap}.csv (sorghum, final release); E1 row: job 17082822
 \begin{table*}[t]
   \centering\scriptsize
@@ -457,7 +472,8 @@ $10^{-4}$; the matched-LR specialist is queued}).
 \subsection{Where the parameter stream belongs}
 \label{sec:param-stream}
 
-% reports/probe_pr_600_d2_16930422.csv (sorghum final release, val/test), outputs/e2_*_d2/training_history.json,
+% reports/probe_pr_600_d2_16930422.csv + probe_pr_e2more_d2_17113707.csv + probe_pr_e2more2_d2_17124249.csv (sorghum final release, val/test),
+% outputs/e2_*_d2/training_history.json, paired: reports/e2more_*_d2.csv,
 % reports/probe_pm_600_22751615.csv (maize, final data), reports/maize_e2_delta_16669530.csv
 \begin{table}[t]
   \centering\scriptsize
@@ -470,8 +486,12 @@ $10^{-4}$; the matched-LR specialist is queued}).
     \midrule
     \multicolumn{8}{l}{\emph{Sorghum}} \\
     PC                 & 5.00 & 0.895 & 0.896 & 0.892 & 0.792 & 0.393 & 0.088 \\
-    PC+RGB             & 2.57 & \textbf{0.979} & \textbf{0.983} & \textbf{0.986} & \textbf{0.934} & \textbf{0.808} & 0.267 \\
+    PC+D               & 2.45 & 0.976 & 0.979 & 0.982 & 0.903 & 0.798 & 0.307 \\
+    PC+RGB             & 2.57 & \textbf{0.979} & \textbf{0.983} & \textbf{0.986} & \textbf{0.934} & 0.808 & 0.267 \\
     PC+RGB+D           & \textbf{1.85} & 0.977 & 0.980 & 0.982 & 0.926 & 0.781 & \textbf{0.309} \\
+    PC+$\theta$        & 4.84 & 0.860 & 0.864 & 0.863 & 0.780 & 0.481 & 0.078 \\
+    PC+D+$\theta$      & 4.08 & 0.907 & 0.909 & 0.916 & 0.856 & 0.694 & 0.191 \\
+    PC+RGB+$\theta$    & 3.00 & 0.962 & 0.964 & 0.967 & 0.890 & \textbf{0.810} & 0.225 \\
     PC+RGB+D+$\theta$  & 2.53 & 0.962 & 0.964 & 0.965 & 0.880 & 0.760 & 0.249 \\
     \midrule
     & & height & leaves & biomass & angle & curl & stem r. \\
@@ -482,8 +502,9 @@ $10^{-4}$; the matched-LR specialist is queued}).
     PC+RGB+D+$\theta$  & \textbf{0.99} & \textbf{0.635} & 0.908 & 0.781 & 0.919 & 0.304 & 0.743 \\
     \bottomrule
   \end{tabular}
-  \caption{\textbf{Modality value-add (E2).} Four arms per species at equal
-  steps, differing only in which token streams exist; $\theta$ is the parameter
+  \caption{\textbf{Modality value-add (E2).} Arms at equal steps, differing
+  only in which token streams exist: every stream set that contains the cloud
+  for sorghum, four sets for maize. $\theta$ is the parameter
   stream as an \emph{input} inside the shared masking budget. Probe $R^2$ on
   held-out plants; branch and roll are the two sorghum leaf-angle definitions.
   Test values are within $0.035$ of val on every sorghum cell and within
