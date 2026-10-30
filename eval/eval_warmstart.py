@@ -1,6 +1,12 @@
 """Measure the true epoch-0 cross-modal baseline (the warm start, before any
 distillation). The run's first val point is at epoch 1, so the published -5.9%
-excludes whatever the first epoch bought."""
+excludes whatever the first epoch bought.
+
+usage: python eval/eval_warmstart.py [config] [sources]
+  config   a distillation config; its data block (rgb_file, rgb_gain, max_leaves) and
+           its distill.student_init are used, so a final-data config scores the
+           final-data warm start (default: the first-release generalist config).
+  sources  optional comma list overriding distill.sources, e.g. rgb+depth,rgb+text."""
 # Repo root on sys.path: this script lives one level down but imports the
 # top-level modules (embodied_mae*, sorghum_dataset*, train_*).
 import sys as _sys, pathlib as _pathlib
@@ -17,12 +23,17 @@ CFG_PATH=sys.argv[1] if len(sys.argv)>1 else 'configs/config_4m_distill_15k_all.
 CFG=yaml.safe_load(open(CFG_PATH))
 print(f"config: {CFG_PATH}")
 args=DIS.config_to_namespace(CFG)
-root=CFG['data']['data_root']
-ds=SorghumDataset4M(f"{root}/val", img_size=args.img_size, num_points=args.num_points)
+if len(sys.argv)>2: args.sources=[s for s in sys.argv[2].split(',') if s]
+ds=SorghumDataset4M(args.data_root, img_size=args.img_size, num_points=args.num_points, split='val',
+                    max_leaves=args.max_leaves, rgb_file=args.rgb_file, rgb_gain=args.rgb_gain)
 dl=DataLoader(ds,batch_size=args.batch_size,shuffle=False,num_workers=8,pin_memory=True)
 
 m=DIS.build_model(args,DEV)
-DIS.load_weights_into(m,'./outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth',DEV,'warmstart')
+# the first-release config predates distill.student_init pointing at a checkpoint on disk
+INIT=args.student_init if args.student_init and __import__('os').path.exists(args.student_init) \
+     else './outputs/4m_pretrain_15k_v2_depthfix_qal/teacher_final.pth'
+print(f"warm start: {INIT}  sources: {args.sources}  target: {args.targets}")
+DIS.load_weights_into(m,INIT,DEV,'warmstart',getattr(args,'expect_init_epoch',None))
 per,mg=DIS.evaluate_crossmodal(m,dl,DEV,args.sources,target=args.targets,
                                max_batches=args.val_max_batches)
 print("\n=== EPOCH 0 (warm start, no distillation) ===")
