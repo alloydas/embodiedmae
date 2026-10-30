@@ -34,9 +34,9 @@ it.
 
 \paragraph{Which metric decides.}
 Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on
-the design decisions (Fig.~\ref{fig:metrics}): depth, more training plants, and
-the parameter stream each move Chamfer by tens of percent and leave the probe
-nearly unchanged, while a partial cloud from one camera raises Chamfer by 2.6 to
+the design decisions (Fig.~\ref{fig:metrics}): depth added to RGB, more
+training plants, and the parameter stream each move Chamfer by tens of percent
+and leave the probe nearly unchanged, while a partial cloud from one camera raises Chamfer by 2.6 to
 6.5 times but changes the probe by at most $0.03$. On slender geometry, Chamfer
 measures surface proximity and the probe measures recovered structure, so we use
 the probe to make decisions and report Chamfer as the decoder's surface error.

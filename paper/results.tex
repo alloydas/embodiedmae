@@ -542,12 +542,22 @@ $10^{-4}$; the matched-LR specialist is queued}).
 \end{table}
 
 Table~\ref{tab:e2} and Fig.~\ref{fig:streams} compare the stream sets at equal
-compute. \textbf{RGB adds the most phenotype information:} adding the
-photograph to the cloud is the largest gain in every column (sorghum height
-$0.895\!\to\!0.979$, roll $0.39\!\to\!0.81$; maize height $0.17\!\to\!0.62$,
-stem radius $0.29\!\to\!0.75$). A cloud records the silhouette but not the
-shading, overlap and texture cues from which organs can be located on the stem.
-\textbf{Depth improves reconstruction but not the phenotype readout:} depth
+compute. \textbf{An image stream adds most of the phenotype information.} On
+sorghum, adding either the photograph or the depth image to the cloud gives the
+largest gain in every column (height $0.895\!\to\!0.979$ with RGB and
+$0.895\!\to\!0.976$ with depth; roll $0.39\!\to\!0.81$ and
+$0.39\!\to\!0.80$), and the depth image wins all nine learnable targets over
+the cloud alone on both splits. On maize, the photograph gives the same jump
+(height $0.17\!\to\!0.62$, stem radius $0.29\!\to\!0.75$). The depth image
+records the same surface as the cloud, so its gain does not come from new
+information about the plant. A likely reason is that dense, ordered image
+patches present the geometry in a form that the encoder reads more easily than
+sampled point tokens. Once depth is present, the photograph adds little:
+paired over plants, PC+RGB+D wins leaf width ($+0.07$, test) and leaf count
+(by $0.001$) against PC+D, loses roll ($-0.015$) and maximum leaf length
+($-0.06$), and ties the other five targets.
+\textbf{Added to RGB, depth improves reconstruction but not the phenotype
+readout:} depth
 lowers the Chamfer by $28\,\%$ in sorghum and by $25\,\%$ in maize. On sorghum,
 it changes the probe by thousandths: paired over plants, it loses on size
 ($-0.002$ to $-0.004$) and on the two angles, and gains only on leaf length
@@ -559,7 +569,13 @@ $0.015$.
 four-stream arm loses to PC+RGB+D on all nine learnable targets on both splits
 (size $-0.015$ to $-0.018$, branch $-0.038$, roll $-0.017$, leaf length
 $-0.075$, leaf width $-0.14$; every interval excludes zero), and its Chamfer,
-$2.53$ against $1.85$, loses the improvement that depth brought. On the first
+$2.53$ against $1.85$, loses the improvement that depth brought. The other
+three sorghum stream sets show the same pattern. Added to PC+D, the parameter
+stream loses all nine targets; added to PC+RGB, it loses seven and ties roll and
+maximum leaf length; added to the cloud alone, it wins roll ($+0.10$) and loses
+the three size traits ($-0.03$). It raises the Chamfer in every set that
+contains an image stream ($2.45\to4.08$ with depth, $2.57\to3.00$ with RGB)
+and lowers it only for the cloud alone ($5.00\to4.84$). On the first
 maize release, the same arm lost 10 of 11 traits. On the final release, the
 paired comparison is a draw: PC+RGB+D wins droop ($+0.04$ to $+0.07$), loses
 curl ($-0.04$ to $-0.07$) and twist ($-0.035$), and ties the eight remaining
@@ -830,6 +846,24 @@ to $0.24$, and the 3{,}000-plant arm beats the 10{,}000-plant arm on height
 radius ($-0.10$), each interval excluding zero on val and test. With one seed
 per arm, the remaining explanation is run-to-run variance of the arm itself.
 \todo{A second seed of the maize 10k arm.}
+
+% reports/probe_pr_xfer_sorghum_17113708.csv, probe_pr_xfer_maize_17113709.csv, reports/t1_warm_vs_scratch_{sorghum,maize}.csv,
+% outputs/{sorghum_xfer_*_d2,maize_xfer_*}/training_history.json; rows: reports/row_sorghum_maize_row_ft_*_17083714.*,
+% reports/row_maize_sorghum_row_ft_*_17084182.*
+\paragraph{Across species.}
+We pretrained the three-stream model (PC+RGB+D) on each species for 150
+epochs, either from scratch or from the other species' pretrained weights
+(sorghum from the first-release maize model at epoch 600, maize from the sorghum
+headline model). Paired over plants, the warm start wins every learnable trait
+on both splits in both directions, nine of nine in sorghum and eleven of eleven
+in maize. The largest gains fall on the traits that the scratch run barely
+learns (test: sorghum roll $+0.18$ and leaf width $+0.16$; maize curl $+0.49$,
+stem radius $+0.32$ and leaf width $+0.25$). The warm start also lowers the
+validation Chamfer, from $3.38$ to $2.29\times10^{-3}$ in sorghum and from
+$2.55$ to $0.85\times10^{-3}$ in maize. Row reconstruction does not transfer:
+on the other species' test rows, a row-trained model reaches about nine times
+the Chamfer of the native row model ($268$ against $30.7\times10^{-4}$\,m$^2$
+on sorghum rows, $61.7$ against $6.5$ on maize rows).
 
 \paragraph{What the latent encodes.}
 % reports/e9_pr_600_16592054/, reports/e9_pr_tg100_600_16686383/, reports/e9_pm_600_22751615/
