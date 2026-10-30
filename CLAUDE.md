@@ -990,6 +990,18 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   to the configured path (md5 identical), the scratch original moved to `outputs/_stale/4m_distill_15k_rgb2pc_smr50_d2_scratch_copy_ep72`
   and replaced by a symlink, job released: it resumes from checkpoint_epoch_72. Lesson: never repoint output_dir of a job that has
   STARTED; a requeue re-reads the config. The other students were checked: their config and folder agree.
+- **2026-10-30 10:55: ALL MAIZE E1 DISTILLATIONS QUEUED ON NOVA (user: "queue all the distillation jobs for maize as you did for
+  sorghum").** Eight runs, the sorghum set: generalist (all four sources, lr 1e-4) + RGB->cloud with the source visible / 50 % hidden
+  x2 (two independent draws, new configs, as sorghum smr50 / smr50b) + RGB+depth / RGB+recipe / depth+recipe -> cloud + one student
+  over the three pairs (lr 3e-5, target pc). Configs `configs/config_maize_distill_{e1,rgb2pc,rgb2pc_smr50,rgb2pc_smr50b,rgbd2pc,
+  rgbt2pc,dt2pc,pairs2pc}_e1_d2_nova.yaml` = the Delta configs with data_root `/work/mech-ai-scratch/alloy/Maize_1` (the trainer has no
+  --data_root flag); teacher = student init = maize E1 `checkpoint_epoch_1000.pth`, `expect_init_epoch: 1000`. `slurm/distill_maize.sbatch`
+  now takes `DISTILL_CONFIG=` (default the first-release run), reads output_dir / data_root from it for the resume walk and the split
+  guard, picks det / det_cu128 from the GPU, and passes `--accum_steps 8/GPUs` (global 128 = 16 x GPUs x accum; dry-run checked).
+  Outputs on /work/mech-ai, symlinked as `outputs/maize_distill_*_e1_d2`. Jobs 17162329 (generalist) and 17162330-36 (rgb2pc,
+  smr50, smr50b, rgbd2pc, rgbt2pc, dt2pc, pairs2pc), names `mdist_*`: nova, 2 GPUs a100|l40s|h200|rtxpro6000, 40 CPU, 160G, 2 d,
+  self-requeue, all `afterany:17147020` (maize E1, epoch 1000 expected ~Nov 1 late). Eight 2-GPU jobs = 16 GPUs: most will wait on
+  the account cap, as the sorghum students did. Not yet built for maize: the quant / F1 evaluation chain.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

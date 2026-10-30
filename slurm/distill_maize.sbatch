@@ -64,14 +64,25 @@ cd /work/mech-ai-scratch/alloy/embodiedmae
 mkdir -p logs
 
 source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh
-conda activate /work/mech-ai-scratch/alloy/.conda/envs/det_cu128
+GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || true)"
+case "${GPU_NAME}" in
+  *"RTX PRO 6000"*|*Blackwell*) conda activate /work/mech-ai-scratch/alloy/.conda/envs/det_cu128 ;;
+  *)                            conda activate /work/mech-ai/alloy/.conda/envs/det ;;
+esac
 
-CONFIG=configs/config_maize_distill_all.yaml
-CKPT_DIR=./outputs/maize_distill_all/checkpoints
+# DISTILL_CONFIG picks the run (2026-10-30: the maize E1 students on Nova, e.g.
+# configs/config_maize_distill_rgb2pc_e1_d2_nova.yaml); the default is the first-release run.
+CONFIG="${DISTILL_CONFIG:-configs/config_maize_distill_all.yaml}"
+read -r OUT_DIR DATA_ROOT < <(python -c "import yaml,sys; c=yaml.safe_load(open(sys.argv[1])); print(c['checkpointing']['output_dir'], c['data']['data_root'])" "${CONFIG}")
+CKPT_DIR="${OUT_DIR}/checkpoints"
+# global batch 128 = 16 per GPU x GPUs x accum (the configs pin training.global_batch)
+NPROC="${SLURM_GPUS_ON_NODE:-2}"
+case "${NPROC}" in 1|2|4|8) ACCUM=$((8 / NPROC)) ;; *) echo "need 1, 2, 4 or 8 GPUs, got ${NPROC}"; exit 2 ;; esac
 
 echo "JobID   : ${SLURM_JOB_ID:-none}"
 echo "Node    : $(hostname)"
-echo "Config  : ${CONFIG}"
+echo "Config  : ${CONFIG} -> ${OUT_DIR}   data ${DATA_ROOT}"
+echo "GPUs    : ${NPROC} x 16 x accum ${ACCUM} = 128   (${GPU_NAME})"
 echo "Date    : $(date)"
 nvidia-smi -L || true
 
@@ -86,7 +97,7 @@ for split in train val; do
   # wait for 45+ min while `stat` on the same directory returned in 0.2 s. The split
   # roots hold only plant_* folders plus _params.json, a file, which adds no link --
   # so links - 2 is the view-folder count exactly (train 105002 -> 105000).
-  links=$(stat -c %h "/work/mech-ai-scratch/alloy/Maize/${split}" 2>/dev/null || echo 2)
+  links=$(stat -c %h "${DATA_ROOT}/${split}" 2>/dev/null || echo 2)
   n=$(( links - 2 ))
   case "${split}" in
     train) want=105000 ;;
@@ -151,8 +162,8 @@ trap requeue_before_wall USR1
 # 48 CPUs: 2 ranks x 16 persistent train workers (num_workers in the YAML) + 8 val
 # workers on rank 0 during val epochs + the two main processes.
 srun --kill-on-bad-exit=1 \
-  torchrun --standalone --nnodes=1 --nproc_per_node=2 \
-    train_maize_4m_distill.py --config "${CONFIG}" ${RESUME_ARG} "$@" &
+  torchrun --standalone --nnodes=1 --nproc_per_node=${NPROC} \
+    train_maize_4m_distill.py --config "${CONFIG}" --accum_steps "${ACCUM}" ${RESUME_ARG} "$@" &
 SRUN_PID=$!
 rc=0
 wait "${SRUN_PID}" || rc=$?
