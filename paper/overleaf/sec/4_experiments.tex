@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit 6c4b3a0).
+% Synced from the embodiedmae repo (paper/results.tex, commit 72ffe99).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -166,7 +166,7 @@ arms and outside the band of the horizon arm, so these differences measure the
 overlap between training and test views as much as the breadth of the training
 draw. \todo{A probe on held-out views separates the two.}
 
-% reports/pcview_16930426_{coverage,recon,probe,bootstrap}.csv (sorghum, final release); E1 row: job 17082822
+% reports/pcview_16930426_{coverage,recon,probe,bootstrap}.csv (sorghum, final release); E1 row: reports/pcview_17082822_{probe,recon}.csv
 \begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.4pt}
@@ -181,7 +181,7 @@ draw. \todo{A probe on held-out views separates the two.}
     PC+RGB         & 0.977 & 0.967 & 0.948 & 0.977 & 0.624 & 0.001 & 2.49 & 3.64 & 11.5 \\
     PC+RGB+D       & 0.975 & 0.968 & 0.956 & 0.975 & 0.721 & 0.576 & 1.76 & 3.06 & 11.4 \\
     four streams   & 0.961 & 0.953 & 0.946 & 0.961 & 0.748 & 0.818 & 2.52 & 3.62 & 11.4 \\
-    headline (E1)  &  &  &  &  &  &  &  &  &  \\
+    headline (E1)  & \textbf{0.982} & \textbf{0.975} & \textbf{0.960} & \textbf{0.982} & 0.623 & $-0.26$ & \textbf{1.36} & 3.14 & 11.6 \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Self-occlusion: what one or three cameras see (sorghum,
@@ -189,7 +189,7 @@ draw. \todo{A probe on held-out views separates the two.}
   cut to the points visible from camera 0, or cameras 0--2, by ray-casting
   against the mesh. Matched: probe refit per condition. Transferred: the
   full-cloud probe applied as is. Chamfer against the complete cloud, masked
-  regime, val. Final data release. \todo{E1 row: final-release headline model (job queued).}}
+  regime, val. Final data release; the headline model at epoch 1{,}000.}
   \label{tab:views}
 \end{table*}
 
@@ -215,7 +215,10 @@ $-0.029\ [-0.033,-0.026]$ on height and PC+RGB+D loses
 $-0.020\ [-0.022,-0.017]$. However, the latent representation shifts with
 coverage (Fig.~\ref{fig:partial}): a readout fitted on complete clouds and
 transferred to one-camera clouds collapses (PC+RGB height
-$0.977 \to 0.624 \to 0.001$), and refitting recovers $0.948$. The decoder also
+$0.977 \to 0.624 \to 0.001$; headline model $0.982 \to 0.623 \to -0.26$), and
+refitting recovers $0.948$ and $0.960$. The headline model has the best matched
+probe and the best complete-cloud Chamfer of all five models, but its one-camera
+Chamfer ($11.6$) is no better than the E2 arms'. The decoder also
 does not complete the hidden part of the plant: at one camera, the distance from
 the true cloud to the prediction is $11.4$ to $12.8$ against $4.1$ for echoing
 the partial input, so the model reproduces what it is given rather than
