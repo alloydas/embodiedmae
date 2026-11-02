@@ -90,7 +90,8 @@ OUT="reports/probe_${SLURM_JOB_NAME:-probe}_${SLURM_JOB_ID:-manual}.csv"
 # CKPT: checkpoint inside each run dir. Default best_model.pth is NOT a matched cut
 # across arms (it lands at 42-100% of schedule) -- pass the arm's last saved epoch,
 # e.g. CKPT=checkpoints/checkpoint_epoch_600.pth. SPECIES=maize switches to the maize
-# probe/E9 scripts. E9_SPLITS runs eval/latent_analysis*.py afterwards on CPU from the
+# probe/E9 scripts; DATA_ROOT overrides the probe's data root (maize final data on Nova:
+# /work/mech-ai-scratch/alloy/Maize_1). E9_SPLITS runs eval/latent_analysis*.py afterwards on CPU from the
 # same feature cache (same --ckpt -> same cache key), so it costs no extra extraction.
 CKPT="${CKPT:-best_model.pth}"
 case "${SPECIES:-sorghum}" in
@@ -107,13 +108,14 @@ python "${PROBE}" \
   --runs "$@" \
   --ckpt "${CKPT}" \
   ${FEATURE:+--feature "${FEATURE}"} \
+  ${DATA_ROOT:+--data-root "${DATA_ROOT}"} \
   --num-workers "${SLURM_CPUS_PER_TASK:-16}" \
   --batch-size 32 \
   --out "${OUT}"
 
 E9_OUT="reports/e9_${SLURM_JOB_NAME:-probe}_${SLURM_JOB_ID:-manual}"
 for split in ${E9_SPLITS:-}; do
-  python "${E9}" --runs "$@" --ckpt "${CKPT}" --split "${split}" --device cpu \
+  python "${E9}" --runs "$@" --ckpt "${CKPT}" --split "${split}" --device cpu ${DATA_ROOT:+--data-root "${DATA_ROOT}"} \
     --out-dir "${E9_OUT}" --fig-dir "${E9_OUT}/figures" \
     || echo "E9 ${split} FAILED (probe results above are unaffected)"
 done

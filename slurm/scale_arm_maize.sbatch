@@ -125,6 +125,9 @@ nvidia-smi -L || true
 # Under view_sampling an epoch is one view per plant, so a half-copied split
 # trains on a silent subset and the step budget stops matching E2's -- which is
 # the single thing these arms exist to hold fixed.
+# the config's data root (Nova: Maize = first release, Maize_1 = the final v2 tree)
+DATA_ROOT=$(python -c "import yaml,sys; print(yaml.safe_load(open(sys.argv[1]))['data']['data_root'])" "${CONFIG}")
+echo "Data    : ${DATA_ROOT}"
 for split in train val; do
   # Count folders from the directory's link count (subdirectories + 2), not by
   # listing it. /work is NFS: on 2026-09-29 an `ls` of the 105,000-entry train
@@ -133,7 +136,7 @@ for split in train val; do
   # in 0.2 s. The split roots hold only plant_* folders plus _params.json, a
   # file, which adds no link -- so links - 2 is the view-folder count exactly
   # (train 105002 -> 105000, val 22502 -> 22500).
-  links=$(stat -c %h "/work/mech-ai-scratch/alloy/Maize/${split}" 2>/dev/null || echo 2)
+  links=$(stat -c %h "${DATA_ROOT}/${split}" 2>/dev/null || echo 2)
   n=$(( links - 2 ))
   case "${split}" in
     train) want=105000 ;;

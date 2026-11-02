@@ -1025,6 +1025,17 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (afterok), zero-shot maize E1 on the test rows **17189621** (`--num-points 24576`, running). Same-species maize row depth is NOT
   re-encoded (as the earlier maize rows). Then: `eval/row_pair_bootstrap.py` for tab:rows, the cross-species row evals with the
   new maize row model, `figures/make_row_gallery.py` and `fig_rows`.
+- **2026-11-01 20:00: EVERY REMAINING NOVA-RUNNABLE ITEM QUEUED (user: "start what left for both", then "Move less important to
+  scavenger"); status table kept in the ledger (`#species`, hand-maintained in the template).** Sorghum: F1 of the four new E2
+  arms **17189720** (scavenger); E3 paired CIs on the login node -> `reports/e3_delta_d2.csv`, `e3_1k_vs_3k_delta_d2.csv`
+  (`eval/probe_pair_bootstrap.py` now takes `run@ckpt`). Maize (data Maize_1): E1 probe + E9 **17189722** (`slurm/linear_probe.sbatch`
+  takes `DATA_ROOT=`), E1 F1 **17189723** (new `slurm/pc_fscore_maize_nova.sbatch`), E1 partial clouds **17189727** (new
+  `slurm/pc_view_maize_nova.sbatch`, scavenger), E8 baselines on final data **17189733** (`slurm/baseline_probe.sbatch` takes
+  `DATA_ROOT=` / `RGB_FILE=`, scavenger), E5 arms **17189739/40/41** (`configs/config_maize_e5_*_d2_nova.yaml`; `scale_arm_maize.sbatch`
+  reads data_root from the config; scavenger), student F1 **17189743** (afterany the eight distillations). Moved to scavenger as less
+  important: the four two-stream maize students 17162333-36, the E5 arms, the partial-cloud eval; kept on nova: maize E1 probe /
+  F1, rows, the running distillations. NOT runnable here: probes of the Delta-only maize runs (new E2 arms, tg controls, E4,
+  supervised scoring), the maize E5 reference (maize_4m_d2 is on Delta), the sorghum E5 held-out-view probe (not built), maize quant.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

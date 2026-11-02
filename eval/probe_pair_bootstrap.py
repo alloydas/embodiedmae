@@ -74,10 +74,14 @@ def base_reads_rgb(name):
 
 
 def load(args, run, feature, split):
+    # `run@checkpoints/checkpoint_epoch_N.pth` overrides --ckpt for that run (E3 arms end at
+    # different epochs: 6168 / 2024 / 624 against 600).
+    run, _, ckpt = run.partition('@')
+    ckpt = ckpt or args.ckpt
     if run.startswith('base:'):    # an E8 row: eval/baseline_probe.py's cache name
         stem = f'base_{run[5:]}__{args.species}__{split}__{feature}'
     else:
-        stem = f'{args.prefix}{run}__{Path(args.ckpt).stem}__{split}__{feature}'
+        stem = f'{args.prefix}{run}__{Path(ckpt).stem}__{split}__{feature}'
     f = Path(args.cache_dir) / f'{stem}__seed{args.seed}__rep{args.repeats}.npz'
     if not run.startswith('base:') and args.species == 'sorghum':
         # linear_probe.cache_stem: runs on a brightenable image file carry the gain
@@ -154,7 +158,7 @@ def main():
                     ra = r2_rows(y[s], P[run][s], idx)
                     r2a = r2_rows(y[s], P[run][s], np.arange(n)[None])[0]
                     d = ra - rb
-                    rows.append({'a': run, 'b': args.b, 'feature': feature, 'target': name,
+                    rows.append({'a': run.split('@')[0], 'b': args.b.split('@')[0], 'feature': feature, 'target': name,
                                  'split': s, 'n': n, 'r2_a': r2a, 'r2_b': r2b, 'delta': r2a - r2b,
                                  'lo': np.percentile(d, 2.5), 'hi': np.percentile(d, 97.5)})
             print(f'  {feature:5s} {name:16s} done', flush=True)

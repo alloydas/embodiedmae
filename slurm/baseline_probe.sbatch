@@ -67,12 +67,15 @@ echo "Baselines : ${BASELINES}"
 echo "Weights   : ${E8_WEIGHTS}"
 echo "Date      : $(date)"
 
+# DATA_ROOT / RGB_FILE (optional): e.g. the maize final data on Nova,
+#   DATA_ROOT=/work/mech-ai-scratch/alloy/Maize_1 RGB_FILE=rgba.png sbatch slurm/baseline_probe.sbatch maize
 # Features are cached atomically per (baseline, split), so a preempted and requeued
 # job resumes at the split it lost.
 python eval/baseline_probe.py \
   --species "${SPECIES}" \
   --baselines ${BASELINES} \
   --weights-dir "${E8_WEIGHTS}" \
+  ${DATA_ROOT:+--data-root "${DATA_ROOT}"} ${RGB_FILE:+--rgb-file "${RGB_FILE}"} \
   --batch-size 32 --num-workers 32 \
   --out "${OUT}"
 

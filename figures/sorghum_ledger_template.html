@@ -91,6 +91,12 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <div class="tablewrap"><table id="matrixtbl"></table></div>
   </section>
 
+  <section id="species">
+    <div class="sechead"><span class="eyebrow">Both species</span><h2>Sorghum and maize, side by side</h2></div>
+    <p>Final data release for both species. Updated with every ledger refresh; job ids are Nova unless marked Delta.</p>
+    <div class="tablewrap"><table id="speciestbl"></table></div>
+  </section>
+
   <section id="queue">
     <div class="sechead"><span class="eyebrow">Nova</span><h2>Queue</h2></div>
     <div class="note" id="queuenote"></div>
@@ -337,7 +343,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-11-01 19:00 CST';
+const ASOF = '2026-11-01 20:00 CST';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -353,7 +359,7 @@ const TARGETS=['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','l
 const TLAB={height:'height',leaf_count:'leaf count',biomass:'biomass',leaf_angle:'leaf angle',leaf_angle_roll:'roll',leaf_len_mean:'leaf len mean',leaf_len_max:'leaf len max',leaf_width_mean:'leaf width mean',leaf_width_max:'leaf width max'};
 const f3=v=>v==null?'':v.toFixed(3);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const pill=s=>({done:'<span class="pill done">done</span>',running:'<span class="pill running">running</span>',queued:'<span class="pill queued">queued</span>',blank:'<span class="pill blank">no result</span>',elsewhere:'<span class="pill elsewhere">owned elsewhere</span>',built:'<span class="pill queued">built, not run</span>'})[s];
+const pill=s=>({done:'<span class="pill done">done</span>',running:'<span class="pill running">running</span>',queued:'<span class="pill queued">queued</span>',blank:'<span class="pill blank">no result</span>',elsewhere:'<span class="pill elsewhere">owned elsewhere</span>',delta:'<span class="pill elsewhere">on Delta</span>',built:'<span class="pill queued">built, not run</span>'})[s];
 const FS=D.fscore; const fsRow=(r,s,t)=>FS.find(x=>x.run===r&&x.split===s&&Math.abs(x.tau-t)<1e-9);
 const C=D.curves;
 
@@ -393,6 +399,26 @@ const C=D.curves;
     ['E10','real field data','blank','Nothing on real scans.'],
   ];
   document.getElementById('matrixtbl').innerHTML='<thead><tr><th>exp</th><th>question</th><th>state</th><th>runs and notes</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="lead">${r[0]}</td><td>${esc(r[1])}</td><td>${pill(r[2])}</td><td class="wrapc${r[2]==='blank'?' blankc':''}" style="text-align:left">${esc(r[3])}</td></tr>`).join('')+'</tbody>';
+})();
+
+// ---------- sorghum vs maize status (hand-maintained, refreshed with ASOF)
+(function(){
+  const rows=[
+    ['E1 headline model','done','1,000 / 1,000; probe, E9, F1, partial-cloud row','done','1,000 / 1,000 (11-01); probe + E9 17189722, F1 17189723, partial clouds 17189727 queued'],
+    ['E2, original 4 arms','done','probe, E9, bootstraps, F1','done','probe, E9, bootstraps, F1'],
+    ['E2, 4 new arms','done','probe, E9, bootstraps; F1 17189720 queued (scavenger)','delta','600 / 600 on Delta; not probed (Delta checkpoints)'],
+    ['Recipe-visibility controls','done','probe, bootstraps, F1','delta','done on Delta; not probed'],
+    ['E3 data scaling','done','probe, E9, F1; paired CIs running (login node)','done','probe, E9, paired CIs, F1'],
+    ['E4 model scaling','done','probe, bootstraps, F1','delta','done on Delta; not probed (small has F1)'],
+    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe not built','running','3 arms 17189739 / 40 / 41 on scavenger (~34 h each); reference maize_4m_d2 is on Delta only'],
+    ['E8 baselines','done','baselines + supervised row','running','final-data baselines 17189733 (scavenger); supervised row on Delta, not scored'],
+    ['Partial clouds','done','4 E2 arms + E1','running','E1 only (17189727, scavenger)'],
+    ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students training on nova (17162329-32); 4 two-stream students on scavenger (17162333-36); F1 17189743 chained; quant not written'],
+    ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','running','redo from maize E1: 17189698 / 99, evals 17189700 / 01, zero-shot 17189621'],
+    ['Cross-species','done','transfer arms, probes, generation, rows','done','same; rows to rerun with the new maize row model'],
+    ['E10 real data','blank','nothing','blank','nothing'],
+  ];
+  document.getElementById('speciestbl').innerHTML='<thead><tr><th>experiment</th><th>sorghum</th><th>sorghum detail</th><th>maize</th><th>maize detail</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="lead">${esc(r[0])}</td><td>${pill(r[1])}</td><td class="wrapc" style="text-align:left">${esc(r[2])}</td><td>${pill(r[3])}</td><td class="wrapc" style="text-align:left">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
 })();
 
 // ---------- queue
