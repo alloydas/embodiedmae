@@ -1016,6 +1016,15 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (epoch 0, val) in logs/evalwarm_17162455/6.out. Maize E1 17147020 finished 1000/1000 11-01 18:43 (val chamfer 0.67e-3,
   best_model epoch 960); maize distillations 17162329-32 running on nova26-gpu-[1-2], 17162333-36 pending on the cap.
   Paper: any-subset table, distillation paragraph, partial-cloud E1 row and setup paragraph on the final release. Ledger v32.
+- **2026-11-01 19:30: MAIZE ROWS REDONE FROM MAIZE E1 (user: "start the row things").** The maize row arms (`maize_row_ft` /
+  `_iso`, 10-17 / 10-21) were warm-started from the FIRST-RELEASE `maize_4m` ep 600 (no maize E1 existed then); the sorghum row arms
+  start from the sorghum E1. New `configs/config_maize_row_{ft,iso}_e1.yaml` = the old configs with init = maize E1
+  `checkpoint_epoch_1000.pth` (schema v2; warm start checked on CPU: 0 missing / 0 unexpected), outputs `maize_row_{ft,iso}_e1` on
+  /work/mech-ai (symlinked). Jobs (nova, 2 GPUs, `--batch_size 16` = global 32): **17189698** `maize_row_ft_e1`
+  ((a100&NVLINK)|h200|rtxpro6000), **17189699** `maize_row_iso_e1` (a100|l40s|h200|rtxpro6000), test evals **17189700** / **17189701**
+  (afterok), zero-shot maize E1 on the test rows **17189621** (`--num-points 24576`, running). Same-species maize row depth is NOT
+  re-encoded (as the earlier maize rows). Then: `eval/row_pair_bootstrap.py` for tab:rows, the cross-species row evals with the
+  new maize row model, `figures/make_row_gallery.py` and `fig_rows`.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
