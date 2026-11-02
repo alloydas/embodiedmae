@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit 72ffe99).
+% Synced from the embodiedmae repo (paper/results.tex, commit 2f12de4).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -17,10 +17,11 @@ model differs in schedule (1{,}000 epochs over all ten views at global batch
 Sec.~\ref{sec:method-pretrain}. The headline model, like the four-stream ablation arm,
 takes the parameter stream as an encoder input under the shared masking budget,
 and the teacher and every student of Sec.~\ref{sec:res-distill} are initialized
-from its weights. \todo{The headline-derived numbers
-in this draft are from the first-release, Chamfer-only headline run; the
-final-release Sinkhorn run and its distillation will replace them.} A maize
-headline model on the same schedule and loss is queued.
+from its weights. The sorghum headline model and its distillation are on the
+final release; \todo{the few headline-derived numbers still from the
+first-release, Chamfer-only run are marked where they appear.} A maize headline
+model on the same schedule and loss reached 1{,}000 epochs (validation Chamfer
+$0.67\times10^{-3}$), and its distillation is training.
 
 \paragraph{Metrics.}
 We measure geometry by the symmetric Chamfer distance in the unit-sphere frame
@@ -404,7 +405,7 @@ therefore also a partial-cloud test, as in Tab.~\ref{tab:views}.
   warm start with both streams visible. $\theta$ MAE on
   hidden real leaf tokens. $^\ddagger$the collapse of an unmasked cloud
   (Sec.~\ref{sec:distill}); maize is the first-release student stopped at
-  epoch 55. \todo{Maize final-release students (queued behind the maize headline model).}}
+  epoch 55. \todo{Maize final-release students: training since Nov 1 from the maize headline model at epoch 1{,}000.}}
   \label{tab:anysubset}\label{tab:main}
 \end{table*}
 
@@ -435,19 +436,28 @@ depth is worse than the photograph alone ($2.91$ against $2.27$): pretraining
 never showed two streams with every token visible, and distillation removes
 this gap.
 
-\todo{The two paragraphs below are first-release numbers; the final-release
-RGB students finish on Nov 1.} Two seeds of the RGB-only student agree to the
-third digit (test $1.00 \to 0.79$ for both; val $1.01 \to 0.80$). Hiding half
-of the source's own tokens during distillation beats full visibility
-($0.80$ vs.\ $0.85$, val). Figure~\ref{fig:views}B shows the gain by plant
-difficulty: the easiest quartile of plants loses $3\,\%$ and the hardest gains
-$12\,\%$, so the regularizer improves robustness on hard plants rather than
-average-case accuracy. A specialist distilled to predict the recipe from the
-cloud alone reaches MAE $0.039$ ($-37\,\%$), and the four-target generalist
-reaches $0.035$ ($-44\,\%$), so the other heads act as auxiliary supervision
-for parameter regression rather than competing with it
-(\todo{the two ran at different learning rates, $3\!\times\!10^{-5}$ vs.\
-$10^{-4}$; the matched-LR specialist is queued}).
+% photograph -> cloud, test, 2,250 plants: reports/quant_{teacher_undistilled,smr00_full,smr50_seed1,smr50_seed2,
+%   generalist_rgb,generalist_depth}_d2_test.json (job 17061909; each student's best_model.pth);
+% F1: reports/pcfscore_17082824_summary.csv (students) and pcfscore_17071405_summary.csv (headline, E2)
+On the full test split (2{,}250 plants, each student at its best validation
+checkpoint), the photograph-to-cloud Chamfer falls from $2.25$ for the
+pretrained model to $0.88$ for the RGB-only student. Hiding half of the
+source's own tokens during distillation beats full visibility ($0.815$ and
+$0.818$ for two independent runs, against $0.88$), and the fully visible
+student reaches its best validation point at epoch 17 of 100. The generalist,
+trained on all four sources, matches the dedicated student from a photograph
+($0.88$) and generates the cloud from a depth image at $0.64$. With every
+stream visible, the distilled models reconstruct the cloud nearly as well as
+the pretrained model (F1 at $\tau{=}0.01$: $0.375$ for the generalist and
+$0.383$ for the half-hidden students, against $0.394$).
+On the first release, the gain from hiding half of the tokens was concentrated
+on hard plants: the easiest quartile lost $3\,\%$ and the hardest gained
+$12\,\%$ (Fig.~\ref{fig:views}B). A specialist distilled to predict the recipe
+from the cloud alone reached MAE $0.039$ ($-37\,\%$), against $0.035$
+($-44\,\%$) for the four-target generalist, so the other heads acted as
+auxiliary supervision for parameter regression rather than competing with it
+(\todo{both first release, at different learning rates, $3\!\times\!10^{-5}$
+vs.\ $10^{-4}$; no final-release specialist was trained}).
 
 \subsection{Where the parameter stream belongs}
 \label{sec:param-stream}\label{sec:exp-params}

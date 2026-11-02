@@ -1009,6 +1009,13 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   (ep 79) stays on nova. Then (user: "no keep this jobs in nova") both moved BACK to nova before starting; all three RGB students are on nova. The final-data warm-start evals for the paper's any-subset table (`eval/eval_warmstart.py <config> [sources]`,
   now config-driven) first failed OOM on 32 GB V100s (17161745/6); resubmitted with `--constraint=a100|l40s|h200|rtxpro6000` as
   17162455 (`config_4m_distill_15k_all_d2`) / 17162456 (`pairs_d2`) -> logs/evalwarm_<job>.out.
+- **2026-11-01 19:00: SORGHUM DISTILLATION COMPLETE; MAIZE E1 DONE.** All eight sorghum distillations at 100/100 (RGB students
+  10-31 18:15 / 20:43, 11-01 05:15). Quant 17061909 (test, photograph -> cloud, each best_model): E1 2.25e-3, source-visible
+  0.88 (best ep 17), smr50 0.815 / 0.818, generalist rgb 0.88 / depth 0.64 -> `reports/quant_*_d2_{val,test}.json`; student
+  P/R/F1 17082824 -> `reports/pcfscore_17082824_*` (F1@0.01: generalist 0.375, smr50 0.383, full 0.352; E1 0.394). Warm starts
+  (epoch 0, val) in logs/evalwarm_17162455/6.out. Maize E1 17147020 finished 1000/1000 11-01 18:43 (val chamfer 0.67e-3,
+  best_model epoch 960); maize distillations 17162329-32 running on nova26-gpu-[1-2], 17162333-36 pending on the cap.
+  Paper: any-subset table, distillation paragraph, partial-cloud E1 row and setup paragraph on the final release. Ledger v32.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
