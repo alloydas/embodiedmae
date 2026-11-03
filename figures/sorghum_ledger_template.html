@@ -343,7 +343,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-11-01 20:00 CST';
+const ASOF = '2026-11-03 10:15 CST';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -404,17 +404,17 @@ const C=D.curves;
 // ---------- sorghum vs maize status (hand-maintained, refreshed with ASOF)
 (function(){
   const rows=[
-    ['E1 headline model','done','1,000 / 1,000; probe, E9, F1, partial-cloud row','done','1,000 / 1,000 (11-01); probe + E9 17189722, F1 17189723, partial clouds 17189727 queued'],
+    ['E1 headline model','done','1,000 / 1,000; probe, E9, F1, partial-cloud row','done','1,000 / 1,000 (11-01); probe + E9 (17189722: height 0.739, curl 0.698, leaf angle 0.958 val), F1 0.504 at τ 0.01 (17189723), partial clouds (17189727)'],
     ['E2, original 4 arms','done','probe, E9, bootstraps, F1','done','probe, E9, bootstraps, F1'],
-    ['E2, 4 new arms','done','probe, E9, bootstraps; F1 17189720 queued (scavenger)','delta','600 / 600 on Delta; not probed (Delta checkpoints)'],
+    ['E2, 4 new arms','done','probe, E9, bootstraps, F1 (17189720: PC+D 0.261, PC+RGB+recipe 0.226)','delta','600 / 600 on Delta; not probed (Delta checkpoints)'],
     ['Recipe-visibility controls','done','probe, bootstraps, F1','delta','done on Delta; not probed'],
-    ['E3 data scaling','done','probe, E9, F1; paired CIs running (login node)','done','probe, E9, paired CIs, F1'],
+    ['E3 data scaling','done','probe, E9, F1, paired CIs (reports/e3_delta_d2.csv: 10k ties full, 3k loses 6, 1k loses 4)','done','probe, E9, paired CIs, F1'],
     ['E4 model scaling','done','probe, bootstraps, F1','delta','done on Delta; not probed (small has F1)'],
-    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe not built','running','3 arms 17189739 / 40 / 41 on scavenger (~34 h each); reference maize_4m_d2 is on Delta only'],
-    ['E8 baselines','done','baselines + supervised row','running','final-data baselines 17189733 (scavenger); supervised row on Delta, not scored'],
-    ['Partial clouds','done','4 E2 arms + E1','running','E1 only (17189727, scavenger)'],
-    ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students training on nova (17162329-32); 4 two-stream students on scavenger (17162333-36); F1 17189743 chained; quant not written'],
-    ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','running','redo from maize E1: 17189698 / 99, evals 17189700 / 01, zero-shot 17189621'],
+    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe not built','running','top-down at epoch 91 / 600 (17189739, scavenger); horizon / single pending on scavenger; reference maize_4m_d2 is on Delta only'],
+    ['E8 baselines','done','baselines + supervised row','running','final-data baselines 17189733 (nova, pending); supervised row on Delta, not scored'],
+    ['Partial clouds','done','4 E2 arms + E1','done','E1 (17189727)'],
+    ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students done 100 / 100 (11-03); RGB+D and three-pair students pending on nova, RGB+recipe and depth+recipe on scavenger; F1 of the four done students 17189743; quant not written'],
+    ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','running','from maize E1: zero-shot and isolated control scored; fine-tune OOM at the epoch-95 validation, fixed and resumed from 90 (17212248), eval 17189700 chained'],
     ['Cross-species','done','transfer arms, probes, generation, rows','done','same; rows to rerun with the new maize row model'],
     ['E10 real data','blank','nothing','blank','nothing'],
   ];

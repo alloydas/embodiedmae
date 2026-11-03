@@ -1036,6 +1036,16 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   important: the four two-stream maize students 17162333-36, the E5 arms, the partial-cloud eval; kept on nova: maize E1 probe /
   F1, rows, the running distillations. NOT runnable here: probes of the Delta-only maize runs (new E2 arms, tg controls, E4,
   supervised scoring), the maize E5 reference (maize_4m_d2 is on Delta), the sorghum E5 held-out-view probe (not built), maize quant.
+- **2026-11-03 10:15 STATUS.** Done: maize distillation generalist + 3 RGB students 100/100 (11-03 02:04-03:34; val, from RGB
+  11.28 -> 0.77-0.80e-3, generalist depth 1.26 -> 0.58, pc 6.43 -> 0.83); maize E1 probe 17189722 (val R2 height 0.739, curl 0.698,
+  leaf angle 0.958, stem radius 0.830; maize_4m_d2 was 0.635 / 0.304 / 0.919 / 0.743), F1@0.01 0.504 (17189723), partial clouds
+  17189727; maize rows from E1: zero-shot (row/all 29.6e-4 m^2) and isolated control (isolated 1.79, rows 29.0; the first-release
+  control was 3.97) scored; sorghum E3 CIs (`reports/e3_delta_d2.csv`) and new-arm F1 (`reports/pcfscore_17189720_*`).
+  **maize_row_ft_e1 17189698 FAILED at the epoch-95 validation: OOM** (the (B, 8192, 24576, 3) chamfer against the scene cloud = 36 GiB
+  at 16 per GPU on an 80 GB A100; the sorghum arm ran on 96 GB cards). Fix: `train_row_4m.py` evaluates that chamfer per item
+  (same value, checked); resubmitted **17212248** (running, resumes at 90), eval 17189700 re-pointed to it. (user: "move som jobs from
+  scavenger to nova"): 17162333 rgbd2pc, 17162336 pairs2pc, 17189733 E8 baselines moved to nova; student F1 17189743 released
+  (it had waited on all eight). Ledger v34.
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),

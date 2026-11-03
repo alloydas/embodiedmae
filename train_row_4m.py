@@ -215,7 +215,10 @@ def evaluate(model, loader, device, mask_ratio, distributed, sp):
         loss, (lr_, ld, lp, lt), (_, _, pred_pc, pred_par), (_, _, _, mt) = model(
             rgb, depth, pc, params, valid, mask_ratio=mask_ratio, targets=(g_rgb, g_depth, g_pc))
         ch_gt = chamfer_distance(pred_pc, g_pc)
-        ch_in = chamfer_distance(pred_pc, pc)
+        # Against the 24,576-point scene cloud the batched (B, N, M, 3) expansion needs 36 GiB at 16 per
+        # GPU (OOM on an 80 GB A100, job 17189698); every item has the same N and M, so the mean of the
+        # per-item values equals the batched value.
+        ch_in = torch.stack([chamfer_distance(pred_pc[i:i + 1], pc[i:i + 1]) for i in range(pc.shape[0])]).mean()
         if 'text' in m.active_modalities:
             err = (pred_par - params).abs()
             cols = torch.zeros(sp['n_params'], device=device)
