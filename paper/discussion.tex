@@ -80,8 +80,10 @@ and concentrates the gain on the weakest sources and the hardest plants
 (Tab.~\ref{tab:anysubset}, Fig.~\ref{fig:views}B), and supervising all four
 targets beats a parameter specialist at parameter regression. Distillation does
 not make the model view-robust: the elevation curve moves down and keeps its
-shape, so view robustness requires a different method, most plausibly treating
-views as an explicit augmentation axis during pretraining. Distillation also
+shape, so view robustness requires a different method. The training-view
+ablation points to the pretraining draw: the arm trained on all ten views is the
+most even across elevations, and every arm trained on a narrower band loses roll
+outside it (Fig.~\ref{fig:e5views}). Distillation also
 showed that an unpredictable field is not neutral: the three waviness parameters
 of the first sorghum release stayed at zero skill and became more view-dependent
 under distillation, and the final generator does not include them. A

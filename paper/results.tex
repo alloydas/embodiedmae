@@ -202,7 +202,30 @@ single-view arm wins six (test: roll $+0.061$, leaf length $+0.069$, size
 $+0.008$). View 0 lies inside the training band of the top-down and single-view
 arms and outside the band of the horizon arm, so these differences measure the
 overlap between training and test views as much as the breadth of the training
-draw. \todo{A probe on held-out views separates the two.}
+draw. To separate the two, we refit and scored the probe on each view $k$ of
+every plant (Fig.~\ref{fig:e5views}; views 0--7 so far, \todo{8--9 pending}).
+Each restricted arm leads on roll only on the views it trained on: against the
+all-view arm, test roll is $+0.061$ (single), $+0.042$ (top-down) and $+0.027$
+(horizon) on the training views and $-0.069$, $-0.060$ and $-0.051$ on average
+on the other views, down to $-0.144$ for the single-view arm on view 6. The
+all-view arm is the most even, $0.734$ to $0.778$ across views. Size does not
+separate the arms off view 0 (height within $0.004$ of the all-view arm, except
+the horizon arm at $-0.013$ on view 0). A narrow band of training views therefore
+raises the probe on that band and lowers it elsewhere, so a deployment camera
+whose elevation is known in advance favors training at that elevation, and an
+unknown one favors the full ladder.
+% E5 held-out-view probe: reports/probe_pr_e5_v<k>_172127xx.csv (--probe-view k)
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figs/fig_e5_views.pdf}
+  \caption{\textbf{Training views (E5), probe on held-out views, sorghum test.}
+  The probe is fitted and scored on view $k$ of every plant, for the four-stream
+  arm trained on all ten views and on three bands of the elevation ladder.
+  Filled markers: views the arm trained on. Each restricted arm leads on roll
+  only on its own views; height does not separate the arms after view 0.}
+  \label{fig:e5views}
+\end{figure}
 
 % reports/pcview_16930426_{coverage,recon,probe,bootstrap}.csv (sorghum, final release); E1 row: reports/pcview_17082822_{probe,recon}.csv
 \begin{table*}[t]
