@@ -1056,6 +1056,9 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   names get `__v{k}` (view 0 without the flag keeps its historical name; checked: 2,250 val plants each have views 0-9). Ten jobs
   **17212752-61** `pr_e5_v0..v9` (scavenger, 1 GPU, requeue): e5_topdown_d2, e5_horizon_d2, e5_single_d2 and the all-view reference
   e2_pcrgbdt_d2 at epoch 600 -> `reports/probe_pr_e5_v<k>_<job>.csv`. v0 doubles as a check against the published view-0 probe.
+  11-03 11:30 (user: "put some jobs from scavenger to NOVA", "move the long runs to NOVA"): moved to nova: E5 view probes v0-v4
+  (17212752-56), the maize two-stream students 17162334 (rgbt2pc) / 17162335 (dt2pc), maize E5 horizon / single 17189740 / 41.
+  Still on scavenger: view probes v5-v9 (17212757-61) and the RUNNING maize E5 top-down 17189739 (a running job cannot move).
 - **Still to create:** the sorghum distillation on d2 (`config_4m_distill_15k_all_d2.yaml`, warm
   start from `outputs/4m_pretrain_15k_d2_sink/checkpoints/checkpoint_epoch_1000.pth`) once E1 finishes.
   Then probes (`CKPT=checkpoints/checkpoint_epoch_600.pth slurm/linear_probe.sbatch e2_pc_d2 ...`),
