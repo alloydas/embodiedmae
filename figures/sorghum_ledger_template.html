@@ -154,7 +154,12 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
       <div class="chart"><h3>E4: model size (val R²)</h3><div class="sub">25 M / 114 M / 332 M parameters, same steps.</div><div id="ch_e4_probe"></div></div>
       <div class="chart"><h3>E5: view band of the train draw (val R²)</h3><div class="sub">Scored on view 0, which is inside the top-down and single-view bands and outside the horizon band.</div><div id="ch_e5_probe"></div></div>
     </div>
-    <div class="note"><strong>Read E5 with care.</strong> The probe scores view 0 (64° above the horizon) for every arm. The single-view arm trained only on view 0 and the top-down arm on views 0-1, so both are tested on views they trained on; the horizon arm never saw view 0, and the all-view reference saw it one time in ten. The E5 wins and losses therefore measure train/test view overlap as much as the view regime itself. A probe on held-out views is not built yet.</div>
+    <div class="note"><strong>Read the view-0 bars with care.</strong> They score view 0 (64° above the horizon) for every arm: inside the single and top-down training bands, outside the horizon band. The held-out-view probe below fits and scores the probe on each view k of every plant (<code>--probe-view k</code>, 17212752-61) and separates the view regime from train/test overlap.</div>
+    <div class="grid2">
+      <div class="chart"><h3>E5 held-out-view probe: roll (test R²)</h3><div class="sub">Probe fitted and scored on view k (0 = 64° down, 4-5 = horizon, 9 = 64° up). Filled markers: views the arm trained on.</div><div id="ch_e5v_roll"></div></div>
+      <div class="chart"><h3>E5 held-out-view probe: height (test R²)</h3><div class="sub">Same probe, height. The arms separate only on view 0.</div><div id="ch_e5v_height"></div></div>
+    </div>
+    <div class="note" id="e5v_note"></div>
   </section>
 
   <section id="boot">
@@ -343,7 +348,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-11-03 12:40 CST';
+const ASOF = '2026-11-03 13:00 CST';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -386,7 +391,7 @@ const C=D.curves;
     ['E2 control','parameter budget','done','The four-stream arm with the recipe tokens gated to 20 % (tg), 60 % (tg40) or 0 % visible (tg100, target only), so the sensor streams keep the three-stream arm\'s 117 visible tokens. Probed, CIs, F1.'],
     ['E3','data scaling','done','1k / 3k / 10k plants (6,169 / 2,100 / 631 epochs, 197,400 steps each), probed, E9, F1. Full-data point = the four-stream arm. Paired CIs not run.'],
     ['E4','model scaling','done','small (25 M) / large (332 M) at 600; base = the four-stream arm. Probed, CIs, F1.'],
-    ['E5','view regime','done','Train draw restricted to a band of the ten-view elevation ladder: top-down (views 0-1), horizon (4-5), single (view 0); reference = all ten views. Probed + E9 (17060237) and paired bootstrap (17060238) against the all-view arm: horizon loses 6 of 9 traits (roll −0.065 test), top-down wins 3 and ties size, single view wins 6 (roll +0.061, leaf length +0.069). Caveat: the probe scores view 0, inside the single and top-down training bands and outside the horizon band, so these deltas mix the view regime with train/test view overlap. A held-out-view probe is not built.'],
+    ['E5','view regime','done','Train draw restricted to a band of the ten-view elevation ladder: top-down (views 0-1), horizon (4-5), single (view 0); reference = all ten views. Probed + E9 (17060237) and paired bootstrap (17060238) against the all-view arm: horizon loses 6 of 9 traits (roll −0.065 test), top-down wins 3 and ties size, single view wins 6 (roll +0.061, leaf length +0.069). Caveat: the probe scores view 0, inside the single and top-down training bands and outside the horizon band, so these deltas mix the view regime with train/test view overlap. A held-out-view probe (views 0-9) now separates the two: each restricted arm leads on roll only on its own training views and loses to the all-view arm elsewhere.'],
     ['E6','masking / noise','elsewhere','Collaborator (yongyun branch).'],
     ['E7','loss study','elsewhere','Collaborator. Its winner, QAL + Sinkhorn, is the loss of E1 and the distillations.'],
     ['E8','baselines','done','DINOv2 ViT-B/14, MultiMAE-B, Point-MAE, EmbodiedMAE-B, random init, supervised from scratch (600 ep); paired CIs.'],
@@ -410,7 +415,7 @@ const C=D.curves;
     ['Recipe-visibility controls','done','probe, bootstraps, F1: every gated arm still loses to PC+RGB+D','done','probed + paired on Delta (23475548): 20 % visible and target-only beat PC+RGB+D on 11 / 11; 60 % visible loses 9 (opposite of sorghum)'],
     ['E3 data scaling','done','probe, E9, F1, paired CIs (reports/e3_delta_d2.csv: 10k ties full, 3k loses 6, 1k loses 4)','done','probe, E9, paired CIs, F1'],
     ['E4 model scaling','done','probe, bootstraps, F1','done','probed + paired on Delta: small and large each lose 10 / 11 to base'],
-    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe: views 0-4 done (each arm leads on roll only on its own training views), 5-9 running','running','all three arms training (top-down on scavenger, horizon / single on nova); reference maize_4m_d2 is on Delta only'],
+    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe: views 0-7 done (each arm leads on roll only on its own training views, all-view arm most even), 8-9 pending','running','all three arms training (top-down on scavenger, horizon / single on nova); reference maize_4m_d2 is on Delta only'],
     ['E8 baselines','done','baselines + supervised row','running','final-data baselines done (17189733); supervised row scored on Delta (23344948)'],
     ['Partial clouds','done','4 E2 arms + E1','done','E1 (17189727)'],
     ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students done 100 / 100 (11-03): from RGB 11.3 → 0.77-0.80, mean generation loss −43.5 %; F1 0.496-0.511 (17189743; E1 0.504); RGB+D and three-pair students pending on nova, RGB+recipe and depth+recipe on scavenger; quant not written'],
@@ -455,6 +460,7 @@ function lineChart(el, series, opt){
     const d=pts.map((p,i)=>(i?'L':'M')+sx(p[0]).toFixed(1)+' '+sy(p[1]).toFixed(1)).join(' ');
     g+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width||1.8}" stroke-linejoin="round"${s.dash?' stroke-dasharray="5 4"':''}/>`;
     if(s.dots){pts.forEach(p=>{g+=`<circle cx="${sx(p[0]).toFixed(1)}" cy="${sy(p[1]).toFixed(1)}" r="3" fill="${s.color}"/>`;});}
+    if(s.marks){pts.forEach(p=>{const own=s.marks.includes(p[0]);g+=`<circle cx="${sx(p[0]).toFixed(1)}" cy="${sy(p[1]).toFixed(1)}" r="4" fill="${own?s.color:'var(--surface)'}" stroke="${s.color}" stroke-width="2"><title>${esc(s.name)}, view ${p[0]}: ${p[1].toFixed(3)}${own?' (trained on)':''}</title></circle>`;});}
     const last=pts[pts.length-1]; g+=`<circle cx="${sx(last[0]).toFixed(1)}" cy="${sy(last[1]).toFixed(1)}" r="3.2" fill="${s.color}"/>`;});
   g+='</svg><div class="legend">'+series.map(s=>`<span><i style="background:${s.color}${s.dash?';height:0;border-top:3px dashed '+s.color:''}"></i>${esc(s.name)}</span>`).join('')+'</div>';
   el.innerHTML=g;
@@ -531,6 +537,21 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   barChart(document.getElementById('ch_e2_probe'), E2.map(r=>({name:SHORT[r],values:vals(r)})), tg.map(t=>TLAB[t]), tcol, {xlabel:'E2 arm (val R², CLS probe, epoch 600)',aria:'E2 probe bars'});
   lineChart(document.getElementById('ch_e3_probe'), tg.map((t,j)=>({name:TLAB[t],color:tcol[j],dots:true,points:[['e3_1k_d2',1000],['e3_3k_d2',3000],['e3_10k_d2',10000],['e2_pcrgbdt_d2',10500]].map(x=>[x[1],P[x[0]].targets[t].val_r2])})), {xlabel:'plants in train split',ylabel:'val R²',logx:true,y0:0,y1:1,aria:'E3 probe scaling'});
   barChart(document.getElementById('ch_tg_probe'), [['e2_pcrgbd_d2','PC+RGB+D'],['e2_pcrgbdt_d2','58 % (as trained)'],['e2_pcrgbdt_tg_d2','20 %'],['e2_pcrgbdt_tg40_d2','60 %'],['e2_pcrgbdt_tg100_d2','target only']].map(x=>({name:x[1],values:vals(x[0])})), tg.map(t=>TLAB[t]), tcol, {xlabel:'recipe visibility during pretraining (val R²)',aria:'control probe bars'});
+  if(D.e5view){
+    const TRV={e5_single_d2:[0],e5_topdown_d2:[0,1],e5_horizon_d2:[4,5],e2_pcrgbdt_d2:[0,1,2,3,4,5,6,7,8,9]};
+    const LAB={e2_pcrgbdt_d2:'all ten views',e5_topdown_d2:'top-down (0-1)',e5_single_d2:'single (0)',e5_horizon_d2:'horizon (4-5)'};
+    const runs=['e2_pcrgbdt_d2','e5_topdown_d2','e5_single_d2','e5_horizon_d2'].filter(r=>D.e5view[r]);
+    ['leaf_angle_roll','height'].forEach(t=>{
+      const el=document.getElementById(t==='height'?'ch_e5v_height':'ch_e5v_roll');
+      lineChart(el, runs.map(r=>({name:LAB[r],color:COL[r],points:Object.entries((D.e5view[r]||{})[t]||{}).map(([k,v])=>[+k,v[1]]).sort((a,b)=>a[0]-b[0]),marks:TRV[r]})), {xlabel:'probe view',ylabel:'test R²',aria:'E5 held-out-view probe '+t});
+    });
+    const nv=Math.max(...runs.map(r=>Object.keys((D.e5view[r]||{}).leaf_angle_roll||{}).length));
+    const roll=r=>(D.e5view[r]||{}).leaf_angle_roll||{};
+    const off=r=>{const o=Object.entries(roll(r)).filter(([k])=>!TRV[r].includes(+k)).map(([,v])=>v[1]);return o.length?o.reduce((a,b)=>a+b,0)/o.length:null;};
+    const on=r=>{const o=Object.entries(roll(r)).filter(([k])=>TRV[r].includes(+k)).map(([,v])=>v[1]);return o.length?o.reduce((a,b)=>a+b,0)/o.length:null;};
+    const ref=roll('e2_pcrgbdt_d2'); const refm=Object.values(ref).map(v=>v[1]); const refMean=refm.reduce((a,b)=>a+b,0)/refm.length;
+    document.getElementById('e5v_note').innerHTML=`<strong>${nv} of 10 views probed.</strong> Roll, mean test R² on the arm's own training views vs. the other views: `+['e5_single_d2','e5_topdown_d2','e5_horizon_d2'].filter(r=>D.e5view[r]).map(r=>`${LAB[r]} ${on(r).toFixed(3)} / ${off(r).toFixed(3)}`).join('; ')+`; all-view reference ${refMean.toFixed(3)} across views (range ${Math.min(...refm).toFixed(3)}-${Math.max(...refm).toFixed(3)}). Each restricted arm leads only on the views it trained on and falls below the all-view arm elsewhere; height separates none of them off view 0.`;
+  }
   if(D.probe.e5_single_d2) barChart(document.getElementById('ch_e5_probe'), [['e2_pcrgbdt_d2','all ten views'],['e5_topdown_d2','top-down (0-1)'],['e5_single_d2','single (0)'],['e5_horizon_d2','horizon (4-5)']].map(x=>({name:x[1],values:vals(x[0])})), tg.map(t=>TLAB[t]), tcol, {xlabel:'train-view band (val R²)',aria:'E5 probe bars'});
   barChart(document.getElementById('ch_e4_probe'), E4.map(r=>({name:SHORT[r]==='all four'?'base 114 M':SHORT[r],values:vals(r)})), tg.map(t=>TLAB[t]), tcol, {xlabel:'model size (val R²)',aria:'E4 probe bars'});
 })();

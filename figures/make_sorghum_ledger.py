@@ -123,6 +123,13 @@ def main():
     pv = pd.concat([pd.read_csv(R/'pcview_16930426_probe.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_probe.csv'))])
     rc = pd.concat([pd.read_csv(R/'pcview_16930426_recon.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_recon.csv'))])
     cov = pd.read_csv(R/'pcview_16930426_coverage.csv')
+    # E5 held-out-view probe: test R2 per (run, target, view) from reports/probe_pr_e5_v<k>_<job>.csv
+    ev = {}
+    for f in sorted(R.glob('probe_pr_e5_v*_*.csv')):
+        k = int(re.search(r'_v(\d)_', f.name).group(1)); d = pd.read_csv(f); d = d[d.feature == 'cls']
+        for r in d.itertuples():
+            ev.setdefault(r.run, {}).setdefault(r.target, {})[k] = [round(r.val_r2, 4), round(r.test_r2, 4)]
+    D['e5view'] = ev
     D['pcview'] = {'probe': [{k: r[k] for k in ('run','condition','fit','target','val_r2','test_r2')} for r in pv[pv.target.isin(['height','leaf_angle_roll','leaf_len_mean'])].to_dict('records')],
                    'recon': [{k: r[k] for k in ('run','condition','chamfer','echo_chamfer')} for r in rc.to_dict('records')],
                    'coverage': {r['condition']: r['mean'] for r in cov.groupby('condition')['mean'].mean().reset_index().to_dict('records')}}
