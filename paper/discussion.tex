@@ -13,18 +13,22 @@
 
 \paragraph{Why a stream that holds the answer hurts.}
 The parameter stream is the only input that states the phenotype verbatim, and
-it is the one input never available in the field. Every arm in which the encoder
-saw the parameter stream learned a worse sensor representation, and on the size
-traits the loss grew with the stream's visibility (Tab.~\ref{tab:control}).
-Even as a pure decoder target, the parameter stream lowered roll, leaf length
-and leaf width, the traits stored per leaf in the parameter tokens. One
+it is the one input never available in the field. In sorghum, every arm in which
+the encoder saw the parameter stream learned a worse sensor representation, and
+on the size traits the loss grew with the stream's visibility
+(Tab.~\ref{tab:control}). Even as a pure decoder target, the parameter stream
+lowered roll, leaf length and leaf width, the traits stored per leaf in the
+parameter tokens. Maize agrees only at high visibility: its arm that sees
+60\,\% of the parameter tokens loses nine traits, but its arms at 20\,\% and
+as a target only improve all eleven. One
 explanation, consistent with modality competition and negative transfer, is that
 a privileged stream lets the encoder route a trait through tokens that are
 absent at test time, and the reconstruction pressure of a per-leaf target then
 shifts the latent toward the plant's size, which is already the direction of its
-first principal component. The ablations support a practical rule: a generative
-modality belongs in the data and in the targets, not in the encoder input. Our
-headline model does not yet follow this rule: it was pretrained with the
+first principal component. The ablations of both species support a narrower
+rule: a generative modality should not be largely visible to the encoder, and
+whether it helps as a target depends on the generator. Our sorghum headline
+model does not yet follow this rule: it was pretrained with the
 parameters as an encoder input, and its distillation used the same model as
 teacher, so its frozen representation corresponds to the four-stream arm. A
 headline run at $\rho_\theta{=}1$ would be the direct test. We expect the rule
@@ -103,8 +107,9 @@ the model. Real scans and the \FieldProc{} release at
 \CropCode{} recovers a complete, editable procedural plant from the data of
 whichever sensor a field campaign used, in one forward pass, by using the
 generator for both the training data and the output representation. Two
-findings from its ablations apply beyond plants: the generator's parameters are
-valuable targets but harmful encoder inputs, and on slender geometry a
+findings from its ablations apply beyond plants: the generator's parameters
+harm the representation when most of them are visible to the encoder, and on
+slender geometry a
 downstream probe, not Chamfer distance, should decide what a modality is worth.
 A single camera's partial view requires refitting the readout and leaves a
 measured transfer gap; the row-occluded and real-scan evaluations will show

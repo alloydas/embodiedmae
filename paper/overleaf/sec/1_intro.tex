@@ -102,13 +102,15 @@ parameter recovery from that point cloud by \oldnum{43.8\%}.
 % P5 — Finding 1: parameters belong at the output.
 We also address a design question that arises for any model with access
 to generative structure: where should the parameter stream enter? In our
-controlled ablations, the parameters are valuable prediction targets but
-harm the representation when used as an encoder input. With token budgets
-matched, adding the parameter stream to the encoder degrades the frozen
+controlled ablations, a parameter stream that is largely visible to the
+encoder harms the representation in both species. With the shared token
+budget, adding the parameter stream to the encoder degrades the frozen
 representation on every sorghum phenotype target, and on maize the paired
-comparison is a draw. In sorghum, the loss persists in control arms that
-restore the sensor-token budget, and it persists even when the parameters
-serve only as a reconstruction target for the decoder. Supervising
+comparison is a draw. Control arms that restore the sensor-token budget
+separate the species: in sorghum the loss persists, even when the parameters
+serve only as a reconstruction target for the decoder, while in maize the
+arms that see 20\,\% of the parameters or only reconstruct them improve
+every trait. Supervising
 parameters as a generation target, however, lets the distilled generalist
 outperform a parameter-only specialist at parameter regression. One
 interpretation, consistent with modality competition~\citep{peng2022ogm}

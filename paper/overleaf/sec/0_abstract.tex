@@ -17,12 +17,12 @@ subset of RGB, depth, and point-cloud input in a single forward pass.
 The model is pretrained on \todo{10K--100K} procedurally generated maize
 and sorghum plants rendered with physically simulated row occlusion, and
 a full-modality teacher is then distilled into single-sensor students.
-Distillation improves cross-modal generation by \oldnum{19\%} on average
-and parameter recovery from a point cloud alone by \oldnum{44\%}.
-Controlled ablations, replicated across both species, show that the
-procedural parameters are valuable prediction targets but do not help
-as a pretraining modality: exposing them to the encoder degrades
-phenotype recovery on every sorghum target and does not improve it in maize. We further show that Chamfer distance and linear probes on
+Distillation lowers the cross-modal generation loss by 30\% in sorghum and
+44\% in maize, and halves the sorghum parameter error from a point cloud alone.
+Controlled ablations in both species show that exposing most of the
+procedural parameters to the encoder degrades phenotype recovery, while
+using them only as a reconstruction target degrades the sorghum
+representation and improves the maize one. We further show that Chamfer distance and linear probes on
 the frozen representation rank input modalities differently on slender
 geometry, and we adopt the probe as the deciding metric. On real field
 scans with independently reconstructed ground truth, \method{}

@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit 1bfd055).
+% Synced from the embodiedmae repo (paper/results.tex, commit 9f5cb1b).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -490,14 +490,18 @@ vs.\ $10^{-4}$; no final-release specialist was trained}).
     & & height & leaves & biomass & angle & curl & stem r. \\
     \multicolumn{8}{l}{\emph{Maize}} \\
     PC                 & 2.63 & 0.171 & 0.670 & 0.610 & 0.756 & 0.114 & 0.289 \\
-    PC+RGB             & 1.61 & 0.620 & 0.914 & \textbf{0.783} & \textbf{0.927} & \textbf{0.334} & 0.753 \\
-    PC+RGB+D           & 1.21 & 0.633 & 0.914 & 0.774 & 0.926 & 0.236 & \textbf{0.760} \\
+    PC+D               & 2.55 & 0.453 & 0.773 & 0.683 & 0.804 & 0.082 & 0.550 \\
+    PC+RGB             & 1.61 & 0.620 & \textbf{0.914} & \textbf{0.783} & \textbf{0.927} & 0.334 & 0.753 \\
+    PC+RGB+D           & 1.21 & 0.633 & \textbf{0.914} & 0.774 & 0.926 & 0.236 & 0.760 \\
+    PC+$\theta$        & 2.49 & 0.256 & 0.740 & 0.662 & 0.787 & 0.114 & 0.363 \\
+    PC+D+$\theta$      & 2.54 & 0.382 & 0.801 & 0.670 & 0.795 & 0.136 & 0.408 \\
+    PC+RGB+$\theta$    & 1.21 & 0.509 & 0.881 & 0.780 & 0.912 & \textbf{0.371} & \textbf{0.763} \\
     PC+RGB+D+$\theta$  & \textbf{0.99} & \textbf{0.635} & 0.908 & 0.781 & 0.919 & 0.304 & 0.743 \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Modality value-add (E2).} Arms at equal steps, differing
   only in which token streams exist: every stream set that contains the cloud
-  for sorghum, four sets for maize. $\theta$ is the parameter
+  in both species. $\theta$ is the parameter
   stream as an \emph{input} inside the shared masking budget. Probe $R^2$ on
   held-out plants; branch and roll are the two sorghum leaf-angle definitions.
   Test values are within $0.035$ of val on every sorghum cell and within
@@ -506,7 +510,8 @@ vs.\ $10^{-4}$; no final-release specialist was trained}).
 \end{table}
 
 % reports/probe_pr_600_d2_16930422.csv, reports/control_delta_d2_16950816.csv,
-% reports/control_delta_vs_pcrgbdt_d2_16950816.csv (final release)
+% reports/control_delta_vs_pcrgbdt_d2_16950816.csv (final release);
+% maize: reports/probe_pm_600_e4ctrl_23475548.csv, maize_ctrl_vs_pcrgbd_delta_d2_23475548.csv, maize_ctrl_e4_delta_d2_23475548.csv (Delta)
 \begin{table}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.2pt}
@@ -521,16 +526,25 @@ vs.\ $10^{-4}$; no final-release specialist was trained}).
     $+\theta$, gated 20\,\%       & 117.0 & 20\,\%  & 2.29 & 0.964 & 0.967 & 0.771 & 0.278 \\
     $+\theta$, gated 60\,\%       & 117.0 & 60\,\%  & 2.40 & 0.959 & 0.963 & 0.761 & 0.239 \\
     $+\theta$, target only        & 117.0 & 0\,\%   & 2.49 & 0.966 & 0.970 & 0.702 & 0.220 \\
+    \midrule
+    \multicolumn{4}{l}{\emph{Maize}} & height & leaves & curl & stem r. \\
+    PC+RGB+D                      &       & --      & 1.21 & 0.633 & 0.914 & 0.236 & 0.760 \\
+    $+\theta$, shared budget      &       &         & 0.99 & 0.635 & 0.908 & 0.304 & 0.743 \\
+    $+\theta$, gated 20\,\%       &       & 20\,\%  &      & 0.704 & 0.931 & \textbf{0.464} & 0.791 \\
+    $+\theta$, gated 60\,\%       &       & 60\,\%  &      & 0.521 & 0.851 & 0.303 & 0.688 \\
+    $+\theta$, target only        &       & 0\,\%   &      & \textbf{0.776} & \textbf{0.947} & 0.357 & \textbf{0.804} \\
     \bottomrule
   \end{tabular}
-  \caption{\textbf{Token-budget control (sorghum).} The four-stream arm
+  \caption{\textbf{Token-budget control.} The four-stream arm
   re-trained with the parameter tokens outside the shared Dirichlet budget, so
   the three sensor streams see the same visible-token count as the three-stream
   arm (117.0; seed-matched masks identical in 5{,}000 of 5{,}000 draws), at
   three parameter visibilities. ``Target only'' never encodes a parameter
   token. The target-only and 60\,\% arms lose all nine learnable targets to
   PC+RGB+D on both splits, and the 20\,\% arm loses eight (maximum leaf length
-  is a draw). Intervals are in the supplement. Fig.~\ref{fig:controls} plots the same rows.}
+  is a draw). In maize the 20\,\% and target-only arms beat both the shared-budget
+  arm and PC+RGB+D on all eleven traits on both splits, and the 60\,\% arm loses
+  nine. Intervals are in the supplement. Fig.~\ref{fig:controls} plots the sorghum rows.}
   \label{tab:control}
 \end{table}
 
@@ -541,7 +555,9 @@ largest gain in every column (height $0.895\!\to\!0.979$ with RGB and
 $0.895\!\to\!0.976$ with depth; roll $0.39\!\to\!0.81$ and
 $0.39\!\to\!0.80$), and the depth image wins all nine learnable targets over
 the cloud alone on both splits. On maize, the photograph gives the same jump
-(height $0.17\!\to\!0.62$, stem radius $0.29\!\to\!0.75$). The depth image
+(height $0.17\!\to\!0.62$, stem radius $0.29\!\to\!0.75$), and the depth
+image a smaller one (height $0.17\!\to\!0.45$; nine of eleven traits won, curl
+lost). The depth image
 records the same surface as the cloud, so its gain does not come from new
 information about the plant. A likely reason is that dense, ordered image
 patches present the geometry in a form that the encoder reads more easily than
@@ -575,7 +591,10 @@ curl ($-0.04$ to $-0.07$) and twist ($-0.035$), and ties the eight remaining
 traits within $0.02$ (height $0.635$ vs.\ $0.633$, stem radius $0.743$ vs.\
 $0.760$), while the four-stream arm has the better Chamfer. Against PC+RGB, the
 four-stream arm loses droop ($-0.05$) and tassel droop ($-0.13$) and ties the
-rest. Either way, the stream that encodes the answer verbatim in training is not
+rest. The new maize arms do not support a uniform rule either: added to the
+cloud alone, the parameter stream wins seven traits and loses none, added to
+PC+RGB it wins three (twist, curl, tassel droop) and loses five, and added to
+PC+D it wins three and loses two. Either way, the stream that encodes the answer verbatim in training is not
 the stream that makes the frozen feature better at deployment, where it is
 absent.
 
@@ -592,12 +611,22 @@ roll, $0.10$ on leaf length and $0.15$ on leaf width. The per-leaf traits stored
 in the parameter tokens (roll, leaf length and leaf width) lose the most. The
 pattern is consistent with the encoder routing these traits through tokens that
 do not exist in the field, and the target-only result shows that the
-reconstruction pressure alone accounts for part of the loss. The headline model
-was nevertheless trained with the parameters in the encoder's shared budget
-(Sec.~\ref{sec:method-pretrain}), as in the four-stream arm of Tab.~\ref{tab:e2}. From
-the ablations, we expect the headline model's frozen representation to be weaker
-than that of a three-stream or $\rho_\theta{=}1$ model; we have not tested this
-at the headline scale. Supervising the parameters as a target, in turn, lets
+reconstruction pressure alone accounts for part of the loss.
+
+Maize gives the opposite result for the gated arms (Tab.~\ref{tab:control}).
+With the sensor budget restored, the arm that sees 20\,\% of the parameter
+tokens and the arm that only reconstructs them beat both the shared-budget arm
+and PC+RGB+D on all eleven traits on both splits (target only, val: height
+$0.776$ against $0.633$, stem radius $0.804$ against $0.760$), while the arm
+that sees 60\,\% loses nine traits. Making most of the parameter stream visible
+to the encoder therefore hurts in both species, but a parameter target hurts the
+sorghum representation and helps the maize one. The headline models were
+nevertheless trained with the parameters in the encoder's shared budget
+(Sec.~\ref{sec:method-pretrain}), as in the four-stream arm of Tab.~\ref{tab:e2}. For
+sorghum, the ablations predict that the headline model's frozen representation
+is weaker than that of a three-stream or $\rho_\theta{=}1$ model; for maize,
+they predict the opposite of $\rho_\theta{=}1$. We have not tested either at the
+headline scale. Supervising the parameters as a target, in turn, lets
 the generalist beat the parameter specialist (Sec.~\ref{sec:res-distill}).
 
 \begin{figure*}[t]
@@ -833,7 +862,9 @@ better and encodes the leaf traits worse.
 \end{figure*}
  Maize is noisier: Chamfer
 falls fourfold with data but the probe is not monotone (height $0.39 / 0.52 /
-0.43 / 0.64$), and the three sizes are within $0.05$ on every trait. According
+0.43 / 0.64$). Paired over plants, the small and the large maize encoders each
+lose ten of eleven traits to base, so base is the best size in maize as well.
+According
 to the paired bootstrap, the dip is not sampling noise: every reduced arm loses
 to the full-data arm on 10 of 11 traits on both splits (twist ties), by $0.03$
 to $0.24$, and the 3{,}000-plant arm beats the 10{,}000-plant arm on height
