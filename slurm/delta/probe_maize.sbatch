@@ -90,6 +90,11 @@ export PYTHONUNBUFFERED=1
 # which later files never change. Check the index the probe will read.
 python slurm/delta/check_split_index.py maize "${MAIZE_ROOT}"
 
+# FEATURE=mean gives the mean-pooled rows (the E8 pooling every baseline has), as
+# slurm/linear_probe.sbatch does for sorghum; the cache name carries the feature.
+# Defaulted before the first use: under set -u an unset FEATURE killed the job here.
+FEATURE="${FEATURE:-cls}"
+
 echo "JobID : ${SLURM_JOB_ID:-none}"
 echo "Node  : $(hostname)"
 echo "Ckpt  : ${CKPT}"
@@ -115,9 +120,6 @@ TAG="${SLURM_JOB_NAME:-probe_maize}_${SLURM_JOB_ID:-manual}"
 CPUS="${SLURM_CPUS_PER_TASK:-$(nproc)}"
 NW=$((CPUS > 1 ? CPUS - 1 : 1))
 CACHE="${PROBE_CACHE_DIR_MAIZE:-outputs/_probe_cache_maize}"
-# FEATURE=mean gives the mean-pooled rows (the E8 pooling every baseline has), as
-# slurm/linear_probe.sbatch does for sorghum; the cache name carries the feature.
-FEATURE="${FEATURE:-cls}"
 COMMON=(--ckpt "${CKPT}" --data-root "${MAIZE_ROOT}" --cache-dir "${CACHE}"
         --feature "${FEATURE}" --seed 0 --repeats 1)
 
