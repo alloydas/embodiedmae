@@ -109,6 +109,7 @@ python "${PROBE}" \
   --ckpt "${CKPT}" \
   ${FEATURE:+--feature "${FEATURE}"} \
   ${DATA_ROOT:+--data-root "${DATA_ROOT}"} \
+  ${PROBE_VIEW:+--probe-view "${PROBE_VIEW}"} \
   --num-workers "${SLURM_CPUS_PER_TASK:-16}" \
   --batch-size 32 \
   --out "${OUT}"

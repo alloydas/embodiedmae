@@ -248,7 +248,7 @@ class _RetryTransientIO(torch.utils.data.Dataset):
 
 @torch.no_grad()
 def extract_split(model, cfg, data_root, split, feature, batch_size,
-                  num_workers, device, seed, repeats):
+                  num_workers, device, seed, repeats, probe_view=None):
     """CLS (and/or mean-pooled) features for one deterministic view per plant."""
     ds = SorghumDataset4M(
         data_root,
@@ -267,6 +267,15 @@ def extract_split(model, cfg, data_root, split, feature, batch_size,
         rgb_file=cfg.get('rgb_file', 'rgb.png'),
         rgb_gain=run_rgb_gain(cfg),
     )
+    if probe_view is not None:
+        # --probe-view k: score every plant on its view k instead of view 0 (the ten
+        # renders are an elevation ladder, sin elev = 0.9 - 0.2 k), the held-out-view
+        # test of the E5 view regimes. Train, val and test all use view k.
+        ds.plant_views = [[i for i in vs if int(Path(ds.samples[i]).name.rsplit('_', 1)[1]) == probe_view]
+                          for vs in ds.plant_views]
+        missing = sum(1 for vs in ds.plant_views if not vs)
+        if missing:
+            raise SystemExit(f'--probe-view {probe_view}: {missing} plants in {split} have no such view')
     loader = DataLoader(
         _RetryTransientIO(ds), batch_size=batch_size, shuffle=False, num_workers=num_workers,
         pin_memory=True, drop_last=False,
@@ -327,13 +336,15 @@ def run_rgb_gain(cfg):
     return float(cfg.get('rgb_brighten_gain', 1.0))
 
 
-def cache_stem(run, ckpt, split, feature, seed, repeats, cfg):
+def cache_stem(run, ckpt, split, feature, seed, repeats, cfg, probe_view=None):
     """Feature-cache file name. Runs reading a brightenable file (rgb_file other than
     rgb.png) carry the gain the images were served at, so caches extracted on the
     wrong brightness are never served and the data-v1 names stay unchanged."""
     stem = f'{run}__{Path(ckpt).stem}__{split}__{feature}__seed{seed}__rep{repeats}'
     if cfg.get('rgb_file', 'rgb.png') != 'rgb.png':
         stem += f'__g{run_rgb_gain(cfg):g}'
+    if probe_view is not None:       # view 0 keeps the historical name
+        stem += f'__v{probe_view}'
     return stem + '.npz'
 
 
@@ -341,7 +352,8 @@ def cached_features(model, cfg, args, run, split):
     """Extract once, reuse for every target and every alpha sweep."""
     cache = Path(args.cache_dir)
     cache.mkdir(parents=True, exist_ok=True)
-    stem = cache_stem(run, args.ckpt, split, args.feature, args.seed, args.repeats, cfg)
+    pv = getattr(args, 'probe_view', None)
+    stem = cache_stem(run, args.ckpt, split, args.feature, args.seed, args.repeats, cfg, pv)
     path = cache / stem
     if path.exists() and not args.refresh:
         z = np.load(path)
@@ -349,7 +361,7 @@ def cached_features(model, cfg, args, run, split):
         return z['plants'], z['feats']
     plants, feats = extract_split(
         model, cfg, args.data_root, split, args.feature, args.batch_size,
-        args.num_workers, args.device, args.seed, args.repeats)
+        args.num_workers, args.device, args.seed, args.repeats, pv)
     # Write-then-rename, so the cache is safe when two copies of this job race
     # (e.g. one queued on nova and one on scavenger, whichever gets a GPU
     # first). os.replace is atomic on POSIX: a reader either sees the previous
@@ -463,6 +475,8 @@ def main():
                     default=[0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0])
     ap.add_argument('--cache-dir', default=str(REPO / 'outputs' / '_probe_cache'))
     ap.add_argument('--refresh', action='store_true', help='ignore cached features')
+    ap.add_argument('--probe-view', type=int, default=None, choices=range(10),
+                    help='fit and score on view k of every plant (default: view 0, cache name unchanged)')
     ap.add_argument('--out', default=None, help='write the full table to this CSV')
     args = ap.parse_args()
 
