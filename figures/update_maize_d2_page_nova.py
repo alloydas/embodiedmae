@@ -248,5 +248,7 @@ s = s.replace('/*PCVIEWCSS*/', open('figures/pcview_viewer.css.html').read())
 s = re.sub(r'\n<!-- PCVIEWER -->.*?<!-- /PCVIEWER -->\n', '\n', s, flags=re.S)
 s = s.rstrip('\n') + ('\n<!-- PCVIEWER -->\n<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>\n<script>'
                        + open('figures/pcview_viewer.js').read() + '</script>\n<!-- /PCVIEWER -->\n')
+sys.path.insert(0, str(Path(__file__).resolve().parent)); from page_theme import white
+s = white(s)   # white background, light palette only
 open(OUT, 'w').write(s)
 print('wrote', OUT, len(s) // 1024, 'KB')

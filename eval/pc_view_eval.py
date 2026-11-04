@@ -167,16 +167,28 @@ def parse_run(spec):
     return run, (ckpt or DEFAULT_CKPT)
 
 
-def run_rgb(run):
-    """(rgb_file, brighten gain) a run trained on, from its config.json (linear_probe.run_rgb_gain)."""
+def is_maize_run(run):
+    """Cross-species (PLAN_cross_species.md, step P): a maize model scored on these sorghum clouds."""
     cfg = json.loads((REPO / 'outputs' / run / 'config.json').read_text())
+    return 'param_schema' in cfg or 'maize' in Path(run).name
+
+
+def run_rgb(run):
+    """(rgb_file, brighten gain) a run trained on, from its config.json (linear_probe.run_rgb_gain).
+    A maize model gets the sorghum images as the data ships them (rgb_nobg.png, gain as on disk),
+    the cross-species convention of eval/cross_species_probe.py."""
+    cfg = json.loads((REPO / 'outputs' / run / 'config.json').read_text())
+    if is_maize_run(run):
+        return 'rgb_nobg.png', None
     return cfg.get('rgb_file', 'rgb.png'), LP.run_rgb_gain(cfg)
 
 
 def cache_path(args, run, ckpt, split):
     tag = f'{run}__{Path(ckpt).stem}__{split}__cls__pcview_v{"".join(f"{v:02d}" for v in MASK_VIEWS)}__seed{args.seed}'
     rgb_file, gain = run_rgb(run)
-    if rgb_file != 'rgb.png':      # as linear_probe.cache_stem: the gain the images were served at
+    if is_maize_run(run):
+        tag += '__xmaize'
+    elif rgb_file != 'rgb.png':      # as linear_probe.cache_stem: the gain the images were served at
         tag += f'__g{gain:g}'
     if args.limit:
         tag += f'__limit{args.limit}'
@@ -192,10 +204,18 @@ def extract(runs, args, split, do_recon):
     masks = PM.Masks(split, MASK_VIEWS, args.mask_dir)
     models = {}
     for run, ckpt in todo:
-        model, cfg, epoch = LP.build_model(REPO / 'outputs' / run, ckpt, args.device)
+        if is_maize_run(run):      # cross-species: maize width recipe zeros, depth re-encoded to its convention
+            LPM = _import_file('linear_probe_maize', REPO / 'eval' / 'linear_probe_maize.py')
+            SC = _import_file('species_conventions', REPO / 'species_conventions.py')
+            model, cfg, epoch = LPM.build_model(REPO / 'outputs' / run, ckpt, args.device)
+            n_text, n_par = 1 + int(cfg.get('max_leaves', 28)), 14
+            denc = (SC.depth_decoder('sorghum_std'), SC.depth_encoder(SC.model_depth_convention('maize', cfg)), SC)
+        else:
+            model, cfg, epoch = LP.build_model(REPO / 'outputs' / run, ckpt, args.device)
+            n_text, n_par, denc = 1 + int(cfg.get('max_leaves', 24)), N_PARAMS, None
         mr = float(args.recon_mask_ratio if args.recon_mask_ratio is not None
                    else cfg.get('mask_ratio', 0.8))
-        models[run] = (model, ckpt, 1 + int(cfg.get('max_leaves', 24)), epoch, mr)
+        models[run] = (model, ckpt, n_text, epoch, mr, n_par, denc)
         print(f'  loaded {run} @ {ckpt} (epoch {epoch}, active {list(model.active_modalities)}, '
               f'recon source mask ratio {mr})')
     # One data pass serves every run, so they must have trained on the same images
@@ -229,14 +249,18 @@ def extract(runs, args, split, do_recon):
             if do_recon:
                 fw, bw = chamfer_both(pcs[c], gts[c])
                 echo[c].append(torch.stack([fw, bw], 1).cpu().numpy())
-        for run, (model, _ckpt, n_text, _ep, _mr) in models.items():
-            params = torch.zeros(B, n_text, N_PARAMS, device=dev)
+        for run, (model, _ckpt, n_text, _ep, _mr, n_par, denc) in models.items():
+            params = torch.zeros(B, n_text, n_par, device=dev)
+            depth_run = depth
+            if denc is not None:
+                dec, enc_d, SC = denc
+                depth_run = torch.stack([SC.reencode_depth(d.cpu(), dec, enc_d) for d in b['depth']]).to(dev)
             visible = tuple(m for m in model.active_modalities if m != 'text')
             for c in CONDITIONS:
                 # Same FPS start for every run and condition of a batch, so the
                 # conditions differ only in the input cloud.
                 torch.manual_seed(args.seed + 1000003 * bi)
-                enc = model.forward_encoder_select(rgb, depth, pcs[c], params,
+                enc = model.forward_encoder_select(rgb, depth_run, pcs[c], params,
                                                    visible=visible, source_mask_ratio=0.0)
                 feats[(run, c)].append(enc[0][:, 0].float().cpu().numpy())
                 if do_recon and 'pc' in model.active_modalities:
@@ -247,7 +271,7 @@ def extract(runs, args, split, do_recon):
                     # number, checked on e2_pc / e2_pcrgbdt). Same seed per batch,
                     # so every condition masks the same token positions.
                     torch.manual_seed(args.seed + 1000003 * bi + 1)
-                    enc = model.forward_encoder_select(rgb, depth, pcs[c], params,
+                    enc = model.forward_encoder_select(rgb, depth_run, pcs[c], params,
                                                        visible=visible,
                                                        source_mask_ratio=models[run][4])
                     pred_pc = model.forward_decoder(enc[0], *enc[5:9], *enc[9:13])[2]
@@ -257,7 +281,7 @@ def extract(runs, args, split, do_recon):
             print(f'    {split}: {min((bi + 1) * args.batch_size, len(ds))}/{len(ds)}'
                   f'  ({time.time() - t0:.0f}s)', flush=True)
     plants = np.asarray(plants, dtype=np.int64)
-    for run, (model, ckpt, _n, epoch, _mr) in models.items():
+    for run, (model, ckpt, _n, epoch, _mr, _np, _de) in models.items():
         arrays = {'plants': plants, 'epoch': np.int64(epoch)}
         for c in CONDITIONS:
             arrays[f'feats_{c}'] = np.concatenate(feats[(run, c)])

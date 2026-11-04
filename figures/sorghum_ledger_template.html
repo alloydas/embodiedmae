@@ -5,25 +5,13 @@
 <style>
 /* Layout: one 1080px column; summary strip, programme matrix, then one section per experiment; tables scroll inside their frames; charts are inline SVG. */
 :root{
-  --bg:#f5f6f2; --surface:#ffffff; --fg:#1d221c; --muted:#5f685c; --line:#d8ddd2;
+  color-scheme:light;--bg:#ffffff; --surface:#ffffff; --fg:#1d221c; --muted:#5f685c; --line:#d8ddd2;
   --accent:#2f6b2a; --accent-soft:#e3eedf; --gold:#b8860b;
   --ok:#2f6b2a; --warn:#b8860b; --pend:#8a8f86; --blank:#eceee8;
   --c1:#2f6b2a; --c2:#b8860b; --c3:#1f6f8b; --c4:#a2402b; --c5:#6b4c9a; --c6:#4a7f6b; --c7:#8b6b1f; --c8:#555b52;
   --font-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --bg:#141814; --surface:#1c211c; --fg:#e6e9e1; --muted:#a2a99d; --line:#333a32;
-  --accent:#7cc26f; --accent-soft:#223322; --gold:#e0b240;
-  --ok:#7cc26f; --warn:#e0b240; --pend:#8a8f86; --blank:#222823;
-  --c1:#7cc26f; --c2:#e0b240; --c3:#5fb3d3; --c4:#e2795f; --c5:#a98be0; --c6:#7fc2a6; --c7:#d3a94a; --c8:#aab0a6;
-  color-scheme:dark } }
-:root[data-theme="dark"]{
-  --bg:#141814; --surface:#1c211c; --fg:#e6e9e1; --muted:#a2a99d; --line:#333a32;
-  --accent:#7cc26f; --accent-soft:#223322; --gold:#e0b240;
-  --ok:#7cc26f; --warn:#e0b240; --pend:#8a8f86; --blank:#222823;
-  --c1:#7cc26f; --c2:#e0b240; --c3:#5fb3d3; --c4:#e2795f; --c5:#a98be0; --c6:#7fc2a6; --c7:#d3a94a; --c8:#aab0a6;
-  color-scheme:dark }
 body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.5;margin:0}
 .wrap{max-width:1080px;margin:0 auto;padding-inline:20px;padding-block:28px 64px}
 h1{font-size:2rem;line-height:1.15;margin:0 0 6px;font-weight:700;letter-spacing:-0.01em;text-wrap:balance}
