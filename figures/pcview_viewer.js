@@ -21,10 +21,10 @@
   const sp = P.species, isM = sp === 'maize';
   const short = { '1view': isM ? '1 camera' : 'camera 00', '3view': isM ? '3 cameras' : 'cameras 00-02', 'full': isM ? '10 cameras' : 'complete cloud' };
   const catLab = isM ? ['in camera 00’s cloud', 'added by cameras 01-02', 'only cameras 03-09'] : ['seen by camera 00', 'only camera 01 or 02', 'hidden from all three'];
-  const CATC = [[0.20, 0.55, 0.30], [0.80, 0.58, 0.10], [0.82, 0.25, 0.20]];
-  const IN_C = [0.20, 0.55, 0.30], PR_C = [0.78, 0.55, 0.08];
-  // miss ramp: near = light yellow, far (>= 0.08) = dark purple
-  const RAMP = [[0.99, 0.95, 0.62], [0.98, 0.65, 0.25], [0.85, 0.30, 0.35], [0.45, 0.12, 0.45], [0.12, 0.05, 0.20]];
+  const CATC = [[0.05, 0.36, 0.14], [0.72, 0.42, 0.00], [0.72, 0.08, 0.08]];
+  const IN_C = [0.05, 0.36, 0.14], PR_C = [0.66, 0.36, 0.00];
+  // miss ramp (dark enough to read on white): near = gold, far (>= 0.08) = near-black purple
+  const RAMP = [[0.85, 0.62, 0.00], [0.90, 0.40, 0.05], [0.75, 0.13, 0.22], [0.42, 0.05, 0.42], [0.08, 0.02, 0.15]];
   const ramp = t => { t = Math.max(0, Math.min(1, t)) * (RAMP.length - 1); const i = Math.min(RAMP.length - 2, Math.floor(t)), f = t - i, a = RAMP[i], b = RAMP[i + 1]; return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]; };
 
   host.innerHTML = `
@@ -74,13 +74,13 @@
     const R = d.ref; let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
     for (let i = 0; i < R.length; i += 3) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], R[i + k]); mx[k] = Math.max(mx[k], R[i + k]); }
     center = [0, 1, 2].map(k => (mn[k] + mx[k]) / 2); scale = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2 || 1;
-    const grey = () => [0.62, 0.64, 0.62];
+    const grey = () => [0.72, 0.74, 0.72];
     const ov = st.overlay ? [{ xyz: R, color: grey }] : [];
     setGeom(rigs[0], ov.concat([{ xyz: dc.input, color: () => IN_C }]));
     setGeom(rigs[1], ov.concat([{ xyz: dc.pred, color: () => PR_C }]));
-    const refColor = st.mode === 'cov' ? (i => CATC[d.cat[i]]) : st.mode === 'miss' ? (i => ramp(dc.miss[i] / 80)) : (() => [0.12, 0.44, 0.55]);
+    const refColor = st.mode === 'cov' ? (i => CATC[d.cat[i]]) : st.mode === 'miss' ? (i => ramp(dc.miss[i] / 80)) : (() => [0.04, 0.26, 0.40]);
     setGeom(rigs[2], [{ xyz: R, color: refColor }]);
-    rigs.forEach(rg => rg.s.children[0].material.size = 0.012 * scale);
+    rigs.forEach(rg => rg.s.children[0].material.size = 0.018 * scale);
     document.getElementById('pcint_t0').innerHTML = `<b>Input:</b> ${h(short[st.cond])} — ${(q.cov * 100).toFixed(0)} % of the ${h(P.ref)}`;
     document.getElementById('pcint_t1').innerHTML = `<b>E1 reconstruction</b> (epoch ${P.epoch}, mask ratio 0.80) — Chamfer to the ${h(P.ref)} ${(q.chamfer * 1e3).toFixed(2)}×10⁻³`;
     document.getElementById('pcint_t2').innerHTML = `<b>Reference:</b> ${h(P.ref)}` + (st.mode === 'miss' ? ` — ${(q.missed_frac * 100).toFixed(0)} % farther than ${P.tau} from the reconstruction` : '');
