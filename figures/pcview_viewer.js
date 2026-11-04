@@ -33,7 +33,7 @@
       <div class="toggle" role="group" aria-label="Input cameras" id="pcint_cond"></div>
       <div class="toggle" role="group" aria-label="Reference colouring" id="pcint_mode">
         <button data-m="miss" aria-pressed="true">reference: miss map</button><button data-m="cov" aria-pressed="false">reference: coverage</button><button data-m="plain" aria-pressed="false">reference: plain</button></div>
-      <label class="small" style="margin-left:6px"><input type="checkbox" id="pcint_overlay"> overlay the reference (grey) on the input and reconstruction</label>
+      <label class="small" style="margin-left:6px"><input type="checkbox" id="pcint_overlay"> overlay the reference (red) on the input and reconstruction</label>
     </div>
     <div class="pcint-grid">
       <figure><canvas id="pcint_c0"></canvas><figcaption id="pcint_t0"></figcaption></figure>
@@ -74,7 +74,7 @@
     const R = d.ref; let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
     for (let i = 0; i < R.length; i += 3) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], R[i + k]); mx[k] = Math.max(mx[k], R[i + k]); }
     center = [0, 1, 2].map(k => (mn[k] + mx[k]) / 2); scale = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2 || 1;
-    const grey = () => [0.72, 0.74, 0.72];
+    const grey = () => [0.85, 0.15, 0.15];
     const ov = st.overlay ? [{ xyz: R, color: grey }] : [];
     setGeom(rigs[0], ov.concat([{ xyz: dc.input, color: () => IN_C }]));
     setGeom(rigs[1], ov.concat([{ xyz: dc.pred, color: () => PR_C }]));
