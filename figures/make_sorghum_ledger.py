@@ -193,7 +193,10 @@ def main():
         for f in sorted((REPO/'paper'/'figs').glob('fig_*.png')):
             if f.stem in ('fig_rows_maize', 'fig_rows_sorghum'): continue   # single-species copies of fig_rows
             D['images']['paper_' + f.stem] = img_b64(f, 1600 if f.stem == 'fig_rows_examples' else 1400, 85)
+    pj = REPO/'reports'/'vis_pcview_sorghum'/'interactive.json'
+    if pj.exists(): D['pcint'] = json.loads(pj.read_text())
     tpl = open(REPO/'figures'/'sorghum_ledger_template.html').read()
+    tpl = tpl.replace('/*PCVIEWCSS*/', open(REPO/'figures'/'pcview_viewer.css.html').read()).replace('/*PCVIEWER*/', open(REPO/'figures'/'pcview_viewer.js').read())
     html = tpl.replace('/*DATA*/', json.dumps(D, separators=(',', ':')))
     Path(a.out).write_text(html); print('wrote', a.out, len(html)//1024, 'KB; images', len(D['images']), '; fscore rows', len(fs), '; boot rows', len(D['boot']))
 

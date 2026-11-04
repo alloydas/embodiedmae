@@ -183,6 +183,10 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <div class="chartgrid">
       <div class="chart"><h3>Height R² against cloud coverage</h3><div class="sub">test; solid = refit per condition, dashed = full-cloud probe transferred.</div><div id="ch_pcview"></div></div>
     </div>
+    <h3 style="margin-top:18px">Interactive: camera 00 vs cameras 00-02 vs complete cloud</h3>
+    <p class="small">E1 (epoch 1,000) on six val plants. Pick a plant and an input; the three panels (input, E1 reconstruction, complete cloud) rotate together. The complete cloud can be coloured by coverage (which cameras see each point) or as a miss map (distance to the reconstruction).</p>
+    /*PCVIEWCSS*/
+    <div id="pcint"></div>
     <h3 style="margin-top:18px">What E1 sees and rebuilds: camera 00, cameras 00-02, complete cloud</h3>
     <p class="small">Six val plants, chosen to span single-camera coverage from 32 % to 86 % (two figures each). <strong>Coverage map:</strong> the complete cloud from three angles, green = seen by camera 00, gold = seen only by camera 01 or 02, red = hidden from all three (nearest input point within 0.02, so slightly looser than the exact masks in the title). <strong>Miss map:</strong> the complete cloud coloured by distance to E1's reconstruction from each input; dark = parts of the plant the model did not rebuild. From one camera the dark regions are the leaves camera 00 could not see.</p>
     <p class="small">Input grids: rows give the input cloud (green) cut to the points camera 00 sees, the points cameras 00-02 see, or the complete cloud; the E1 epoch-1000 reconstruction from it (gold, masked regime at ratio 0.80, RGB and depth of camera 00); the complete cloud (blue). Each condition is normalised on its own input, so Chamfer values are comparable within a row, less so across rows. The decoder does not fill in what the camera missed: from one camera the hidden leaves are thin or absent. <span class="mono">figures/make_pcview_gallery.py --species sorghum</span></p>
@@ -815,4 +819,5 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   document.getElementById('recongrid').innerHTML=items.map(i=>`<figure><img src="${i[0]}" alt="${esc(i[1])}" loading="lazy"><figcaption>${esc(i[1])}</figcaption></figure>`).join('');
 })();
 </script>
+<script>/*PCVIEWER*/</script>
 </body></html>

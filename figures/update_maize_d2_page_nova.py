@@ -155,6 +155,8 @@ for f in sorted((REP / 'vis_pcview_maize').glob('pcmap_maize_plant_*.png')):
 N['gallery'] = GAL
 D['nova'] = N
 
+pj = REP / 'vis_pcview_maize' / 'interactive.json'
+if pj.exists(): D['pcint'] = json.loads(pj.read_text())
 s = s[:m.start(2)] + json.dumps(D, separators=(',', ':')) + s[m.end(2):]
 
 # ---- markup: Nova section before the queue (or replace an earlier one)
@@ -177,6 +179,10 @@ SEC = '''  <section id="nova">
     <div class="tablewrap"><table id="nv_pcv"></table></div>
     <h3 style="margin-top:18px">E5 view regime (training)</h3>
     <div class="tablewrap"><table id="nv_e5"></table></div>
+    <h3 style="margin-top:22px">Interactive: 1 vs 3 vs 10 cameras</h3>
+    <p class="small">Maize E1 (epoch 1,000) on six val plants. Pick a plant and an input; the three panels (input, E1 reconstruction, 10-camera cloud) rotate together. The 10-camera cloud can be coloured by coverage (which cameras captured each point) or as a miss map (distance to the reconstruction).</p>
+    /*PCVIEWCSS*/
+    <div id="pcint"></div>
     <h3 style="margin-top:22px">Visual results</h3>
     <p class="small muted">The trainers' own grids on val plants. In the reconstruction grids the depth panel's silhouette comes from the ground truth (only the values inside it are predicted).</p>
     <div id="nv_gallery"></div>
@@ -237,5 +243,10 @@ once("    ['23475549','pm_600_e2more',", """    ['17162333-35, 17213246','mdist_
     ['17233173 -> 17189700','maize_row_ft_e1 (Nova)','scavenger','pending','row fine-tune from E1, epochs 91-100 on 1 GPU (accum 2 = global 32), then its test eval'],
     ['17189739-41','maize_e5_* (Nova)','nova / scavenger','top-down done, two running','E5 arms, 600 epochs each; single and horizon finish 11-04 afternoon'],
     ['23475549','pm_600_e2more',""")
+# ---- interactive partial-cloud viewer (three.js + figures/pcview_viewer.js), appended once at the end
+s = s.replace('/*PCVIEWCSS*/', open('figures/pcview_viewer.css.html').read())
+s = re.sub(r'\n<!-- PCVIEWER -->.*?<!-- /PCVIEWER -->\n', '\n', s, flags=re.S)
+s = s.rstrip('\n') + ('\n<!-- PCVIEWER -->\n<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>\n<script>'
+                       + open('figures/pcview_viewer.js').read() + '</script>\n<!-- /PCVIEWER -->\n')
 open(OUT, 'w').write(s)
 print('wrote', OUT, len(s) // 1024, 'KB')

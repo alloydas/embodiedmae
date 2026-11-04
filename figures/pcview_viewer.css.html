@@ -1,0 +1,9 @@
+<style>
+.pcint-ctl{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0}
+.pcint-ctl .toggle{margin:0}
+.pcint-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:760px){.pcint-grid{grid-template-columns:1fr}}
+.pcint-grid figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.pcint-grid canvas{display:block;width:100%;aspect-ratio:1/1;touch-action:none;cursor:grab}
+.pcint-grid canvas:active{cursor:grabbing}
+</style>

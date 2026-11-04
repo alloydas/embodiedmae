@@ -88,6 +88,13 @@ print('picked', [(pool[i]['plant'], round(pool[i]['cov_1view'], 2)) for i in pic
 from scipy.spatial import cKDTree
 TAU = 0.02          # normalised units: "near" for the coverage and miss maps
 CATC = np.array(['#2f6b2a', '#b8860b', '#c0392b'])
+import base64, json
+INTER = {'species': a.species, 'ref': REF, 'cond_order': ['1view', '3view', 'full'], 'cond_names': NAMES, 'epoch': int(epoch), 'tau': TAU, 'plants': []}
+def q16(X, n, rng):
+    """Subsample to n points, quantise to int16 (1e-4 units), base64."""
+    X = np.asarray(X, dtype=np.float64)
+    idx = rng.choice(len(X), min(n, len(X)), replace=False) if len(X) > n else np.arange(len(X))
+    return idx, base64.b64encode(np.clip(np.round(X[idx] * 1e4), -32767, 32767).astype('<i2').tobytes()).decode()
 for i in pick:
     b = pool[i]
     rgb, depth = b['rgb'][None].to(a.device), b['depth'][None].to(a.device)
@@ -102,6 +109,21 @@ for i in pick:
             preds[c] = model.forward_decoder(enc[0], *enc[5:9], *enc[9:13])[2][0].float()
         chs[c] = cham(preds[c], gt)
     tag = f'{a.species}_{b["plant"]}'
+    # interactive data: reference (+ coverage category, per-condition miss distance), inputs, reconstructions
+    rng = np.random.default_rng(0)
+    gi, gb = q16(G, 3500, rng)
+    pl = {'plant': str(b['plant']), 'ref': gb, 'cat': base64.b64encode(np.zeros(1, 'u1')).decode(), 'cond': {}}
+    for c in ['1view', '3view', 'full']:
+        ic = to_full(b, c, b[f'pc_{c}'].numpy()); pr = to_full(b, c, preds[c].numpy())
+        dmiss = cKDTree(pr).query(G[gi])[0]
+        _, ib = q16(ic, 3000, rng); _, pb = q16(pr, 3000, rng)
+        pl['cond'][c] = {'input': ib, 'pred': pb, 'cov': round(float(b[f'cov_{c}']), 4), 'chamfer': round(chs[c], 7),
+                         'miss': base64.b64encode(np.clip(np.round(dmiss * 1000), 0, 255).astype('u1').tobytes()).decode(),
+                         'missed_frac': round(float(np.mean(cKDTree(pr).query(G)[0] > TAU)), 4)}
+    p1i, p3i = to_full(b, '1view', b['pc_1view'].numpy()), to_full(b, '3view', b['pc_3view'].numpy())
+    cg = np.where(cKDTree(p1i).query(G[gi])[0] < TAU, 0, np.where(cKDTree(p3i).query(G[gi])[0] < TAU, 1, 2)).astype('u1')
+    pl['cat'] = base64.b64encode(cg.tobytes()).decode()
+    INTER['plants'].append(pl)
     # (1) inputs / reconstructions / reference
     fig = plt.figure(figsize=(10.5, 10.5))
     for r, c in enumerate(['1view', '3view', 'full']):
@@ -129,3 +151,5 @@ for i in pick:
                  f'Top: {REF} coloured green = {lab[0]}, gold = {lab[1]}, red = {lab[2]} (nearest input point within {TAU})\n'
                  f'Bottom: {REF} coloured by distance to E1\'s reconstruction from each input (dark = missed)', fontsize=8.5)
     fig.subplots_adjust(left=0, right=1, bottom=0.09, top=0.88, wspace=0, hspace=0.12); f = out / f'pcmap_{tag}.png'; fig.savefig(f, dpi=140); plt.close(fig); print('wrote', f)
+(out / 'interactive.json').write_text(json.dumps(INTER, separators=(',', ':')))
+print('wrote', out / 'interactive.json', (out / 'interactive.json').stat().st_size // 1024, 'KB')

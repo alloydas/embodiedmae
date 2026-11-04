@@ -41,11 +41,23 @@ const document = new Proxy({}, { get(t, k) {
 } });
 const window = { addEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {} }), innerWidth: 1200, devicePixelRatio: 1, location: { hash: '' } };
 const ctx = { document, window, localStorage: { getItem: () => null, setItem() {} }, ResizeObserver: class { observe() {} }, IntersectionObserver: class { observe() {} }, requestAnimationFrame: () => 0, getComputedStyle: () => ({ getPropertyValue: () => '' }), console };
+// minimal three.js stub so 3D viewers run their data path (CONCAT=1 runs all inline scripts as one, sharing globals)
+class V3 { constructor() { this.x = 0; this.y = 0; this.z = 0; } set(x, y, z) { this.x = x; this.y = y; this.z = z; } }
+ctx.THREE = { WebGLRenderer: class { setPixelRatio() {} setSize() {} render() { ctx.__renders = (ctx.__renders || 0) + 1; } },
+  Scene: class { constructor() { this.children = []; } add(o) { this.children.push(o); } },
+  PerspectiveCamera: class { constructor() { this.position = new V3(); } updateProjectionMatrix() {} lookAt() {} },
+  BufferGeometry: class { constructor() { this.attr = {}; } setAttribute(k, v) { this.attr[k] = v; } computeBoundingSphere() {} },
+  BufferAttribute: class { constructor(a, n) { this.array = a; this.itemSize = n; } },
+  PointsMaterial: class { constructor(o) { Object.assign(this, o); } }, Points: class { constructor(g, m) { this.geometry = g; this.material = m; } },
+  Color: class { constructor() {} setHSL() { return this; } } };
+ctx.atob = s => Buffer.from(s, 'base64').toString('binary');
 let ok = true;
-for (const s of scripts) {
+const runs = process.env.CONCAT ? [scripts.join('\n;\n')] : scripts;
+for (const s of runs) {
   try { new Function(...Object.keys(ctx), s)(...Object.values(ctx)); }
-  catch (e) { ok = false; console.log('SCRIPT ERROR:', e.message); }
+  catch (e) { ok = false; console.log('SCRIPT ERROR:', e.message, (e.stack || '').split('\n')[1]); }
 }
+if (ctx.__renders) console.log('3D renders:', ctx.__renders);
 const charts = Object.keys(els).filter(k => k.startsWith('ch_'));
 const drawn = charts.filter(k => /<svg/.test(String(els[k].innerHTML)));
 console.log(ok ? 'js ok;' : 'js FAILED;', 'charts drawn:', drawn.length, '/', charts.length, charts.filter(k => !drawn.includes(k)).join(' '));
