@@ -117,6 +117,37 @@ for arm, band in [('topdown', 'top:2 (two highest cameras)'), ('horizon', 'horiz
     ck = sorted(d.glob('checkpoint_epoch_*.pth'), key=lambda p: int(p.stem.split('_')[-1])) if d.exists() else []
     e5.append([f'maize_e5_{arm}_d2', band, int(ck[-1].stem.split('_')[-1]) if ck else 0])
 N['e5'] = e5
+# ---- visual results: trainer grids, cropped and JPEG-encoded into D.images
+import base64, io
+from PIL import Image
+def enc(path, crop=None, w=1100):
+    im = Image.open(path).convert('RGB')
+    if crop: im = im.crop((0, 0, im.width, int(im.height * crop)))
+    if im.width > w: im = im.resize((w, round(im.height * w / im.width)), Image.LANCZOS)
+    b = io.BytesIO(); im.save(b, 'JPEG', quality=70, optimize=True)
+    return 'data:image/jpeg;base64,' + base64.b64encode(b.getvalue()).decode()
+def latest(d, plant, prefix='epoch_'):
+    fs = sorted((OUTD / d / 'visualizations').glob(f'{prefix}*{plant}.png'), key=lambda p: int(p.name.split('_')[1]))
+    return fs[-1] if fs else None
+GAL = []
+def add(key, path, cap, crop=None, group=''):
+    if path and Path(path).exists():
+        D['images'][key] = enc(path, crop); GAL.append({'key': key, 'cap': cap, 'group': group})
+V = OUTD / E1 / 'visualizations'
+for ep in ('001', '100', '1000'):
+    f = sorted(V.glob(f'epoch_{ep}_sample_*_plant_0003_00.png'))
+    add(f'nv_e1_{ep}', f[0] if f else None, f'E1 at epoch {int(ep)}, plant_0003 view 00: RGB, depth and point cloud, input / masked / reconstructed at mask ratio 0.80.', 0.61, 'E1 reconstructions over training (same plant)')
+for pl in ('plant_0000_00', 'plant_0034_00'):
+    f = sorted(V.glob(f'epoch_1000_sample_*_{pl}.png'))
+    add(f'nv_e1_1000_{pl}', f[0] if f else None, f'E1 at epoch 1000, {pl}, full grid including the decoded recipe (masked tokens predicted).', None, 'E1 at epoch 1000, other plants')
+for run, src, lab in [('maize_distill_rgb2pc_e1_d2', 'rgb', 'RGB student (photograph only)'), ('maize_distill_e1_d2', 'pc', 'generalist, from the point cloud only')]:
+    for ep in ('001', '100'):
+        f = sorted((OUTD / run / 'visualizations').glob(f'epoch_{ep}_src-{src}_sample_*_plant_0000_02.png'))
+        add(f'nv_dist_{src}_{ep}', f[0] if f else None, f'{lab}, epoch {int(ep)}: everything generated from one source, plant_0000 view 02 (val). Chamfer in the cloud panel title.', None, 'Distillation from E1: one source in, all four out (epoch 1 vs 100)')
+for arm, lab in [('topdown', 'top-down (two highest cameras)'), ('horizon', 'horizon (two most level cameras)'), ('single', 'single (view 0)')]:
+    f = latest(f'maize_e5_{arm}_d2_nova', 'plant_0003_00')
+    if f: add(f'nv_e5_{arm}', f, f'E5 {lab}, epoch {int(f.name.split("_")[1])}, plant_0003 view 00. Each grid has its own masking draw, so compare shapes, not the losses in the title.', 0.61, 'E5 arms on the same plant')
+N['gallery'] = GAL
 D['nova'] = N
 
 s = s[:m.start(2)] + json.dumps(D, separators=(',', ':')) + s[m.end(2):]
@@ -141,6 +172,9 @@ SEC = '''  <section id="nova">
     <div class="tablewrap"><table id="nv_pcv"></table></div>
     <h3 style="margin-top:18px">E5 view regime (training)</h3>
     <div class="tablewrap"><table id="nv_e5"></table></div>
+    <h3 style="margin-top:22px">Visual results</h3>
+    <p class="small muted">The trainers' own grids on val plants. In the reconstruction grids the depth panel's silhouette comes from the ground truth (only the values inside it are predicted).</p>
+    <div id="nv_gallery"></div>
   </section>
 '''
 if '<section id="nova">' in s:
@@ -164,6 +198,8 @@ JS = '''
   tbl('nv_rows',[['input'],['sources'],['zero-shot E1',1],['isolated-trained',1],['row-trained'+(N.rows_ft?'':' (training)'),1]],N.rows);
   tbl('nv_pcv',[['condition'],['coverage',1],['recon chamfer x1e-3',1],...N.e8_targets.map(t=>[TL[t]+' R²',1])],N.pcview);
   tbl('nv_e5',[['run'],['train views'],['epoch / 600',1]],N.e5);
+  if(N.gallery){ const groups=[...new Set(N.gallery.map(g=>g.group))];
+    document.getElementById('nv_gallery').innerHTML=groups.map(gr=>`<h3 style="margin-top:14px;font-size:.92rem">${esc(gr)}</h3><div class="imggrid">`+N.gallery.filter(g=>g.group===gr).map(g=>`<figure><img loading="lazy" src="${D.images[g.key]}" alt="${esc(g.cap)}"><figcaption>${esc(g.cap)}</figcaption></figure>`).join('')+'</div>').join(''); }
 })();
 '''
 if '// ---------- Nova section' in s:
