@@ -157,7 +157,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <div class="note"><strong>Read the view-0 bars with care.</strong> They score view 0 (64° above the horizon) for every arm: inside the single and top-down training bands, outside the horizon band. The held-out-view probe below fits and scores the probe on each view k of every plant (<code>--probe-view k</code>, 17212752-61) and separates the view regime from train/test overlap.</div>
     <div class="grid2">
       <div class="chart"><h3>E5 held-out-view probe: roll (test R²)</h3><div class="sub">Probe fitted and scored on view k (0 = 64° down, 4-5 = horizon, 9 = 64° up). Filled markers: views the arm trained on.</div><div id="ch_e5v_roll"></div></div>
-      <div class="chart"><h3>E5 held-out-view probe: height (test R²)</h3><div class="sub">Same probe, height. The arms separate only on view 0.</div><div id="ch_e5v_height"></div></div>
+      <div class="chart"><h3>E5 held-out-view probe: height (test R²)</h3><div class="sub">Same probe, height. The arms stay within 0.02 of each other; the steepest views (0, 9) separate them most.</div><div id="ch_e5v_height"></div></div>
     </div>
     <div class="note" id="e5v_note"></div>
   </section>
@@ -348,7 +348,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-11-03 13:00 CST';
+const ASOF = '2026-11-04 11:30 CST';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -415,11 +415,11 @@ const C=D.curves;
     ['Recipe-visibility controls','done','probe, bootstraps, F1: every gated arm still loses to PC+RGB+D','done','probed + paired on Delta (23475548): 20 % visible and target-only beat PC+RGB+D on 11 / 11; 60 % visible loses 9 (opposite of sorghum)'],
     ['E3 data scaling','done','probe, E9, F1, paired CIs (reports/e3_delta_d2.csv: 10k ties full, 3k loses 6, 1k loses 4)','done','probe, E9, paired CIs, F1'],
     ['E4 model scaling','done','probe, bootstraps, F1','done','probed + paired on Delta: small and large each lose 10 / 11 to base'],
-    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe: views 0-7 done (each arm leads on roll only on its own training views, all-view arm most even), 8-9 pending','running','all three arms training (top-down on scavenger, horizon / single on nova); reference maize_4m_d2 is on Delta only'],
+    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe: all ten views done and in the paper (each arm leads on roll only on its own training views, all-view arm most even)','running','top-down 600 / 600 (11-04); horizon 520 and single 570 / 600, finishing today; reference maize_4m_d2 is on Delta only'],
     ['E8 baselines','done','baselines + supervised row','running','final-data baselines done (17189733); supervised row scored on Delta (23344948)'],
     ['Partial clouds','done','4 E2 arms + E1','done','E1 (17189727)'],
     ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students done 100 / 100 (11-03): from RGB 11.3 → 0.77-0.80, mean generation loss −43.5 %; F1 0.496-0.511 (17189743; E1 0.504); RGB+D and three-pair students pending on nova, RGB+recipe and depth+recipe on scavenger; quant not written'],
-    ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','running','from maize E1: zero-shot and isolated control scored; fine-tune OOM at the epoch-95 validation, fixed; resumed from 90 (17212248, running), eval 17189700 chained'],
+    ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','running','from maize E1: zero-shot and isolated control scored, bootstrapped and in tab:rows (control 1.8 isolated vs 29.0 on rows); fine-tune at 90 / 100, finishing on 1 GPU on scavenger (17233173, accum 2 = global 32), eval 17189700 chained'],
     ['Cross-species','done','transfer arms, probes, generation, rows','done','same; rows to rerun with the new maize row model'],
     ['E10 real data','blank','nothing','blank','nothing'],
   ];

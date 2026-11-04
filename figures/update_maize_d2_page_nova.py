@@ -184,17 +184,17 @@ def setrow(key, state, text):
     pat = re.compile(r"\n    \['" + re.escape(key) + r"','([^']*)','[a-z]+',(`[^`]*`|'[^']*')\],")
     mm = pat.search(s); assert mm, key
     s = s[:mm.start()] + f"\n    ['{key}','{mm.group(1)}','{state}','{text}']," + s[mm.end():]
-ft_txt = 'row fine-tune from E1 done' if N['rows_ft'] else 'row fine-tune from E1 at epoch 90 / 100, pending on the account GPU limit'
 setrow('E5', 'running', 'maize_e5_{topdown,horizon,single}_d2 on Nova (views ranked by camera elevation: top:2 / horizon:2 / view 0), epochs ' + ' / '.join(str(r[2]) for r in e5) + ' of 600 (Nova section). Their reference, maize_4m_d2, exists only on Delta: its probe cache must be copied to Nova, or the E5 arms probed on Delta.')
 setrow('E8', 'done', 'Supervised from scratch: maize_e8_supervised_d2 scored on Delta (23344948; head row in the probe table). Frozen baselines on d2 (Nova 17189733): Point-MAE, + gravity, + full pose, EmbodiedMAE-B, MultiMAE-B, DINOv2, random init (Nova section).')
 setrow('Distill', 'running', 'From the maize E1 epoch-1000 teacher, on Nova: generalist and three RGB students 100/100 (val chamfer from RGB 11.28e-3 before -> 0.77-0.80e-3 after; F1 0.49-0.51 vs the teacher 0.50); four two-stream students training or pending (Nova section).')
 setrow('Partial clouds', 'done', 'eval/pc_view_eval_maize.py on maize E1 (Nova 17189727): 1 / 3 / 10 cameras fused (Nova section). The 600-epoch E2 arms were not run.')
 
 # ---- lede, queue
-s = re.sub(r'State as of [0-9-]+ [0-9:]+ CST\.', 'State as of 2026-11-03 14:30 CST.', s, count=1)
-once("    ['23475549','pm_600_e2more',", """    ['17213246, 17162333-35','mdist_* (Nova)','nova','two running, two pending','maize two-stream distillation students from E1 (rgbd2pc, rgbt2pc, dt2pc, pairs2pc), ~3 days each'],
-    ['17212734 -> 17189700','maize_row_ft_e1 (Nova)','nova','pending (account GPU limit)','row fine-tune from E1, resumes at epoch 90; then its test eval'],
-    ['17189739-41','maize_e5_* (Nova)','nova / scavenger','running','E5 arms, 600 epochs each'],
+s = re.sub(r'State as of [0-9-]+ [0-9:]+ CST\.', 'State as of 2026-11-04 11:30 CST.', s, count=1)
+s = re.sub(r"\n    \['[^']*','[^']*\(Nova\)',[^\n]*\],", '', s)   # drop Nova rows of an earlier build
+once("    ['23475549','pm_600_e2more',", """    ['17162333-35, 17213246','mdist_* (Nova)','nova','three running, pairs2pc pending','maize two-stream distillation students from E1: rgbt2pc ~68, dt2pc ~39, rgbd2pc ~35 of 100 (11-04 11:15); rgbt2pc ends ~11-04 22:00, rgbd2pc ~11-06'],
+    ['17233173 -> 17189700','maize_row_ft_e1 (Nova)','scavenger','pending','row fine-tune from E1, epochs 91-100 on 1 GPU (accum 2 = global 32), then its test eval'],
+    ['17189739-41','maize_e5_* (Nova)','nova / scavenger','top-down done, two running','E5 arms, 600 epochs each; single and horizon finish 11-04 afternoon'],
     ['23475549','pm_600_e2more',""")
 open(OUT, 'w').write(s)
 print('wrote', OUT, len(s) // 1024, 'KB')
