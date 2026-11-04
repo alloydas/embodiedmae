@@ -147,8 +147,8 @@ for run, src, lab in [('maize_distill_rgb2pc_e1_d2', 'rgb', 'RGB student (photog
 for arm, lab in [('topdown', 'top-down (two highest cameras)'), ('horizon', 'horizon (two most level cameras)'), ('single', 'single (view 0)')]:
     f = latest(f'maize_e5_{arm}_d2_nova', 'plant_0003_00')
     if f: add(f'nv_e5_{arm}', f, f'E5 {lab}, epoch {int(f.name.split("_")[1])}, plant_0003 view 00. Each grid has its own masking draw, so compare shapes, not the losses in the title.', 0.61, 'E5 arms on the same plant')
-for f in sorted((REP / 'vis_pcview_maize').glob('pcview_plant_*.png')):
-    add(f'nv_pcv_{f.stem}', f, f'{f.stem[7:]} (val): input cloud fused from 1, 3 or 10 cameras (rows), E1 epoch-1000 reconstruction from it (masked regime, ratio 0.80) and the 10-camera target. E1 trained on single-camera clouds, so it reconstructs best from one camera; fused clouds are out of its training distribution (val Chamfer 1.15 vs 4.5-5.0 x1e-3 over all plants). figures/make_pcview_maize_gallery.py', None, 'Partial clouds: 1 vs 3 vs 10 cameras (maize E1)')
+for f in sorted((REP / 'vis_pcview_maize').glob('pcview_maize_plant_*.png')):
+    add(f'nv_pcv_{f.stem}', f, f'{f.stem[13:]} (val): input cloud fused from 1, 3 or 10 cameras (rows), E1 epoch-1000 reconstruction from it (masked regime, ratio 0.80) and the 10-camera target. E1 trained on single-camera clouds, so it reconstructs best from one camera; fused clouds are out of its training distribution (val Chamfer 1.15 vs 4.5-5.0 x1e-3 over all plants). figures/make_pcview_gallery.py', None, 'Partial clouds: 1 vs 3 vs 10 cameras (maize E1)')
 N['gallery'] = GAL
 D['nova'] = N
 

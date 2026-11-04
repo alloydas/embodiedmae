@@ -183,6 +183,9 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
     <div class="chartgrid">
       <div class="chart"><h3>Height R² against cloud coverage</h3><div class="sub">test; solid = refit per condition, dashed = full-cloud probe transferred.</div><div id="ch_pcview"></div></div>
     </div>
+    <h3 style="margin-top:18px">What E1 sees and rebuilds: camera 00, cameras 00-02, complete cloud</h3>
+    <p class="small">Three val plants. Rows: the input cloud (green) cut to the points camera 00 sees, the points cameras 00-02 see, or the complete cloud; the E1 epoch-1000 reconstruction from it (gold, masked regime at ratio 0.80, RGB and depth of camera 00); the complete cloud (blue). Each condition is normalised on its own input, so Chamfer values are comparable within a row, less so across rows. The decoder does not fill in what the camera missed: from one camera the hidden leaves are thin or absent. <span class="mono">figures/make_pcview_gallery.py --species sorghum</span></p>
+    <div class="imggrid" id="pcvisgrid"></div>
   </section>
 
   <section id="e9">
@@ -711,6 +714,12 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
     hp+=`<tr><td class="lead" colspan="${cols.length+1}" style="background:var(--accent-soft)">${sp} · job ${P.job}</td></tr><tr><th></th>${cols.map(c=>`<th class="n">${c[1]}</th>`).join('')}</tr>`;
     rs.forEach(r=>{hp+=`<tr><td class="lead">${esc(SHORT[r])}</td>`+cols.map(c=>{const x=P.rows.find(y=>y.run===r&&y.target===c[0]);const o=P.rows.find(y=>y.run!==r&&rs.includes(y.run)&&y.target===c[0]);const win=x&&o&&x.val_r2>o.val_r2;return `<td class="n"${win?' style="font-weight:700"':''}>${x?x.val_r2.toFixed(3):''}</td>`;}).join('')+'</tr>';});});
   if(pt) pt.innerHTML=hp?'<tbody>'+hp+'</tbody>':'<tbody><tr><td class="blankc">queued</td></tr></tbody>';
+})();
+
+// ---------- partial-cloud gallery
+(function(){ const el=document.getElementById('pcvisgrid'); if(!el) return;
+  const ks=Object.keys(D.images).filter(k=>k.startsWith('pcvis_'));
+  el.innerHTML=ks.map(k=>`<figure style="background:#fff"><img src="${D.images[k]}" alt="Sorghum plant ${k.slice(6)}: partial and complete clouds with E1 reconstructions" loading="lazy"><figcaption>Sorghum plant ${k.slice(6)} (val)</figcaption></figure>`).join('');
 })();
 
 // ---------- row figures

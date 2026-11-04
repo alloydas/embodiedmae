@@ -187,6 +187,8 @@ def main():
         if gv:
             D['images']['gen_v2_ep1'] = img_b64(gv[0], 1100, 80); D['images']['gen_v2_ep1_name'] = gv[0].stem
             D['images']['gen_v2_last'] = img_b64(gv[-1], 1100, 80); D['images']['gen_v2_last_name'] = gv[-1].stem
+        for f in sorted((REPO/'reports'/'vis_pcview_sorghum').glob('pcview_sorghum_*.png')):
+            D['images']['pcvis_' + f.stem.split('_')[-1]] = img_b64(f, 1100, 72)
         for f in sorted((REPO/'paper'/'figs').glob('fig_*.png')):
             if f.stem in ('fig_rows_maize', 'fig_rows_sorghum'): continue   # single-species copies of fig_rows
             D['images']['paper_' + f.stem] = img_b64(f, 1600 if f.stem == 'fig_rows_examples' else 1400, 85)
