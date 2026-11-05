@@ -326,7 +326,7 @@ rows of Tab.~\ref{tab:views}.}
 % control 17064411, zero-shot 17059823; cross-model pairs reports/row_maize_pair_ft17059822_iso17064411.csv;
 % sorghum rows /work/mech-ai/alloydas/sorghum_row: ft 17082628, control 17082823, zero-shot (E1 ep 1000) 17071869;
 % pairs eval/row_pair_bootstrap.py -> reports/row_sorghum_pair_ft17082628_iso17082823.csv (within-model deltas: --ft X --iso X)
-\begin{table}[t]
+\begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.0pt}
   \begin{tabular}{l l ccc ccc}
@@ -383,7 +383,7 @@ rows of Tab.~\ref{tab:views}.}
   The zero-shot model of each species is its headline model, and both
   fine-tuned models of each species start from it.}
   \label{tab:rows}
-\end{table}
+\end{table*}
 
 The row data pairs every observation with an isolated twin (Sec.~\ref{sec:data}),
 so Tab.~\ref{tab:rows} compares each plant with itself: only the neighbors
@@ -404,9 +404,13 @@ Fig.~\ref{fig:rowsex} shows held-out plants of both species in their rows.
 % figures/make_row_gallery.py (test; maize models from the maize headline model)
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{figs/fig_rows_examples.pdf}
+  % fig_rows_examples.pdf is one tall 379x1103pt page: sorghum rows in the top
+  % half, maize in the bottom. Shown as the two halves side by side.
+  \includegraphics[width=0.49\linewidth,trim=0 551.7 0 0,clip]{figs/fig_rows_examples.pdf}\hfill
+  \includegraphics[width=0.49\linewidth,trim=0 0 0 551.7,clip]{figs/fig_rows_examples.pdf}
   \caption{\textbf{Rows, held-out plants.} For each species, plants at yaw
-  $0^\circ$ (broadside) and $90^\circ$ (end-on): the row photograph the model
+  $0^\circ$ (broadside) and $90^\circ$ (end-on; sorghum left, maize right):
+  the row photograph the model
   receives, the target plant, and the predictions of the row-trained model
   (blue) and the isolated-trained control (orange) over the target (gray).
   The control rebuilds neighboring leaves as part of the target; the

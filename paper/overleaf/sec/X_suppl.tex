@@ -129,7 +129,7 @@ validation Chamfer at the matched checkpoint.
 \subsection{Modality value-add (E2)}
 Eight pretraining arms per species differ only in which token streams exist
 (every stream set that contains the cloud).
-\begin{table}[h]\centering\small
+\begin{table*}[t]\centering\small
 \begin{tabular}{lcccc}
 \toprule
  & \multicolumn{2}{c}{Sorghum} & \multicolumn{2}{c}{Maize} \\
@@ -151,7 +151,7 @@ on the probe depends on the set (added to PC: 7 wins, 0 losses of 11; to PC+RGB:
 3 wins, 5 losses; to PC+RGB+D: a draw). Full probe columns are in the main
 E2 table.}
 \label{tab:supp-e2}
-\end{table}
+\end{table*}
 
 \subsection{Token-budget control arms}
 In the four-stream arm the three sensor streams share the visible budget with
@@ -178,7 +178,7 @@ PC+RGB+D on every trait, so the effect of the reconstruction target depends on
 the generator.
 
 \subsection{Data and model scaling at fixed compute}
-\begin{table}[h]\centering\small
+\begin{table*}[t]\centering\small
 \begin{tabular}{lcccc}
 \toprule
  & \multicolumn{2}{c}{Sorghum} & \multicolumn{2}{c}{Maize} \\
@@ -202,7 +202,7 @@ monotone in data (the 3{,}000-plant arm beats the 10{,}000-plant arm on height,
 leaf length and leaf count). Base is the best size in both species; in maize
 small and large each lose 10 of 11 traits to base.}
 \label{tab:supp-scaling}
-\end{table}
+\end{table*}
 
 \subsection{Distillation, per source modality}
 From the headline model of each species, distillation lowers the mean
