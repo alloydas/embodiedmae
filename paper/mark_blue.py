@@ -41,7 +41,7 @@ def mark(base, src):
     env = 0; math = 0
     def flush():
         nonlocal buf
-        if not buf: out.extend(buf := []) 
+        if not buf: return
         text = '\n'.join(buf); buf = []
         if not text.strip(): out.append(text); return
         parts = re.split(r'(?<=[.!?])\s+(?=[A-Z\\$`(])', text)
