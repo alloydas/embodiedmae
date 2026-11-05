@@ -120,8 +120,9 @@ def main():
         for t in (0.005, 0.01, 0.02):
             f1 = g[f'f1_{t:g}']; fs.append({'run': run, 'split': split, 'epoch': int(g.epoch.iloc[0]), 'n_plants': len(g), 'tau': t, 'precision': round(g[f'precision_{t:g}'].mean(), 5), 'recall': round(g[f'recall_{t:g}'].mean(), 5), 'f1': round(f1.mean(), 5), 'f1_median': round(float(f1.median()), 5), 'f1_p10': round(float(f1.quantile(0.1)), 5), 'chamfer': round(g.chamfer.mean(), 6), 'scale_m': round(float(g.scale_m.median()), 3)})
     D['fscore'] = fs
-    pv = pd.concat([pd.read_csv(R/'pcview_16930426_probe.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_probe.csv'))])
-    rc = pd.concat([pd.read_csv(R/'pcview_16930426_recon.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_recon.csv'))])
+    # + 17246566: maize E1 (cross-species) on the sorghum partial clouds
+    pv = pd.concat([pd.read_csv(R/'pcview_16930426_probe.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_probe.csv')) + sorted(R.glob('pcview_17246566_probe.csv'))])
+    rc = pd.concat([pd.read_csv(R/'pcview_16930426_recon.csv')] + [pd.read_csv(f) for f in sorted(R.glob('pcview_1708282*_recon.csv')) + sorted(R.glob('pcview_17246566_recon.csv'))])
     cov = pd.read_csv(R/'pcview_16930426_coverage.csv')
     # E5 held-out-view probe: test R2 per (run, target, view) from reports/probe_pr_e5_v<k>_<job>.csv
     ev = {}
@@ -165,10 +166,14 @@ def main():
         b = json.load(open(f))['by_mode_source']
         return {k: round(v['chamfer_gt_m2']['mean'] * 1e4, 2) for k, v in b.items() if 'chamfer_gt_m2' in v}
     xr = []
-    for lab, model, data, pat in (('maize row model on sorghum rows', 'maize', 'sorghum', 'row_sorghum_maize_row_ft_checkpoint_epoch_100_test_*.json'),
+    for lab, model, data, pat in (('maize row model from maize E1 on sorghum rows', 'maize', 'sorghum', 'row_sorghum_maize_row_ft_e1_checkpoint_epoch_100_test_*.json'),
+                                  ('maize E1 zero-shot on sorghum rows', 'maize', 'sorghum', 'row_sorghum_maize_4m_pretrain_15k_d2_*_test_*.json'),
+                                  ('sorghum E1 zero-shot on sorghum rows (native)', 'sorghum', 'sorghum', 'row_sorghum_4m_pretrain_15k_d2_sink_*_test_*.json'),
+                                  ('maize row model from maize E1 on maize rows (native)', 'maize', 'maize', 'row_maize_maize_row_ft_e1_checkpoint_epoch_100_test_*.json'),
+                                  ('maize row model (first release) on sorghum rows', 'maize', 'sorghum', 'row_sorghum_maize_row_ft_checkpoint_epoch_100_test_*.json'),
                                   ('sorghum row model on sorghum rows (native)', 'sorghum', 'sorghum', 'row_sorghum_sorghum_row_ft_checkpoint_epoch_100_test_*.json'),
                                   ('sorghum row model on maize rows', 'sorghum', 'maize', 'row_maize_sorghum_row_ft_checkpoint_epoch_100_test_*.json'),
-                                  ('maize row model on maize rows (native)', 'maize', 'maize', 'row_maize_maize_row_ft_checkpoint_epoch_100_test_*.json')):
+                                  ('maize row model (first release) on maize rows (native)', 'maize', 'maize', 'row_maize_maize_row_ft_checkpoint_epoch_100_test_*.json')):
         rf = sorted(R.glob(pat))
         if rf: xr.append({'label': lab, 'model': model, 'data': data, 'job': rf[-1].stem.rsplit('_', 1)[-1], 'c': rowsum(rf[-1])})
     D['xrows'] = xr

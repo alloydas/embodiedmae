@@ -130,7 +130,7 @@ def fig_controls():
     save(fig, 'fig_param_controls')
 
 # ---------------- Fig 6: rows (Regime III), both species ----------------
-ROWS = {'maize': ('row_maize_maize_row_ft_*_test_17059822.json', 'row_maize_maize_row_iso_*_test_17064411.json', 'row_maize_maize_4m_*_test_17059823.json'),
+ROWS = {'maize': ('row_maize_maize_row_ft_e1_*_test_17189700.json', 'row_maize_maize_row_iso_e1_*_test_17189701.json', 'row_maize_maize_4m_pretrain_15k_d2_*_test_17189621.json'),
         'sorghum': ('row_sorghum_sorghum_row_ft_*_test_17082628.json', 'row_sorghum_sorghum_row_iso_*_test_17082823.json', 'row_sorghum_4m_pretrain_15k_d2_sink_*_test_17071869.json')}
 
 def _rows_panels(a, b, species, letters):

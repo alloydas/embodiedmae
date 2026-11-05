@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit 297f018).
+% Synced from the embodiedmae repo (paper/results.tex, commit 6db1988).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -402,6 +402,7 @@ therefore also a partial-cloud test, as in Tab.~\ref{tab:views}.
 % after: outputs/4m_distill_15k_all_d2/training_history.json val[-1] (epoch 100); two-stream rows:
 %   outputs/4m_distill_15k_{rgbd2pc,rgbt2pc,dt2pc,pairs}_d2/training_history.json val[-1] (epoch 100);
 % maize (final release): outputs/maize_distill_e1_d2/training_history.json val[0] (epoch 0 = warm start, val_at_start) / val[-1] (epoch 100);
+%   maize two-stream: outputs/maize_distill_{rgbd2pc,rgbt2pc,dt2pc,pairs2pc}_e1_d2/training_history.json val[0] / val[-1]
 % specialist: outputs/4m_distill_15k_pc2text/training_history.json
 \begin{table*}[t]
   \centering\scriptsize
@@ -419,9 +420,9 @@ therefore also a partial-cloud test, as in Tab.~\ref{tab:views}.
     $\theta$ only & -- & -- & 22.7 & 6.83 & & -- & -- & 80.7 & 12.8 \\
     \midrule
     \multicolumn{10}{l}{\emph{two streams $\to$ cloud (dedicated student / one student for all three pairs)$^\P$}} \\
-    RGB+D       & -- & -- & 2.91 & 0.60 / 0.59 & &  &  &  &  \\
-    RGB+$\theta$ & -- & -- & 0.43 & 0.40 / 0.39 & &  &  &  &  \\
-    D+$\theta$   & -- & -- & 0.50 & 0.37 / \textbf{0.36} & &  &  &  &  \\
+    RGB+D       & -- & -- & 2.91 & 0.60 / 0.59 & & -- & -- & 1.30 & \todo{0.54} / \todo{0.64} \\
+    RGB+$\theta$ & -- & -- & 0.43 & 0.40 / 0.39 & & -- & -- & 0.47 & 0.44 / \todo{0.43} \\
+    D+$\theta$   & -- & -- & 0.50 & 0.37 / \textbf{0.36} & & -- & -- & 0.46 & 0.42 / \todo{0.40} \\
     \midrule
     mean generation loss & \multicolumn{4}{c}{$0.371 \to 0.259\ (-30.2\,\%)$} & & \multicolumn{4}{c}{$0.290 \to 0.164\ (-43.5\,\%)$} \\
     \bottomrule
@@ -435,7 +436,7 @@ therefore also a partial-cloud test, as in Tab.~\ref{tab:views}.
   that see both streams fully and are trained to generate the cloud only
   (Sec.~\ref{sec:distill}), so they have no $\theta$ MAE; before = the same
   warm start with both streams visible. $\theta$ MAE on
-  hidden real leaf tokens. \todo{Maize two-stream students: queued.}}
+  hidden real leaf tokens. \todo{Maize RGB+D (epoch 65) and three-pair (epoch 35) students still training: interim values in red.}}
   \label{tab:anysubset}\label{tab:main}
 \end{table*}
 
@@ -468,7 +469,13 @@ with depth. One student trained on all three pairs matches the three dedicated
 students within $0.02$ on every pair. Before distillation, the photograph with
 depth is worse than the photograph alone ($2.91$ against $2.27$): pretraining
 never showed two streams with every token visible, and distillation removes
-this gap.
+this gap. Maize repeats the ordering: the recipe students generate at $0.44$
+(with the photograph) and $0.42$ (with depth), against $0.77$ from the
+photograph alone, and the photograph with depth again starts worse than either
+stream alone ($1.30$) and improves under distillation \todo{(maize RGB+D at
+epoch 65: $0.54$)}. The maize recipe students gain little from distillation
+($0.47 \to 0.44$, $0.46 \to 0.42$) because the pretrained model already
+generates well from these pairs.
 
 % photograph -> cloud, test, 2,250 plants: reports/quant_{teacher_undistilled,smr00_full,smr50_seed1,smr50_seed2,
 %   generalist_rgb,generalist_depth}_d2_test.json (job 17061909; each student's best_model.pth);
@@ -915,7 +922,9 @@ any one of them.
 
 % reports/probe_pr_xfer_sorghum_17113708.csv, probe_pr_xfer_maize_17113709.csv, reports/t1_warm_vs_scratch_{sorghum,maize}.csv,
 % outputs/{sorghum_xfer_*_d2,maize_xfer_*}/training_history.json; rows: reports/row_sorghum_maize_row_ft_*_17083714.*,
-% reports/row_maize_sorghum_row_ft_*_17084182.*
+% reports/row_maize_sorghum_row_ft_*_17084182.*; maize E1 on sorghum (2026-11-04): reports/xprobe_maizeE1_on_sorghum{,_nodepth}_17246373.csv,
+% xprobe_maizeE1_on_sorghum_g1_17260312.csv, xprobe_sorghum_on_sorghum_anchor_17246373.csv, xquant_maizeE1_on_sorghum_17246373.json,
+% row_sorghum_maize_{4m_pretrain_15k_d2,row_ft_e1}_*_1724637{5,6}.json, pcview_17246566_{recon,probe}.csv
 \paragraph{Across species.}
 We pretrained the three-stream model (PC+RGB+D) on each species for 150
 epochs, either from scratch or from the other species' pretrained weights
@@ -930,6 +939,23 @@ $2.55$ to $0.85\times10^{-3}$ in maize. Row reconstruction does not transfer:
 on the other species' test rows, a row-trained model reaches about nine times
 the Chamfer of the native row model ($268$ against $30.7\times10^{-4}$\,m$^2$
 on sorghum rows, $61.7$ against $6.5$ on maize rows).
+
+The maize headline model separates the two halves of the model on sorghum
+plants. Its frozen encoder, probed on sorghum without fine-tuning, reaches the
+native sorghum models on size (val height $0.976$, against $0.977$ for the
+sorghum three-stream arm and $0.983$ for the sorghum headline model) and leaf
+width ($0.360$, against $0.301$ and $0.415$), and loses $0.02$ to $0.09$ on roll
+and leaf length. Hiding the depth image changes no trait by more than $0.016$,
+and so does serving the sorghum photographs without their brightness gain, so
+the result does not depend on depth scale or exposure. Its decoder does not
+transfer: from a sorghum photograph it generates a cloud at
+$18.6\times10^{-3}$ against $2.25$ for the sorghum headline model, its
+reconstruction from the sorghum clouds stays near $37\times10^{-3}$ whatever
+part of the plant the cameras see, and on sorghum rows it reaches $198$
+(zero-shot) and $237$ (the maize row model) against $30.7\times10^{-4}$\,m$^2$
+for the sorghum row model. The encoder therefore learns plant structure that
+carries across species, while the decoder learns one species' shape.
+\todo{T1 warm start from the maize headline model (150 epochs) training.}
 
 \paragraph{What the latent encodes.}
 % reports/e9_pr_600_16592054/, reports/e9_pr_tg100_600_16686383/, reports/e9_pm_600_22751615/

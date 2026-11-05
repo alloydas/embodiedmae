@@ -344,7 +344,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-11-04 11:30 CST';
+const ASOF = '2026-11-05 09:40 CST';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -353,7 +353,7 @@ const E4=['e4_small_d2','e2_pcrgbdt_d2','e4_large_d2'];
 const E5=['e5_topdown_d2','e5_horizon_d2','e5_single_d2','e2_pcrgbdt_d2'];
 const ALL=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2','e3_1k_d2','e3_3k_d2','e3_10k_d2','e4_small_d2','e4_large_d2','e5_topdown_d2','e5_horizon_d2','e5_single_d2','4m_pretrain_15k_d2_sink','e2_pcd_d2','e2_pct_d2','e2_pcrgbt_d2','e2_pcdt_d2'].filter(r=>D.curves&&D.curves[r]);
 const PROBED=ALL.filter(r=>D.probe[r]);
-const SHORT={e2_pc_d2:'PC',e2_pcrgb_d2:'PC+RGB',e2_pcrgbd_d2:'PC+RGB+D',e2_pcrgbdt_d2:'all four',e2_pcrgbdt_tg_d2:'tg 20 %',e2_pcrgbdt_tg40_d2:'tg 60 %',e2_pcrgbdt_tg100_d2:'target only',e3_1k_d2:'1k plants',e3_3k_d2:'3k plants',e3_10k_d2:'10k plants',e4_small_d2:'small 25 M',e4_large_d2:'large 332 M',e5_topdown_d2:'E5 top-down',e5_horizon_d2:'E5 horizon',e5_single_d2:'E5 single view','4m_pretrain_15k_d2_sink':'E1',e8_supervised_d2:'supervised',e2_pcd_d2:'PC+D',e2_pct_d2:'PC+recipe',e2_pcrgbt_d2:'PC+RGB+recipe',e2_pcdt_d2:'PC+D+recipe',sorghum_xfer_warm_d2:'warm start (from maize)',sorghum_xfer_scratch_d2:'from scratch',maize_xfer_warm:'warm start (from sorghum E1)',maize_xfer_scratch:'from scratch'};
+const SHORT={e2_pc_d2:'PC',e2_pcrgb_d2:'PC+RGB',e2_pcrgbd_d2:'PC+RGB+D',e2_pcrgbdt_d2:'all four',e2_pcrgbdt_tg_d2:'tg 20 %',e2_pcrgbdt_tg40_d2:'tg 60 %',e2_pcrgbdt_tg100_d2:'target only',e3_1k_d2:'1k plants',e3_3k_d2:'3k plants',e3_10k_d2:'10k plants',e4_small_d2:'small 25 M',e4_large_d2:'large 332 M',e5_topdown_d2:'E5 top-down',e5_horizon_d2:'E5 horizon',e5_single_d2:'E5 single view','4m_pretrain_15k_d2_sink':'E1',maize_4m_pretrain_15k_d2:'maize E1 (cross-species)',sorghum_xfer_warm_e1m_d2:'warm start (from maize E1)',e8_supervised_d2:'supervised',e2_pcd_d2:'PC+D',e2_pct_d2:'PC+recipe',e2_pcrgbt_d2:'PC+RGB+recipe',e2_pcdt_d2:'PC+D+recipe',sorghum_xfer_warm_d2:'warm start (from maize)',sorghum_xfer_scratch_d2:'from scratch',maize_xfer_warm:'warm start (from sorghum E1)',maize_xfer_scratch:'from scratch'};
 const COL={e2_pc_d2:'var(--c4)',e2_pcrgb_d2:'var(--c2)',e2_pcrgbd_d2:'var(--c3)',e2_pcrgbdt_d2:'var(--c1)',e2_pcrgbdt_tg_d2:'var(--c5)',e2_pcrgbdt_tg40_d2:'var(--c6)',e2_pcrgbdt_tg100_d2:'var(--c7)',e3_1k_d2:'var(--c5)',e3_3k_d2:'var(--c6)',e3_10k_d2:'var(--c7)',e4_small_d2:'var(--c2)',e4_large_d2:'var(--c4)',e5_topdown_d2:'var(--c3)',e5_horizon_d2:'var(--c4)',e5_single_d2:'var(--c2)','4m_pretrain_15k_d2_sink':'var(--c8)',e2_pcd_d2:'var(--c5)',e2_pct_d2:'var(--c6)',e2_pcrgbt_d2:'var(--c7)',e2_pcdt_d2:'var(--c8)',sorghum_xfer_warm_d2:'var(--c1)',sorghum_xfer_scratch_d2:'var(--c4)',maize_xfer_warm:'var(--c1)',maize_xfer_scratch:'var(--c4)'};
 const STEPS={e3_1k_d2:32,e3_3k_d2:94,e3_10k_d2:313,e2_pcrgbdt_d2:329};
 const TARGETS=['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_len_max','leaf_width_mean','leaf_width_max'];
@@ -411,12 +411,12 @@ const C=D.curves;
     ['Recipe-visibility controls','done','probe, bootstraps, F1: every gated arm still loses to PC+RGB+D','done','probed + paired on Delta (23475548): 20 % visible and target-only beat PC+RGB+D on 11 / 11; 60 % visible loses 9 (opposite of sorghum)'],
     ['E3 data scaling','done','probe, E9, F1, paired CIs (reports/e3_delta_d2.csv: 10k ties full, 3k loses 6, 1k loses 4)','done','probe, E9, paired CIs, F1'],
     ['E4 model scaling','done','probe, bootstraps, F1','done','probed + paired on Delta: small and large each lose 10 / 11 to base'],
-    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe: all ten views done and in the paper (each arm leads on roll only on its own training views, all-view arm most even)','running','top-down 600 / 600 (11-04); horizon 520 and single 570 / 600, finishing today; reference maize_4m_d2 is on Delta only'],
+    ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe: all ten views done and in the paper (each arm leads on roll only on its own training views, all-view arm most even)','running','all three arms 600 / 600 (11-04); not probed: the reference maize_4m_d2 exists only on Delta (copy its probe cache to Nova, or probe the E5 arms on Delta)'],
     ['E8 baselines','done','baselines + supervised row','running','final-data baselines done (17189733); supervised row scored on Delta (23344948)'],
     ['Partial clouds','done','4 E2 arms + E1','done','E1 (17189727)'],
-    ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students done 100 / 100 (11-03): from RGB 11.3 → 0.77-0.80, mean generation loss −43.5 %; F1 0.496-0.511 (17189743; E1 0.504); RGB+D and three-pair students pending on nova, RGB+recipe and depth+recipe on scavenger; quant not written'],
-    ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','running','from maize E1: zero-shot and isolated control scored, bootstrapped and in tab:rows (control 1.8 isolated vs 29.0 on rows); fine-tune at 90 / 100, finishing on 1 GPU on scavenger (17233173, accum 2 = global 32), eval 17189700 chained'],
-    ['Cross-species','done','transfer arms, probes, generation, rows','done','same; rows to rerun with the new maize row model'],
+    ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students done 100 / 100 (11-03): from RGB 11.3 → 0.77-0.80, mean generation loss −43.5 %; F1 0.496-0.511 (17189743; E1 0.504); RGB+recipe and depth+recipe done (val 0.47 → 0.44, 0.46 → 0.42, in tab:anysubset); RGB+D at 66 and three-pair at 37 / 100 on nova; quant not written'],
+    ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','done','from maize E1, all three scored and in tab:rows + fig_rows (11-05): row-trained 4.0 on rows vs isolated-trained 1.8 clean / 29.0 on rows; row training removes 92 % of the penalty (first release 91 %)'],
+    ['Cross-species','done','transfer arms, probes, generation, rows','running','maize E1 on sorghum done (11-04): frozen probe within 0.01 of native on size, decoder does not transfer (rows, generation, partial clouds); T1 warm start from maize E1 resumed at epoch 25 after an NCCL timeout (17260311); gain-1.0 probe rerun (17260312)'],
     ['E10 real data','blank','nothing','blank','nothing'],
   ];
   document.getElementById('speciestbl').innerHTML='<thead><tr><th>experiment</th><th>sorghum</th><th>sorghum detail</th><th>maize</th><th>maize detail</th></tr></thead><tbody>'+rows.map(r=>`<tr><td class="lead">${esc(r[0])}</td><td>${pill(r[1])}</td><td class="wrapc" style="text-align:left">${esc(r[2])}</td><td>${pill(r[3])}</td><td class="wrapc" style="text-align:left">${esc(r[4])}</td></tr>`).join('')+'</tbody>';
@@ -586,7 +586,7 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   const PV=D.pcview; const conds=['full','3view','1view']; const cl={full:'full ('+(PV.coverage.full*100).toFixed(0)+' %)','3view':'3 cameras ('+(PV.coverage['3view']*100).toFixed(0)+' %)','1view':'1 camera ('+(PV.coverage['1view']*100).toFixed(0)+' %)'};
   const g=(r,fit,c,t,s)=>{const x=PV.probe.find(y=>y.run===r&&y.fit===fit&&y.condition===c&&y.target===t);return x?x[s+'_r2']:null;}; const rc=(r,c)=>{const x=PV.recon.find(y=>y.run===r&&y.condition===c);return x?x.chamfer*1e3:null;};
   let h='<thead><tr><th>arm</th>'+conds.map(c=>`<th class="n">matched height · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">transferred height · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">matched roll · ${cl[c]}</th>`).join('')+conds.map(c=>`<th class="n">chamfer ×10⁻³ · ${cl[c]}</th>`).join('')+'</tr></thead><tbody>';
-  const PVR=E2.concat(PV.probe.some(y=>y.run==='4m_pretrain_15k_d2_sink')?['4m_pretrain_15k_d2_sink']:[]);
+  const PVR=E2.concat(PV.probe.some(y=>y.run==='4m_pretrain_15k_d2_sink')?['4m_pretrain_15k_d2_sink']:[]).concat(PV.probe.some(y=>y.run==='maize_4m_pretrain_15k_d2')?['maize_4m_pretrain_15k_d2']:[]);
   PVR.forEach(r=>{h+=`<tr><td class="lead">${esc(SHORT[r])}</td>`+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'transfer',c,'height','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${f3(g(r,'matched',c,'leaf_angle_roll','test'))}</td>`).join('')+conds.map(c=>`<td class="n">${rc(r,c)==null?'':rc(r,c).toFixed(2)}</td>`).join('')+'</tr>';});
   if(!PVR.includes('4m_pretrain_15k_d2_sink')) h+=`<tr><td class="lead">E1</td><td class="blankc" colspan="12">not run</td></tr>`;
   document.getElementById('pcviewtbl').innerHTML=h+'</tbody>';
@@ -669,13 +669,13 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   const X=D.xprobe||[]; if(!X.length){document.getElementById('xtbl').innerHTML='<tbody><tr><td class="blankc">not run</td></tr></tbody>';return;}
   const dirs=[['maize','sorghum models on maize plants'],['sorghum','maize model on sorghum plants']];
   const MT={maize:['height','leaf_count','biomass','leaf_angle','stem_radius','leaf_length','leaf_width','leaf_twist','leaf_curl','leaf_droop','tassel_droop'],sorghum:['height','leaf_count','biomass','leaf_angle','leaf_angle_roll','leaf_len_mean','leaf_width_mean']};
-  const LAB={'4m_pretrain_15k_d2_sink':'sorghum E1 (final data)','e2_pcrgbd_d2':'sorghum PC+RGB+D','maize_4m':'maize_4m (first release)','maize_e2_pcrgbd':'maize PC+RGB+D (first release)'};
+  const LAB={'maize_4m_pretrain_15k_d2':'maize E1 (final data)','4m_pretrain_15k_d2_sink':'sorghum E1 (final data)','e2_pcrgbd_d2':'sorghum PC+RGB+D','maize_4m':'maize_4m (first release)','maize_e2_pcrgbd':'maize PC+RGB+D (first release)'};
   const tog=document.getElementById('xtog');
   tog.innerHTML=dirs.map((d,i)=>`<button data-i="${i}" aria-pressed="false">${esc(d[1])}</button>`).join('');
   function render(i){const ds=dirs[i][0]; const T=MT[ds];
     const rows=[]; const seen=new Set();
     X.filter(x=>x.data_species===ds).forEach(x=>{const k=x.set+'|'+x.run; if(!seen.has(k)){seen.add(k); rows.push([x.set,x.run]);}});
-    if(ds==='sorghum'){['e2_pcrgbd_d2','4m_pretrain_15k_d2_sink'].forEach(r=>{if(D.probe[r])rows.push(['native_sorghum',r]);});}
+    if(ds==='sorghum'&&!rows.some(r=>r[0].includes('anchor'))){['e2_pcrgbd_d2','4m_pretrain_15k_d2_sink'].forEach(r=>{if(D.probe[r])rows.push(['native_sorghum',r]);});}
     const get=(set,run,t)=>{ if(set==='native_sorghum'){const d=D.probe[run]; return d&&d.targets[t]?d.targets[t].val_r2:null;} const x=X.find(y=>y.set===set&&y.run===run&&y.target===t); return x?x.val_r2:null;};
     const order=r=>r[0].startsWith('native')?1:(r[0].includes('nodepth')?2:(r[0].includes('anchor')?1:0));
     rows.sort((a,b)=>order(a)-order(b));
@@ -687,6 +687,7 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   tog.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>render(+b.dataset.i))); render(0);
   const leak=X.some(x=>x.set.includes('nodepth'));
   document.getElementById('xnote').innerHTML=leak?'<strong>The check is in: metric depth explains the sorghum-on-maize gain.</strong> With depth hidden, the sorghum E1 falls from height 0.827 to 0.512, biomass 0.941 to 0.786 and leaf length 0.889 to 0.688, i.e. to the native maize model\'s level (0.576 / 0.768 / 0.690). The maize renderer frames each plant by its size and encodes depth per plant, so native maize models never see absolute scale; metric depth hands it over. Without depth the sorghum encoder transfers at about the native level: size traits within 0.06, leaf width (0.79 vs 0.74) and curl (0.42 vs 0.11) better, leaf angle worse (0.71 vs 0.86). Single-photograph generation does not transfer across species (Chamfer 28 to 58 ×10⁻³).':'<strong>Treat the sorghum-on-maize numbers as unverified.</strong> They beat every native maize model (height 0.83 against 0.58 for maize_4m on the same first-release data). The adapter hands the sorghum model METRIC depth, while native maize models only ever see depth normalised per plant, and the maize renderer frames each plant by its size, so absolute depth may leak height. The check (same probe with depth hidden, plus the native model through this harness) is job 17083713. The maize-on-sorghum direction shows no such anomaly: height 0.952 against 0.977 native.';
+  if(X.some(x=>x.run==='maize_4m_pretrain_15k_d2')) document.getElementById('xnote').innerHTML+=' <strong>Maize E1 on sorghum (11-04, job 17246373).</strong> The maize headline model\'s frozen encoder probes sorghum within 0.01 of the native sorghum models on size (height 0.976 vs 0.977 / 0.983) and loses 0.02-0.09 on roll and leaf length; hiding depth changes nothing (0.974), so no depth leak this way. Its decoder does not transfer: photograph → cloud 18.6×10⁻³ against 2.25 native, sorghum rows 198 (zero-shot) and 237 (maize row model) against 30.7 native, and on the sorghum partial clouds its reconstruction stays at ~37×10⁻³ for every camera set (the partial-cloud table below).';
 })();
 
 // ---------- T1 transfer arms
@@ -733,7 +734,7 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
   el.innerHTML=XR.length?h+'</tbody>':'<tbody><tr><td class="blankc">not run</td></tr></tbody>';
   const q=D.xquant||[], qe=document.getElementById('xquanttbl'); const tq=(D.quant||[]).find(x=>x.label==='teacher_undistilled_d2'&&x.split==='test');
   let hq='<thead><tr><th>photograph → cloud</th><th class="n">Chamfer ×10⁻³</th><th class="n">skill vs mean plant</th></tr></thead><tbody>';
-  const nm={maize_on_sorghum:'maize model (ep 600) on sorghum photographs',sorghum_on_maize:'sorghum E1 (ep 1000) on maize photographs'};
+  const nm={maize_on_sorghum:'maize model (first release, ep 600) on sorghum photographs',sorghum_on_maize:'sorghum E1 (ep 1000) on maize photographs',maizeE1_on_sorghum:'maize E1 (ep 1000) on sorghum photographs',maize_rgbstudent_on_sorghum:'maize RGB distillation student on sorghum photographs'};
   q.forEach(x=>{hq+=`<tr><td class="lead">${esc(nm[x.tag]||x.tag)}</td><td class="n">${(x.chamfer*1e3).toFixed(1)}</td><td class="n">${x.skill.toFixed(3)}</td></tr>`;});
   if(tq) hq+=`<tr style="color:var(--muted)"><td class="lead">sorghum E1 on sorghum photographs (native, test)</td><td class="n">${(tq.chamfer*1e3).toFixed(2)}</td><td class="n">${tq.skill.toFixed(3)}</td></tr>`;
   qe.innerHTML=q.length?hq+'</tbody>':'';

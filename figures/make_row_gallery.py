@@ -22,7 +22,7 @@ from row_dataset import RowDataset, IN_FILES
 
 REPO = Path(__file__).resolve().parents[1]; OUT = REPO / 'paper' / 'figs'
 SPEC = {'sorghum': ('/work/mech-ai/alloydas/sorghum_row', 'sorghum_row_ft', 'sorghum_row_iso'),
-        'maize': ('/work/mech-ai/alloydas/maize_row', 'maize_row_ft', 'maize_row_iso')}
+        'maize': ('/work/mech-ai/alloydas/maize_row', 'maize_row_ft_e1', 'maize_row_iso_e1')}   # from the maize headline model (2026-11-05)
 BLUE, ORANGE, GRAY = '#2a78d6', '#eb6834', '#c9c8c4'
 plt.rcParams.update({'font.size': 7, 'font.family': 'DejaVu Sans', 'figure.facecolor': 'white', 'savefig.facecolor': 'white'})
 
