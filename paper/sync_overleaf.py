@@ -1,7 +1,11 @@
-"""Sync paper/results.tex and paper/discussion.tex into the Overleaf tree (paper/overleaf/sec/4-6).
+"""Sync paper/discussion.tex into the Overleaf tree (paper/overleaf/sec/5-6).
 
-Maps the repo drafts' cite keys to CVPR.bib's, adds the Overleaf label aliases and Figures/ paths.
-Run: python paper/sync_overleaf.py, then latexmk -pdf main.tex in paper/overleaf."""
+Maps the repo draft's cite keys to CVPR.bib's and adds the Overleaf label aliases.
+Sections 0-4 and the supplement are hand-maintained in paper/overleaf/sec/ since
+2026-11-05 (the user's rewrites were integrated there); paper/results.tex remains
+the numbers archive but no longer generates 4_experiments.tex.
+Run: python paper/sync_overleaf.py, then latexmk -pdf main.tex in paper/overleaf.
+"""
 import os, re, subprocess
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 ov='overleaf/sec/'
@@ -17,16 +21,6 @@ def fixrefs(t):
     return t
 sha=subprocess.check_output(['git','rev-parse','--short','HEAD']).decode().strip()
 hdr=lambda src: f"% Synced from the embodiedmae repo (paper/{src}, commit {sha}).\n% Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.\n"
-r=open('results.tex').read()
-body=r[r.index('\\section{Experiments}'):]
-for a,b in [('sec:results','sec:experiments'),('sec:setup','sec:exp-setup'),('sec:regime1','sec:exp-regime1'),
-            ('sec:regime2','sec:exp-regime2'),('sec:regime3','sec:exp-occlusion'),('sec:res-distill','sec:exp-main'),
-            ('tab:anysubset','tab:main'),('sec:param-stream','sec:exp-params'),('sec:res-metrics','sec:exp-metrics'),
-            ('sec:res-field','sec:exp-real'),('sec:res-repr','sec:exp-repr')]:
-    s='\\label{%s}'%a; assert body.count(s)==1,a; body=body.replace(s,s+'\\label{%s}'%b)
-body=body.replace('{fig_view_elevation.png}','{Figures/fig_view_elevation.png}').replace('{fig_metrics.pdf}','{Figures/fig_metrics.pdf}')
-body=body.replace('{figs/fig_','{Figures/fig_')
-open(ov+'4_experiments.tex','w').write(hdr('results.tex')+fixrefs(fixcites(body)))
 d=open('discussion.tex').read()
 i=d.index('\\section{Discussion'); j=d.index('\\section{Conclusion}')
 open(ov+'5_discussion.tex','w').write(hdr('discussion.tex')+fixrefs(fixcites(d[i:j])).rstrip()+'\n')
