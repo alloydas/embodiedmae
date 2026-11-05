@@ -1,68 +1,55 @@
 \section{Introduction}
 \label{sec:intro}
 
-% ---- Fig. 1: teaser. TOP ROW: single RGB image -> \method{} ->
-% predicted parameters -> editable 3D plant, INCLUDING one edit demo
-% (change leaf angle, re-render) — immediately distinguishes this from
-% point-cloud completion. BOTTOM STRIP: the difficulty progression,
-% isolated -> self-occluded -> neighbor-occluded, with the other input
-% modalities (depth / partial PCD) shown as alternative entry points.
-% Downstream uses (simulation, trait analytics, compact storage) as
-% small icons.
 % Fig. 1 (teaser) lives in the title block of main.tex, full width on page 1.
 
-% P1 — Goal. (GPS: goal)
-Accurate three-dimensional models of individual crop plants enable
+\upd{Accurate three-dimensional models of individual crop plants enable
 high-throughput phenotyping of morphological traits such as leaf angle,
 internode length, and canopy architecture, and they are the basis of emerging
 agricultural digital twins in which breeding trials run \emph{in
-silico}~\citep{hadadi2025procmaize, maizefield3d2025}. The representation
+silico}~\citep{hadadi2025procmaize, maizefield3d2025}.} The representation
 best suited to these uses is procedural: a compact set of biologically
-interpretable parameters that a generator expands into complete,
-editable, simulation-ready geometry~\citep{prusin1990abop,
-floraforge2026}. A procedural plant occupies a few kilobytes where a
-laser scan occupies megabytes, every parameter corresponds to a trait used by
-agronomists, and the model can be edited, re-rendered, and
-perturbed in ways that unstructured geometry does not support.
-% (fix 2: vision hook — delete the next sentence if unwanted)
-Field crops also instantiate a challenge of general interest in 3D
-computer vision: recovering a parametric model of a thin, heavily
-occluded object from partial multimodal observations.
+interpretable parameters that a generator expands into complete, editable,
+simulation-ready geometry~\citep{prusin1990abop, floraforge2026}.
+\upd{A procedural plant occupies a few kilobytes where a laser scan occupies
+megabytes, every parameter corresponds to a trait used by agronomists, and
+the model can be edited, re-rendered, and perturbed in ways that unstructured
+geometry does not support.}
+\upd{Field crops also instantiate a challenge of general interest in 3D
+computer vision: recovering a parametric model of a thin, heavily occluded
+object from partial multimodal observations.}
 
-% P2 — Problem, part 1: existing routes presuppose a rich input. (GPS: problem)
 Yet recovering procedural structure from field-acquired sensor data
 remains a significant challenge, and every existing route presupposes a
 rich, clean observation. Manual parameter specification takes hours per
 plant~\citep{floraforge2026}. Staged reconstruction pipelines automate
 the process; a recent system annotates laser scans with a
 vision-language model and fits a procedural descriptor to
-\oldnum{5.4}\,mm median accuracy, but it requires a complete scan of an
+5.4\,mm median accuracy, but it requires a complete scan of an
 isolated plant and roughly ten minutes of computation per
-plant~\citep{hadadi2026vlmmaize}. Per-scene optimization methods search
-generator parameters against multi-view imagery~\citep{cropcraft2026},
-and recent learned models infer parametric plants, but only
-from a clean, complete point cloud~\citep{demeter2025,
-ghrer2025paramplants}. A phenotyping campaign produces the opposite:
-thousands of plants per day, each observed by whichever sensor was
-practical (a camera, a depth frame, or a partial scan).
+plant~\citep{hadadi2026vlmmaize}.
+\upd{Per-scene optimization methods search generator parameters against
+multi-view imagery~\citep{cropcraft2026}, and recent learned models infer
+parametric plants, but only from a clean, complete point
+cloud~\citep{demeter2025, ghrer2025paramplants}.}
+\upd{A phenotyping campaign produces the opposite: thousands of plants per
+day, each observed by whichever sensor was practical (a camera, a depth
+frame, or a partial scan).}
 
-% P3 — Problem, part 2: the geometric frontier. (GPS: problem, sharpened)
-In addition, crop plants
-are slender: a maize blade is centimeters wide, millimeters thick, and
-up to a meter long. In a planted row, each plant is further occluded by
-its neighbors, whose leaves interleave with the target; in our field
-simulations, a third of the target's pixels and two thirds of the
-scene's point cloud belong to neighboring plants. This regime violates the
+\upd{In addition, crop plants are slender: a maize blade is centimeters wide,
+millimeters thick, and up to a meter long.}
+\upd{In a planted row, each plant is further occluded by its neighbors, whose
+leaves interleave with the target; in our field simulations, a third of the
+target's pixels and two thirds of the scene's point cloud belong to
+neighboring plants.} This regime violates the
 assumptions of learned 3D completion: the standard benchmarks contain
 compact, largely convex objects and no slender-under-occlusion
 category~\citep{yuan2018pcn,yu2021pointr}, and Chamfer distance, the
 default metric, is structurally insensitive to thin sheets, so it can
 reward reconstructions that miss entire blades~\citep{wu2021dcd,
-song2026structural}. Occlusion-aware completion of thin plant organs has begun to address
-the input side of this regime, but its output is a completed point
-cloud rather than structure~\citep{lee2026occ}.
-% TODO-bib: add thinleaf_completion2024 (Plant Phenomics 2024) and
-% cornleaf_gridding2023 (Remote Sensing 2023) to CVPR.bib and cite here.
+song2026structural}. Occlusion-aware completion of thin plant organs has
+begun to address the input side of this regime, but its output is a
+completed point cloud rather than structure~\citep{lee2026occ}.
 To our knowledge, no prior method recovers a procedural, re-renderable
 representation of slender crop organs from a single field-practical
 observation (a photograph, a depth frame, or a partial point cloud)
@@ -72,94 +59,89 @@ plants~\citep{demeter2025,ghrer2025paramplants}, and methods that
 tolerate field occlusion complete unstructured geometry
 instead~\citep{lee2026occ}.
 
-% P4 — Solution: the framework. (GPS: solution)
 In this work, we present \method{}, a framework that makes this inverse
 problem tractable by using the procedural generator itself as the prior.
-We pretrain a four-stream masked
+\upd{We pretrain a four-stream masked
 autoencoder~\citep{he2022mae,bachmann2022multimae,mizrahi2023fourm,
 dong2025embodiedmae} over RGB, depth, point clouds, and tokenized
 procedural parameters of 15{,}000 generated plants per species, maize and
 sorghum, and fine-tune it on simulated rows in which neighboring leaves bend
-on contact. Because random modality subsets are masked during pretraining,
-a single model learns to complete any subset at inference. A
-full-modality teacher is then distilled~\citep{hinton2015distillation}
-into single-sensor students for deployment. Distillation lowers the
-cross-modal generation loss by 30\% in sorghum and 44\% in maize, and it
-halves the sorghum parameter error from a point cloud alone. Trained
-against the target plant behind its neighbors, the model recovers most of
-what the neighbors cost: 92\% of the added error in maize and 85\% in
-sorghum.
+on contact.} Because random modality subsets are masked during pretraining,
+a single model learns to complete any subset at inference.
+\upd{A full-modality teacher is then distilled~\citep{hinton2015distillation}
+into single-sensor students for deployment.}
+\upd{Distillation lowers the cross-modal generation loss by 30\% in sorghum
+and 44\% in maize, and it halves the sorghum parameter error from a point
+cloud alone.}
+\upd{Row fine-tuning against the target plant behind its neighbors removes
+most of the error that the neighbors add: 92\% in maize and 85\% in
+sorghum.}
 
-% P5 — Finding 1: parameters belong at the output.
-We also address a design question that arises for any model with access
-to generative structure: where should the parameter stream enter? In our
-controlled ablations, a parameter stream that is largely visible to the
-encoder harms the representation in both species. With the shared token
-budget, adding the parameter stream to the encoder degrades the frozen
-representation on every sorghum phenotype target, and on maize the paired
-comparison is a draw. Control arms that restore the sensor-token budget
-separate the species: in sorghum the loss persists, even when the parameters
-serve only as a reconstruction target for the decoder, while in maize the
-arms that see 20\,\% of the parameters or only reconstruct them improve
-every trait. Supervising
-parameters as a generation target, however, lets the distilled generalist
-outperform a parameter-only specialist at parameter regression
-\todo{(first-release result: no final-data specialist was trained)}. One
-interpretation, consistent with modality competition~\citep{peng2022ogm}
-and negative transfer~\citep{yu2020pcgrad}, is that a stream that already
-contains the answer suppresses learning in the streams that must provide the
-trait information at test time.
+\upd{We also address a design question that arises for any model with access
+to generative structure: where should the parameter stream enter?}
+\upd{In our controlled ablations, a parameter stream that is largely visible
+to the encoder harms the representation in both species.}
+\upd{With the shared token budget, adding the parameter stream to the encoder
+degrades the frozen representation on every sorghum phenotype target, and on
+maize the paired comparison is a draw.}
+\upd{Control arms that restore the sensor-token budget separate the species:
+in sorghum the loss persists, even when the parameters serve only as a
+reconstruction target for the decoder, while in maize the arms that see
+20\,\% of the parameters or only reconstruct them improve every trait.}
+\upd{Supervising parameters as a generation target, however, lets the
+distilled generalist outperform a parameter-only specialist at parameter
+regression \todo{(first-release result: no final-data specialist was
+trained)}.}
+\upd{One interpretation, consistent with modality
+competition~\citep{peng2022ogm} and negative transfer~\citep{yu2020pcgrad},
+is that a stream that already contains the answer suppresses learning in the
+streams that must provide the trait information at test time.}
 
-% P6 — Finding 2: metrics.
-Adding depth to the photograph and the point cloud lowers Chamfer
-distance by 28\% in sorghum and 25\% in maize, whereas a linear probe on
-the frozen representation, read out on phenotypic traits, finds little or
-no gain from depth and identifies RGB as the main source of trait
-information. On slender geometry the two metrics measure
+\upd{Adding depth to the photograph and the point cloud lowers Chamfer
+distance by 28\% in sorghum and 25\% in maize, whereas a linear probe on the
+frozen representation, read out on phenotypic traits, finds little or no gain
+from depth and identifies RGB as the main source of trait information.}
+On slender geometry the two metrics measure
 different quantities, surface proximity and recovered structure, and we
 adopt the probe as the deciding metric for modality
 decisions~\citep{chen2020simclr,wu2021dcd}.
 
-% P7 — Claim + validation + contributions.
-We claim that fragmentary field sensing suffices to
-recover a complete, interpretable procedural plant, provided the
-generator is used for both the training data and the output
-representation. We
-validate this claim on real field
-scans of maize and sorghum with independently reconstructed ground
-truth~\citep{maizefield3d2025,hadadi2026vlmmaize}, including rows in
-which neighbors occlude the target.
-\todo{one sentence of headline real-data results when available.}
+\upd{We claim that fragmentary field sensing suffices to recover a complete,
+interpretable procedural plant, provided the generator is used for both the
+training data and the output representation.}
+\upd{We validate this claim on real field scans of maize and sorghum with
+independently reconstructed ground
+truth~\citep{maizefield3d2025,hadadi2026vlmmaize}, including rows in which
+neighbors occlude the target, \todo{demonstrating accuracy matching staged
+annotation pipelines while running in milliseconds per plant}.}
 The key contributions of this work are:
 \begin{enumerate}
-  \item \textbf{Task and framework.} The first formulation and system, to
-  our knowledge, for recovering procedural plant representations of
+  \item \textbf{Task and framework.} \upd{The first formulation and system,
+  to our knowledge, for recovering procedural plant representations of
   slender, row-occluded field crops from \emph{any subset} of RGB, depth,
   and point-cloud input in one amortized forward pass, with full-modal to
   single-sensor distillation (generation loss $-30\%$ in sorghum and
   $-44\%$ in maize; sorghum parameter error from a point cloud alone
   halved), and row fine-tuning that removes most of the error added by
-  neighboring plants (92\% in maize, 85\% in sorghum).
-  \item \textbf{A design rule for structured modalities.} Controlled,
+  neighboring plants (92\% in maize, 85\% in sorghum).}
+  \item \textbf{A design rule for structured modalities.} \upd{Controlled,
   budget-matched, two-species evidence that a parameter stream largely
   visible to the encoder degrades the sensor representation in both
   species, while the value of the parameters as a reconstruction target
-  depends on the generator (it lowers the sorghum representation and
-  raises the maize one); we expect this guidance to transfer to any
-  multimodal model with access to privileged generative structure.
-  \item \textbf{An evaluation protocol for slender geometry.} A
+  depends on the generator (it degrades the sorghum representation and
+  improves the maize one); we expect this guidance to transfer to any
+  multimodal model with access to privileged generative structure.}
+  \item \textbf{An evaluation protocol for slender geometry.} \upd{A
   demonstration that Chamfer distance and downstream phenotype probes
   disagree systematically on slender organs, and a frozen-latent probe
-  protocol that resolves modality decisions where Chamfer is insensitive.
-  \item \textbf{A benchmark.} \dataset{}, a two-species procedural
-  field benchmark of \todo{N} plants spanning \todo{diversity axes:
-  phenotypes / generator configurations / occlusion severities}, with
-  paired multimodal captures, physically simulated row occlusion, and
-  exact parameter ground truth, together with a real-field evaluation
-  split carrying reconstructed procedural ground truth across the
-  genotypes of a diversity panel~\citep{maizefield3d2025}. No existing
-  dataset combines these elements
-  (Tab.~\ref{tab:datacompare})~\citep{schunck2021pheno4d,yuan2018pcn}.
+  protocol that resolves modality decisions where Chamfer is insensitive.}
+  \item \textbf{A benchmark.} \upd{\dataset{}, a two-species procedural
+  field benchmark of 30{,}000 plants spanning diverse phenotypes, generator
+  configurations, and row occlusion severities, with paired multimodal
+  captures, physically simulated row occlusion, and exact parameter ground
+  truth, together with a real-field evaluation split carrying reconstructed
+  procedural ground truth across the genotypes of a diversity
+  panel~\citep{maizefield3d2025}.} No existing dataset combines these
+  elements (Tab.~\ref{tab:datacompare})~\citep{schunck2021pheno4d,yuan2018pcn}.
   We will release the data, generation code, and evaluation scripts.
-  \todo{confirm release scope and licensing}
 \end{enumerate}
