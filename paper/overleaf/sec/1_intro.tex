@@ -62,8 +62,8 @@ In addition, crop plants
 are slender: a maize blade is centimeters wide, millimeters thick, and
 up to a meter long. In a planted row, each plant is further occluded by
 its neighbors, whose leaves interleave with the target; in our field
-simulations, roughly a third of the points inside a plant's bounding
-region belong to neighboring plants. This regime violates the
+simulations, a third of the target's pixels and two thirds of the
+scene's point cloud belong to neighboring plants. This regime violates the
 assumptions of learned 3D completion: the standard benchmarks contain
 compact, largely convex objects and no slender-under-occlusion
 category~\citep{yuan2018pcn,yu2021pointr}, and Chamfer distance, the
@@ -89,15 +89,17 @@ problem tractable by using the procedural generator itself as the prior.
 We pretrain a four-stream masked
 autoencoder~\citep{he2022mae,bachmann2022multimae,mizrahi2023fourm,
 dong2025embodiedmae} over RGB, depth, point clouds, and tokenized
-procedural parameters of \todo{10K--100K} generated maize and sorghum
-plants, rendered in simulated rows in which neighboring leaves bend on
-contact. Because random modality subsets are masked during pretraining,
+procedural parameters of 15{,}000 generated plants per species, maize and
+sorghum, and fine-tune it on simulated rows in which neighboring leaves bend
+on contact. Because random modality subsets are masked during pretraining,
 a single model learns to complete any subset at inference. A
 full-modality teacher is then distilled~\citep{hinton2015distillation}
-into single-sensor students for deployment. Distillation
-improves cross-modal generation by \oldnum{19.1\%} on average and by
-\oldnum{27.5\%} when conditioning on a point cloud alone, and it improves
-parameter recovery from that point cloud by \oldnum{43.8\%}.
+into single-sensor students for deployment. Distillation lowers the
+cross-modal generation loss by 30\% in sorghum and 44\% in maize, and it
+halves the sorghum parameter error from a point cloud alone. Trained
+against the target plant behind its neighbors, the model recovers most of
+what the neighbors cost: 92\% of the added error in maize and 85\% in
+sorghum.
 
 % P5 — Finding 1: parameters belong at the output.
 We also address a design question that arises for any model with access
@@ -112,17 +114,19 @@ serve only as a reconstruction target for the decoder, while in maize the
 arms that see 20\,\% of the parameters or only reconstruct them improve
 every trait. Supervising
 parameters as a generation target, however, lets the distilled generalist
-outperform a parameter-only specialist at parameter regression. One
+outperform a parameter-only specialist at parameter regression
+\todo{(first-release result: no final-data specialist was trained)}. One
 interpretation, consistent with modality competition~\citep{peng2022ogm}
 and negative transfer~\citep{yu2020pcgrad}, is that a stream that already
 contains the answer suppresses learning in the streams that must provide the
 trait information at test time.
 
 % P6 — Finding 2: metrics.
-Chamfer distance ranks depth as the most valuable input
-modality (\oldnum{$-32\%$}), whereas a linear probe on the frozen
-representation, read out on phenotypic traits, ranks depth within noise
-and identifies RGB as the main source of trait information. On slender geometry the two metrics measure
+Adding depth to the photograph and the point cloud lowers Chamfer
+distance by 28\% in sorghum and 25\% in maize, whereas a linear probe on
+the frozen representation, read out on phenotypic traits, finds little or
+no gain from depth and identifies RGB as the main source of trait
+information. On slender geometry the two metrics measure
 different quantities, surface proximity and recovered structure, and we
 adopt the probe as the deciding metric for modality
 decisions~\citep{chen2020simclr,wu2021dcd}.
@@ -143,13 +147,16 @@ The key contributions of this work are:
   our knowledge, for recovering procedural plant representations of
   slender, row-occluded field crops from \emph{any subset} of RGB, depth,
   and point-cloud input in one amortized forward pass, with full-modal to
-  single-sensor distillation (+\oldnum{19.1\%} generation,
-  $-$\oldnum{43.8\%} parameter error from point clouds alone).
+  single-sensor distillation (generation loss $-30\%$ in sorghum and
+  $-44\%$ in maize; sorghum parameter error from a point cloud alone
+  halved), and row fine-tuning that removes most of the error added by
+  neighboring plants (92\% in maize, 85\% in sorghum).
   \item \textbf{A design rule for structured modalities.} Controlled,
-  budget-matched, two-species evidence that generator parameters are
-  valuable prediction targets, while treating them as an auxiliary
-  representation-learning modality does not improve, and can degrade,
-  the sensor representation; we expect this guidance to transfer to any
+  budget-matched, two-species evidence that a parameter stream largely
+  visible to the encoder degrades the sensor representation in both
+  species, while the value of the parameters as a reconstruction target
+  depends on the generator (it lowers the sorghum representation and
+  raises the maize one); we expect this guidance to transfer to any
   multimodal model with access to privileged generative structure.
   \item \textbf{An evaluation protocol for slender geometry.} A
   demonstration that Chamfer distance and downstream phenotype probes
