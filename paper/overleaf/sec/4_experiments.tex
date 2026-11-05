@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit 131f48a).
+% Synced from the embodiedmae repo (paper/results.tex, commit ac2a7c9).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -104,9 +104,25 @@ that release were unrecoverable from any source (skill $-0.04$ to $0.02$): the
 head emitted the population mean, and a single aggregate MAE would have averaged
 these constant predictions with the fields that have skill. The final generator
 does not include these fields.
-\todo{Fig.~3: qualitative grid (input, generated cloud, re-rendered recipe
-against ground truth) for one held-out plant per species, plus the edit demo:
-change one recovered parameter and re-render.}
+Fig.~\ref{fig:qual} shows one held-out plant per species generated from the
+photograph alone: the headline model used as is produces a diffuse cloud
+around the right silhouette, the distilled generalist recovers the individual
+blades, and the leaf lengths it reads off the photograph follow the ground
+truth along the stem. \todo{Add the edit demo: change one recovered parameter
+and re-render.}
+
+% figures/make_qual_fig.py (val, seeded; headline = E1 epoch 1000, after = the generalist's best_model)
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_qual.pdf}
+  \caption{\textbf{From one photograph to a plant (held-out plants).} Each row
+  takes only the photograph on the left. The headline model before
+  distillation and the distilled generalist generate the point cloud; titles
+  give the Chamfer distance to the ground-truth cloud. The right panel compares
+  the generalist's recovered leaf lengths (normalized) with the generator's,
+  leaf by leaf from the base.}
+  \label{fig:qual}
+\end{figure*}
 
 \subsection{Regime II: morphological complexity, viewpoint, self-occlusion}
 \label{sec:regime2}\label{sec:exp-regime2}
@@ -345,9 +361,21 @@ not an occlusion effect)? And does the error follow the occlusion measure, by
 yaw ($13\,\%$ of the target hidden broadside against $1\,\%$ edge-on) and by
 quartile? From Sec.~\ref{sec:regime2} we predict that inputs including RGB lose
 least and that the decoder will not complete a hidden blade, so the recipe,
-which describes the whole plant, should be the least affected output. \todo{Fig.~5: one plant isolated and
-in the row at $0^\circ$ and $90^\circ$, neighbor pixels marked, with the
-generated cloud and re-rendered recipe under each.}
+which describes the whole plant, should be the least affected output.
+Fig.~\ref{fig:rowsex} shows held-out plants of both species in their rows.
+
+% figures/make_row_gallery.py (test; maize models from the maize headline model)
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_rows_examples.pdf}
+  \caption{\textbf{Rows, held-out plants.} For each species, plants at yaw
+  $0^\circ$ (broadside) and $90^\circ$ (end-on): the row photograph the model
+  receives, the target plant, and the predictions of the row-trained model
+  (blue) and the isolated-trained control (orange) over the target (gray).
+  The control rebuilds neighboring leaves as part of the target; the
+  row-trained model keeps to the target plant.}
+  \label{fig:rowsex}
+\end{figure*}
 
 \paragraph{What the rows cost.}
 On maize (Tab.~\ref{tab:rows}, Fig.~\ref{fig:rows}), neighbors cause a large
@@ -990,5 +1018,18 @@ dominated by size of the five (first component $43\,\%$ of variance,
 $|r| = 0.95$). Linear decodability is also distinct from local embedding
 structure: the probe reads roll at $R^2$ $0.81$ from a latent in which roll is
 barely organized locally, so we use the probe, not t-SNE smoothness, as the
-measure for representation claims on a continuous generator. \todo{E9 figure: t-SNE of the three- and four-stream latents colored
-by leaf count and by roll.}
+measure for representation claims on a continuous generator
+(Fig.~\ref{fig:e9}).
+
+% figures/make_e9_fig.py (probe caches, val, epoch 600)
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_e9_tsne.pdf}
+  \caption{\textbf{Latent structure (sorghum, val).} t-SNE of the frozen CLS
+  token of the three-stream and four-stream arms, colored by leaf count (the
+  size axis) and by mean leaf roll (the axis independent of size). Both latents
+  are continua; leaf count varies smoothly across each map, while roll, which the
+  probe reads at $R^2$ 0.78 from the three-stream latent, shows no local
+  organization.}
+  \label{fig:e9}
+\end{figure}

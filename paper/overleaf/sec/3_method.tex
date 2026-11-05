@@ -32,7 +32,7 @@ observations. An overview of the framework is shown in Fig.~\ref{fig:arch}.
 \label{sec:method-form}
 % Talking points:
 % - A plant is a program: theta in R^d (plant-level + per-leaf fields;
-%   d ~ \todo{X} for maize, \todo{Y} for sorghum), generator G(theta) ->
+%   d = 14+14x28 for maize, 9+5x24 for sorghum), generator G(theta) ->
 %   mesh -> any sensor rendering.
 % - Observation: O = any nonempty subset of {I_rgb, I_depth, P_partial},
 %   degraded by view sparsity, sensor noise, and ROW OCCLUSION (neighbor
@@ -41,7 +41,6 @@ observations. An overview of the framework is shown in Fig.~\ref{fig:arch}.
 %   procedural parameters PLUS completed modalities, one forward pass.
 % - State the well-posedness argument: slender+occluded geometry is
 %   underdetermined; G's parameterization is the prior that closes it.
-\todo{3 short paragraphs from the bullets}
 
 Let $G$ denote a procedural generator that maps a parameter vector
 $\theta\in\R^{d_\theta}$ to a plant mesh $G(\theta)$. The parameters describe
@@ -312,7 +311,6 @@ released}}
 %   per-head weights \todo{values}.
 % - As run: the headline model and teacher encode the parameter stream
 %   (shared Dirichlet budget); Sec.~\ref{sec:exp-params} ablates this.
-\todo{2-3 paragraphs}
 
 \paragraph{Token representations and architecture.}
 Our architecture builds on EmbodiedMAE~\cite{dong2025embodiedmae}, extending
@@ -334,9 +332,12 @@ The decoder restores a fixed ordering of all $L=588+(1+K)$ token positions
 using mask tokens for missing inputs. Linear heads reconstruct RGB and depth
 patches, a FoldingNet-style head generates 41 points per point-cloud token,
 and an MLP predicts the procedural parameters.
-Plants with more than $K$ leaves keep their first $K$ leaf tokens.
-\todo{Define inference-time leaf presence; report the share of sorghum plants
-above $K=24$.}
+Plants with more than $K$ leaves keep their first $K$ leaf tokens; this
+affects 1{,}586 of the 15{,}000 sorghum plants (10.6\,\%) and no maize plant.
+The validity mask enters only the loss: the model is not trained to predict
+which leaf slots are occupied, and every leaf metric in this paper is scored
+on the real leaf slots of the ground truth. \todo{State how the leaf count is
+chosen when a predicted recipe is re-rendered.}
 
 \paragraph{Modality masking.}
 We use a total mask ratio of $\rho=0.80$ over all four streams, giving a
@@ -499,8 +500,13 @@ reconstruction targets, whereas the generalist cycles across all four
 sources. At deployment only a sensor source is available; we evaluate each
 source alone, without source-token masking, and compare against the
 initialization using the same evaluation routine.
-\todo{Specify the reconstruction masks/reductions on single-sensor steps,
-particularly whether fully visible source patches contribute to the loss.}
+On a single-sensor step, the RGB, depth and parameter losses are averaged
+over masked tokens only, so a fully visible source stream contributes nothing
+to $\mathcal{L}_{\mathrm{rec}}$; when half of the source tokens are masked,
+those masked tokens do. The point-cloud loss is always taken over the whole
+cloud, so a point-cloud source is still reconstructed. The feature terms of
+Eq.~\eqref{eq:distillation-loss} exclude the source positions for the
+generalist, and for a specialist they cover only its target streams.
 % Original diagnostics: without interleaved pretraining, depth-head error
 % increased sevenfold within ten epochs and recovered within one epoch after
 % restoring these steps. Some sources gain early while others regress; retain
@@ -515,7 +521,6 @@ particularly whether fully visible source patches contribute to the loss.}
 % - Objective: \todo{exact distillation loss}.
 % - Close: distillation is what turns a pretraining artifact into a
 %   deployable any-sensor system (quantified in Tab.~\ref{tab:main}).
-\todo{2 paragraphs}
 
 \subsection{Crossing into the field}
 \label{sec:field}
