@@ -344,7 +344,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-11-05 09:40 CST';
+const ASOF = '2026-11-05 12:00 CST';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -658,7 +658,10 @@ renderProbe('val'); ['val','test','mae'].forEach(m=>document.getElementById('tg_
     fig_fscore:'Point-cloud quality. (a) F1 against distance threshold; (b) precision against recall: every model under-covers the plant.',
     fig_partial_clouds:'Partial clouds. Height R² against camera coverage; solid = probe refit per condition, dashed = full-cloud probe transferred.',
     fig_param_controls:'Recipe-stream controls. Probe R² with the recipe absent, a target only, or 20 / 58 / 60 % visible, at equal sensor tokens.',
-    fig_rows:'Regime III, both species (test). (a, c) Chamfer by training regime and input; (b, d) error against row yaw. Row training removes 91 % (maize) and 85 % (sorghum) of the neighbor penalty.',
+    fig_rows:'Regime III, both species (test). (a, c) Chamfer by training regime and input; (b, d) error against row yaw. Row training removes 92 % (maize, from the maize headline model) and 85 % (sorghum) of the neighbor penalty.',
+    fig_qual:'Fig. 3: one held-out plant per species from the photograph alone. Headline model before distillation vs the distilled generalist vs ground truth (Chamfer in titles: sorghum 2.85 → 0.88, maize 7.09 → 0.40 ×10⁻³), and the recovered leaf lengths against the generator\'s.',
+    fig_e9_tsne:'E9: t-SNE of the frozen CLS latents (sorghum val) of the three- and four-stream arms, coloured by leaf count and by mean leaf roll. Continua; leaf count varies smoothly, roll (probe R² 0.78) has no local organization.',
+    fig_e5_views:'E5: probe fitted and scored on each held-out view. Each restricted arm leads on roll only on its own training views; height separates the arms by at most 0.02.',
     fig_rows_examples:'Regime III examples: three held-out plants per species at yaw 0° and 90°. Row photograph, the target plant, and each model\'s prediction (color) over the target (gray); titles give Chamfer in 10⁻⁴ m².'};
   const keys=Object.keys(D.images).filter(k=>k.startsWith('paper_fig_'));
   document.getElementById('paperfiggrid').innerHTML=keys.map(k=>{const n=k.slice(6);return `<figure style="background:#fff"><img src="${D.images[k]}" alt="${esc(caps[n]||n)}" loading="lazy"><figcaption><span class="mono">${esc(n)}.pdf</span> · ${esc(caps[n]||'')}</figcaption></figure>`;}).join('');
