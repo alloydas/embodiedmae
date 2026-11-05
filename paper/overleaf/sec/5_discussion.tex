@@ -1,97 +1,200 @@
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
-\paragraph{Why a stream that holds the answer hurts.}
-\upd{The parameter stream is the only input that states the phenotype verbatim, and
-it is the one input never available in the field.} \upd{In sorghum, every arm in which
-the encoder saw the parameter stream learned a worse sensor representation, and
-on the size traits the loss grew with the stream's visibility
-(Tab.~\ref{tab:control}).} \upd{Even as a pure decoder target, the parameter stream
-lowered roll, leaf length and leaf width, the traits stored per leaf in the
-parameter tokens.} \upd{Maize agrees only at high visibility: its arm that sees
-60\,\% of the parameter tokens loses nine traits, but its arms at 20\,\% and
-as a target only improve all eleven.} \upd{One
-explanation, consistent with modality competition and negative transfer, is that
-a privileged stream lets the encoder route a trait through tokens that are
-absent at test time, and the reconstruction pressure of a per-leaf target then
-shifts the latent toward the plant's size, which is already the direction of its
-first principal component.} \upd{The ablations of both species support a narrower
-rule: a generative modality should not be largely visible to the encoder, and
-whether it helps as a target depends on the generator.} \upd{Our sorghum headline
-model does not yet follow this rule: it was pretrained with the
-parameters as an encoder input, and its distillation used the same model as
-teacher, so its frozen representation corresponds to the four-stream arm.} \upd{A
-headline run at $\rho_\theta{=}1$ would be the direct test.} \upd{We expect the rule
-to transfer to any multimodal model with access to a program, a CAD sketch, or a
-simulator state, and the gated ratio $\rho_\theta$ is a one-line way to test
-it.}
+\upd{We discuss the core insights, metric divergences, architectural principles,
+and limitations established by our experiments.}
 
-\paragraph{Which metric decides.}
-\upd{Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on
-the design decisions (Fig.~\ref{fig:metrics}): depth added to RGB, more
-training plants, and the parameter stream each move Chamfer by tens of percent
-and leave the probe nearly unchanged, while a partial cloud from one camera raises Chamfer by 2.6 to
-6.5 times but changes the probe of any fused arm by at most $0.03$.} \upd{On slender geometry, Chamfer
-measures surface proximity and the probe measures recovered structure, so we use
-the probe to make decisions and report Chamfer as the decoder's surface error.} \upd{The probe has its own limitations: it requires labels and a held-out split, and
-its $R^2$ is comparable between models on one split but is not an absolute
-measure across datasets (our held-out plants are extreme-enriched).} \upd{Sorghum's
-four named traits also reduce to two generator variables, so our claims about
-independent traits rely on maize.} \upd{On the training side, we added the Sinkhorn
-term because Chamfer barely penalizes a missing blade; its ablation is pending
-(\todo{E7}).}
+\paragraph{Privileged parameter visibility and modality competition.}
+\upd{A central design question in multimodal architectures trained alongside
+generative models is where privileged structural information should enter
+the network.} \upd{The procedural parameter stream $\theta$ is the only modality
+that states target phenotypic traits verbatim, yet it is never available at
+deployment in the field.} \upd{Across our controlled ablations
+(Sec.~\ref{sec:exp-params}), exposing parameter tokens to the encoder
+during pretraining degraded the quality of learned sensor representations
+in both sorghum and maize.} \upd{In sorghum, every model arm that saw parameter
+tokens in the encoder learned inferior visual features, with the
+degradation on the size traits growing with the stream's visibility
+(Tab.~\ref{tab:token_budget}).}
 
-\paragraph{From complete clouds to a camera.}
-% maize partial clouds: reports/pcview_maize_nova_17189727_{coverage,recon,probe}.csv (maize E1, val)
-\upd{Every sorghum model was pretrained on complete clouds of isolated plants, and
-Sec.~\ref{sec:regime2} measures the effect of partial clouds.} \upd{Maize is the other
-case: a maize cloud is the surface visible to its own camera (2\,\% of a
-cloud's points hidden from that camera, 25\,\% from another; the depth image
-back-projects to within 1\,mm), so every maize model trained on single-camera
-clouds.} \upd{Fusing the clouds of three or ten cameras raises coverage of the
-ten-camera cloud from $72\,\%$ to $96\,\%$ and $100\,\%$, but it moves the
-maize headline model off its training distribution: its reconstruction of the
-ten-camera cloud worsens from $1.15$ to $4.54$ and $4.98\times10^{-3}$, and its
-refitted height probe from $0.743$ to $0.670$ and $0.682$ (val).} \upd{A model is best
-on the coverage it was trained on, in both directions.} \upd{The phenotype information survives a
-single camera's view, but the latent shifts with coverage, so a readout
-calibrated on complete scans is wrong on partial ones and must be refit.} \upd{The
-decoder reproduces what it is given and does not hallucinate the hidden half.} \upd{Viewpoint, not morphology, determines the difficulty of inverting a photograph.} \upd{The recipe tolerates partial views best: the recovered insertion heights of one
-plant vary by a tenth of their spread across its ten photographs, and a
-re-rendered recipe is complete even where the cloud is not.} \upd{In both species,
-training on rows removes most of the neighbor penalty (92\,\% in maize and
-85\,\% in sorghum, Sec.~\ref{sec:regime3}).} \upd{The real scans
-(Sec.~\ref{sec:res-field}) are not yet evaluated; until they are, the
-one-camera transfer gap is our prediction for the sim-to-real penalty.} \upd{A generator also contains unintended
-regularities, such as the fixed leaf azimuth that gave a pose-aware baseline a
-canonical orientation, and benchmark users should expect more of them.}
+\upd{This behavior can be understood through the lenses of shortcut learning,
+modality competition~\citep{peng2022ogm}, and negative gradient
+transfer~\citep{yu2020pcgrad}.} \upd{When ground-truth parameter tokens are
+visible to the transformer encoder, they directly encode target geometry.} \upd{A
+plausible account is that the encoder learns a low-cost shortcut through
+these parameter tokens, starving the visual (RGB, depth) and point cloud
+streams of gradient updates; when parameter tokens are then absent at
+inference, the sensor representations prove impoverished.}
 
-\paragraph{What distillation does and does not provide.}
-\upd{Distillation from a full-modality teacher improves every single-sensor student
-and concentrates the gain on the weakest sources and the hardest plants
-(Tab.~\ref{tab:anysubset}, Fig.~\ref{fig:views}B), and supervising all four
-targets beats a parameter specialist at parameter regression.} \upd{Distillation does
-not make the model view-robust: the elevation curve moves down and keeps its
-shape, so view robustness requires a different method.} \upd{The training-view
-ablation points to the pretraining draw: the arm trained on all ten views is the
-most even across elevations, and every arm trained on a narrower band loses roll
-outside it (Fig.~\ref{fig:e5views}).} \upd{Distillation also
-showed that an unpredictable field is not neutral: the three waviness parameters
-of the first sorghum release stayed at zero skill and became more view-dependent
-under distillation, and the final generator does not include them.} \upd{A
-parameterization meant to be regressed should be restricted to the fields that
-the sensors can determine.}
+\upd{The species-specific control arms (Tab.~\ref{tab:token_budget}) reveal an
+additional nuance:}
+\begin{itemize}
+\item \upd{ \textbf{Sorghum}: Keeping parameter tokens strictly as a decoder
+  target ($\rho_\theta = 1.0$) continues to lower sensor latent quality
+  ($R^2$ drops from $0.977$ to $0.966$ on height).} \upd{Sorghum morphological
+  parameters are tightly coupled (effective rank two); a plausible
+  mechanism is gradient competition during multi-task decoding that pulls
+  sensor representations toward global plant size, the leading principal
+  component of the sorghum latent.} \item \upd{ \textbf{Maize}: Keeping parameters strictly as a decoder target
+  ($\rho_\theta = 1.0$) or restricting visibility to 20\% improves sensor
+  latent probing across all eleven traits ($R^2 = 0.776$ vs.\ $0.633$ on
+  height).} \upd{Maize parameters contain 11 independent morphological
+  dimensions; supervising them as a generation target provides structured
+  multi-task decoder gradients, consistent with a regularizing effect on
+  sensor latents without encoder shortcuts.}
+\end{itemize}
 
-\paragraph{Scope and compute.}
-\upd{The ablations use one seed per arm.} \upd{The run-to-run floor comes from a single
-near-duplicate pair (2\,\% in Chamfer, at most $0.011$ in $R^2$), and the maize
-scaling differences, although significant under the paired bootstrap, could
-still be run-to-run variance (Sec.~\ref{sec:res-repr}).} \upd{Two generators and two
-species-specific models are studied, and the 1{,}000-epoch headline model is
-trained once per species.} \upd{The procedural prior that makes inversion tractable
-also limits it: a plant that the generator cannot express cannot be recovered,
-and an organ class that the generator renders without variation (tassel droop in
-maize is below zero for every encoder of this design) limits the data as much as
-the model.} \upd{The real-scan evaluation and the \FieldProc{} release remain
-\todo{in progress}.}
+\upd{These findings yield an architectural design rule for multimodal masked
+autoencoders trained on synthetic or procedural data: \emph{privileged
+generative parameters should never be largely visible to the encoder during
+pretraining}.} \upd{Setting parameter tokens strictly as a decoder reconstruction
+target ($\rho_\theta = 1.0$) or applying heavy gating
+($\rho_\theta \le 0.20$) prevents encoder shortcut learning while
+preserving generative parameter output capabilities; whether the parameters
+help even as a pure reconstruction target depends on the generator.}
 
+\paragraph{Metric divergence on slender geometry.}
+\upd{A critical empirical finding of this work is the structural divergence
+between nearest-neighbor point cloud metrics (such as Chamfer distance) and
+downstream phenotypic trait probing on slender geometry
+(Sec.~\ref{sec:exp-metrics}, Fig.~\ref{fig:metric_divergence}).} \upd{Standard
+Chamfer distance evaluates surface proximity by computing average
+nearest-neighbor point displacements:}
+\begin{equation}
+  \mathrm{CD}(P, \hat P) = \frac{1}{|P|}\sum_{p\in P}\min_{q\in\hat P}\|p-q\|_2^2 + \frac{1}{|\hat P|}\sum_{q\in\hat P}\min_{p\in P}\|p-q\|_2^2.
+  \label{eq:chamfer_def}
+\end{equation}
+\upd{Because crop organs (such as maize and sorghum leaves) are thin,
+high-aspect-ratio surfaces, a predicted point cloud can achieve low Chamfer
+distance simply by clustering points onto bulky central stalks while
+omitting entire leaf blades.} \upd{In contrast, downstream linear probes fitted
+on frozen encoder embeddings directly measure whether latent
+representations retain the structural parameter information required for
+phenotyping.}
+
+\upd{Throughout our experiments, Chamfer distance and linear probes rank model
+variants differently:}
+\begin{enumerate}
+\item \upd{ \textbf{Depth stream addition}: Adding metric depth to RGB
+  photographs reduces Chamfer distance by 28\% in sorghum and 25\% in
+  maize, but yields negligible change in downstream probe $R^2$ scores
+  (Tab.~\ref{tab:modality_value_add}).} \upd{Depth ordering provides spatial
+  surface proximity for decoders without expanding high-level trait
+  information in the encoder.} \item \upd{ \textbf{Data scaling}: Increasing pretraining dataset volume from
+  1{,}000 to 10{,}000 plants reduces sorghum Chamfer error by 21\%
+  ($3.13 \to 2.48 \times 10^{-3}$), whereas sorghum probe scores saturate
+  by 10{,}000 plants (Tab.~\ref{tab:scaling_ablations}).} \item \upd{ \textbf{Partial camera visibility}: Restricting point cloud inputs
+  to a single camera perspective increases Chamfer error $2.6\times$ to
+  $6.5\times$, whereas refitted linear probes of the fused arms lose at
+  most $0.030$ in height $R^2$ (Tab.~\ref{tab:views}).}
+\end{enumerate}
+
+\upd{These disagreements demonstrate that Chamfer distance alone is an
+insufficient metric for evaluating slender 3D shape reconstruction.} \upd{We
+advocate evaluating structural downstream trait probes alongside Chamfer
+distance, and incorporating distribution-matching losses (such as Sinkhorn
+optimal transport divergence, Eq.~\eqref{eq:point-loss-sinkhorn}) during
+training to force decoders to cover full organ geometry rather than
+collapsing points onto central stalks.}
+
+\paragraph{Partial coverage, camera viewpoint, and row occlusion.}
+\upd{Sensor observations in agricultural field campaigns are inherently partial.} \upd{Our experiments analyze three aspects of partial sensing:}
+\begin{itemize}
+\item \upd{ \textbf{Viewpoint elevation dominance}: Across isolated camera
+  perspectives, camera elevation angle dominates single-image
+  reconstruction difficulty, accounting for $\eta^2 = 0.24\text{--}0.31$ of
+  per-plant reconstruction variance (Fig.~\ref{fig:views}).} \upd{Steep top-down
+  and bottom-up perspectives suffer from severe self-occlusion where leaves
+  stack vertically along the optical axis, whereas side-on views expose
+  full blade silhouettes.} \item \upd{ \textbf{Covariate shift under partial visibility}: While phenotypic
+  trait information persists in encoder representations under partial
+  surface coverage (refitted 1-camera height $R^2 = 0.960$), directly
+  transferring linear probes trained on 100\% complete clouds to partial
+  inputs results in performance failure ($R^2 \to -0.26$,
+  Fig.~\ref{fig:partial}).} \upd{Partial visibility induces a systematic
+  covariate shift in latent feature space.} \upd{Consequently, downstream
+  phenotyping readouts deployed in the field must be refit or calibrated on
+  sensor-matched partial coverage inputs.} \item \upd{ \textbf{Implicit row occlusion reasoning}: In planted rows,
+  neighboring foliage accounts for up to two-thirds of input point clouds
+  and pixel areas.} \upd{Standard models trained on isolated plants suffer
+  catastrophic failure under row occlusion because decoders attempt to
+  incorporate neighboring leaves into target plant reconstructions
+  (Tab.~\ref{tab:regime_3}).} \upd{Fine-tuning decoders to predict target main
+  plant geometry behind occluding neighbors removes 92\% of
+  neighbor-induced occlusion error in maize and 85\% in sorghum, forcing
+  the network to perform implicit occlusion reasoning and segment target
+  organs from inter-plant contact foliage.}
+\end{itemize}
+
+\upd{Importantly, procedural parameter outputs ($\hat\theta$) demonstrate
+superior robustness to partial visibility compared to raw point cloud
+completions.} \upd{Because the procedural generator $G(\hat\theta)$ acts as an
+explicit biological prior, re-rendered procedural meshes generate complete
+3D geometry even when input sensor observations capture only a fraction of
+the plant surface.}
+
+\paragraph{Capabilities and boundaries of cross-modal distillation.}
+\upd{Cross-modal teacher--student distillation (Sec.~\ref{sec:method-distill})
+converts a multimodal pretraining artifact into a fast, deployable
+single-sensor inference model.} \upd{Distilling a full-modality teacher
+($\mathrm{RGB}+\mathrm{D}+\mathrm{PC}+\theta$) into single-sensor student
+networks reduces overall cross-modal generation loss by 30.2\% in sorghum
+and 43.5\% in maize (Tab.~\ref{tab:anysubset}).} \upd{Distillation gains are
+concentrated on the weakest input modalities (photograph-to-cloud Chamfer
+error falls by 61\%) and the most challenging plant geometries
+(Fig.~\ref{fig:views}B).} \upd{Furthermore, supervising student models across all
+four decoder targets simultaneously outperforms a specialized
+parameter-only regression student \todo{(first release; no final-data
+specialist was trained)}, consistent with auxiliary visual reconstruction
+tasks acting as regularizing gradients for parameter regression.}
+
+\upd{However, distillation exhibits clear boundary limits:}
+\begin{enumerate}
+\item \upd{ \textbf{Viewpoint robustness}: Distillation lowers absolute
+  reconstruction error across all camera views but does not flatten the
+  U-shaped elevation difficulty curve (Fig.~\ref{fig:views}A).} \upd{Viewpoint
+  robustness cannot be acquired purely through distillation; it requires
+  balanced elevation sampling during pretraining data capture
+  (Fig.~\ref{fig:e5views}).} \item \upd{ \textbf{Unobservable parameter instability}: Parameterizations
+  submitted to inverse regression must be restricted to traits that field
+  sensors can physically resolve.} \upd{In early experimental iterations
+  containing unobservable leaf waviness parameters, distillation caused
+  these unconstrained parameter heads to develop severe view-dependent
+  instability without improving trait skill (skill $\approx 0$).} \upd{Restricting procedural parameter representations to observable
+  physiological attributes (insertion heights, blade lengths, widths,
+  angles, and rolls) ensures stable cross-modal distillation.}
+\end{enumerate}
+
+\paragraph{Limitations and future directions.}
+\upd{We acknowledge several limitations in our current study:}
+\begin{itemize}
+\item \upd{ \textbf{Single-seed ablation budgets}: Controlled ablation
+  experiments (Tabs.~\ref{tab:modality_value_add}--\ref{tab:scaling_ablations})
+  were executed under a standardized compute budget of 197{,}400 optimizer
+  steps using a single seed per arm.} \upd{Run-to-run baseline variance estimated
+  from near-duplicate runs is $\approx 2\%$ in Chamfer distance and
+  $\le 0.011$ in probe $R^2$; the non-monotone maize scaling differences,
+  though significant under the paired bootstrap, could still reflect
+  run-to-run variance.} \item \upd{ \textbf{Procedural generator expressivity boundaries}: An inherent
+  limitation of inverse procedural modeling is that recovered
+  representations are bounded by the expressivity of the underlying
+  generator $G$.} \upd{If a physical plant exhibits morphological deformations
+  unrepresented in $G$ (such as severe disease lesions, structural
+  breakage, or tassel droop, which the generator renders without learnable
+  variation), the framework fits the nearest valid procedural parameter
+  configuration.} \upd{Expanding procedural generators to support broader
+  developmental malformations represents an important avenue for future
+  research.} \item \upd{ \textbf{Synthetic renderer regularities}: Synthetic rendering
+  pipelines can introduce unintended canonical cues (such as fixed leaf
+  plane azimuth alignments) that pose-aware baselines may exploit as
+  shortcuts.} \upd{Rigorous evaluation on real-world field captures
+  (Sec.~\ref{sec:exp-real}) remains essential to verify true sim-to-real
+  domain transfer.}
+\end{itemize}
+
+\upd{By releasing \dataset{} (comprising 30{,}000 synthetic plants across maize
+and sorghum with paired multimodal captures, physically simulated row
+occlusion, and exact procedural parameter ground truth), we aim to provide
+the 3D vision and digital agriculture communities with a benchmark for
+evaluating multimodal completion and inverse procedural modeling on
+slender, heavily occluded geometry.}

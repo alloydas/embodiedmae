@@ -39,10 +39,10 @@ Sec.~\ref{sec:exp-main}.} \upd{Results are reported on the validation split
 unless stated otherwise.}
 
 \paragraph{Evaluation metrics.}
-\upd{We evaluate 3D geometric accuracy using symmetric Chamfer distance in the
-unit-sphere frame ($\times 10^{-3}$; for a plant spanning $\approx 1.4$\,m,
-a Chamfer value of 1.0 corresponds to $\approx 7$\,mm of spatial
-displacement).} \upd{For pretrained models, Chamfer distance is evaluated in the
+\upd{We evaluate 3D geometric accuracy using symmetric Chamfer distance on
+squared point displacements in the unit-sphere frame
+($\times 10^{-3}$; a value of 1.0 corresponds to
+a root-mean-square displacement of $\approx 22$\,mm on a 1.4\,m plant).} \upd{For pretrained models, Chamfer distance is evaluated in the
 masked input regime of pretraining; for distilled student models, it is
 evaluated with unmasked sensor inputs.}
 
