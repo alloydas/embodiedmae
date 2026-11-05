@@ -376,9 +376,17 @@ every remaining contact is decided by exact triangle--triangle tests; a found
 layout is then settled, each bent leaf easing back toward its grown shape to
 the least bend that still clears. Unsolved layouts are retried under looser
 limits (Tab.~\ref{tab:supp-stages}), then at spacings raised in 5\,cm steps up
-to 1.5\,m and refined in 1\,cm steps. An independent NumPy triangle--triangle
-test on the rendered positions found no crossing plant pairs on the rows
-checked.
+to 1.5\,m and refined in 1\,cm steps.
+
+\paragraph{Independent intersection check.}
+\upd{Solved layouts are verified by a check that shares no code with the
+solver: a separate NumPy implementation takes the plant meshes at their
+rendered positions and, for every pair of plants in the row, runs exact
+triangle--triangle intersection tests between their triangles. A row passes
+only if no triangle of one plant intersects a triangle of another.
+The check found no crossing plant pairs on the rows it was run on;
+\todo{the coverage of this check is not recorded; re-run it over all
+300{,}000 shots and state the count here}.}
 
 \begin{table}[h]\centering\small\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lcccc}
