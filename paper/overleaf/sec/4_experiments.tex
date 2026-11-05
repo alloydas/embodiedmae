@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/results.tex, commit fea43d7).
+% Synced from the embodiedmae repo (paper/results.tex, commit 6185d71).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
@@ -275,9 +275,25 @@ The held-out splits are enriched with unusual morphologies by construction
 degrades with plant complexity: the per-plant photograph-to-cloud error is
 uncorrelated with leaf count and stem length ($|\rho| \le 0.06$ above), and
 the bootstrap intervals in every table are computed over these
-extreme-enriched plants. \todo{Fig.~4 companion: error by leaf-count
-decile for both species from the \FieldProc{} evaluation; maize self-occlusion
-rows of Tab.~\ref{tab:views}.}
+extreme-enriched plants. Fig.~\ref{fig:leafcount} shows the same on the
+test plants of both species: after distillation, the photograph-to-cloud
+error is flat across leaf-count deciles (Spearman $\rho = -0.07$ in sorghum and
+$+0.04$ in maize), while the headline model used as is is worse on maize plants
+with few leaves ($\rho = -0.28$). \todo{Maize self-occlusion rows of
+Tab.~\ref{tab:views}.}
+
+% figures/make_leafcount_fig.py; reports/quant_{teacher_undistilled,generalist_rgb}_d2_test.json,
+% reports/quant_maize_{e1,generalist_rgb}_d2_test.json (job 17261514)
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_leafcount.pdf}
+  \caption{\textbf{Error against plant complexity (test, 2{,}250 plants per
+  species).} Chamfer of the cloud generated from the photograph alone, median
+  and interquartile range per leaf-count decile, for the headline model before
+  distillation and the distilled generalist. After distillation the error does
+  not depend on leaf count.}
+  \label{fig:leafcount}
+\end{figure}
 
 \subsection{Regime III: neighbor occlusion in realistic rows}
 \label{sec:regime3}\label{sec:exp-occlusion}
@@ -521,7 +537,8 @@ generates well from these pairs.
 %   maize: reports/pc_fscore_maize_nova_17189743.csv (students), pc_fscore_maize_nova_17189723.csv (headline)
 On the full test split (2{,}250 plants, each student at its best validation
 checkpoint), the photograph-to-cloud Chamfer falls from $2.25$ for the
-pretrained model to $0.88$ for the RGB-only student. Hiding half of the
+pretrained model to $0.88$ for the RGB-only student; in maize the generalist
+lowers it from $10.8$ to $0.83$ (median $7.12$ to $0.51$). Hiding half of the
 source's own tokens during distillation beats full visibility ($0.815$ and
 $0.818$ for two independent runs, against $0.88$), and the fully visible
 student reaches its best validation point at epoch 17 of 100. The generalist,
