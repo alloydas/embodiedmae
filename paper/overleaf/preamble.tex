@@ -53,3 +53,8 @@
 %% padded to ~\textheight so it gets a page of its own next to its section
 %% ([p] double floats flush only at \clearpage, i.e. after the references).
 \renewcommand{\dbltopfraction}{0.99}
+
+%% Revision marking: text changed or added after the 2026-11-05 shared draft is
+%% set in blue. For the submission, switch to the no-op definition below.
+\newcommand{\upd}[1]{{\color{blue}#1}}
+% \renewcommand{\upd}[1]{#1}
