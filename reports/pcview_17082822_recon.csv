@@ -1,0 +1,4 @@
+run,ckpt,epoch,condition,n,echo_chamfer,echo_pred_to_gt,echo_gt_to_pred,chamfer,chamfer_median,pred_to_gt,gt_to_pred
+4m_pretrain_15k_d2_sink,checkpoints/checkpoint_epoch_1000.pth,1000,full,2250,0.00011162074,5.582412e-05,5.5796623e-05,0.0013602942,0.001267612,0.00065977796,0.00070051616
+4m_pretrain_15k_d2_sink,checkpoints/checkpoint_epoch_1000.pth,1000,3view,2250,0.00017991781,7.124636e-05,0.00010867144,0.0031430228,0.002991869,0.0012092028,0.0019338201
+4m_pretrain_15k_d2_sink,checkpoints/checkpoint_epoch_1000.pth,1000,1view,2250,0.0040932624,7.678518e-05,0.004016477,0.01163892,0.010867857,0.0027057403,0.008933178

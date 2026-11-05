@@ -1,0 +1,2 @@
+run,split,n_plants,dim,pc1_var,pc1_3_var,n_pcs_90,n_pcs_95,participation_ratio,n_sampled,spearman_latent_vs_shape_dist,tsne_trustworthiness_k10,best_silhouette,best_silhouette_k,ari_at_best_k,align_n_leaves,align_stem_length,align_leaf_len_mean,align_leaf_len_max
+e3_10k_d2,test,2250,768,0.27111091636738865,0.5696069974928069,11,18,7.004087734359397,1500,0.2138340692202381,0.9463220388458515,0.15536088188709798,2,0.0005975860277968351,0.5596941274608012,0.5457059367236418,0.12243937165849285,0.14426246600021744

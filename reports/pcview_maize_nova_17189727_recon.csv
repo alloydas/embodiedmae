@@ -1,0 +1,4 @@
+run,ckpt,epoch,condition,n,echo_chamfer,echo_pred_to_gt,echo_gt_to_pred,chamfer,chamfer_median,pred_to_gt,gt_to_pred
+maize_4m_pretrain_15k_d2,checkpoints/checkpoint_epoch_1000.pth,1000,1view,2250,0.00053637713,2.4883662e-05,0.0005114935,0.0011549209,0.00078323693,0.0005401122,0.0006148087
+maize_4m_pretrain_15k_d2,checkpoints/checkpoint_epoch_1000.pth,1000,3view,2250,6.5959226e-05,2.5302577e-05,4.065665e-05,0.004536019,0.003555078,0.0025204231,0.002015596
+maize_4m_pretrain_15k_d2,checkpoints/checkpoint_epoch_1000.pth,1000,full,2250,5.1395287e-05,2.5698006e-05,2.569728e-05,0.004975903,0.0040388154,0.0028136864,0.0021622162
