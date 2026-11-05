@@ -403,7 +403,11 @@ Fig.~\ref{fig:rowsex} shows held-out plants of both species in their rows.
 
 % figures/make_row_gallery.py (test; maize models from the maize headline model)
 \begin{figure*}[t]
+  % This figure takes a page of its own: padded to ~0.97\textheight, so the
+  % \textfraction rule leaves no room for text below (needs the raised
+  % \dbltopfraction in preamble.tex).
   \centering
+  \vspace*{\dimexpr0.5\textheight-215pt\relax}
   % fig_rows_examples.pdf is one tall 379x1103pt page: sorghum rows in the top
   % half, maize in the bottom. Shown as the two halves side by side.
   \includegraphics[width=0.49\linewidth,trim=0 551.7 0 0,clip]{figs/fig_rows_examples.pdf}\hfill
@@ -416,6 +420,7 @@ Fig.~\ref{fig:rowsex} shows held-out plants of both species in their rows.
   The control rebuilds neighboring leaves as part of the target; the
   row-trained model keeps to the target plant.}
   \label{fig:rowsex}
+  \vspace*{\dimexpr0.5\textheight-215pt\relax}
 \end{figure*}
 
 \paragraph{What the rows cost.}

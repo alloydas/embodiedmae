@@ -49,3 +49,7 @@
 %%
 % \usepackage{soul}
 % \setuldepth{foobar}
+%% Allow a double-column top float to fill nearly the whole page: fig:rowsex is
+%% padded to ~\textheight so it gets a page of its own next to its section
+%% ([p] double floats flush only at \clearpage, i.e. after the references).
+\renewcommand{\dbltopfraction}{0.99}
