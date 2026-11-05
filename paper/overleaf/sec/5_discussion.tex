@@ -1,101 +1,97 @@
-% Synced from the embodiedmae repo (paper/discussion.tex, commit 80c1aed).
-% Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
 \paragraph{Why a stream that holds the answer hurts.}
-The parameter stream is the only input that states the phenotype verbatim, and
-it is the one input never available in the field. In sorghum, every arm in which
+\upd{The parameter stream is the only input that states the phenotype verbatim, and
+it is the one input never available in the field.} \upd{In sorghum, every arm in which
 the encoder saw the parameter stream learned a worse sensor representation, and
 on the size traits the loss grew with the stream's visibility
-(Tab.~\ref{tab:control}). Even as a pure decoder target, the parameter stream
+(Tab.~\ref{tab:control}).} \upd{Even as a pure decoder target, the parameter stream
 lowered roll, leaf length and leaf width, the traits stored per leaf in the
-parameter tokens. Maize agrees only at high visibility: its arm that sees
+parameter tokens.} \upd{Maize agrees only at high visibility: its arm that sees
 60\,\% of the parameter tokens loses nine traits, but its arms at 20\,\% and
-as a target only improve all eleven. One
+as a target only improve all eleven.} \upd{One
 explanation, consistent with modality competition and negative transfer, is that
 a privileged stream lets the encoder route a trait through tokens that are
 absent at test time, and the reconstruction pressure of a per-leaf target then
 shifts the latent toward the plant's size, which is already the direction of its
-first principal component. The ablations of both species support a narrower
+first principal component.} \upd{The ablations of both species support a narrower
 rule: a generative modality should not be largely visible to the encoder, and
-whether it helps as a target depends on the generator. Our sorghum headline
+whether it helps as a target depends on the generator.} \upd{Our sorghum headline
 model does not yet follow this rule: it was pretrained with the
 parameters as an encoder input, and its distillation used the same model as
-teacher, so its frozen representation corresponds to the four-stream arm. A
-headline run at $\rho_\theta{=}1$ would be the direct test. We expect the rule
+teacher, so its frozen representation corresponds to the four-stream arm.} \upd{A
+headline run at $\rho_\theta{=}1$ would be the direct test.} \upd{We expect the rule
 to transfer to any multimodal model with access to a program, a CAD sketch, or a
 simulator state, and the gated ratio $\rho_\theta$ is a one-line way to test
-it.
+it.}
 
 \paragraph{Which metric decides.}
-Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on
+\upd{Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on
 the design decisions (Fig.~\ref{fig:metrics}): depth added to RGB, more
 training plants, and the parameter stream each move Chamfer by tens of percent
 and leave the probe nearly unchanged, while a partial cloud from one camera raises Chamfer by 2.6 to
-6.5 times but changes the probe by at most $0.03$. On slender geometry, Chamfer
+6.5 times but changes the probe of any fused arm by at most $0.03$.} \upd{On slender geometry, Chamfer
 measures surface proximity and the probe measures recovered structure, so we use
-the probe to make decisions and report Chamfer as the decoder's surface error.
-The probe has its own limitations: it requires labels and a held-out split, and
+the probe to make decisions and report Chamfer as the decoder's surface error.} \upd{The probe has its own limitations: it requires labels and a held-out split, and
 its $R^2$ is comparable between models on one split but is not an absolute
-measure across datasets (our held-out plants are extreme-enriched). Sorghum's
+measure across datasets (our held-out plants are extreme-enriched).} \upd{Sorghum's
 four named traits also reduce to two generator variables, so our claims about
-independent traits rely on maize. On the training side, we added the Sinkhorn
+independent traits rely on maize.} \upd{On the training side, we added the Sinkhorn
 term because Chamfer barely penalizes a missing blade; its ablation is pending
-(\todo{E7}).
+(\todo{E7}).}
 
 \paragraph{From complete clouds to a camera.}
 % maize partial clouds: reports/pcview_maize_nova_17189727_{coverage,recon,probe}.csv (maize E1, val)
-Every sorghum model was pretrained on complete clouds of isolated plants, and
-Sec.~\ref{sec:regime2} measures the effect of partial clouds. Maize is the other
+\upd{Every sorghum model was pretrained on complete clouds of isolated plants, and
+Sec.~\ref{sec:regime2} measures the effect of partial clouds.} \upd{Maize is the other
 case: a maize cloud is the surface visible to its own camera (2\,\% of a
 cloud's points hidden from that camera, 25\,\% from another; the depth image
 back-projects to within 1\,mm), so every maize model trained on single-camera
-clouds. Fusing the clouds of three or ten cameras raises coverage of the
+clouds.} \upd{Fusing the clouds of three or ten cameras raises coverage of the
 ten-camera cloud from $72\,\%$ to $96\,\%$ and $100\,\%$, but it moves the
 maize headline model off its training distribution: its reconstruction of the
 ten-camera cloud worsens from $1.15$ to $4.54$ and $4.98\times10^{-3}$, and its
-refitted height probe from $0.743$ to $0.670$ and $0.682$ (val). A model is best
-on the coverage it was trained on, in both directions. The phenotype information survives a
+refitted height probe from $0.743$ to $0.670$ and $0.682$ (val).} \upd{A model is best
+on the coverage it was trained on, in both directions.} \upd{The phenotype information survives a
 single camera's view, but the latent shifts with coverage, so a readout
-calibrated on complete scans is wrong on partial ones and must be refit. The
-decoder reproduces what it is given and does not hallucinate the hidden half.
-Viewpoint, not morphology, determines the difficulty of inverting a photograph.
-The recipe tolerates partial views best: the recovered insertion heights of one
+calibrated on complete scans is wrong on partial ones and must be refit.} \upd{The
+decoder reproduces what it is given and does not hallucinate the hidden half.} \upd{Viewpoint, not morphology, determines the difficulty of inverting a photograph.} \upd{The recipe tolerates partial views best: the recovered insertion heights of one
 plant vary by a tenth of their spread across its ten photographs, and a
-re-rendered recipe is complete even where the cloud is not. In both species,
+re-rendered recipe is complete even where the cloud is not.} \upd{In both species,
 training on rows removes most of the neighbor penalty (92\,\% in maize and
-85\,\% in sorghum, Sec.~\ref{sec:regime3}). The real scans
+85\,\% in sorghum, Sec.~\ref{sec:regime3}).} \upd{The real scans
 (Sec.~\ref{sec:res-field}) are not yet evaluated; until they are, the
-one-camera transfer gap is our prediction for the sim-to-real penalty. A generator also contains unintended
+one-camera transfer gap is our prediction for the sim-to-real penalty.} \upd{A generator also contains unintended
 regularities, such as the fixed leaf azimuth that gave a pose-aware baseline a
-canonical orientation, and benchmark users should expect more of them.
+canonical orientation, and benchmark users should expect more of them.}
 
-\paragraph{What distillation does and does not buy.}
-Distillation from a full-modality teacher improves every single-sensor student
+\paragraph{What distillation does and does not provide.}
+\upd{Distillation from a full-modality teacher improves every single-sensor student
 and concentrates the gain on the weakest sources and the hardest plants
 (Tab.~\ref{tab:anysubset}, Fig.~\ref{fig:views}B), and supervising all four
-targets beats a parameter specialist at parameter regression. Distillation does
+targets beats a parameter specialist at parameter regression.} \upd{Distillation does
 not make the model view-robust: the elevation curve moves down and keeps its
-shape, so view robustness requires a different method. The training-view
+shape, so view robustness requires a different method.} \upd{The training-view
 ablation points to the pretraining draw: the arm trained on all ten views is the
 most even across elevations, and every arm trained on a narrower band loses roll
-outside it (Fig.~\ref{fig:e5views}). Distillation also
+outside it (Fig.~\ref{fig:e5views}).} \upd{Distillation also
 showed that an unpredictable field is not neutral: the three waviness parameters
 of the first sorghum release stayed at zero skill and became more view-dependent
-under distillation, and the final generator does not include them. A
+under distillation, and the final generator does not include them.} \upd{A
 parameterization meant to be regressed should be restricted to the fields that
-the sensors can determine.
+the sensors can determine.}
 
 \paragraph{Scope and compute.}
-The ablations use one seed per arm. The run-to-run floor comes from a single
+\upd{The ablations use one seed per arm.} \upd{The run-to-run floor comes from a single
 near-duplicate pair (2\,\% in Chamfer, at most $0.011$ in $R^2$), and the maize
 scaling differences, although significant under the paired bootstrap, could
-still be run-to-run variance (Sec.~\ref{sec:res-repr}). Two generators and two
+still be run-to-run variance (Sec.~\ref{sec:res-repr}).} \upd{Two generators and two
 species-specific models are studied, and the 1{,}000-epoch headline model is
-trained once per species. The procedural prior that makes inversion tractable
+trained once per species.} \upd{The procedural prior that makes inversion tractable
 also limits it: a plant that the generator cannot express cannot be recovered,
 and an organ class that the generator renders without variation (tassel droop in
 maize is below zero for every encoder of this design) limits the data as much as
-the model. Real scans and the \FieldProc{} release at
-10K--100K plants remain \todo{in progress}.
+the model.} \upd{The real-scan evaluation and the \FieldProc{} release remain
+\todo{in progress}.}
+

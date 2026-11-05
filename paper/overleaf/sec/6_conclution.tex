@@ -1,16 +1,12 @@
-% Synced from the embodiedmae repo (paper/discussion.tex, commit 80c1aed).
-% Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Conclusion}
 \label{sec:conclusion}
 
-\CropCode{} recovers a complete, editable procedural plant from the data of
+\upd{\CropCode{} recovers a complete, editable procedural plant from the data of
 whichever sensor a field campaign used, in one forward pass, by using the
-generator for both the training data and the output representation. Two
+generator for both the training data and the output representation.} \upd{Two
 findings from its ablations apply beyond plants: the generator's parameters
 harm the representation when most of them are visible to the encoder, and on
 slender geometry a
-downstream probe, not Chamfer distance, should decide what a modality is worth.
-A single camera's partial view requires refitting the readout and leaves a
+downstream probe, not Chamfer distance, should decide what a modality is worth.} \upd{A single camera's partial view requires refitting the readout and leaves a
 measured transfer gap; the row-occluded and real-scan evaluations will show
-whether the generator's prior covers the remaining difference to field data.
-\todo{Sharpen once E10 lands.}
+whether the generator's prior covers the remaining difference to field data.} \todo{Sharpen once E10 lands.}

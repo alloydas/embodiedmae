@@ -41,7 +41,7 @@ Chamfer and the frozen probe agree on the coarse ranking of arms and disagree on
 the design decisions (Fig.~\ref{fig:metrics}): depth added to RGB, more
 training plants, and the parameter stream each move Chamfer by tens of percent
 and leave the probe nearly unchanged, while a partial cloud from one camera raises Chamfer by 2.6 to
-6.5 times but changes the probe by at most $0.03$. On slender geometry, Chamfer
+6.5 times but changes the probe of any fused arm by at most $0.03$. On slender geometry, Chamfer
 measures surface proximity and the probe measures recovered structure, so we use
 the probe to make decisions and report Chamfer as the decoder's surface error.
 The probe has its own limitations: it requires labels and a held-out split, and
@@ -79,7 +79,7 @@ one-camera transfer gap is our prediction for the sim-to-real penalty. A generat
 regularities, such as the fixed leaf azimuth that gave a pose-aware baseline a
 canonical orientation, and benchmark users should expect more of them.
 
-\paragraph{What distillation does and does not buy.}
+\paragraph{What distillation does and does not provide.}
 Distillation from a full-modality teacher improves every single-sensor student
 and concentrates the gain on the weakest sources and the hardest plants
 (Tab.~\ref{tab:anysubset}, Fig.~\ref{fig:views}B), and supervising all four
@@ -105,8 +105,8 @@ trained once per species. The procedural prior that makes inversion tractable
 also limits it: a plant that the generator cannot express cannot be recovered,
 and an organ class that the generator renders without variation (tassel droop in
 maize is below zero for every encoder of this design) limits the data as much as
-the model. Real scans and the \FieldProc{} release at
-10K--100K plants remain \todo{in progress}.
+the model. The real-scan evaluation and the \FieldProc{} release remain
+\todo{in progress}.
 
 \section{Conclusion}
 \label{sec:conclusion}
