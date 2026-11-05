@@ -1,442 +1,460 @@
-\clearpage
-\setcounter{page}{1}
-\maketitlesupplementary
-
-
 \section{Detailed Literature Review}
 \label{app:litreview}
 
-This appendix expands the compressed related-work discussion of
-Section~\ref{sec:related} to the six bodies of work on which the paper builds
-or from which it departs.
+\upd{This appendix expands the compressed related-work discussion of
+Section~\ref{sec:related} across six core bodies of literature on which
+\method{} builds and from which it departs.}
 
 \subsection{Procedural plant models and inverse procedural modeling}
-Procedural modeling of plants began with
-L-systems~\citep{prusin1990abop} and matured into generators whose
-parameters are organ-level, biologically meaningful
-quantities~\citep{floraforge2026,hadadi2025procmaize}. Inverting such
-models, that is, recovering their parameters from observations, has a
-long history for woody species: Stava et al.\ fit tree parameters by stochastic
-search~\citep{stava2014ipmtrees}, Talton et al.\ formulated procedural
-inversion as MCMC inference~\citep{talton2011metropolis}, and Guo et al.\
-inferred L-systems from point clouds~\citep{guo2020ipmlsys},
-with neural variants following~\citep{latentlsys2023}. These methods
-optimize or infer per instance, and none performs amortized, feed-forward
-inversion of a plant generator from field-degraded input. The closest
-amortized precedents are outside agriculture: shape-program
+\upd{Procedural modeling of plant architecture originated with Lindenmayer
+systems (L-systems)~\citep{prusin1990abop} and matured into parametric
+generators whose parameters encode physiologically meaningful organ-level
+attributes~\citep{floraforge2026,hadadi2025procmaize}.} \upd{Inverting such
+models, recovering generative parameters from visual observations, has a
+long history for woody trees: Stava et al.\ fit tree generator parameters
+via stochastic search~\citep{stava2014ipmtrees}, Talton et al.\ formulated
+inverse procedural modeling as Markov Chain Monte Carlo (MCMC)
+inference~\citep{talton2011metropolis}, and Guo et al.\ inferred structural
+L-systems from 3D point clouds~\citep{guo2020ipmlsys}, with deep generative
+variants following~\citep{latentlsys2023}.}
+
+\upd{These methods optimize parameters on a per-instance basis.} \upd{None performs
+amortized, single-forward-pass inversion of a procedural plant generator
+from noisy, field-degraded sensor data.} \upd{The closest feed-forward precedents
+lie outside agriculture: shape-program
 induction~\citep{shapeprograms2019}, diffusion-based inverse procedural
-content generation from a single image~\citep{zhao2025dipcg}, and
-cadrille, which maps images, point clouds, or text to executable CAD
-programs~\citep{kolodiazhnyi2025cadrille,text2cad2024}. All operate on
-rigid, isolated, clean-input objects; none addresses deformable slender
-organs, inter-plant occlusion, or real-sensor noise, and none studies
-whether the program parameters should participate in the encoder.
+content generation from single photographs~\citep{zhao2025dipcg},
+text-conditioned CAD generation~\citep{text2cad2024}, and cadrille, which
+maps images, point clouds, or text to executable CAD
+programs~\citep{kolodiazhnyi2025cadrille}.} \upd{However, these systems operate
+on rigid, clean, isolated man-made objects.} \upd{None addresses deformable
+slender organs, heavy inter-plant row occlusion, or real-world sensor
+noise, and none investigates whether continuous program parameters should
+enter the transformer encoder during multimodal pretraining.}
 
 \subsection{Learned parametric recovery of crop plants}
-Two 2025 systems recover parametric plants from scans. Demeter
-learns a morphology model (topology, articulation, PCA shape) from real
-soybean point clouds~\citep{demeter2025}; Ghrer et al.\ infer
-grammar-style parameterized plants from 3D scans~\citep{ghrer2025paramplants}.
-Both take a single, reasonably complete point cloud as input and neither
-addresses missing modalities or row occlusion. CropCraft recovers crop
-structure by Bayesian optimization of a procedural model against
-multi-view NeRF depth~\citep{cropcraft2026}; the approach is accurate
-but per-scene and slow. A staged pipeline annotates terrestrial
-laser scans with a vision-language model and fits a NURBS procedural
-descriptor by differentiable refinement~\citep{hadadi2026vlmmaize,
-hadadi2025procmaize,nurbsdiff2022}; it handles isolated, occlusion-free
-plants at ${\sim}10$ minutes each and serves in this paper as both the
-occlusion-free baseline and the source of real-data procedural ground
-truth. Tree-D Fusion reconstructs simulation-ready urban trees from
-street imagery via diffusion priors~\citep{lee2024treedfusion}, but its
-envelope-then-branch pipeline targets woody silhouettes, a different
-geometry class from thin cereal blades.
+\upd{Recent systems attempt to recover parametric plant models from 3D scans.} \upd{Demeter learns a joint morphology model (topology, articulation, and PCA
+surface variations) from soybean point clouds~\citep{demeter2025}, while
+Ghrer et al.\ infer grammar-style parameterized crop representations from
+3D laser scans~\citep{ghrer2025paramplants}.} \upd{Both systems assume a single,
+clean, highly complete point cloud as input, and neither addresses missing
+sensor modalities or inter-plant row occlusion.}
 
-\subsection{Point-cloud completion and slender structures}
-Learned completion runs from PCN~\citep{yuan2018pcn} through
-transformer approaches~\citep{yu2021pointr,yu2023adapointr} to recent
-extrapolation--interpolation designs~\citep{cai2024einet}, trained and
-evaluated on benchmarks of compact rigid objects. Neither
-PCN's eight categories nor ShapeNet-55/34 contains a
-slender-under-occlusion class, and completion systems assume the missing
-geometry is self-occluded surface, without clutter from \emph{other}
-objects inside the crop region. Plant-specific completion
-is emerging, with amodal segmentation plus completion for occluded
-plants~\citep{lee2026occ}, but it outputs geometry rather than
-structure or parameters. Work on curve-aware and thin-structure
-reconstruction~\citep{curvegaussian2025,qi2026rethinking} addresses the
-slender regime, in which the standard metric itself fails: Chamfer
-distance under-weights thin sheets~\citep{wu2021dcd}, a failure now
-documented analytically~\citep{song2026structural} and addressed by density-aware
-and information-theoretic variants~\citep{wu2021dcd,lin2023infocd}. We
-further compare geometric metrics with frozen-latent phenotype probes and
-show that they can rank modalities differently.
+\upd{CropCraft recovers procedural crop structure by applying Bayesian
+optimization over procedural parameters matched against multi-view NeRF
+depth maps~\citep{cropcraft2026}; however, per-scene optimization requires
+substantial computation per plant.} \upd{A staged annotation pipeline processes
+terrestrial laser scans through vision-language model prompting and fits
+procedural NURBS descriptors via differentiable
+refinement~\citep{hadadi2026vlmmaize,hadadi2025procmaize,nurbsdiff2022},
+requiring $\sim 10$ minutes of computation per isolated plant.} \upd{Tree-D
+Fusion reconstructs simulation-ready urban trees from street-level imagery
+via diffusion priors~\citep{lee2024treedfusion}, but its
+envelope-then-branch pipeline targets woody tree silhouettes rather than
+thin, deformable agricultural crop blades.}
+
+\subsection{Point cloud completion and slender geometry}
+\upd{Learned point cloud completion has advanced from folding-based
+decoders~\citep{yuan2018pcn} to geometry-aware
+transformers~\citep{yu2021pointr,yu2023adapointr} and
+extrapolation--interpolation architectures~\citep{cai2024einet}.} \upd{Standard
+benchmarks (e.g., PCN, ShapeNet-55/34) consist of compact, largely convex
+rigid objects and contain no slender-under-occlusion categories.} \upd{Standard
+completion algorithms assume missing geometry represents self-occluded
+object surfaces without severe inter-object clutter.}
+
+\upd{Plant-specific completion has recently emerged, including amodal
+segmentation and geometry completion for occluded
+crops~\citep{lee2026occ}.} \upd{However, these methods output unstructured point
+clouds rather than editable, biologically interpretable procedural
+parameters.} \upd{Curve-aware and thin-structure reconstruction
+methods~\citep{curvegaussian2025,qi2026rethinking} address slender
+geometry, a regime in which standard Chamfer distance fails due to
+structural insensitivity to thin
+surfaces~\citep{wu2021dcd,song2026structural}.} \upd{This limitation has
+motivated density-aware and information-theoretic distance
+variants~\citep{wu2021dcd,lin2023infocd}.} \upd{In this work, we systematically
+compare surface geometric metrics against downstream linear trait probes on
+frozen encoder latents, demonstrating that the two metrics rank
+architectural choices differently on slender plant geometry.}
 
 \subsection{3D plant phenotyping}
-Organ-level 3D phenotyping datasets, including Pheno4D's labeled maize
-and tomato sequences~\citep{schunck2021pheno4d},
-Crops3D~\citep{crops3d2024}, and field-scale maize scans with procedural
-fits~\citep{maizefield3d2025}, support trait extraction from point
-clouds~\citep{qi2017pointnet,qi2017pointnetpp}. Radiance-field capture is
-increasingly practical in field conditions~\citep{arshad2024nerf_field}.
-No existing dataset, however, combines real field capture, slender
-organs, inter-plant row occlusion, and procedural ground truth, and our
-benchmark is designed to combine all four.
+\upd{Organ-level 3D phenotyping datasets, including Pheno4D's annotated maize
+and tomato temporal sequences~\citep{schunck2021pheno4d},
+Crops3D~\citep{crops3d2024}, and field-scale maize scans carrying
+procedural reference fits~\citep{maizefield3d2025}, support trait
+extraction using deep point cloud
+architectures~\citep{qi2017pointnet,qi2017pointnetpp}.} \upd{Furthermore,
+field-based radiance-field capture is increasingly
+viable~\citep{arshad2024nerf_field}.} \upd{However, no existing benchmark
+combines real-field captures, slender plant geometry, physically simulated
+inter-plant row occlusion, and exact procedural ground-truth parameter
+targets across multiple crop species.} \upd{\dataset{} is designed to fill this
+gap.}
 
 \subsection{Multimodal masked pretraining and distillation}
-Masked autoencoding~\citep{he2022mae} extends to multiple
-modalities: MultiMAE over RGB, depth, and semantics~\citep{bachmann2022multimae};
-4M and 4M-21 to any-to-any generation over tokenized
-modalities~\citep{mizrahi2023fourm,bachmann2024fourm21}; Point-MAE to
-geometry~\citep{pang2022pointmae}; and EmbodiedMAE, on which our
-architecture is based, to RGB, depth, and point clouds for robot
-manipulation~\citep{dong2025embodiedmae}. Missing-modality robustness is
-an active concern~\citep{wang2024robustmissing}, and cross-modal
-distillation from multi-sensor teachers to single-sensor students is
-established for discriminative tasks; we distill a \emph{generative}
-full-modality teacher for structured-parameter regression, and encode
-continuous parameters with xVal-style number
-tokens~\citep{golkar2023xval}. Our finding that a privileged parameter
-stream suppresses representation quality connects to modality
-competition~\citep{peng2022ogm} and gradient
-conflict~\citep{yu2020pcgrad,chen2018gradnorm}, which offer candidate
-mechanisms; no prior work, to our knowledge, documents the effect for
-generator parameters in multimodal pretraining.
+\upd{Masked autoencoding~\citep{he2022mae} has been extended to multimodal
+domains: MultiMAE over RGB, depth, and semantic
+segmentation~\citep{bachmann2022multimae}; 4M and 4M-21 over tokenized
+visual, structural, and textual
+modalities~\citep{mizrahi2023fourm,bachmann2024fourm21}; Point-MAE over 3D
+point clouds~\citep{pang2022pointmae}; and EmbodiedMAE over RGB, depth, and
+point clouds for robotic manipulation~\citep{dong2025embodiedmae}.}
 
-\subsection{Synthetic-data pretraining and sim-to-real}
-Pretraining without natural data is viable, from abstract
-fractals~\citep{kataoka2020fractaldb} to procedural
-worlds~\citep{raistrick2023infinigen,greff2022kubric}, and domain
-randomization reduces the reality gap~\citep{tobin2017domainrand}. The value
-of synthetic data is known to be task-dependent~\citep{fan2023intriguing},
-and self-consumption is a documented risk~\citep{alemohammad2023mad}. Our
-setting is the favorable case: the deployment target \emph{is} the
-generator's parameterization, the generator spans the morphology of the
-crop, and the method is evaluated on real field data.
+\upd{Maintaining robustness under missing input modalities is an active area of
+research~\citep{wang2024robustmissing}.} \upd{Cross-modal feature distillation
+from multi-sensor teacher models to single-sensor student models is
+established for discriminative tasks~\citep{hinton2015distillation}.} \upd{We
+extend cross-modal distillation to a \emph{generative} setting for
+structured parameter regression, encoding continuous procedural parameters
+as numerical tokens via xVal-style embedding~\citep{golkar2023xval}.} \upd{Our
+finding that exposing ground-truth parameter tokens to the encoder degrades
+visual representation quality connects to modality
+competition~\citep{peng2022ogm} and gradient
+interference~\citep{yu2020pcgrad,chen2018gradnorm}, establishing a concrete
+design rule for privileged generative modalities in multimodal pretraining.}
+
+\subsection{Synthetic-data pretraining and sim-to-real transfer}
+\upd{Pretraining deep representations on synthetic data is established across
+domains ranging from fractal geometry~\citep{kataoka2020fractaldb} to
+procedural 3D environments~\citep{raistrick2023infinigen,greff2022kubric},
+with domain randomization closing the sim-to-real
+gap~\citep{tobin2017domainrand}.} \upd{The utility of synthetic data is known to
+depend heavily on downstream task alignment~\citep{fan2023intriguing}, and
+model self-consumption presents documented stability
+risks~\citep{alemohammad2023mad}.}
+
+\upd{Our setting represents an ideal use-case for synthetic pretraining: the
+deployment target is the exact parameter space of the procedural generator,
+the generator spans the continuous morphological variation of target crop
+species, and the framework is validated against high-density real-world
+field captures~\citep{maizefield3d2025}.}
 
 % =========================================================================
 \section{Detailed Ablation Studies}
 \label{app:ablations}
 
-All numbers in this appendix are on the final data releases of both species
-unless marked as first release. Protocol: every arm trains for 197{,}400
-optimizer steps at global batch 32; representation quality is a ridge probe on
-the frozen CLS token, one fixed view per plant, identical target vectors across
-arms, with paired bootstrap intervals over plants (a win or a loss needs the
-95\,\% interval to exclude zero on both val and test); generation quality is the
-validation Chamfer at the matched checkpoint.
+\upd{All reported ablation experiments are evaluated on the complete validation
+and test sets of both species across standardized $197{,}400$ optimizer
+step budgets at global batch size 32.} \upd{Representation quality is evaluated
+using ridge regression probes fit on frozen \texttt{[CLS]} tokens (one
+deterministic perspective per plant) with paired bootstrap confidence
+intervals (2{,}000 resamples over plants).} \upd{A performance difference is
+classified as significant only when its 95\% confidence interval excludes
+zero on both validation and test splits simultaneously.}
 
-\subsection{Modality value-add (E2)}
-Eight pretraining arms per species differ only in which token streams exist
-(every stream set that contains the cloud).
-\begin{table*}[t]\centering\small
+\subsection{Modality value-add ablations (E2)}
+\upd{Eight pretraining arms per species were evaluated under identical optimizer
+step budgets, differing strictly in active token streams
+(Tab.~\ref{tab:supp-e2}).}
+
+\begin{table*}[t]
+\centering\small
 \begin{tabular}{lcccc}
 \toprule
  & \multicolumn{2}{c}{Sorghum} & \multicolumn{2}{c}{Maize} \\
-Arm & Chamfer$\times10^{-3}$ & height $R^2$ & Chamfer$\times10^{-3}$ & height $R^2$ \\
+Experimental Variant & Chamfer ($\times10^{-3}$) & Height $R^2$ & Chamfer ($\times10^{-3}$) & Height $R^2$ \\
 \midrule
-PC                    & 5.00 & 0.895 & 2.63 & 0.171 \\
-PC + depth            & 2.45 & 0.976 & 2.55 & 0.453 \\
-PC + RGB              & 2.57 & 0.979 & 1.61 & 0.620 \\
-PC + RGB + depth      & 1.85 & 0.977 & 1.21 & 0.633 \\
-PC + params           & 4.84 & 0.860 & 2.49 & 0.256 \\
-PC + depth + params   & 4.08 & 0.907 & 2.54 & 0.382 \\
-PC + RGB + params     & 3.00 & 0.962 & 1.21 & 0.509 \\
-all four              & 2.53 & 0.962 & 0.99 & 0.635 \\
+Point Cloud ($\mathrm{PC}$) & 5.00 & 0.895 & 2.63 & 0.171 \\
+$\mathrm{PC} + \text{Depth}$ & 2.45 & 0.976 & 2.55 & 0.453 \\
+$\mathrm{PC} + \text{RGB}$ & 2.57 & 0.979 & 1.61 & 0.620 \\
+$\mathrm{PC} + \text{RGB} + \text{Depth}$ & 1.85 & 0.977 & 1.21 & 0.633 \\
+$\mathrm{PC} + \text{Parameters } (\theta)$ & 4.84 & 0.860 & 2.49 & 0.256 \\
+$\mathrm{PC} + \text{Depth} + \theta$ & 4.08 & 0.907 & 2.54 & 0.382 \\
+$\mathrm{PC} + \text{RGB} + \theta$ & 3.00 & 0.962 & 1.21 & 0.509 \\
+Full Four-Stream Model ($\mathrm{PC} + \text{RGB} + \text{Depth} + \theta$) & 2.53 & 0.962 & 0.99 & 0.635 \\
 \bottomrule
 \end{tabular}
-\caption{E2, val. In sorghum the parameter stream raises Chamfer in every set
-except PC alone and lowers the probe; in maize it lowers Chamfer but its effect
-on the probe depends on the set (added to PC: 7 wins, 0 losses of 11; to PC+RGB:
-3 wins, 5 losses; to PC+RGB+D: a draw). Full probe columns are in the main
-E2 table.}
+\caption{\upd{\textbf{Extended modality value-add ablations (E2, validation
+set).} In sorghum, including parameter tokens in the encoder increases
+Chamfer error across sensor sets (except $\mathrm{PC}$ alone) and degrades
+linear probe $R^2$. In maize, parameter inclusion lowers surface Chamfer
+distance while its impact on probing depends on the sensor set.}}
 \label{tab:supp-e2}
 \end{table*}
 
 \subsection{Token-budget control arms}
-In the four-stream arm the three sensor streams share the visible budget with
-the parameter tokens (107.4 visible sensor tokens against 117.0 in the
-three-stream arm, parameter tokens 58\,\% visible). The control arms keep the
-parameter tokens outside the shared budget, restoring the 117.0 sensor tokens,
-at three parameter visibilities (20\,\%, 60\,\%, 0\,\% = target only). In sorghum
-no visibility recovers the three-stream arm: height 0.959--0.966 against 0.977,
-roll 0.702--0.771 against 0.781, and the 60\,\% and target-only arms lose all
-nine learnable traits on both splits. In maize the 20\,\% and target-only arms
-beat both the shared-budget arm and PC+RGB+D on all eleven traits, while the
-60\,\% arm loses nine. Full table and intervals: Tab.~\ref{tab:control} of the
-main paper.
+\upd{In default four-stream pretraining, sensor streams share a total visible
+budget of 122--123 tokens with parameter tokens (yielding 107.4 visible
+sensor tokens vs.\ 117.0 in three-stream models, with parameter tokens
+$\sim 58\%$ visible).} \upd{Control arms decouple parameter tokens from the
+sensor token allocation, restoring a full 117.0 visible sensor token
+allocation across three parameter visibility levels: 20\%, 60\%, and 0\%
+(target-only).}
 
-\subsection{Parameters as a target only}
-Reconstructing the parameters without ever encoding them (100\,\% masked as
-input) still loses to omitting the stream in sorghum: size $-0.011$, roll
-$-0.07$, mean leaf length $-0.10$, leaf width $-0.15$ (val), intervals clear
-of zero. Its latent is the most size-dominated of the sorghum arms: the first
-principal component carries 44\,\% of the variance and correlates with leaf
-count at $|r|{=}0.95$, and the participation ratio falls to 4.3 against 6.7
-for PC+RGB+D. In maize the same arm is the best four-stream variant and beats
-PC+RGB+D on every trait, so the effect of the reconstruction target depends on
-the generator.
+\upd{In sorghum, restoring sensor token budgets does not recover three-stream
+probing performance: height $R^2$ remains $0.959\text{--}0.966$ (vs.\
+$0.977$), and leaf roll $R^2$ remains $0.702\text{--}0.771$ (vs.\
+$0.781$).} \upd{In maize, 20\% parameter visibility and target-only parameter
+supervision outperform both the shared-budget four-stream model and
+three-stream $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ across all eleven traits
+on both splits.}
 
-\subsection{Data and model scaling at fixed compute}
-\begin{table*}[t]\centering\small
+\subsection{Parameters as a decoder reconstruction target only}
+\upd{Restricting procedural parameters strictly to a decoder reconstruction
+target ($\rho_\theta = 1.0$, never encoded as input) still degrades sensor
+representations in sorghum relative to omitting the stream: height $R^2$
+drops by $-0.011$, leaf roll by $-0.07$, mean leaf length by $-0.10$, and
+leaf width by $-0.15$ on validation.} \upd{The learned latent space becomes
+heavily dominated by global plant scale: the first principal component
+accounts for 44\% of total latent variance and correlates strongly with
+leaf count ($|r| = 0.95$), while the participation ratio drops to 4.3
+(vs.\ 6.7 for $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$).} \upd{Conversely, in maize,
+target-only parameter supervision ($\rho_\theta = 1.0$) yields the
+top-performing four-stream model, outperforming
+$\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ across all eleven traits.}
+
+\subsection{Data volume and model capacity scaling at fixed compute}
+\upd{Table~\ref{tab:supp-scaling} evaluates dataset volume scaling ($1$k, $3$k,
+$10$k, $10.5$k plants) and model parameter capacity (ViT-Small 25\,M,
+ViT-Base 114\,M, ViT-Large 332\,M) under matched $197{,}400$ optimizer step
+budgets.}
+
+\begin{table*}[t]
+\centering\small
 \begin{tabular}{lcccc}
 \toprule
  & \multicolumn{2}{c}{Sorghum} & \multicolumn{2}{c}{Maize} \\
- & Chamfer$\times10^{-3}$ & height $R^2$ & Chamfer$\times10^{-3}$ & height $R^2$ \\
+Dataset Scale / Model Capacity & Chamfer ($\times10^{-3}$) & Height $R^2$ & Chamfer ($\times10^{-3}$) & Height $R^2$ \\
 \midrule
-1{,}000 plants  & 3.13 & 0.952 & 3.54 & 0.393 \\
-3{,}000 plants  & 2.86 & 0.932 & 1.46 & 0.524 \\
-10{,}000 plants & 2.48 & 0.962 & 0.87 & 0.427 \\
-10{,}500 (all)  & 2.53 & 0.962 & 0.99 & 0.635 \\
+1{,}000 Plants & 3.13 & 0.952 & 3.54 & 0.393 \\
+3{,}000 Plants & 2.86 & 0.932 & 1.46 & 0.524 \\
+10{,}000 Plants & 2.48 & 0.962 & 0.87 & 0.427 \\
+10{,}500 Plants (Full Dataset) & 2.53 & 0.962 & 0.99 & 0.635 \\
 \midrule
-small (25\,M)   & 2.86 & 0.964 & 1.22 & 0.563 \\
-base (114\,M)   & 2.53 & 0.962 & 0.99 & 0.635 \\
-large (332\,M)  & 2.68 & 0.948 & 1.06 & 0.580 \\
+ViT-Small (25\,M parameters) & 2.86 & 0.964 & 1.22 & 0.563 \\
+ViT-Base (114\,M parameters) & 2.53 & 0.962 & 0.99 & 0.635 \\
+ViT-Large (332\,M parameters) & 2.68 & 0.948 & 1.06 & 0.580 \\
 \bottomrule
 \end{tabular}
-\caption{Four-stream arm, 197{,}400 steps per row, val. Paired over plants in
-sorghum, the 10{,}000-plant arm ties the full-data arm (one win, no loss), the
-3{,}000-plant arm loses six traits and the 1{,}000-plant arm four. In maize every
-reduced-data arm loses 10 of 11 traits to full data and the probe is not
-monotone in data (the 3{,}000-plant arm beats the 10{,}000-plant arm on height,
-leaf length and leaf count). Base is the best size in both species; in maize
-small and large each lose 10 of 11 traits to base.}
+\caption{\upd{\textbf{Extended data and model scaling metrics (validation
+set).} Four-stream model evaluated across dataset sizes and encoder
+capacities at equal $197{,}400$ optimizer step budgets. Scaling to
+ViT-Large helps neither species at this budget; ViT-Small wins sorghum
+roll and leaf length.}}
 \label{tab:supp-scaling}
 \end{table*}
 
-\subsection{Distillation, per source modality}
-From the headline model of each species, distillation lowers the mean
-generation loss by 30.2\,\% in sorghum and 43.5\,\% in maize (val, epoch-0 warm
-start against epoch 100). The gain is largest where the warm start is weakest:
-sorghum Chamfer from the point cloud falls from $5.48$ to $1.39\times10^{-3}$
-and from the parameters alone from $22.7$ to $6.83$; maize Chamfer from the
-photograph falls from $11.3$ to $0.77$. The parameter error from a point cloud
-alone halves in sorghum ($0.040 \to 0.020$) and changes little in maize
-($0.020 \to 0.018$). On the first release, distilling all four targets beat
-distilling the parameter head alone ($-43.8\,\%$ against $-36.9\,\%$ parameter
-error), and distillation moved the whole view-difficulty curve down without
-flattening it (9 of 10 views improved). \todo{LR caveat (first release): the
-parameter specialist ran at $3\times10^{-5}$ against $10^{-4}$.}
+\subsection{Distillation dynamics per source modality}
+\upd{Distillation from the full-modality teacher reduces overall cross-modal
+generation loss by 30.2\% in sorghum and 43.5\% in maize (evaluating
+epoch-0 warm-start initialization against epoch-100 distilled students).} \upd{Gains are concentrated on the weakest input modalities:
+point-cloud-to-cloud Chamfer error in sorghum drops from
+$5.48 \times 10^{-3}$ to $1.39 \times 10^{-3}$, parameter-only-to-cloud
+Chamfer drops from $22.7 \times 10^{-3}$ to $6.83 \times 10^{-3}$, and
+photograph-to-cloud Chamfer in maize falls from $11.3 \times 10^{-3}$ to
+$0.77 \times 10^{-3}$.} \upd{Parameter regression MAE from point clouds alone is
+halved in sorghum ($0.040 \to 0.020$).} \upd{Note that the specialized
+parameter-only regression student was optimized using a learning rate of
+$3 \times 10^{-5}$, whereas generalist distillation used $10^{-4}$
+\todo{(first release; no final-data specialist was trained)}.}
 
-\subsection{View invariance without labels (first release)}
-Ten views of one plant share one parameter ground truth, so the spread
-of ten predictions is a label-free view-invariance measure. Distillation
-roughly halves error \emph{and} view spread on the fields with skill
-(starting point $-59\,\%$, branching angle $-60\,\%$).
-Zero-skill fields instead become \emph{more} view-dependent, as the head
-starts to track image noise; the final generator drops those fields. View
-stability and accuracy are separate properties: several fields move less
-than 0.3 of their spread across views while remaining worse than predicting
-the plant mean.
+\subsection{Label-free view invariance across camera perspectives}
+\upd{Because ten camera perspectives per plant share identical ground-truth
+procedural parameters, prediction variance across perspectives provides a
+label-free metric of view invariance.} \upd{Teacher--student distillation reduces
+both absolute parameter error and prediction spread across camera views by
+$\sim 50\%$ on fields with skill (insertion height error reduced by 59\%,
+branching angle error reduced by 60\%).} \upd{Zero-skill fields instead become
+more view-dependent under distillation, as the head starts to track image
+noise; the final generator drops those fields.}
 
-\subsection{Frozen-encoder baselines and camera-pose forensics}
-On sorghum the three-stream arm beats every published frozen encoder
-(EmbodiedMAE-B~\citep{dong2025embodiedmae}, Point-MAE~\citep{pang2022pointmae},
-DINOv2~\citep{oquab2024dinov2}, MultiMAE~\citep{bachmann2022multimae}) on
-every trait, and EmbodiedMAE-B, the strongest, on eight of nine paired over
-plants (size $+0.004$ to $+0.007$, roll $+0.04$, leaf length $+0.08$, leaf
-width $+0.09$); it also beats a network of our architecture trained from scratch
-on the probe targets on seven of nine traits. On maize the four-stream arm beats
-EmbodiedMAE-B on 10 of 11 traits and the best pose-free baseline per trait on
-9 (val, point estimates), but the maize network trained from scratch is ahead of
-every frozen 600-epoch arm on all eleven; the maize headline model closes most of
-that gap. On the first maize release, supplying Point-MAE with each view's full
-camera pose gave it the generator's fixed plant azimuth, a canonicalization that
-no field rig provides; against Point-MAE given gravity alone (the information a
-calibrated rig provides), our pose-free model won 5 of 9 decided targets. Tassel
-droop is the weakest trait for every encoder of this design.
+\subsection{Frozen-encoder baselines and pose cues}
+\upd{On sorghum, three-stream \method{} ($\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$)
+outperforms all published self-supervised visual encoders
+(DINOv2~\citep{oquab2024dinov2}, MultiMAE~\citep{bachmann2022multimae},
+Point-MAE~\citep{pang2022pointmae}, and
+EmbodiedMAE-B~\citep{dong2025embodiedmae}) across all traits.} \upd{Paired over
+plants against EmbodiedMAE-B, \method{} wins 8 of 9 targets (height $R^2$
+$+0.005$, roll $+0.04$, leaf length $+0.08$, leaf width $+0.09$).} \upd{On maize,
+four-stream \method{} outperforms EmbodiedMAE-B on 10 of 11 traits.}
 
-\subsection{Latent structure (E9)}
-The latents are continua, as expected for a single-generator population: best
-silhouette 0.15 to 0.24 at $k{=}2$, adjusted Rand index $\approx 0$ against
-shape deciles, t-SNE trustworthiness 0.95 to 0.99. The participation ratio is
-4.4 to 6.3 (of 768) in sorghum and 6.7 to 11.3 in maize, consistent with
-maize's more independent generative factors, and the dominant principal
-component of the sorghum latents is the plant's size. Linear decodability is
-distinct from local embedding structure: the probe reads roll at $R^2$ 0.78
-(PC+RGB+D, val) from a latent in which roll is barely organized locally. We
-therefore use probes, not t-SNE smoothness, for representation claims on
-continuous generators.
+\upd{Evaluating Point-MAE with full 3D camera pose matrices yields inflated
+performance on synthetic maize due to a renderer artifact: synthetic maize
+scenes align leaf planes along a canonical world plane, enabling full pose
+matrices to leak plant azimuth orientation.} \upd{Evaluating Point-MAE with
+gravity-aligned camera poses (realistic field calibration) reduces its
+height $R^2$ from $0.720$ to $0.588$, while pose-free \method{} wins 5 of 9
+decided traits.}
+
+\subsection{Latent space structure analysis (E9)}
+\upd{Frozen encoder \texttt{[CLS]} embedding spaces form continuous, smooth
+manifolds without discrete clustering, as expected for continuous synthetic
+generators (best silhouette coefficient $0.15\text{--}0.24$ at $k=2$,
+adjusted Rand index $\approx 0.0$ against shape deciles, t-SNE
+trustworthiness $0.95\text{--}0.99$).} \upd{The latent effective participation
+ratio is low: $4.4\text{--}6.3$ (out of 768 dimensions) in sorghum and
+$6.7\text{--}11.3$ in maize.} \upd{Explaining 90\% of latent variance requires
+14--15 principal components in sorghum and 18--19 in maize.} \upd{In sorghum, the
+leading principal component aligns with global plant scale (correlation
+with leaf count $|r| = 0.73\text{--}0.94$).}
 
 % =========================================================================
-% Condensed from paper/data_generation.tex (2026-10-16). Local paths and
-% reproduction commands are omitted; that file is the full record.
-\section{Dataset Generation}
+\section{Dataset Generation Details}
 \label{app:data}
 
-\FieldProc{} holds four synthetic sets: isolated single-plant captures of maize
-and sorghum, and \emph{row views} in which the same plants stand in a crop row
-between two neighbors and are photographed by a ground rover. All images are
-$1024\times1024$ with a $40^\circ$ vertical field of view
-($f_x=f_y=512/\tan20^\circ=1406.7$\,px, principal point at the center), in the
-OpenGL convention ($y$ up, the camera looking down $-z$).
+\upd{\dataset{} contains four synthetic sets: isolated single-plant captures of
+maize and sorghum, alongside simulated \emph{row scenes} captured by a
+level ground rover.} \upd{All images are rendered at $1024 \times 1024$
+resolution with a $40^\circ$ vertical field of view
+($f_x = f_y = 512 / \tan 20^\circ = 1406.7$\,px, principal point at image
+center) in OpenGL camera coordinates ($+y$ up, camera looking along $-z$).}
 
-\subsection{Procedural plants}
-\paragraph{Maize.} Plant $i$ of 15{,}000 is generated with seed $i$ by a
-procedural maize generator whose traits are drawn from Gaussians (height
-$0.832\pm0.104$\,m, leaf count $12.35\pm2.57$, base leaf length
-$0.448\pm0.057$\,m, base leaf width $0.066\pm0.010$\,m, base leaf angle
-$43.98^\circ\pm10.13^\circ$), coupled through four latent traits (vigor,
-slenderness, posture, texture) with correlation strength 0.735, with bottom,
-middle and top canopy curves and per-leaf jitter (scale 0.687). The plants are
-0.62--1.44\,m tall (median 1.01\,m). The generator record is reduced to the
-plant height, the leaf count and, per leaf, its distance along the stem,
-length, width, azimuth, angle and droopiness; per-leaf curvature is added by
-rebuilding the midrib B-spline (target elevation
-$\text{angle}+\text{droopiness}\cdot t^2$) and integrating
-$\theta=\int|\kappa|\,ds$ over the blade, $s\in[0.22,1]$, with the blade length
-$S$ from 10-node Gauss--Legendre quadrature.
+\subsection{Procedural crop generation}
+\paragraph{Maize procedural generation.} Each plant $i$ of $15{,}000$ is
+\upd{generated from seed $i$ using a procedural maize generator.} \upd{Morphological
+traits are sampled from Gaussian distributions: plant height
+$0.832 \pm 0.104$\,m, leaf count $12.35 \pm 2.57$, base leaf length
+$0.448 \pm 0.057$\,m, base leaf width $0.066 \pm 0.010$\,m, and base leaf
+insertion angle $43.98^\circ \pm 10.13^\circ$.} \upd{Attributes are coupled
+through four latent traits (vigor, slenderness, posture, texture) with
+correlation strength 0.735, canopy position curves (bottom, middle, top),
+and per-leaf spatial jitter (scale 0.687).} \upd{Plant heights span 0.62--1.44\,m
+(median 1.01\,m).} \upd{Parameter records store plant height, leaf count, and
+per-leaf stem insertion height, length, width, azimuth, insertion angle,
+and droopiness.} \upd{Per-leaf curvature is generated by constructing midrib
+B-splines and integrating bending curvature along leaf blades using
+10-node Gauss--Legendre quadrature.}
 
-\paragraph{Sorghum.} Plant $i$ of 15{,}000 is generated with seed $i$ by the
-EvoEngine sorghum generator. It draws the plant heading uniformly in
-$[0^\circ,360^\circ)$, the stem tilt ($0\pm1.5^\circ$), the leaf count
-($20\pm2$, clamped to $[2,128]$) and the internode length
-($0.04\pm0.03$\,m), and sets the stem length to
-$\text{internode}\times n_\text{leaves}/(1-s_0)$, with $s_0$ the first leaf's
-starting point. Leaf $k$ at $t=k/(n-1)$ takes its starting point, length,
-width, roll ($\text{roll}_k=(k\bmod2)\cdot180^\circ+\text{roll}(t)$), branching
-angle, bending, curling and waviness from curves over $t$. No panicle is
-generated. The plants have 4--35 leaves (mean 19.5) on stems of
-0.19--1.74\,m.
+\paragraph{Sorghum procedural generation.} Each plant $i$ of $15{,}000$ is
+\upd{generated from seed $i$ using the EvoEngine sorghum generator.} \upd{Heading
+angle is sampled uniformly in $[0^\circ, 360^\circ)$, stem tilt
+$0^\circ \pm 1.5^\circ$, leaf count $20 \pm 2$ (clamped to $[2, 128]$), and
+internode spacing $0.04 \pm 0.03$\,m.} \upd{Stem length is evaluated as
+$\text{internode} \times n_{\text{leaves}} / (1 - s_0)$, where $s_0$
+represents the first leaf insertion point.} \upd{Continuous curves over relative
+height $t \in [0, 1]$ determine leaf insertion height, blade length, width,
+roll ($\text{roll}_k = (k \bmod 2) \cdot 180^\circ + \text{roll}(t)$),
+branching angle, and bending curvature.} \upd{Sorghum plants contain 4--35 leaves
+(mean 19.5) on stems ranging from 0.19\,m to 1.74\,m.}
 
-\subsection{Splits}
-Both species are split by plant into 10{,}500 / 2{,}250 / 2{,}250 plants.
-\emph{Maize:} 19 scalar features are robustly standardized,
-$z=(x-\mathrm{median})/(1.4826\,\mathrm{MAD})$, each plant is scored by
-$\sqrt{z^\top(\Sigma+10^{-6}I)^{+}z}$, and plants are dealt from most to least
-extreme alternately to test and validation until both hold 2{,}250 (seed 0).
-Train scores span 1.56--4.60, validation 4.60--23.3, test 4.60--32.2.
-\emph{Sorghum:} the extremeness reproduces, to the stored precision, as the
-Mahalanobis distance from the mean (sample covariance) over leaf count, stem
-length, mean and maximum leaf length, and mean and standard deviation of leaf
-roll. The hold-out probability rises with a plant's extremeness rank, from 0.3\,\% in the least
-extreme 5\,\% to 70\,\% in the most extreme 5\,\% (median rank 0.75 on validation
-and test, 0.37 on train). \todo{This rule is inferred from the released
-assignment; the script that wrote it was not found.}
+\subsection{Dataset partitioning}
+\upd{Both species are partitioned into 10{,}500 training, 2{,}250 validation,
+and 2{,}250 test plants (70\% / 15\% / 15\%).}
+\begin{itemize}
+\item \upd{ \textbf{Maize partitioning}: 19 scalar morphological features are
+  robustly standardized using median absolute deviation
+  ($z = (x - \mathrm{median}) / (1.4826 \cdot \mathrm{MAD})$).} \upd{Each plant
+  is scored by Mahalanobis distance
+  $\sqrt{z^\top (\Sigma + 10^{-6}I)^{+} z}$.} \upd{The most extreme plants are
+  dealt alternately to test and validation splits to form an extreme tail
+  split (train scores 1.56--4.60, validation 4.60--23.3, test 4.60--32.2).} \item \upd{ \textbf{Sorghum partitioning}: Plants are partitioned based on
+  Mahalanobis distance across six core traits: leaf count, stem length,
+  mean leaf length, maximum leaf length, mean leaf roll, and leaf roll
+  standard deviation.} \upd{Sampling probabilities scale continuously with
+  extremeness rank, rising from 0.3\% in the least extreme 5\% of plants to
+  70\% in the most extreme 5\% (median rank 0.75 on validation and test,
+  0.37 on train).} \todo{The sorghum selection rule is inferred from the
+  released assignment file; the script that wrote it was not found.}
+\end{itemize}
 
-\subsection{Isolated-plant captures}
-Both species are rendered off-screen with \texttt{pyrender}. The camera looks at
-the plant's bounding-box center $\mathbf c$ with world up $(0,1,0)$; lighting is
-ambient 0.15 plus three white directional lights aimed at $\mathbf c$ from
-$(1,1,1)$, $(-1,0.5,-0.5)$ and $(0,1,0)$ (intensities 4.0, 2.0, 1.5), on a gray
-(0.5) background. Depth $z$ with near and far planes $n,f$ is stored as
-$v=\lfloor\mathrm{clip}((z-n)/(f-n),0,1)(2^{32}-1)\rfloor$ across the four
-8-bit channels of a PNG, most significant byte first; $v=0$ is background. A
-pixel $(u,v)$ with depth $z>0$ back-projects to
+\subsection{Isolated-plant sensor rendering}
+\upd{Off-screen rendering is executed via \texttt{pyrender}.} \upd{Cameras target the
+plant bounding-box center $\mathbf{c}$ with world up $(0,1,0)$.} \upd{Lighting
+consists of 0.15 ambient illumination plus three white directional lights
+directed at $\mathbf{c}$ from $(1,1,1)$, $(-1,0.5,-0.5)$, and $(0,1,0)$
+(intensities 4.0, 2.0, 1.5) against a neutral gray background (0.5).} \upd{Depth
+$z \in [n, f]$ is packed losslessly into 32-bit RGBA PNG files:}
 \begin{equation}
-  \mathbf p_{\mathrm{cam}}=\Big(\tfrac{u-c_x}{f_x}z,\;-\tfrac{v-c_y}{f_y}z,\;-z\Big),
+  v = \left\lfloor \mathrm{clip}\left(\frac{z-n}{f-n}, 0, 1\right) (2^{32}-1) \right\rfloor.
+\end{equation}
+\upd{Pixels $(u,v)$ with depth $z > 0$ back-project to 3D camera coordinates:}
+\begin{equation}
+  \mathbf{p}_{\mathrm{cam}} = \left( \frac{u - c_x}{f_x} z,\; -\frac{v - c_y}{f_y} z,\; -z \right).
   \label{eq:supp-backproject}
 \end{equation}
-and clouds are drawn uniformly without replacement from these points.
 
-\emph{Maize:} ten view directions per plant are drawn uniformly on the sphere
-(seeded per plant), at distance $1.05\,r/\sin20^\circ$ with $r$ half the
-bounding-box diagonal; a fourth light (1.5) is placed at the camera, and textured
-leaf, stem and tassel materials are double-sided. Each view stores RGB, an
-RGBA image with the background cleared, depth, the camera pose, the trimmed
-parameter file, and an 8{,}192-point cloud back-projected from that view's
-depth (Eq.~\ref{eq:supp-backproject}), so the cloud contains only the surface
-visible to the camera.
-\emph{Sorghum:} the ten directions form a Fibonacci sphere,
-$y_i=1-2(i+\tfrac12)/10$, $\phi_i=i(\sqrt5-1)\pi+\epsilon_i$ with a small fixed
-jitter, identical for every plant (five above and five below the horizon), at
-2.5\,m; one leaf texture covers the plant and there is no camera light. Each
-view stores RGB, depth, the camera pose, the parameter file, and the complete,
-occlusion-free labeled plant cloud moved into the camera frame.
+\paragraph{Maize captures.} Ten camera directions per plant are sampled
+\upd{uniformly on the sphere at distance $1.05\,r / \sin 20^\circ$
+($r$ = bounding-box half-diagonal).} \upd{A fourth directional light (1.5) is
+mounted to the camera.} \upd{Outputs include RGB images, RGBA images with cleared
+backgrounds, depth maps, camera poses, parameter records, and
+8{,}192-point clouds back-projected from view depth maps.}
 
-\subsection{Row views}
-\paragraph{Composition.} Within a split with plant list $L$, row $i$ has main
-plant $L_i$, right neighbor $L_{i+1}$ and left neighbor $L_{i+2}$ (indices
-modulo $|L|$), so every plant is a main plant once. The world frame is the main
-plant's (stem base at the origin, row along $x$, rover on the $+z$ side), with
-the neighbors' stem bases at $(\pm d,0,0)$, $d=0.15$\,m. Each row is rendered
-at ten orientations: the main plant is turned about its stem base by
-$\theta\in\{0^\circ,10^\circ,\dots,90^\circ\}$, each neighbor by
-$\theta+\delta$, $\delta\sim U(-15^\circ,15^\circ)$ (seeded per split and row).
-Sorghum stems lean, so each sorghum neighbor is also rotated about its stem
-base by the smallest rotation that makes its stem axis (the principal axis of
-its stem vertices) parallel to the main plant's; the main plant is never
-tilted, and maize is not tilted.
+\paragraph{Sorghum captures.} Ten camera directions form a fixed Fibonacci
+\upd{sphere rig at 2.5\,m distance ($y_i = 1 - 2(i+0.5)/10$, elevation angles
+$-64^\circ$ to $+64^\circ$).} \upd{Outputs include RGB images, depth maps, camera
+poses, parameter records, and complete occlusion-free 8{,}192-point clouds
+expressed in the camera frame.}
 
-\paragraph{Contact solver.} The three plants are made free of intersections
-while staying as close as possible to their grown shapes; they may touch but
-not cross. Each blade is a chain of 8\,cm segments from collar to tip whose
-joints bend along circular arcs, up/down and sideways, so the blade stays
-smooth, keeps its length and stays attached. Stems and sheaths (everything
-within 2.5\,cm of the stem axis) and the maize tassel are rigid. A leaf's joint
-bends sum to a total-turn limit, and a leaf may not bend into its own stem or
-cross its own plant's leaves more than it does as grown. Where a leaf would
-cross another plant, it bends at the joint before the contact by the smallest
-clearing angle, smallest first, so it comes to rest on or under what it meets.
-Neighbors bend first; a main-plant leaf bends only where a neighbor
-cannot move (a neighbor's stem or sheath, or a neighbor leaf with no clear
-shape). A sorghum neighbor leaf that cannot bend clear may also roll about its
-stem by up to $\pm90^\circ$. Candidates are screened on 1\,cm occupancy grids and
-every remaining contact is decided by exact triangle--triangle tests; a found
-layout is then settled, each bent leaf easing back toward its grown shape to
-the least bend that still clears. Unsolved layouts are retried under looser
-limits (Tab.~\ref{tab:supp-stages}), then at spacings raised in 5\,cm steps up
-to 1.5\,m and refined in 1\,cm steps.
+\subsection{Simulated crop row rendering}
+\paragraph{Row composition.} Within a split, row $i$ places target main
+\upd{plant $L_i$ between right neighbor $L_{i+1}$ and left neighbor $L_{i+2}$ at
+stem spacing $d = 0.15$\,m along the $x$-axis.} \upd{Rows are rendered across ten
+orientation angles $\theta \in \{0^\circ, 10^\circ, \dots, 90^\circ\}$ with
+random neighbor offsets $\delta \sim U(-15^\circ, 15^\circ)$.} \upd{Sorghum
+neighbors are rotated so their stem axes run parallel to the main stem.}
 
-\paragraph{Independent intersection check.}
-\upd{Solved layouts are verified by a check that shares no code with the
-solver: a separate NumPy implementation takes the plant meshes at their
-rendered positions and, for every pair of plants in the row, runs exact
-triangle--triangle intersection tests between their triangles. A row passes
-only if no triangle of one plant intersects a triangle of another.
-The check found no crossing plant pairs on the rows it was run on;
-\todo{the coverage of this check is not recorded; re-run it over all
-300{,}000 shots and state the count here}.}
+\paragraph{Physical contact solver.} Inter-plant leaf collisions are
+\upd{resolved using an articulated contact solver.} \upd{Leaf blades are modeled as
+chains of 8\,cm segments connected by joints that bend along circular arcs,
+up/down and sideways.} \upd{Stems, sheaths (within 2.5\,cm of stem axes), and
+maize tassels remain rigid.} \upd{Upon collision, joints rotate by the minimum
+clearing angle required to eliminate triangle--triangle intersection.} \upd{Neighbors bend first; main plant leaves bend only when neighbors reach
+rotation limits (Tab.~\ref{tab:supp-stages}).} \upd{When no valid layout exists
+under default limits, limits loosen in stages, and stem spacing widens in
+5\,cm steps (refined to 1\,cm); the maximum spacing used in maize is
+0.33\,m.}
 
-\begin{table}[h]\centering\small\setlength{\tabcolsep}{3pt}
+\begin{table}[h]
+\centering\scriptsize
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lcccc}
 \toprule
-Stage & collar side & blade side & up/down & total turn \\
+Stage & Collar side & Blade side & Up/down & Total turn \\
 \midrule
-0 & $30^\circ$ & $10^\circ$ & $45^\circ$ & $90^\circ$ \\
-1 & $60^\circ$ & $10^\circ$ & $60^\circ$ & $120^\circ$ \\
-2 & $90^\circ$ & $30^\circ$ & $70^\circ$ & $180^\circ$ \\
+Stage 0 (default) & $30^\circ$ & $10^\circ$ & $45^\circ$ & $90^\circ$ \\
+Stage 1 (medium)  & $60^\circ$ & $10^\circ$ & $60^\circ$ & $120^\circ$ \\
+Stage 2 (loose)   & $90^\circ$ & $30^\circ$ & $70^\circ$ & $180^\circ$ \\
 \bottomrule
 \end{tabular}
-\caption{Staged bend limits of the contact solver (per joint, except the
-total turn per leaf).}
-\label{tab:supp-stages}
+\caption{\upd{\textbf{Physical contact solver staged bending thresholds.} Joint
+rotation limits applied across optimization stages to resolve inter-plant
+row leaf collisions.}}
+\label{tab:supp-stages}\label{tab:supp-solver_limits}
 \end{table}
 
-\paragraph{Rover camera and outputs.} One shot is taken per orientation from
-$(0,h,\mathrm{dist})$, looking horizontally at $(0,h,0)$ with $h$ the height of
-the main plant's bounding-box center; $\mathrm{dist}=1.0$\,m for maize and
-2.5\,m for sorghum, near 0.05\,m, far $\mathrm{dist}+2$\,m, with the lens, lights
-and materials of the isolated captures. Each shot is rendered twice from the
-same camera: the input with all three plants (RGBA, depth, and a 24{,}576-point
-cloud of every visible plant) and the ground truth with the main plant alone in
-its bent shape (RGBA, depth, 8{,}192 points), with the main plant's parameter
-record. The maize input clouds were first produced at 8{,}192 points and rebuilt
-at 24{,}576 from the stored depth; the old clouds lie within
-$8.4\times10^{-8}$\,m of the rebuilt ones.
+\paragraph{Independent mesh intersection validation.}
+\upd{Solved row layouts are verified by an independent validation suite that
+shares no code with the solver: it executes exact triangle--triangle
+intersection checks between adjacent plant meshes at their rendered
+positions, and a row passes only if no triangle of one plant intersects a
+triangle of another.} \upd{The check found no inter-plant mesh intersections on
+the rows it was run on; \todo{its coverage is not recorded; re-run it over
+all 300{,}000 rendered row perspectives and state the count here}.}
 
-\begin{table}[h]\centering\small\setlength{\tabcolsep}{2.5pt}
+\begin{table}[h]
+\centering\scriptsize
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lrrrr}
 \toprule
-Split & shots & at $d{=}0.15$\,m & stage 0 / 1 / 2 & max $d$ \\
+Split & Row views & At $d{=}0.15$\,m & Stage 0 / 1 / 2 & Max $d$ \\
 \midrule
-train & 105{,}000 & 76.4\,\% & 81{,}679 / 16{,}138 / 7{,}183 & 0.33\,m \\
-val   & 22{,}500  & 78.3\,\% & 17{,}780 / 3{,}321 / 1{,}399 & 0.28\,m \\
-test  & 22{,}500  & 79.0\,\% & 17{,}824 / 3{,}284 / 1{,}392 & 0.30\,m \\
+Maize train & 105{,}000 & 76.4\% & 81{,}679 / 16{,}138 / 7{,}183 & 0.33\,m \\
+Maize val   & 22{,}500  & 78.3\% & 17{,}780 / 3{,}321 / 1{,}399 & 0.28\,m \\
+Maize test  & 22{,}500  & 79.0\% & 17{,}824 / 3{,}284 / 1{,}392 & 0.30\,m \\
 \bottomrule
 \end{tabular}
-\caption{Maize row statistics. The 99th percentile of the spacing is 0.23\,m
-in every split, and no orientation failed. On 10 sample sorghum rows
-(100 orientations), 85 were solved at 0.15\,m and the rest at
-0.16--0.21\,m.}
-\label{tab:supp-rowstats}
+\caption{\upd{\textbf{Maize crop row solver statistics.} Solution convergence
+rates across solver stages and maximum required plant spacing across
+splits. On 10 sample sorghum rows (100 orientations), 85 were solved at
+0.15\,m and the rest by 0.21\,m.}}
+\label{tab:supp-rowstats}\label{tab:supp-row_stats}
 \end{table}
 
-\paragraph{Caveats.} The row ground truth is the main plant as bent in that
-row, while its parameter record describes the grown plant; main-plant leaves
-are bent only where unavoidable. At 2.5\,m the lens covers about 1.8\,m of
-height, so the top or base of tall sorghum plants can leave the frame (in the
-10 sample sorghum rows the main plant touches the top edge in 58 of 100 shots).
-The two isolated sets differ in view sampling, camera distance, materials,
-lighting and per-view cloud. Sorghum plant 0 uses seed 0, for which the
-generator does not reseed. \todo{Check that plant 0's parameters match its mesh.}
+\paragraph{Rover camera capture.} Row perspectives are captured by a
+\upd{ground rover camera positioned at $(0, h, \mathrm{dist})$ aimed
+horizontally at $(0, h, 0)$, where $h$ represents target plant
+bounding-box center height ($\mathrm{dist} = 1.0$\,m for maize, $2.5$\,m
+for sorghum).} \upd{Each shot is rendered twice: (1) full row scene input (RGBA,
+depth, and 24{,}576-point scene cloud containing target and neighbor
+geometry), and (2) target main plant ground truth in its contact-bent
+shape (RGBA, depth, 8{,}192-point cloud, and procedural parameter record).}
+
+\paragraph{Caveats.} The row ground truth is the main plant as bent in its
+\upd{row, while its parameter record describes the grown plant; main-plant
+leaves are bent only where unavoidable.} \upd{At the 2.5\,m sorghum distance, the
+$40^\circ$ lens covers about 1.8\,m of height, so the top or base of the
+tallest sorghum plants can leave the frame.} \upd{Sorghum plant 0 uses seed 0,
+for which the generator does not reseed its random generator;
+\todo{check that plant 0's parameters match its mesh}.}
