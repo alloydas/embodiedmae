@@ -67,7 +67,25 @@
 
 \begin{document}
 
+% Title and teaser share the one-column head of page 1: \twocolumn[...] sets
+% its argument at full width, and the inner \renewcommand makes \maketitle's
+% own \twocolumn call a no-op so the title lands inside this block.
+\twocolumn[{%
+\renewcommand\twocolumn[1][]{#1}%
 \maketitle
+\begin{center}%
+  \includegraphics[width=\textwidth]{Figures/fig_teaser.pdf}%
+  \captionof{figure}{\textbf{Any sensor in, procedural plant out.} From any subset
+  of field-practical modalities (a single photograph, a depth frame, or
+  a point cloud truncated by row neighbors), \method{} recovers the full
+  procedural representation of the plant: a kilobyte-scale, physiologically
+  interpretable parameter set that can be re-rendered to complete geometry,
+  used as simulation input, and used for trait analytics at field scale.
+  \todo{replace box with figure}}
+  \label{fig:teaser}%
+\end{center}%
+\vspace{4pt}
+}]
 
 \input{sec/0_abstract}    
 \input{sec/1_intro}
