@@ -118,136 +118,145 @@ crop, and the method is evaluated on real field data.
 \section{Detailed Ablation Studies}
 \label{app:ablations}
 
-All numbers in this appendix are from the 15K-plant studies
-(\oldnum{purple} throughout); every table will be refreshed from the
-10K--100K reruns. Protocol: every arm trains at a matched budget of
-\oldnum{197{,}400} optimizer steps, global batch 32; representation
-quality is a ridge probe on the frozen CLS token, one fixed view per
-plant, identical target vectors across arms; generation quality is
-validation Chamfer / parameter MAE at the matched checkpoint.
+All numbers in this appendix are on the final data releases of both species
+unless marked as first release. Protocol: every arm trains for 197{,}400
+optimizer steps at global batch 32; representation quality is a ridge probe on
+the frozen CLS token, one fixed view per plant, identical target vectors across
+arms, with paired bootstrap intervals over plants (a win or a loss needs the
+95\,\% interval to exclude zero on both val and test); generation quality is the
+validation Chamfer at the matched checkpoint.
 
 \subsection{Modality value-add (E2)}
-Four pretraining arms differ only in which token streams exist.
+Eight pretraining arms per species differ only in which token streams exist
+(every stream set that contains the cloud).
 \begin{table}[h]\centering\small
-\begin{tabular}{lcc}
+\begin{tabular}{lcccc}
 \toprule
-Arm & PC Chamfer $\downarrow$ & vs.\ PC-only \\
+ & \multicolumn{2}{c}{Sorghum} & \multicolumn{2}{c}{Maize} \\
+Arm & Chamfer$\times10^{-3}$ & height $R^2$ & Chamfer$\times10^{-3}$ & height $R^2$ \\
 \midrule
-PC only                  & \oldnum{0.00495}  & --             \\
-PC + RGB                 & \oldnum{0.00250}  & \oldnum{$-49.5\%$} \\
-PC + RGB + depth         & \oldnum{0.00171}  & \oldnum{$-65.6\%$} \\
-PC + RGB + depth + params& \oldnum{0.00248}  & \oldnum{$-50.0\%$} \\
+PC                    & 5.00 & 0.895 & 2.63 & 0.171 \\
+PC + depth            & 2.45 & 0.976 & 2.55 & 0.453 \\
+PC + RGB              & 2.57 & 0.979 & 1.61 & 0.620 \\
+PC + RGB + depth      & 1.85 & 0.977 & 1.21 & 0.633 \\
+PC + params           & 4.84 & 0.860 & 2.49 & 0.256 \\
+PC + depth + params   & 4.08 & 0.907 & 2.54 & 0.382 \\
+PC + RGB + params     & 3.00 & 0.962 & 1.21 & 0.509 \\
+all four              & 2.53 & 0.962 & 0.99 & 0.635 \\
 \bottomrule
 \end{tabular}
-\caption{Sorghum E2: adding the parameter stream to the encoder raises
-Chamfer back to the PC+RGB level and loses the depth gain. The frozen
-probe agrees: the four-modality arm is worse on all eight sorghum
-phenotype targets and \oldnum{7 of 11} maize targets.
-\todo{add maize table + probe $R^2$ columns + CIs}}
+\caption{E2, val. In sorghum the parameter stream raises Chamfer in every set
+except PC alone and lowers the probe; in maize it lowers Chamfer but its effect
+on the probe depends on the set (added to PC: 7 wins, 0 losses of 11; to PC+RGB:
+3 wins, 5 losses; to PC+RGB+D: a draw). Full probe columns are in the main
+E2 table.}
 \label{tab:supp-e2}
 \end{table}
 
 \subsection{Token-budget control arms}
-In the four-stream arm, each vision stream has fewer visible tokens, a
-mechanical confound. Control arms restore RGB/depth/PC to the
-three-modality arm's \oldnum{117} visible vision tokens, varying only
-parameter-text visibility. With the budget restored the gap persists
-(height probe \oldnum{0.958} vs.\ \oldnum{0.981}; roll \oldnum{0.764}
-vs.\ \oldnum{0.806}), and visibility is dose-dependent: at 60\% text
-visible, every skilled target worsens further. \todo{full control-arm table with
-bootstrap CIs}
+In the four-stream arm the three sensor streams share the visible budget with
+the parameter tokens (107.4 visible sensor tokens against 117.0 in the
+three-stream arm, parameter tokens 58\,\% visible). The control arms keep the
+parameter tokens outside the shared budget, restoring the 117.0 sensor tokens,
+at three parameter visibilities (20\,\%, 60\,\%, 0\,\% = target only). In sorghum
+no visibility recovers the three-stream arm: height 0.959--0.966 against 0.977,
+roll 0.702--0.771 against 0.781, and the 60\,\% and target-only arms lose all
+nine learnable traits on both splits. In maize the 20\,\% and target-only arms
+beat both the shared-budget arm and PC+RGB+D on all eleven traits, while the
+60\,\% arm loses nine. Full table and intervals: Tab.~\ref{tab:control} of the
+main paper.
 
 \subsection{Parameters as a target only}
-Masking parameter text at 100\% (never an input; reconstructed only by
-the decoder) still loses to omitting the stream entirely: size targets
-\oldnum{$-0.010$ to $-0.012$} $R^2$, roll \oldnum{$-0.069/-0.077$}
-(val/test), mean leaf length \oldnum{$-0.102/-0.097$}, CIs clear of zero.
-In the latent analysis, the target-only arm's latent is
-the most size-dominated of its cohort (PC1 $=$ size at $|r|{=}$
-\oldnum{0.95}, effective rank \oldnum{4.6}). The reconstruction pressure
-itself, under the encoder's capacity, reduces the structure encoded in the
-latent.
-\todo{reconcile with matched-LR pc2text control when it lands}
+Reconstructing the parameters without ever encoding them (100\,\% masked as
+input) still loses to omitting the stream in sorghum: size $-0.011$, roll
+$-0.07$, mean leaf length $-0.10$, leaf width $-0.15$ (val), intervals clear
+of zero. Its latent is the most size-dominated of the sorghum arms: the first
+principal component carries 44\,\% of the variance and correlates with leaf
+count at $|r|{=}0.95$, and the participation ratio falls to 4.3 against 6.7
+for PC+RGB+D. In maize the same arm is the best four-stream variant and beats
+PC+RGB+D on every trait, so the effect of the reconstruction target depends on
+the generator.
 
 \subsection{Data and model scaling at fixed compute}
 \begin{table}[h]\centering\small
 \begin{tabular}{lcccc}
 \toprule
  & \multicolumn{2}{c}{Sorghum} & \multicolumn{2}{c}{Maize} \\
-Train plants & Chamfer & Param acc@.05 & Chamfer & Probe moves? \\
+ & Chamfer$\times10^{-3}$ & height $R^2$ & Chamfer$\times10^{-3}$ & height $R^2$ \\
 \midrule
-1{,}000  & \oldnum{0.00299} & \oldnum{0.608} & \oldnum{0.00292$^{*}$} & -- \\
-3{,}000  & \oldnum{0.00258} & \oldnum{0.775} & \oldnum{$-34\%$} & yes \\
-10{,}000 & \oldnum{0.00241} & \oldnum{0.811} & \oldnum{$-34\%$} & $\le$ noise \\
+1{,}000 plants  & 3.13 & 0.952 & 3.54 & 0.393 \\
+3{,}000 plants  & 2.86 & 0.932 & 1.46 & 0.524 \\
+10{,}000 plants & 2.48 & 0.962 & 0.87 & 0.427 \\
+10{,}500 (all)  & 2.53 & 0.962 & 0.99 & 0.635 \\
+\midrule
+small (25\,M)   & 2.86 & 0.964 & 1.22 & 0.563 \\
+base (114\,M)   & 2.53 & 0.962 & 0.99 & 0.635 \\
+large (332\,M)  & 2.68 & 0.948 & 1.06 & 0.580 \\
 \bottomrule
 \end{tabular}
-\caption{Fixed 197{,}400-step budget. Near-duplicate 10{,}000 vs.\
-10{,}500 arms give the run-to-run noise floor (\oldnum{$\sim$3\%}
-Chamfer, \oldnum{0.02} $R^2$). Chamfer keeps improving with data, while the
-probe saturates by $\sim$3{,}000 plants in both species. More data improves
-geometry but not linearly decodable phenotype.
-$^{*}$maize small-data arms overfit (best at 29\% of schedule,
-+79\% by the end). \todo{refresh at 100K; add model-scaling row (25M
-$\to$ 114M $=-17.1\%$; 114M $\to$ 332M $\approx$ 0: base is the knee)}}
+\caption{Four-stream arm, 197{,}400 steps per row, val. Paired over plants in
+sorghum, the 10{,}000-plant arm ties the full-data arm (one win, no loss), the
+3{,}000-plant arm loses six traits and the 1{,}000-plant arm four. In maize every
+reduced-data arm loses 10 of 11 traits to full data and the probe is not
+monotone in data (the 3{,}000-plant arm beats the 10{,}000-plant arm on height,
+leaf length and leaf count). Base is the best size in both species; in maize
+small and large each lose 10 of 11 traits to base.}
 \label{tab:supp-scaling}
 \end{table}
 
 \subsection{Distillation, per source modality}
-Distilling the full-modal teacher into the warm-started student improves
-the mean generation metric by \oldnum{19.1\%}, and the gain is concentrated
-where the student was weakest: with PC alone the metric improves by
-\oldnum{27.5\%} (Chamfer by \oldnum{56.6\%}), and with parameters alone the
-Chamfer improves by \oldnum{61.9\%}. RGB and depth, already strong, gain
-about \oldnum{11\%}. PC$\rightarrow$params MAE falls \oldnum{43.8\%}
-(\oldnum{0.0617} $\to$ \oldnum{0.0347}), and distilling all four targets
-beats distilling the parameter head alone (\oldnum{$-43.8\%$} vs.\
-\oldnum{$-36.9\%$}); the other heads act as auxiliary supervision.
-Distillation moves the whole view-difficulty curve down without
-flattening it (\oldnum{9/10} views improve; best-to-worst ratio
-unchanged), so view robustness requires a different method.
-\todo{LR caveat: specialist ran at 3e-5 vs.\ 1e-4; matched-LR control
-pending. Per-trait recovery tables (PC vs.\ RGB conditioning,
-position-only baseline) to follow from reruns.}
+From the headline model of each species, distillation lowers the mean
+generation loss by 30.2\,\% in sorghum and 43.5\,\% in maize (val, epoch-0 warm
+start against epoch 100). The gain is largest where the warm start is weakest:
+sorghum Chamfer from the point cloud falls from $5.48$ to $1.39\times10^{-3}$
+and from the parameters alone from $22.7$ to $6.83$; maize Chamfer from the
+photograph falls from $11.3$ to $0.77$. The parameter error from a point cloud
+alone halves in sorghum ($0.040 \to 0.020$) and changes little in maize
+($0.020 \to 0.018$). On the first release, distilling all four targets beat
+distilling the parameter head alone ($-43.8\,\%$ against $-36.9\,\%$ parameter
+error), and distillation moved the whole view-difficulty curve down without
+flattening it (9 of 10 views improved). \todo{LR caveat (first release): the
+parameter specialist ran at $3\times10^{-5}$ against $10^{-4}$.}
 
-\subsection{View invariance without labels}
+\subsection{View invariance without labels (first release)}
 Ten views of one plant share one parameter ground truth, so the spread
 of ten predictions is a label-free view-invariance measure. Distillation
 roughly halves error \emph{and} view spread on the fields with skill
-(starting point \oldnum{$-59\%$}, branching angle \oldnum{$-60\%$}).
+(starting point $-59\,\%$, branching angle $-60\,\%$).
 Zero-skill fields instead become \emph{more} view-dependent, as the head
-starts to track image noise. View stability and accuracy are separate
-properties: several fields move less than 0.3 of their spread across views
-while remaining worse than predicting the plant mean.
+starts to track image noise; the final generator drops those fields. View
+stability and accuracy are separate properties: several fields move less
+than 0.3 of their spread across views while remaining worse than predicting
+the plant mean.
 
 \subsection{Frozen-encoder baselines and camera-pose forensics}
-Our three-modality arm wins every learnable sorghum target against four
-public frozen encoders (EmbodiedMAE-B~\citep{dong2025embodiedmae},
-Point-MAE~\citep{pang2022pointmae}, DINOv2~\citep{oquab2024dinov2},
-MultiMAE~\citep{bachmann2022multimae}) and a supervised-from-scratch network
-under one probe (roll +\oldnum{0.078}, mean leaf length +\oldnum{0.104} over
-the strongest baseline). The margin comes from fusing RGB with geometry:
-off-the-shelf Point-MAE beats our PC-only arm, and the four-modality reference
-arm falls below EmbodiedMAE-B on size targets; this gap is the parameter-input
-effect measured against an external model. Supplying Point-MAE with each
-view's full camera pose gives it the generator's fixed plant azimuth, a
-canonicalization that no field rig provides. Our pose-free model wins
-\oldnum{5} of 9 decided targets against Point-MAE given gravity alone (the
-information a calibrated rig provides). Tassel droop stays below zero for
-every encoder of this design and remains an open limitation. \todo{full tables, both species, with CIs}
+On sorghum the three-stream arm beats every published frozen encoder
+(EmbodiedMAE-B~\citep{dong2025embodiedmae}, Point-MAE~\citep{pang2022pointmae},
+DINOv2~\citep{oquab2024dinov2}, MultiMAE~\citep{bachmann2022multimae}) on
+every trait, and EmbodiedMAE-B, the strongest, on eight of nine paired over
+plants (size $+0.004$ to $+0.007$, roll $+0.04$, leaf length $+0.08$, leaf
+width $+0.09$); it also beats a network of our architecture trained from scratch
+on the probe targets on seven of nine traits. On maize the four-stream arm beats
+EmbodiedMAE-B on 10 of 11 traits and the best pose-free baseline per trait on
+9 (val, point estimates), but the maize network trained from scratch is ahead of
+every frozen 600-epoch arm on all eleven; the maize headline model closes most of
+that gap. On the first maize release, supplying Point-MAE with each view's full
+camera pose gave it the generator's fixed plant azimuth, a canonicalization that
+no field rig provides; against Point-MAE given gravity alone (the information a
+calibrated rig provides), our pose-free model won 5 of 9 decided targets. Tassel
+droop is the weakest trait for every encoder of this design.
 
 \subsection{Latent structure (E9)}
-The latents are continua, as expected for a single-generator population
-(silhouette $\le$ \oldnum{0.24}; k-means at chance against leaf-count
-deciles). Sorghum latents occupy \oldnum{4--7} effective dimensions and maize
-latents \oldnum{7--17}, consistent with maize's more independent generative
-factors. In the first release, the dominant principal component did not align
-with any trait (\oldnum{$\sim$30\%} of variance unexplained by any trait); in
-the final release it is the plant's size in sorghum
-(Sec.~\ref{sec:res-repr}). Linear decodability is also distinct from local
-embedding structure: the probe reads roll angle at $R^2$ \oldnum{0.806} from a
-latent in which roll is barely organized locally. We therefore use probes, not
-t-SNE smoothness, for representation claims on continuous generators.
-\todo{E9 figures; PC1 identity remains open}
+The latents are continua, as expected for a single-generator population: best
+silhouette 0.15 to 0.24 at $k{=}2$, adjusted Rand index $\approx 0$ against
+shape deciles, t-SNE trustworthiness 0.95 to 0.99. The participation ratio is
+4.4 to 6.3 (of 768) in sorghum and 6.7 to 11.3 in maize, consistent with
+maize's more independent generative factors, and the dominant principal
+component of the sorghum latents is the plant's size. Linear decodability is
+distinct from local embedding structure: the probe reads roll at $R^2$ 0.78
+(PC+RGB+D, val) from a latent in which roll is barely organized locally. We
+therefore use probes, not t-SNE smoothness, for representation claims on
+continuous generators.
 
 % =========================================================================
 % Condensed from paper/data_generation.tex (2026-10-16). Local paths and

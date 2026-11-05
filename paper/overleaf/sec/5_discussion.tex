@@ -1,4 +1,4 @@
-% Synced from the embodiedmae repo (paper/discussion.tex, commit 6db1988).
+% Synced from the embodiedmae repo (paper/discussion.tex, commit 131f48a).
 % Numbers come from reports/*.csv etc.; edit the repo copy, then re-sync.
 \section{Discussion and Limitations}
 \label{sec:discussion}
@@ -45,13 +45,18 @@ term because Chamfer barely penalizes a missing blade; its ablation is pending
 (\todo{E7}).
 
 \paragraph{From complete clouds to a camera.}
+% maize partial clouds: reports/pcview_maize_nova_17189727_{coverage,recon,probe}.csv (maize E1, val)
 Every sorghum model was pretrained on complete clouds of isolated plants, and
-Sec.~\ref{sec:regime2} measures the effect of partial clouds. \todo{Maize is the other
-case: a maize \texttt{pointcloud\_cam.ply} is the surface visible to its own camera
-(2\,\% of a cloud's points hidden from that camera, 25\,\% from another; the
-depth image back-projects to within 1\,mm), so every maize model trained on
-single-camera clouds. The maize study inverts the question (what three and ten
-fused cameras add; \texttt{eval/pc\_view\_eval\_maize.py}) and is queued.} The phenotype information survives a
+Sec.~\ref{sec:regime2} measures the effect of partial clouds. Maize is the other
+case: a maize cloud is the surface visible to its own camera (2\,\% of a
+cloud's points hidden from that camera, 25\,\% from another; the depth image
+back-projects to within 1\,mm), so every maize model trained on single-camera
+clouds. Fusing the clouds of three or ten cameras raises coverage of the
+ten-camera cloud from $72\,\%$ to $96\,\%$ and $100\,\%$, but it moves the
+maize headline model off its training distribution: its reconstruction of the
+ten-camera cloud worsens from $1.15$ to $4.54$ and $4.98\times10^{-3}$, and its
+refitted height probe from $0.743$ to $0.670$ and $0.682$ (val). A model is best
+on the coverage it was trained on, in both directions. The phenotype information survives a
 single camera's view, but the latent shifts with coverage, so a readout
 calibrated on complete scans is wrong on partial ones and must be refit. The
 decoder reproduces what it is given and does not hallucinate the hidden half.
