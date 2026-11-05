@@ -76,7 +76,10 @@ def plant_key(species, name):
 def extract(model, cfg, a, model_species, split):
     tag = (f'{Path(a.run_dir).name}__{Path(a.ckpt).stem}__on_{a.data_species}'
            f'__{split}__{a.feature}__seed{a.seed}__rep{a.repeats}'
-           + (f'__limit{a.limit}' if a.limit else '') + (('__drop-' + '-'.join(sorted(a.drop))) if a.drop else ''))
+           + (f'__limit{a.limit}' if a.limit else '') + (('__drop-' + '-'.join(sorted(a.drop))) if a.drop else '')
+           # data-side RGB overrides change the features: key them (before 2026-11-05 --rgb-gain reused the
+           # as-stored cache, so xprobe_maizeE1_on_sorghum_g1_17246373.csv is a copy of the as-stored run)
+           + (f'__rgb-{a.rgb_file}' if a.rgb_file else '') + (f'__g{a.rgb_gain:g}' if a.rgb_gain is not None else ''))
     cache = Path(a.cache_dir) / f'{tag}.npz'
     cache.parent.mkdir(parents=True, exist_ok=True)
     if cache.exists() and not a.refresh:

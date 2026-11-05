@@ -303,8 +303,8 @@ rows of Tab.~\ref{tab:views}.}
 \label{sec:regime3}
 
 % maize rows: /work/mech-ai/alloydas/maize_row (train 10,500 + test 2,250 plants, 10 yaws each);
-% maize from E1 (2026-11-03): zero-shot 17189621, control maize_row_iso_e1 17189701, within-model CIs
-% reports/row_maize_within_{zs,iso}_e1_*.csv, blocks via paper/row_table_block.py; ft maize_row_ft_e1 pending.
+% maize from E1: zero-shot 17189621, control maize_row_iso_e1 17189701, ft maize_row_ft_e1 17189700; within-model CIs
+% reports/row_maize_within_{zs,iso,ft}_e1_*.csv, pair reports/row_maize_pair_ft17189700_iso17189701.csv; blocks via paper/row_table_block.py.
 % eval/eval_row.py -> reports/row_<species>_<run>_<ckpt>_<split>_<job>.{csv,json}: first-release maize ft 17059822,
 % control 17064411, zero-shot 17059823; cross-model pairs reports/row_maize_pair_ft17059822_iso17064411.csv;
 % sorghum rows /work/mech-ai/alloydas/sorghum_row: ft 17082628, control 17082823, zero-shot (E1 ep 1000) 17071869;
@@ -324,11 +324,11 @@ rows of Tab.~\ref{tab:views}.}
     & point cloud & 20.0 & 33.8 & $+13.7$\,{\tiny[$+13.4$, $+14.1$]} & 0.064 & 0.081 & $+0.018$\,{\tiny[$+0.017$, $+0.018$]} \\
     & all three   & 26.4 & 29.6 & $+3.2$\,{\tiny[$+2.9$, $+3.6$]} & 0.086 & 0.093 & $+0.007$\,{\tiny[$+0.007$, $+0.008$]} \\
     \midrule
-    \multicolumn{8}{l}{\emph{Maize, row fine-tune (first release; \todo{rerun from the headline model pending})}} \\
-    & RGB         & 13.0 & 12.2 & $-0.9$\,{\tiny[$-1.0$, $-0.7$]} & 0.057 & 0.060 & $+0.003$\,{\tiny[$+0.003$, $+0.003$]} \\
-    & depth       & 7.1 & 4.6 & $-2.4$\,{\tiny[$-2.6$, $-2.3$]} & 0.053 & 0.055 & $+0.002$\,{\tiny[$+0.002$, $+0.002$]} \\
-    & point cloud & 152.9 & 152.6 & $-0.3$\,{\tiny[$-0.9$, $+0.4$]} & 0.085 & 0.088 & $+0.003$\,{\tiny[$+0.003$, $+0.003$]} \\
-    & all three   & 12.4 & 6.5 & $-5.9$\,{\tiny[$-6.1$, $-5.7$]} & 0.056 & 0.060 & $+0.004$\,{\tiny[$+0.004$, $+0.004$]} \\
+    \multicolumn{8}{l}{\emph{Maize, row fine-tune (from the headline model)}} \\
+    & RGB         & 13.7 & 14.4 & $+0.6$\,{\tiny[$+0.4$, $+0.8$]} & 0.067 & 0.071 & $+0.004$\,{\tiny[$+0.003$, $+0.004$]} \\
+    & depth       & 10.3 & 9.6 & $-0.7$\,{\tiny[$-0.9$, $-0.5$]} & 0.061 & 0.064 & $+0.003$\,{\tiny[$+0.003$, $+0.004$]} \\
+    & point cloud & 21.7 & 21.9 & $+0.2$\,{\tiny[$-0.1$, $+0.5$]} & 0.063 & 0.073 & $+0.010$\,{\tiny[$+0.010$, $+0.010$]} \\
+    & all three   & 12.6 & 4.0 & $-8.6$\,{\tiny[$-8.8$, $-8.3$]} & 0.046 & 0.052 & $+0.005$\,{\tiny[$+0.005$, $+0.005$]} \\
     \midrule
     \multicolumn{8}{l}{\emph{Maize, isolated control (from the headline model)}} \\
     & RGB         & 11.6 & 56.1 & $+44.5$\,{\tiny[$+44.0$, $+45.1$]} & 0.071 & 0.095 & $+0.024$\,{\tiny[$+0.023$, $+0.024$]} \\
@@ -363,9 +363,8 @@ rows of Tab.~\ref{tab:views}.}
   normalized to different extents. $\Delta$ = row minus isolated, paired per
   plant, bootstrap over plants. The row fine-tune reconstructs the target plant
   from the row streams; the control is the same schedule on the isolated twins.
-  The zero-shot model of each species is its headline model, and the maize
-  isolated control is fine-tuned from it; the maize row fine-tune is still the
-  first-release model \todo{(its rerun from the headline model is pending)}.}
+  The zero-shot model of each species is its headline model, and both
+  fine-tuned models of each species start from it.}
   \label{tab:rows}
 \end{table}
 
@@ -394,17 +393,18 @@ own clean inputs ($29.0$ against $1.8\times10^{-4}\,$m$^2$, $+27.2\
 [+26.9, +27.6]$), with the leaf-recipe error higher by $0.050$. The headline
 model without fine-tuning loses little to the neighbors ($+3.2\ [+2.9, +3.6]$)
 because it is already poor under the rover camera, whose viewpoint and
-framing it never saw ($26.4$ on the isolated twins). \todo{Row fine-tune from
-the headline model pending.} With the first-release models, $91\,\%$ of the
-row penalty disappeared once the model was trained against the target plant
-behind its neighbors: the row-trained model on rows beat the isolated-trained
-model on rows by $-26.5\ [-26.9, -26.1]$, and its error was only $+2.6\ [+2.5,
-+2.7]$ above the isolated-trained model on clean inputs, with the leaf-recipe
-error higher by $0.005$. The row-trained model's Chamfer against the input scene rises during
+framing it never saw ($26.4$ on the isolated twins). Training against the
+target plant behind its neighbors removes $92\,\%$ of the row penalty: the
+row-trained model on rows ($4.0$) beats the isolated-trained model on rows by
+$-25.0\ [-25.3, -24.7]$, and its error is only $+2.2\ [+2.2, +2.3]$ above the
+isolated-trained model on clean inputs, with the leaf-recipe error higher by
+$0.008$ and $0.042$ lower than the isolated-trained model on rows. The
+first-release models gave the same picture ($91\,\%$). The row-trained model's Chamfer against the input scene rises during
 training while its Chamfer against the target falls, so the model reconstructs
 the target plant, not the row. Depth alone is the best single input for the
-row-trained model, the scene cloud alone fails for every model, and the error
-grows toward end-on yaws, where the neighbors overlap the target in the image.
+row-trained model ($9.6$), the scene cloud alone is the weakest ($21.9$), and
+the error doubles from its minimum at $20$ to $40^\circ$ yaw ($3.2$) to end-on
+($6.4$ at $90^\circ$), where the neighbors overlap the target in the image.
 
 Sorghum repeats the result at a larger scale. The isolated-plant model is ten
 times worse on rows than on its own clean inputs ($133.8$ against
