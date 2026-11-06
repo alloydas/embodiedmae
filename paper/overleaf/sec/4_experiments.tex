@@ -85,59 +85,62 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
   \begin{tabular}{l cc c cc}
     \toprule
     & Leaf Count & Height Error & Leaf Parameters & $F_1$-score & Chamfer \\
-    Input Modality & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ \\
+    Input Modality (one view) & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ \\
     \midrule
     \multicolumn{6}{l}{\emph{Sorghum}} \\
-    RGB (1 view) &  &  & 0.69$^\ast$ &  & 0.88 \\
-    RGB (3 views) &  &  &  &  &  \\
-    Depth (1 view) &  &  &  &  & 0.62 \\
-    Point Cloud (1 view) &  &  & 0.76$^\ast$ &  & 1.22 \\
-    Full Teacher ($\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$) &  &  &  &  & \textbf{0.35} \\
-    Two-Stage Baseline (Completion $\to$ Fit) &  &  &  &  &  \\
+    RGB & 0.909 & 0.036 & 0.656 & 0.386 & 1.36 \\
+    Depth & 0.956 & 0.026 & 0.679 & \textbf{0.441} & \textbf{0.92} \\
+    Point Cloud & \textbf{0.998} & \textbf{0.022} & 0.674 & 0.369 & 1.46 \\
+    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.891 & 0.038 & 0.635 & 0.394 & 1.35 \\
     \midrule
     \multicolumn{6}{l}{\emph{Maize}} \\
-    RGB (1 view) &  &  &  &  & 0.77 \\
-    RGB (3 views) &  &  &  &  &  \\
-    Depth (1 view) &  &  &  &  & 0.58 \\
-    Point Cloud (1 view) &  &  &  &  & 0.83 \\
-    Full Teacher ($\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$) &  &  &  &  &  \\
-    Two-Stage Baseline (Completion $\to$ Fit) &  &  &  &  &  \\
+    RGB & 0.973 & 0.045 & 0.567 & 0.482 & 0.83 \\
+    Depth & 0.972 & 0.046 & 0.571 & \textbf{0.529} & \textbf{0.64} \\
+    Point Cloud & \textbf{0.986} & \textbf{0.043} & \textbf{0.587} & 0.455 & 0.87 \\
+    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 \\
     \bottomrule
   \end{tabular}
-  \caption{\upd{\textbf{Regime I: single-view reconstruction on isolated plants.}
-  Each row reports performance for the distilled generalist model given only
-  the specified sensor input, compared against the full-modality teacher
-  model and a two-stage baseline (point cloud completion followed by
-  parameter fitting). Chamfer distance ($\times 10^{-3}$, validation) is
-  evaluated against complete ground-truth point clouds. $^\ast$Mean skill
-  across active leaf parameter fields (insertion height, branching angle,
-  length, and roll). \todo{Leaf-count accuracy, height error, $F_1$, the
-  3-view and two-stage rows, and the maize teacher are not yet evaluated;
-  the empty cells await the \dataset{} evaluation scripts.}}}
+  \caption{\upd{\textbf{Regime I: single-view reconstruction on isolated
+  plants.} Each row is the distilled generalist given that input alone, on
+  view 00 of every validation plant (2{,}250 per species).
+  $^\dagger$The headline model given all three sensor streams, scored in its
+  masked pretraining regime (80\% of tokens hidden); with every token visible
+  its cloud collapses. Leaf count and height are read from the predicted
+  recipe: maize stores the leaf count in the plant token, sorghum does not,
+  so its count is derived from the predicted stem length through the
+  generator's rule (stem length $= 0.05n - 0.001$). Leaf-parameter skill is
+  Eq.~\eqref{eq:trait-skill} averaged over leaf fields on real leaf slots.
+  Chamfer and $F_1$ against the complete plant cloud, unit-sphere frame; the
+  distillation history of Tab.~\ref{tab:main} averages over random views, so
+  its Chamfer differs. \todo{Three-view and two-stage (completion then fit)
+  rows not evaluated.}}}
   \label{tab:regime1}
 \end{table*}
 
-\upd{Table~\ref{tab:regime1} presents performance results for single-view
-deployment on isolated crop plants.} \upd{Given a single photograph, a single
-depth frame, or a partial point cloud, \method{} predicts the full
-procedural parameter vector and completes unobserved sensor modalities in a
-single feed-forward pass.}
+\upd{\upd{Table~\ref{tab:regime1} covers deployment on an isolated plant: from one
+photograph, one depth frame, or one point cloud, the model returns the recipe
+and the other streams in a single forward pass.}
+\upd{Depth is the best single input for the cloud in both species (Chamfer
+$0.92$ in sorghum and $0.64 \times 10^{-3}$ in maize, $F_1$ $0.44$ and
+$0.53$), and the photograph alone comes within a factor of 1.5 of it.}
+\upd{On the full test split the photograph-to-cloud Chamfer is $0.88$ in
+sorghum and $0.83$ in maize, with skill $0.98$ and $0.99$ against another
+plant of the split (Sec.~\ref{sec:res-distill}).}
+\upd{The recipe is recovered from any single sensor: the leaf count is within
+one leaf for $91$ to $100\%$ of plants, the height within $2$ to $5\%$, and
+the mean leaf-parameter skill is $0.66$ to $0.68$ in sorghum and $0.57$ to
+$0.59$ in maize.}
+\upd{The skill is high on the leaf's position along the stem ($0.93$ to
+$0.97$ in sorghum, $0.83$ in maize) and on its angle ($0.89$ to $0.95$;
+$0.76$ to $0.79$), moderate on length ($0.62$ to $0.70$), and lowest on blade
+width in sorghum ($0.20$ to $0.22$), whose spread between plants is small.}
+\upd{The headline model given all three streams is no better than the
+generalist given one, because it was never trained to read every token of its
+input.}
+\upd{On the first release, three waviness fields were unrecoverable from any
+source (skill $-0.04$ to $0.02$); the final generator does not include them.}
 
-\upd{On sorghum, point clouds generated from a single photograph achieve a
-Chamfer distance of $0.88 \times 10^{-3}$ ($0.79 \times 10^{-3}$ on test),
-single depth frames yield $0.62 \times 10^{-3}$, and point cloud
-regeneration achieves $1.22 \times 10^{-3}$, compared to
-$0.35 \times 10^{-3}$ for the full-modality teacher.} \upd{The photograph-to-cloud
-student achieves an overall leaf parameter recovery skill of $0.984$
-relative to split variance.} \upd{Evaluating active leaf parameter fields, an
-input point cloud achieves skill scores of $0.95$ for leaf insertion height,
-$0.93$ for branching angle, $0.67$ for leaf length, and $0.50$ for leaf
-roll.} \upd{A single photograph achieves skill scores of $0.90$, $0.85$, $0.66$,
-and $0.33$ on the same fields, respectively.} \upd{Point clouds outperform single
-photographs on every field exhibiting nonzero skill, with the performance
-gap largest on leaf roll.}
-
-\upd{Figure~\ref{fig:qual} illustrates qualitative single-photograph
+Figure~\ref{fig:qual} illustrates qualitative single-photograph
 reconstructions on held-out test plants.} \upd{While the headline model before
 distillation generates diffuse point clouds around target silhouettes, the
 distilled generalist model resolves individual leaf blades, accurately
@@ -425,9 +428,9 @@ angles.}
     $\theta$ (Parameters Only) & -- & -- & 22.7 & 6.83 & & -- & -- & 80.7 & 12.8 \\
     \midrule
     \multicolumn{10}{l}{\emph{Two-Stream Input Pairs $\to$ Point Cloud Generation (Dedicated Student / Generalist)}} \\
-    $\mathrm{RGB}+\mathrm{D}$ & -- & -- & 2.91 & 0.60 / 0.59 & & -- & -- & 1.30 & 0.54 / 0.64 \\
-    $\mathrm{RGB}+\theta$ & -- & -- & 0.43 & 0.40 / 0.39 & & -- & -- & 0.47 & 0.44 / 0.43 \\
-    $\mathrm{D}+\theta$ & -- & -- & 0.50 & 0.37 / \textbf{0.36} & & -- & -- & 0.46 & 0.42 / 0.40 \\
+    $\mathrm{RGB}+\mathrm{D}$ & -- & -- & 2.91 & 0.60 / 0.59 & & -- & -- & 1.30 & 0.53 / 0.55 \\
+    $\mathrm{RGB}+\theta$ & -- & -- & 0.43 & 0.40 / 0.39 & & -- & -- & 0.47 & 0.44 / 0.41 \\
+    $\mathrm{D}+\theta$ & -- & -- & 0.50 & 0.37 / \textbf{0.36} & & -- & -- & 0.46 & 0.42 / \textbf{0.40} \\
     \midrule
     Mean Generation Loss & \multicolumn{4}{c}{$0.371 \to 0.259\ (-30.2\%)$} & & \multicolumn{4}{c}{$0.290 \to 0.164\ (-43.5\%)$} \\
     \bottomrule
@@ -436,8 +439,7 @@ angles.}
   cross-modal distillation (validation set).} Each row represents
   evaluation given only the specified source modality to generate remaining
   streams. Before: zero-shot pre-trained model warm-start; After: distilled
-  generalist student model. \todo{Maize RGB+D (epoch 65) and three-pair
-  (epoch 35) students still training: interim values.}}}
+  generalist student model.}}
   \label{tab:anysubset}\label{tab:main}
 \end{table*}
 
@@ -453,7 +455,9 @@ point-cloud inputs, parameter regression MAE is halved
 ($0.040 \to 0.020$).} \upd{Dual-stream inputs combining sensor data with
 procedural parameters ($\mathrm{RGB}+\theta$ and $\mathrm{D}+\theta$)
 achieve the overall lowest point cloud reconstruction errors
-($0.36\text{--}0.44 \times 10^{-3}$).}
+($0.36\text{--}0.44 \times 10^{-3}$). \upd{A single student trained on all
+three input pairs matches the dedicated two-stream students within $0.03$ in
+both species.}}
 
 \subsection{Influence of procedural parameter stream placement}
 \label{sec:param-stream}\label{sec:exp-params}
