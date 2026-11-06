@@ -133,16 +133,17 @@ and the other streams in a single forward pass.}
 $0.92$ in sorghum and $0.64 \times 10^{-3}$ in maize, $F_1$ $0.44$ and
 $0.53$), and the photograph alone comes within a factor of 1.5 of it.}
 \upd{On the full test split the photograph-to-cloud Chamfer is $0.88$ in
-sorghum and $0.83$ in maize, with skill $0.98$ and $0.99$ against another
-plant of the split (Sec.~\ref{sec:res-distill}).}
+sorghum and $0.83$ in maize; relative to the Chamfer between two random
+plants of the split, that is a skill of $0.98$ and $0.99$
+(Sec.~\ref{sec:res-distill}).}
 \upd{The recipe is recovered from any single sensor: the leaf count is within
-one leaf for $91$ to $100\%$ of plants, the height within $2$ to $5\%$, and
+one leaf for $91$ to $100\%$ of plants, the height is within $2$ to $5\%$, and
 the mean leaf-parameter skill is $0.66$ to $0.68$ in sorghum and $0.57$ to
 $0.59$ in maize.}
 \upd{The skill is high on the leaf's position along the stem ($0.93$ to
 $0.97$ in sorghum, $0.83$ in maize) and on its angle ($0.89$ to $0.95$;
-$0.76$ to $0.79$), moderate on length ($0.62$ to $0.70$), and lowest on blade
-width in sorghum ($0.20$ to $0.22$), whose spread between plants is small.}
+$0.76$ to $0.79$), moderate on length ($0.62$ to $0.70$), and lowest on sorghum blade width
+($0.20$ to $0.22$), whose spread between plants is small.}
 \upd{The headline model given all three streams is no better than the
 generalist given one, because it was never trained to read every token of its
 input.}
@@ -755,7 +756,7 @@ real-scan evaluation.}}
 \upd{Table~\ref{tab:baselines} compares \method{} against self-supervised visual
 encoders.} \upd{Three-stream \method{} ($\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$)
 outperforms DINOv2, MultiMAE, Point-MAE, and EmbodiedMAE across 8 of 9
-sorghum traits and 10 of 11 maize traits.} \upd{Mean-pooled, the headline model
+sorghum traits and 10 of 11 maize traits.} \upd{Under mean pooling, the headline model
 of each species is the strongest frozen encoder in the table: in sorghum it leads
 on size and leaf length (height $0.983$, leaf length $0.371$), and in maize it
 beats every published encoder on all eleven traits, including tassel droop
