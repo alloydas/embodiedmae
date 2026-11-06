@@ -352,6 +352,24 @@ and 2{,}250 test plants (70\% / 15\% / 15\%).}
   Re-running this procedure (\texttt{data\_split/make\_split.py}) reproduces
   the released assignment for all 15{,}000 plants.}
 \end{itemize}
+\upd{Figure~\ref{fig:dataset_stats} shows the resulting split densities, the
+trait structure of the two generators and the occlusion the row scenes
+produce.}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_dataset_stats.pdf}
+  \caption{\upd{\textbf{What \dataset{} spans.} (a) Eight validation plants per
+  species along the leaf-count range, photographed near the horizon. (b)
+  Leaf-count densities per split: validation and test are enriched with
+  extreme plants. (c) Plant height against leaf count for all 15{,}000 plants
+  per species: the sorghum generator ties the two ($r = 0.99$), in maize they
+  are nearly independent ($r = 0.20$). (d) Row occlusion by yaw on the test
+  rows: the share of the target's pixels hidden behind a neighbor (solid) and
+  the share of plant pixels that belong to neighbors (dashed), median and
+  interquartile range over plants.}}
+  \label{fig:dataset_stats}
+\end{figure*}
 
 \subsection{Isolated-plant sensor rendering}
 \upd{Off-screen rendering is executed via \texttt{pyrender}.} \upd{Cameras target the

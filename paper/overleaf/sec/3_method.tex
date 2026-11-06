@@ -84,7 +84,24 @@ forward pass taking milliseconds.}
 \upd{To train and evaluate \method{}, we construct \dataset{}, a synthetic
 benchmark pairing exact procedural ground-truth parameters with multimodal
 field observations under realistic row neighbor occlusion
-(Tab.~\ref{tab:fieldproc}).}
+(Tab.~\ref{tab:fieldproc}).} \upd{Figure~\ref{fig:dataset} shows, for each
+species, the four streams of one view, the ten cameras of one plant and a row
+scene.}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_dataset.pdf}
+  \caption{\upd{\textbf{\dataset{} at a glance.} (a) The four streams of one
+  view per species: photograph, depth frame, camera-frame point cloud and the
+  procedural recipe as text (a plant line, then one line per leaf; maize shows
+  five of its seven leaf fields). (b) The ten cameras of one plant, labelled by
+  elevation above the plant: sorghum on a fixed ladder from $+64^\circ$ to
+  $-64^\circ$, maize at random elevations and azimuths (sorted here). (c) Row
+  scenes at yaw $0^\circ$ and $90^\circ$: neighbor pixels in red, target pixels
+  hidden behind a neighbor in orange, the target plant alone from the same
+  camera, and the scene cloud with neighbor points in grey.}}
+  \label{fig:dataset}
+\end{figure*}
 
 \begin{table}[t]
   \centering\scriptsize
