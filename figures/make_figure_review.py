@@ -58,6 +58,69 @@ def b64png(path, w=1400):
     return 'data:image/png;base64,' + base64.b64encode(b.getvalue()).decode()
 
 
+def comment_block(fig):
+    return f'''<div class="cform"><ul id="l-{fig}" class="clist" hidden></ul>
+<label for="c-{fig}">Your change for this figure</label>
+<textarea id="c-{fig}" rows="3" placeholder="e.g. swap the sorghum plant, bigger labels, drop panel c"></textarea>
+<div class="crow"><button id="b-{fig}" type="button">Send to Claude</button><span id="s-{fig}" class="cstatus"></span></div></div>'''
+
+
+SCRIPT = '''<script>
+(async () => {
+  const figs = [...document.querySelectorAll('section.fig')].map(s => s.id).concat(['general']);
+  const esc = s => String(s).replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[m]));
+  const status = (fig, msg, cls) => { const el = document.getElementById('s-' + fig); if (el) { el.textContent = msg; el.className = 'cstatus ' + (cls || ''); } };
+  const fmt = iso => { try { return new Date(iso).toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'}); } catch (e) { return iso; } };
+  for (const f of figs) {
+    const ta = document.getElementById('c-' + f); if (!ta) continue;
+    try { ta.value = localStorage.getItem('draft:' + f) || ''; } catch (e) {}
+    ta.addEventListener('input', () => { try { localStorage.setItem('draft:' + f, ta.value); } catch (e) {} });
+  }
+  const db = await claude.use('db');
+  if (!db) {
+    figs.forEach(f => status(f, 'Comments need the signed-in claude.ai viewer. Reply in the chat instead.', 'muted'));
+    document.querySelectorAll('.cform button').forEach(b => { b.disabled = true; });
+    return;
+  }
+  const user = await claude.use('user');
+  let uid = null; try { uid = user ? await user.id() : null; } catch (e) {}
+  const LOADING = 'Earlier comments are not reachable yet.';
+  const timer = setTimeout(() => figs.forEach(f => { const el = document.getElementById('s-' + f); if (el && !el.textContent) status(f, LOADING, 'muted'); }), 10000);
+  const render = snap => {
+    const by = {};
+    snap.docs.forEach(d => { const x = d.data(); if (!x || !x.fig) return; (by[x.fig] = by[x.fig] || []).push({id: d.id, ...x}); });
+    for (const f of figs) {
+      const list = document.getElementById('l-' + f); if (!list) continue;
+      const items = by[f] || [];
+      list.innerHTML = items.map(c => '<li class="' + (c.status === 'done' ? 'done' : '') + '"><span class="when">' + esc(fmt(c.at)) + (c.status === 'done' ? ' · addressed' : '') + '</span>' + esc(c.text) + '</li>').join('');
+      list.hidden = items.length === 0;
+    }
+  };
+  db.collection('comments').orderBy('at').onSnapshot(snap => {
+    if (!snap.metadata.fromCache) { clearTimeout(timer); figs.forEach(f => { const el = document.getElementById('s-' + f); if (el && el.textContent === LOADING) status(f, '', ''); }); }
+    render(snap);
+  }, e => { clearTimeout(timer); figs.forEach(f => status(f, 'Earlier comments cannot be loaded (' + e.code + ').', 'warn')); });
+  for (const f of figs) {
+    const ta = document.getElementById('c-' + f), btn = document.getElementById('b-' + f); if (!ta || !btn) continue;
+    btn.addEventListener('click', async () => {
+      const text = ta.value.trim();
+      if (!text) { status(f, 'Write the change first.', 'warn'); return; }
+      btn.disabled = true; status(f, 'Sending…', 'muted');
+      try {
+        await db.collection('comments').add({fig: f, text: text, at: new Date().toISOString(), by: uid, status: 'open'});
+        ta.value = ''; try { localStorage.removeItem('draft:' + f); } catch (e) {}
+        status(f, 'Sent. In the chat, say "read the figure comments" and Claude applies it.', 'ok');
+      } catch (e) {
+        const code = (e && e.code) || 'error';
+        status(f, code === 'invalid_argument' ? 'This viewer cannot write comments here. Reply in the chat instead.' : 'Could not send (' + code + '). Try again.', 'warn');
+      }
+      btn.disabled = false;
+    });
+  }
+})();
+</script>'''
+
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--out', required=True); a = ap.parse_args()
     caps = captions(); today = time.strftime('%Y-%m-%d')
@@ -80,7 +143,7 @@ def main():
         note = NOTES.get(n, 'As committed.')
         cards.append(f'''<section class="fig" id="{n}"><header><h2>{i}. {n[4:].replace('_', ' ')}</h2><span class="pill {cls}">{status}</span></header>
 <p class="meta"><span class="mono">{n}.pdf</span> · made by <span class="mono">{SCRIPTS.get(n, "?")}</span> · rendered {mt}</p>
-<figure><img src="{b64png(FIGS / f'{n}.png')}" alt="{n}" loading="lazy"></figure>{use_html}<p class="note">{note}</p></section>''')
+<figure><img src="{b64png(FIGS / f'{n}.png')}" alt="{n}" loading="lazy"></figure>{use_html}<p class="note">{note}</p>{comment_block(n)}</section>''')
     toc = ''.join(f'<li><a href="#{n}">{i}. {n[4:].replace("_", " ")}</a></li>' for i, n in enumerate(names, 1))
     cands = ''.join(f'<li><b>{t}.</b> {d}</li>' for t, d in CANDIDATES)
     html = f'''<title>CropCode Figures</title>
@@ -113,17 +176,30 @@ figure img {{ display: block; width: 100%; height: auto; }}
 .note {{ font-size: .9rem; margin: 8px 0 0; padding: 8px 12px; background: var(--accent-soft); border-radius: 4px; max-width: 100ch; }}
 .cands {{ border-top: 1px solid var(--line); margin-top: 30px; padding-top: 18px; }}
 .cands ul {{ margin: 6px 0 0; padding-left: 18px; max-width: 90ch; font-size: .95rem; }} .cands li {{ margin: 4px 0; }}
-a:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
+a:focus-visible, textarea:focus-visible, button:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
+.cform {{ margin-top: 12px; display: grid; gap: 6px; max-width: 100ch; }}
+.cform label {{ font-size: .82rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }}
+.cform textarea {{ width: 100%; min-width: 0; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; resize: vertical; background: #fff; color: var(--fg); }}
+.crow {{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }}
+.cform button {{ font: 600 .9rem var(--body); padding: 6px 14px; border-radius: 4px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }}
+.cform button:disabled {{ opacity: .5; cursor: default; }}
+.cstatus {{ font-size: .85rem; color: var(--muted); }} .cstatus.warn {{ color: var(--warn); }} .cstatus.ok {{ color: var(--accent); }}
+.clist {{ list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }}
+.clist li {{ border-left: 3px solid var(--new); padding: 5px 10px; background: #f4f7f2; font-size: .92rem; white-space: pre-wrap; }}
+.clist li.done {{ border-left-color: var(--accent); opacity: .7; }}
+.when {{ display: block; font-size: .75rem; color: var(--muted); }}
 @media (prefers-reduced-motion: no-preference) {{ html {{ scroll-behavior: smooth; }} }}
 </style>
 <div class="wrap">
 <h1>CropCode figures, for review</h1>
-<p class="lede">Every figure in <span class="mono">paper/figs/</span> as of {time.strftime('%Y-%m-%d %H:%M')}, with the caption from the Overleaf section that places it. Reply with the figure number and the change you want.</p>
+<p class="lede">Every figure in <span class="mono">paper/figs/</span> as of {time.strftime('%Y-%m-%d %H:%M')}, with the caption from the Overleaf section that places it. Each figure has a comment box under it: what you send is stored with this page. Then say "read the figure comments" in the chat, and Claude applies them and marks them addressed here.</p>
 <ul class="toc">{toc}</ul>
 <p class="legend">New today = made in this session and not committed yet. Updated today = regenerated today from committed scripts. Committed = unchanged since the date shown.</p>
 {''.join(cards)}
 <section class="cands"><h3>Candidates not built yet</h3><p class="lede">Say which of these you want, or name another.</p><ul>{cands}</ul></section>
-</div>'''
+<section class="cands" id="general"><h3>General comments</h3><p class="lede">Anything that is not about one figure: a new figure, the order, the style.</p>{comment_block('general')}</section>
+</div>
+{SCRIPT}'''
     pathlib.Path(a.out).write_text(html); print('wrote', a.out, len(html) // 1024, 'KB', len(names), 'figures')
 
 
