@@ -229,10 +229,13 @@ sequence is processed by a 12-block ViT encoder (width 768) followed by an
 8-block decoder (width 512).} \upd{The decoder restores all $L$ token positions
 with learnable mask tokens; linear heads predict RGB and depth patches, a
 FoldingNet head emits 41 points per point-cloud token, and an MLP regresses
-the continuous parameters.} \upd{When predicted parameters are scored or
-re-rendered, the real leaf slots are selected by the ground-truth validity
-mask; \todo{inferring leaf presence from the sensors alone is left to
-future work}.}
+the continuous parameters.} \upd{Leaf presence is not predicted per slot. When
+predicted parameters are scored against the ground truth, the real leaf slots
+are selected by the ground-truth validity mask; when a recipe is used without
+ground truth (Tab.~\ref{tab:regime1}), the leaf count is read from the predicted
+recipe itself: maize stores it in the plant token, and for sorghum it follows
+from the predicted stem length through the generator's rule (stem length
+$=0.05n-0.001$), and the first $n$ leaf slots are kept.}
 
 \paragraph{Dynamic Dirichlet modality masking.}
 \upd{To train a single network capable of completing any arbitrary subset of

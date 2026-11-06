@@ -344,8 +344,13 @@ and 2{,}250 test plants (70\% / 15\% / 15\%).}
   standard deviation.} \upd{Sampling probabilities scale continuously with
   extremeness rank, rising from 0.3\% in the least extreme 5\% of plants to
   70\% in the most extreme 5\% (median rank 0.75 on validation and test,
-  0.37 on train).} \todo{The sorghum selection rule is inferred from the
-  released assignment file; the script that wrote it was not found.}
+  0.37 on train).} \upd{The rule is: each plant's extremeness is its Mahalanobis
+  distance from the centroid of the six standardized traits, ranked to a
+  percentile $r\in[0,1]$; a pool of 30\,\% of the plants is drawn without
+  replacement with probability proportional to $(r+0.02)^2$ (seed 42), shuffled,
+  and split equally into test and validation, and the rest is the training split.
+  Re-running this procedure (\texttt{data\_split/make\_split.py}) reproduces
+  the released assignment for all 15{,}000 plants.}
 \end{itemize}
 
 \subsection{Isolated-plant sensor rendering}
@@ -420,8 +425,12 @@ shares no code with the solver: it executes exact triangle--triangle
 intersection checks between adjacent plant meshes at their rendered
 positions, and a row passes only if no triangle of one plant intersects a
 triangle of another.} \upd{The check found no inter-plant mesh intersections on
-the rows it was run on; \todo{its coverage is not recorded; re-run it over
-all 300{,}000 rendered row perspectives and state the count here}.}
+the rows it was run on; which rows those were is not recorded, and the bent
+meshes are not stored with the renders, so it cannot be repeated on the released
+data.} \upd{The solver's own record covers every row: across all 300{,}000 row
+orientations (15{,}000 rows $\times$ 10 yaws per species), none is marked failed,
+and the spacing had to be widened beyond 0.15\,m in 21{,}599 sorghum (14.4\,\%)
+and 34{,}388 maize (22.9\,\%) orientations.}
 
 \begin{table}[h]
 \centering\scriptsize
@@ -457,4 +466,8 @@ leaves are bent only where unavoidable.} \upd{At the 2.5\,m sorghum distance, th
 $40^\circ$ lens covers about 1.8\,m of height, so the top or base of the
 tallest sorghum plants can leave the frame.} \upd{Sorghum plant 0 uses seed 0,
 for which the generator does not reseed its random generator;
-\todo{check that plant 0's parameters match its mesh}.}
+\upd{its recipe matches its mesh where it has parameters (the leaf center lines
+lie a median 3.7\,mm from the mesh, as for plants 1--40, 3.5--3.9\,mm), but 2 of its
+13 leaves carry no parameters, and the mesh is 0.35\,m taller than its stem length
+predicts (about six standard deviations off the relation of the other plants).
+Plant 0 is one of the 10{,}500 training plants and in no evaluation split.}}
