@@ -346,10 +346,10 @@ checkpoint, except three E2 arms now on nova, see below):** 2x A100 / 32 CPU / 1
   epoch 1 of the history (that understates the gain: 19.1 % vs 5.9 %). Figures: `paper/fig_metrics.pdf`
   (`figures/make_metric_fig.py`, Chamfer vs probe over 12 sorghum arms) and `paper/fig_view_elevation.png`
   (copy of `vis_gallery/view_elevation_effect.png`). **The Overleaf project is `paper/overleaf/`** (imported
-  2026-10-14 from the user's zip; `main.tex`, `sec/*.tex`, `CVPR.bib`). Since 2026-11-05 Secs. 0-4 and the
-  supplement are HAND-MAINTAINED in `paper/overleaf/sec/` (the user pastes rewrites; integrate there, blue-mark
-  vs the 2026-10-07 draft with `paper/mark_blue.py`, fact-check numbers against `paper/results.tex`, which stays
-  the numbers archive). Secs. 5-6 are hand-maintained too since 2026-11-05 (sync_overleaf.py retired); `paper/discussion.tex` is their archive.
+  2026-10-14 from the user's zip; `main.tex`, `sec/*.tex`, `CVPR.bib`). Since 2026-11-06 the WHOLE PAPER is ONE FILE, `paper/overleaf/main.tex` (preamble and every
+  section inlined at the user's request, banner comments mark each former file; `sec/` and `preamble.tex` are
+  deleted). User pastes integrate into main.tex directly: blue-mark vs the 2026-10-07 draft with
+  `paper/mark_blue.py`, fact-check numbers against `paper/results.tex`, which stays the numbers archive. `paper/discussion.tex` is the Secs. 5-6 archive (sync_overleaf.py retired).
 - **SORGHUM v2 EVALUATION LAUNCHED (2026-10-14 ~20:10).** All 13 `_d2` ablation arms are complete
   (E2 x4 at 600, tg/tg40/tg100 at 600, e3 at 6168/2024/624, e4 small/large at 600, e8_supervised_d2 at
   600; `config.json` records `rgb_file: rgb_nobg.png` in each). Scavenger, 1 GPU each, `--requeue`,
