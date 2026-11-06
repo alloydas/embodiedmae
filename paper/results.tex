@@ -84,63 +84,63 @@ intervals are in the supplement.
 \subsection{Regime I: single-view reconstruction of isolated plants}
 \label{sec:regime1}
 
-% reports/quant_{teacher_undistilled,smr50_seed1,smr50_seed2,generalist_depth}_{val,test}.json,
-% outputs/4m_distill_15k_all/training_history.json (val, epoch 100),
-% outputs/maize_distill_all/training_history.json (val, epoch 55);
-% skill: reports/PROGRESS_REVIEW_2026-09-18.md sec. 1b (8 plants, 142 leaf tokens)
+% reports/regime1_17265134.csv (eval/regime1_eval.py; generalists 4m_distill_15k_all_d2 / maize_distill_e1_d2
+% best_model, headline models E1 epoch 1000; val, view 00, all plants)
 \begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.2pt}
   \begin{tabular}{l cc c cc}
     \toprule
-    & leaf cnt & height & leaf params & F-score & Chamfer \\
-    input & (acc$\pm$1) $\uparrow$ & (rel.\ err) $\downarrow$ & (mean skill) $\uparrow$ & $\uparrow$ & $\times10^{-3}\downarrow$ \\
+    & leaf count & height & leaf params & F1 & Chamfer \\
+    input (one view) & (acc.\ $\pm$1) $\uparrow$ & (rel.\ err.) $\downarrow$ & (mean skill) $\uparrow$ & ($\tau$ 0.01) $\uparrow$ & $\times10^{-3}\downarrow$ \\
     \midrule
     \multicolumn{6}{l}{\emph{Sorghum}} \\
-    RGB (1 view)        &  &  & 0.69$^\ast$ &  & 0.88 \\
-    RGB (3 views)       &  &  &  &  &  \\
-    depth (1 view)      &  &  &  &  & 0.62 \\
-    PC (1 view)         &  &  & 0.76$^\ast$ &  & 1.22 \\
-    RGB+D+PC            &  &  &  &  & 0.35 \\
-    two-stage (completion$\to$fit) &  &  &  &  &  \\
+    RGB                 & 0.909 & 0.036 & 0.656 & 0.386 & 1.36 \\
+    depth               & 0.956 & 0.026 & 0.679 & 0.441 & 0.92 \\
+    PC                  & 0.998 & 0.022 & 0.674 & 0.369 & 1.46 \\
+    RGB+D+PC$^\dagger$  & 0.891 & 0.038 & 0.635 & 0.394 & 1.35 \\
     \midrule
     \multicolumn{6}{l}{\emph{Maize}} \\
-    RGB (1 view)        &  &  &  &  & 0.98 \\
-    RGB (3 views)       &  &  &  &  &  \\
-    depth (1 view)      &  &  &  &  & 0.99 \\
-    PC (1 view)         &  &  &  &  & 1.97 \\
-    RGB+D+PC            &  &  &  &  &  \\
-    two-stage (completion$\to$fit) &  &  &  &  &  \\
+    RGB                 & 0.973 & 0.045 & 0.567 & 0.482 & 0.83 \\
+    depth               & 0.972 & 0.046 & 0.571 & 0.529 & 0.64 \\
+    PC                  & 0.986 & 0.043 & 0.587 & 0.455 & 0.87 \\
+    RGB+D+PC$^\dagger$  & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Regime I: isolated plants, one view.} Each row is the
-  distilled generalist given that input alone; the RGB+D+PC row is the
-  teacher. Before/after distillation is in Tab.~\ref{tab:anysubset}. Chamfer
-  against the complete plant cloud, val. $^\ast$Mean skill over the four
-  leaf fields with any skill (insertion height, branching angle, length,
-  roll), on an 8-plant sample of the first release; the three waviness fields
-  of that release have zero skill from every source and were dropped from the
-  final generator. \todo{Fill leaf-count accuracy, height error, F-score and
-  the 3-view and two-stage rows from the \FieldProc{} evaluation script; maize
-  numbers are from the 55-epoch first-release student.}}
+  distilled generalist given that input alone, on view 00 of every val plant
+  (2{,}250 per species). $^\dagger$The headline model given all three sensor
+  streams, scored in its masked pretraining regime (80\,\% of tokens hidden);
+  with every token visible its cloud collapses. Leaf count and height are read
+  from the predicted recipe: maize stores the leaf count in the plant token,
+  sorghum does not, so its count is derived from the predicted stem length
+  through the generator's rule (stem length $= 0.05n - 0.001$). Leaf-parameter
+  skill is $1-\mathrm{MAE}/\mathrm{MAE}_{\text{mean}}$ averaged over leaf fields,
+  on real leaf slots. Chamfer and F1 against the plant cloud, unit-sphere frame;
+  the distillation history of Tab.~\ref{tab:anysubset} averages over random views,
+  so its Chamfer differs. \todo{Three-view and two-stage (completion then fit)
+  rows not evaluated.}}
   \label{tab:regime1}
 \end{table*}
 
 Table~\ref{tab:regime1} covers deployment on an isolated plant: from one
 photograph, one depth frame or one cloud, the model returns the recipe and the
-other streams in one forward pass. On sorghum, the cloud generated from a single
-photograph has Chamfer $0.88$ (test $0.79$), the cloud generated from a depth
-frame has $0.62$, and the cloud regenerated from the input cloud has $1.22$. The
-full-modality teacher reaches $0.35$. The photograph-to-cloud student has skill
-$0.984$ against the mean plant of the split. On the first-release leaf fields, a
-cloud gives skill $0.95$ for insertion height, $0.93$ for branching angle,
-$0.67$ for leaf length and $0.50$ for roll, and a photograph gives $0.90$,
-$0.85$, $0.66$ and $0.33$. The cloud is ahead of the photograph on every field
-with nonzero skill, and the gap is widest on roll. The three waviness fields of
-that release were unrecoverable from any source (skill $-0.04$ to $0.02$): the
-head emitted the population mean, and a single aggregate MAE would have averaged
-these constant predictions with the fields that have skill. The final generator
-does not include these fields.
+other streams in one forward pass. Depth is the best single input for the cloud
+in both species (Chamfer $0.92$ in sorghum and $0.64\times10^{-3}$ in maize, F1
+$0.44$ and $0.53$), and the photograph alone comes within a factor of 1.5 of it.
+On the full test split the photograph-to-cloud Chamfer is $0.88$ in sorghum and
+$0.83$ in maize, with skill $0.98$ and $0.99$ against another plant of the split
+(Sec.~\ref{sec:res-distill}). The recipe is recovered from any single sensor: the
+leaf count is within one leaf for $91$ to $100\,\%$ of plants and the height
+within $2$ to $5\,\%$, and the mean leaf-parameter skill is $0.66$ to $0.68$ in
+sorghum and $0.57$ to $0.59$ in maize. The skill is high on the leaf's position
+along the stem ($0.93$ to $0.97$ in sorghum, $0.83$ in maize) and on its angle
+($0.89$ to $0.95$; $0.76$ to $0.79$), moderate on length ($0.62$ to $0.70$), and
+lowest on blade width in sorghum ($0.20$ to $0.22$), whose spread between plants
+is small. The headline model given all three streams is no better than the
+generalist given one, because it was never trained to read every token of its
+input. On the first release, three waviness fields were unrecoverable from any
+source (skill $-0.04$ to $0.02$); the final generator does not include them.
 Fig.~\ref{fig:qual} shows one held-out plant per species generated from the
 photograph alone: the headline model used as is produces a diffuse cloud
 around the right silhouette, the distilled generalist recovers the individual
