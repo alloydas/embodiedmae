@@ -55,11 +55,12 @@ Sec.~\ref{sec:pretrain}. The headline model, like the four-stream ablation arm,
 takes the parameter stream as an encoder input under the shared masking budget,
 and the teacher and every student of Sec.~\ref{sec:res-distill} are initialized
 from its weights. The sorghum headline model and its distillation are on the
-final release; \todo{the few headline-derived numbers still from the
-first-release, Chamfer-only run are marked where they appear.} A maize headline
-model on the same schedule and loss reached 1{,}000 epochs (validation Chamfer
-$0.67\times10^{-3}$); its generalist, the three RGB students and two of the
-four two-stream students are distilled, and the other two are training.
+final release. Two analyses remain on the first release and are marked where
+they appear: the per-view curve of Fig.~\ref{fig:views} and the comparison with
+a parameter-only specialist. A maize headline model on the same schedule and
+loss reached 1{,}000 epochs (validation Chamfer $0.67\times10^{-3}$), and all
+eight of its distillations (the generalist, three RGB students and four
+two-stream students) are complete.
 
 \paragraph{Metrics.}
 We measure geometry by the symmetric Chamfer distance in the unit-sphere frame
@@ -246,7 +247,8 @@ unknown one favors the full ladder.
   \label{fig:e5views}
 \end{figure}
 
-% reports/pcview_16930426_{coverage,recon,probe,bootstrap}.csv (sorghum, final release); E1 row: reports/pcview_17082822_{probe,recon}.csv
+% reports/pcview_16930426_{coverage,recon,probe,bootstrap}.csv (sorghum, final release); E1 row: reports/pcview_17082822_{probe,recon}.csv;
+% maize: reports/pcview_maize_nova_17189727_{coverage,probe,recon}.csv (test probe, val Chamfer)
 \begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.4pt}
@@ -262,6 +264,9 @@ unknown one favors the full ladder.
     PC+RGB+D       & 0.975 & 0.968 & 0.956 & 0.975 & 0.721 & 0.576 & 1.76 & 3.06 & 11.4 \\
     four streams   & 0.961 & 0.953 & 0.946 & 0.961 & 0.748 & 0.818 & 2.52 & 3.62 & 11.4 \\
     headline (E1)  & \textbf{0.982} & \textbf{0.975} & \textbf{0.960} & \textbf{0.982} & 0.623 & $-0.26$ & \textbf{1.36} & 3.14 & 11.6 \\
+    \midrule
+    \multicolumn{10}{l}{\emph{Maize: full = 10 cameras fused, 3 cam / 1 cam as in sorghum; coverage 100 / 96 / 72\,\% of the 10-camera cloud}} \\
+    headline (E1)  & 0.719 & 0.698 & 0.754 & 0.108 & 0.251 & 0.754 & 4.98 & 4.54 & 1.15 \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Self-occlusion: what one or three cameras see (sorghum,
@@ -269,7 +274,10 @@ unknown one favors the full ladder.
   cut to the points visible from camera 0, or cameras 0--2, by ray-casting
   against the mesh. Matched: probe refit per condition. Transferred: the
   full-cloud probe applied as is. Chamfer against the complete cloud, masked
-  regime, val. Final data release; the headline model at epoch 1{,}000.}
+  regime, val. Final data release; the headline model at epoch 1{,}000. Maize
+  clouds are single-camera captures, so the maize model trained on the 1-camera
+  condition: its transferred probe is fitted there and applied to the fused
+  clouds, and Chamfer is against the 10-camera cloud.}
   \label{tab:views}
 \end{table*}
 
@@ -316,8 +324,11 @@ extreme-enriched plants. Fig.~\ref{fig:leafcount} shows the same on the
 test plants of both species: after distillation, the photograph-to-cloud
 error is flat across leaf-count deciles (Spearman $\rho = -0.07$ in sorghum and
 $+0.04$ in maize), while the headline model used as is is worse on maize plants
-with few leaves ($\rho = -0.28$). \todo{Maize self-occlusion rows of
-Tab.~\ref{tab:views}.}
+with few leaves ($\rho = -0.28$). The maize rows of Tab.~\ref{tab:views} run
+the self-occlusion study the other way round: the maize model trained on
+single-camera clouds, and fusing three or ten cameras raises coverage but lowers
+both the refitted probe (height $0.754$ to $0.698$ and $0.719$, test) and the
+reconstruction ($1.15$ to $4.54$ and $4.98\times10^{-3}$).
 
 % figures/make_leafcount_fig.py; reports/quant_{teacher_undistilled,generalist_rgb}_d2_test.json,
 % reports/quant_maize_{e1,generalist_rgb}_d2_test.json (job 17261514)
@@ -644,6 +655,8 @@ vs.\ $10^{-4}$; no final-release specialist was trained}).
 % reports/probe_pr_600_d2_16930422.csv, reports/control_delta_d2_16950816.csv,
 % reports/control_delta_vs_pcrgbdt_d2_16950816.csv (final release);
 % maize: reports/probe_pm_600_e4ctrl_23475548.csv, maize_ctrl_vs_pcrgbd_delta_d2_23475548.csv, maize_ctrl_e4_delta_d2_23475548.csv (Delta)
+% maize Chamfer: each run's training_history final val_pc_chamfer (Delta, via the maize results page); visible tokens: 3,000 draws of
+% EmbodiedMAE4M.random_masking_dirichlet at mask 0.80, 29 maize parameter tokens (sorghum check: 107.3 tokens, text 59 %)
 \begin{table}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3.2pt}
@@ -660,11 +673,11 @@ vs.\ $10^{-4}$; no final-release specialist was trained}).
     $+\theta$, target only        & 117.0 & 0\,\%   & 2.49 & 0.966 & 0.970 & 0.702 & 0.220 \\
     \midrule
     \multicolumn{4}{l}{\emph{Maize}} & height & leaves & curl & stem r. \\
-    PC+RGB+D                      &       & --      & 1.21 & 0.633 & 0.914 & 0.236 & 0.760 \\
-    $+\theta$, shared budget      &       &         & 0.99 & 0.635 & 0.908 & 0.304 & 0.743 \\
-    $+\theta$, gated 20\,\%       &       & 20\,\%  &      & 0.704 & 0.931 & \textbf{0.464} & 0.791 \\
-    $+\theta$, gated 60\,\%       &       & 60\,\%  &      & 0.521 & 0.851 & 0.303 & 0.688 \\
-    $+\theta$, target only        &       & 0\,\%   &      & \textbf{0.776} & \textbf{0.947} & 0.357 & \textbf{0.804} \\
+    PC+RGB+D                      & 117.0 & --      & 1.21 & 0.633 & 0.914 & 0.236 & 0.760 \\
+    $+\theta$, shared budget      & 106.6 & 56\,\%  & 0.99 & 0.635 & 0.908 & 0.304 & 0.743 \\
+    $+\theta$, gated 20\,\%       & 117.0 & 17\,\%  & \textbf{0.94} & 0.704 & 0.931 & \textbf{0.464} & 0.791 \\
+    $+\theta$, gated 60\,\%       & 117.0 & 59\,\%  & 1.04 & 0.521 & 0.851 & 0.303 & 0.688 \\
+    $+\theta$, target only        & 117.0 & 0\,\%   & 1.16 & \textbf{0.776} & \textbf{0.947} & 0.357 & \textbf{0.804} \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Token-budget control.} The four-stream arm
@@ -676,7 +689,8 @@ vs.\ $10^{-4}$; no final-release specialist was trained}).
   PC+RGB+D on both splits, and the 20\,\% arm loses eight (maximum leaf length
   is a draw). In maize the 20\,\% and target-only arms beat both the shared-budget
   arm and PC+RGB+D on all eleven traits on both splits, and the 60\,\% arm loses
-  nine. Intervals are in the supplement. Fig.~\ref{fig:controls} plots the sorghum rows.}
+  nine. Visible shares are averages over draws, floored to whole tokens (the
+  maize 20\,\% arm keeps 5 of 29 parameter tokens). Intervals are in the supplement. Fig.~\ref{fig:controls} plots the sorghum rows.}
   \label{tab:control}
 \end{table}
 
@@ -870,7 +884,7 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
 % sorghum (final release, gain-matched): probe_e8_base_sorghum_d2_16930425.csv, probe_pr_mean600_d2_16930423.csv,
 % probe_e8_score_d2_16930424_mean.csv, e8_*_delta_d2_16950816.csv; maize: probe_e8_base_maize_*.csv,
 % maize final: probe_e8_base_maize_d2_17189733.csv (mean), probe_e8_score_maize_23344948_mean.csv (supervised, Delta),
-% probe_pm_600_22751615.csv (our arms, CLS); mean pooling for every baseline
+% probe_pm_600_22751615.csv (our arms, CLS); headline rows mean-pooled: probe_pr_mean_e1s_17276023.csv, probe_pm_mean_e1m_17276024.csv
 \begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{2.6pt}
@@ -884,11 +898,12 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
     MultiMAE-B (RGB+D)~\cite{bachmann2022multimae}     & 0.922 & 0.925 & 0.833 & 0.679 & 0.232 & & 0.570 & 0.783 & 0.069 & 0.442 \\
     Point-MAE (PC)~\cite{pang2022pointmae}             & 0.958 & 0.963 & 0.863 & 0.716 & 0.188 & & 0.509 & 0.863 & 0.199 & 0.426 \\
     EmbodiedMAE-B (RGB+D+PC)~\cite{dong2025embodiedmae}& 0.976 & 0.979 & 0.871 & 0.765 & 0.265 & & 0.528 & 0.823 & 0.139 & 0.428 \\
-    supervised from scratch (ours, 4 streams)          & 0.973 & 0.978 & \textbf{0.924} & 0.634 & 0.271 & & \textbf{0.785} & \textbf{0.935} & \textbf{0.618} & \textbf{0.860} \\
+    supervised from scratch (ours, 4 streams)          & 0.973 & 0.978 & \textbf{0.924} & 0.634 & 0.271 & & \textbf{0.785} & 0.935 & 0.618 & \textbf{0.860} \\
     \midrule
     \CropCode{} PC only                                & 0.906 & 0.909 & 0.801 & 0.444 & 0.107 & & 0.171 & 0.756 & 0.114 & 0.289 \\
-    \CropCode{} PC+RGB+D                               & \textbf{0.979} & \textbf{0.983} & 0.903 & \textbf{0.809} & \textbf{0.337} & & 0.633 & 0.926 & 0.236 & 0.760 \\
+    \CropCode{} PC+RGB+D                               & 0.979 & 0.983 & 0.903 & \textbf{0.809} & 0.337 & & 0.633 & 0.926 & 0.236 & 0.760 \\
     \CropCode{} four streams                           & 0.965 & 0.968 & 0.888 & 0.779 & 0.288 & & 0.635 & 0.919 & 0.304 & 0.743 \\
+    \CropCode{} headline (1{,}000 ep)                   & \textbf{0.983} & \textbf{0.988} & 0.912 & 0.798 & \textbf{0.371} & & 0.747 & \textbf{0.967} & \textbf{0.739} & 0.841 \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Frozen-encoder baselines (E8).} Published checkpoints are
@@ -896,8 +911,8 @@ scans as Sec.~\ref{sec:regime2} shows it must be.}
   for every model, the only pooling available for all of them. For the
   supervised row, our architecture is trained end to end on the probe targets
   and evaluated with the same frozen probe. Both species on the final release. The maize rows of our three arms
-  use the CLS token \todo{(mean-pooled maize rows not run)}; the maize supervised row is
-  mean-pooled, as in sorghum.}
+  use the CLS token \todo{(mean-pooled maize rows not run)}; the maize supervised row and the
+  headline rows (the headline model of each species, epoch 1{,}000) are mean-pooled.}
   \label{tab:e8}
 \end{table*}
 
@@ -955,12 +970,16 @@ trait without camera pose on 9, losing leaf count to Point-MAE ($0.908$ against
 $0.926$) and tassel droop to DINOv2 ($-0.048$ against $0.297$). The maize
 headline model beats every such baseline on 10 of 11 (height $0.739$ against
 $0.570$, curl $0.698$ against $0.199$, stem radius $0.830$ against $0.588$) and
-still loses tassel droop to DINOv2 ($0.215$ against $0.297$), the trait where
-every encoder of the EmbodiedMAE design is weakest. Unlike sorghum, the maize
+loses only tassel droop to DINOv2 on the CLS token ($0.215$ against $0.297$);
+mean-pooled, it beats every published encoder on all eleven traits (tassel
+droop $0.319$). The sorghum headline model, mean-pooled, is the best encoder on
+size and leaf length (height $0.983$, leaf length $0.371$). Unlike sorghum, the maize
 network trained from scratch on the probe targets is ahead of every frozen
 600-epoch arm on all eleven traits (mean pooled: height $0.785$, curl $0.618$),
-and the maize headline model closes most of that gap and passes it on curl (height $0.739$, curl
-$0.698$ on the CLS token).
+and the maize headline model, mean-pooled, overtakes it on six of eleven
+(leaf angle $0.967$ against $0.935$, curl $0.739$ against $0.618$, droop $0.641$
+against $0.476$) while staying behind on height ($0.747$ against $0.785$) and
+tassel droop ($0.319$ against $0.691$).
 
 \paragraph{Camera pose, a forensic note.}
 Point-MAE given each view's full camera pose beats our camera-frame four-stream
@@ -1023,7 +1042,8 @@ height ($0.983$ against $0.962$). The comparison mixes schedule, batch and loss,
 any one of them.
 
 % reports/probe_pr_xfer_sorghum_17113708.csv, probe_pr_xfer_maize_17113709.csv, reports/t1_warm_vs_scratch_{sorghum,maize}.csv,
-% outputs/{sorghum_xfer_*_d2,maize_xfer_*}/training_history.json; rows: reports/row_sorghum_maize_row_ft_*_17083714.*,
+% outputs/{sorghum_xfer_*_d2,maize_xfer_*}/training_history.json; warm from maize E1: probe_pr_xfer_e1m_17275937.csv,
+% t1_warm_e1m_vs_sorghum_xfer_{scratch,warm}_d2.csv (job 17276265); rows: reports/row_sorghum_maize_row_ft_*_17083714.*,
 % reports/row_maize_sorghum_row_ft_*_17084182.*; maize E1 on sorghum (2026-11-04): reports/xprobe_maizeE1_on_sorghum{,_nodepth}_17246373.csv,
 % xprobe_maizeE1_on_sorghum_g1_17260312.csv, xprobe_sorghum_on_sorghum_anchor_17246373.csv, xquant_maizeE1_on_sorghum_17246373.json,
 % row_sorghum_maize_{4m_pretrain_15k_d2,row_ft_e1}_*_1724637{5,6}.json, pcview_17246566_{recon,probe}.csv
@@ -1057,7 +1077,13 @@ part of the plant the cameras see, and on sorghum rows it reaches $198$
 (zero-shot) and $237$ (the maize row model) against $30.7\times10^{-4}$\,m$^2$
 for the sorghum row model. The encoder therefore learns plant structure that
 carries across species, while the decoder learns one species' shape.
-\todo{T1 warm start from the maize headline model (150 epochs) training.}
+Warm-starting the sorghum three-stream arm from the maize headline model, instead
+of the first-release maize model, widens the gain. Against training from scratch
+it wins all nine traits on both splits (test: roll $+0.20$, leaf width $+0.27$,
+size $+0.04$), and against the first-release warm start it wins seven and loses
+only maximum leaf length (test: leaf width $+0.11$, roll $+0.03$, size $+0.01$).
+Its validation Chamfer falls to $1.83\times10^{-3}$, against $2.29$ from the
+first-release warm start and $3.38$ from scratch, at the same 150 epochs.
 
 \paragraph{What the latent encodes.}
 % reports/e9_pr_600_16592054/, reports/e9_pr_tg100_600_16686383/, reports/e9_pm_600_22751615/
