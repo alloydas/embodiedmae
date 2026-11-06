@@ -85,19 +85,23 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
   \begin{tabular}{l cc c cc}
     \toprule
     & Leaf Count & Height Error & Leaf Parameters & $F_1$-score & Chamfer \\
-    Input Modality (one view) & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ \\
+    Input Modality & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ \\
     \midrule
     \multicolumn{6}{l}{\emph{Sorghum}} \\
     RGB & 0.909 & 0.036 & 0.656 & 0.386 & 1.36 \\
     Depth & 0.956 & 0.026 & 0.679 & \textbf{0.441} & \textbf{0.92} \\
-    Point Cloud & \textbf{0.998} & \textbf{0.022} & 0.674 & 0.369 & 1.46 \\
+    Point Cloud & \textbf{0.998} & 0.022 & 0.674 & 0.369 & 1.46 \\
     $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.891 & 0.038 & 0.635 & 0.394 & 1.35 \\
+    \upd{RGB, three views (recipes averaged)} & \upd{0.995} & \upd{\textbf{0.018}} & \upd{\textbf{0.747}} & -- & -- \\
+    \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.301} & \upd{0.221} & \upd{$-0.010$} & \upd{0.386} & \upd{1.36} \\
     \midrule
     \multicolumn{6}{l}{\emph{Maize}} \\
     RGB & 0.973 & 0.045 & 0.567 & 0.482 & 0.83 \\
     Depth & 0.972 & 0.046 & 0.571 & \textbf{0.529} & \textbf{0.64} \\
-    Point Cloud & \textbf{0.986} & \textbf{0.043} & \textbf{0.587} & 0.455 & 0.87 \\
+    Point Cloud & 0.986 & \textbf{0.043} & 0.587 & 0.455 & 0.87 \\
     $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 \\
+    \upd{RGB, three views (recipes averaged)} & \upd{\textbf{0.988}} & \upd{0.044} & \upd{\textbf{0.597}} & -- & -- \\
+    \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.066} & \upd{0.131} & \upd{0.015} & \upd{0.482} & \upd{0.83} \\
     \bottomrule
   \end{tabular}
   \caption{\upd{\textbf{Regime I: single-view reconstruction on isolated
@@ -112,8 +116,13 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
   Eq.~\eqref{eq:trait-skill} averaged over leaf fields on real leaf slots.
   Chamfer and $F_1$ against the complete plant cloud, unit-sphere frame; the
   distillation history of Tab.~\ref{tab:main} averages over random views, so
-  its Chamfer differs. \todo{Three-view and two-stage (completion then fit)
-  rows not evaluated.}}}
+  its Chamfer differs.} \upd{The three-view row averages the recipes predicted
+  from the photographs of views 00, 01 and 02 (recipe columns only: each
+  view's cloud is in its own camera frame). The two-stage row generates the
+  cloud from the view-00 photograph and reads the recipe from that generated
+  cloud; its cloud columns are the RGB row's. Reading the recipe from a
+  generated cloud loses almost all of it (sorghum leaf skill 0.66 to
+  $-0.01$), so the recipe is read from the sensor directly.}}
   \label{tab:regime1}
 \end{table*}
 
