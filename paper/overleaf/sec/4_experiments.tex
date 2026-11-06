@@ -207,7 +207,16 @@ elevations (e.g., $+0.061$ roll $R^2$ on view 0 for the single-view model),
 but experience performance drops on unobserved elevations (falling by
 $-0.066$ to $-0.144$ on distant views).} \upd{Models trained on the complete
 elevation ladder maintain stable performance across all perspective angles
-($R^2 = 0.734\text{--}0.778$).}
+($R^2 = 0.734\text{--}0.778$).} \upd{Maize gives the same answer without a
+per-view probe: its cameras sit at random elevations, so the probe camera is a
+random one in every arm. All three restricted arms lose to the all-view arm on
+every target (validation $R^2$ for height 0.45, 0.49 and 0.52 against 0.64 for
+the top-down, horizontal and single-camera arms; leaf angle 0.82, 0.80 and 0.89
+against 0.92; stem radius 0.57, 0.57 and 0.72 against 0.75). The single-camera
+arm trains on one tenth of the images but at the probe's elevation distribution
+and loses least; the two band arms train on twice as many images inside a band
+and lose most, so covering the evaluation elevations matters more than the
+number of images.}
 
 \begin{figure}[t]
   \centering
@@ -674,18 +683,17 @@ real-scan evaluation.}}
     EmbodiedMAE-B (RGB+D+PC)~\cite{dong2025embodiedmae} & 0.976 & 0.979 & 0.871 & 0.765 & 0.265 & & 0.528 & 0.823 & 0.139 & 0.428 \\
     Supervised from Scratch (Ours) & 0.973 & 0.978 & \textbf{0.924} & 0.634 & 0.271 & & \textbf{0.785} & 0.935 & 0.618 & \textbf{0.860} \\
     \midrule
-    \CropCode{} PC Only & 0.906 & 0.909 & 0.801 & 0.444 & 0.107 & & 0.171 & 0.756 & 0.114 & 0.289 \\
-    \CropCode{} $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & 0.979 & 0.983 & 0.903 & \textbf{0.809} & 0.337 & & 0.633 & 0.926 & 0.236 & 0.760 \\
-    \CropCode{} Four Streams & 0.965 & 0.968 & 0.888 & 0.779 & 0.288 & & 0.635 & 0.919 & 0.304 & 0.743 \\
+    \CropCode{} PC Only & 0.906 & 0.909 & 0.801 & 0.444 & 0.107 & & \upd{0.222} & \upd{0.814} & \upd{0.175} & \upd{0.490} \\
+    \CropCode{} $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & 0.979 & 0.983 & 0.903 & \textbf{0.809} & 0.337 & & \upd{0.669} & \upd{0.943} & \upd{0.337} & \upd{0.762} \\
+    \CropCode{} Four Streams & 0.965 & 0.968 & 0.888 & 0.779 & 0.288 & & \upd{0.646} & \upd{0.932} & \upd{0.336} & \upd{0.757} \\
     \upd{\CropCode{} Headline (1{,}000 ep)} & \textbf{0.983} & \textbf{0.988} & 0.912 & 0.798 & \textbf{0.371} & & 0.747 & \textbf{0.967} & \textbf{0.739} & 0.841 \\
     \bottomrule
   \end{tabular}
   \caption{\upd{\textbf{Comparison against published pre-trained encoders (E8).}
   Published self-supervised visual encoders are evaluated on identical
-  held-out test plants using mean-pooled features and the same ridge
-  regression probe protocol.} \upd{The maize rows of our three 600-epoch arms use
-  the CLS token (their mean-pooled rows are not yet run); every other row is
-  mean-pooled, including the headline model of each species at epoch 1{,}000.}}
+  held-out \upd{validation} plants using mean-pooled features and the same ridge
+  regression probe protocol.} \upd{Every row is mean-pooled, including the
+  headline model of each species at epoch 1{,}000.}}
   \label{tab:e8}\label{tab:baselines}
 \end{table*}
 
