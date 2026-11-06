@@ -236,13 +236,13 @@ def setrow(key, state, text):
     s = s[:mm.start()] + f"\n    ['{key}','{mm.group(1)}','{state}','{text}']," + s[mm.end():]
 setrow('E5', 'running', 'maize_e5_{topdown,horizon,single}_d2 on Nova (views ranked by camera elevation: top:2 / horizon:2 / view 0), epochs ' + ' / '.join(str(r[2]) for r in e5) + ' of 600 (Nova section). Not probed yet: their reference, maize_4m_d2, exists only on Delta, so its probe cache must be copied to Nova, or the E5 arms probed on Delta.')
 setrow('E8', 'done', 'Supervised from scratch: maize_e8_supervised_d2 scored on Delta (23344948; head row in the probe table). Frozen baselines on d2 (Nova 17189733): Point-MAE, + gravity, + full pose, EmbodiedMAE-B, MultiMAE-B, DINOv2, random init (Nova section).')
-setrow('Distill', 'running', 'From the maize E1 epoch-1000 teacher, on Nova: generalist and three RGB students 100/100 (val chamfer from RGB 11.28e-3 before -> 0.77-0.80e-3 after; F1 0.49-0.51 vs the teacher 0.50); four two-stream students training or pending (Nova section).')
+setrow('Distill', 'done', 'From the maize E1 epoch-1000 teacher, on Nova: generalist and three RGB students 100/100 (val chamfer from RGB 11.28e-3 before -> 0.77-0.80e-3 after; F1 0.49-0.51 vs the teacher 0.50); four two-stream students done (Nova section).')
 setrow('Partial clouds', 'done', 'eval/pc_view_eval_maize.py on maize E1 (Nova 17189727): 1 / 3 / 10 cameras fused (Nova section). The 600-epoch E2 arms were not run.')
 
 # ---- lede, queue
-s = re.sub(r'State as of [0-9-]+ [0-9:]+ CST\.', 'State as of 2026-11-05 12:00 CST.', s, count=1)
+s = re.sub(r'State as of [0-9-]+ [0-9:]+ CST\.', 'State as of 2026-11-06 09:45 CST.', s, count=1)
 s = re.sub(r"\n    \['[^']*','[^']*\(Nova\)',[^\n]*\],", '', s)   # drop Nova rows of an earlier build
-once("    ['23475549','pm_600_e2more',", """    ['17162333, 17213246','mdist_* (Nova)','nova','two running','maize two-stream students from E1: RGB+recipe and depth+recipe done 100 / 100 (11-04 22:02, 11-05 07:50); RGB+D at 66 (ends ~11-06), three-pair at 37 (ends ~11-07)'],
+once("    ['23475549','pm_600_e2more',", """    ['17162329-36, 17213246','mdist_* (Nova)','nova','done 11-06','all eight maize distillations from E1 100 / 100; photograph -> cloud test 10.8 -> 0.83e-3 (17261514)'],
     ['17233173 -> 17189700','maize_row_ft_e1 (Nova)','scavenger','done 11-04 17:13','row fine-tune from E1 100 / 100 and its test eval: Regime III complete (92 % of the row penalty removed)'],
     ['17189739-41','maize_e5_* (Nova)','nova / scavenger','done 11-04','E5 arms 600 / 600; not probed (reference maize_4m_d2 is on Delta)'],
     ['17246373-76, 17246566, 17260311-12','cross-species (Nova)','nova / scavenger','done except T1','maize E1 on sorghum: probe, generation, rows, partial clouds done; T1 warm start resumed (17260311); gain-1.0 probe rerun (17260312)'],

@@ -344,7 +344,7 @@ ul{padding-left:20px;max-width:76ch}li{margin-bottom:4px}
 <script src="params_v2.js"></script>
 <script>
 const D = JSON.parse(document.getElementById('data').textContent);
-const ASOF = '2026-11-05 12:00 CST';
+const ASOF = '2026-11-06 09:45 CST';
 document.getElementById('asof').textContent = ASOF;
 const E2=['e2_pc_d2','e2_pcrgb_d2','e2_pcrgbd_d2','e2_pcrgbdt_d2'];
 const TG=['e2_pcrgbdt_d2','e2_pcrgbdt_tg_d2','e2_pcrgbdt_tg40_d2','e2_pcrgbdt_tg100_d2'];
@@ -414,7 +414,7 @@ const C=D.curves;
     ['E5 view regime','done','probe, bootstrap, F1; held-out-view probe: all ten views done and in the paper (each arm leads on roll only on its own training views, all-view arm most even)','running','all three arms 600 / 600 (11-04); not probed: the reference maize_4m_d2 exists only on Delta (copy its probe cache to Nova, or probe the E5 arms on Delta)'],
     ['E8 baselines','done','baselines + supervised row','running','final-data baselines done (17189733); supervised row scored on Delta (23344948)'],
     ['Partial clouds','done','4 E2 arms + E1','done','E1 (17189727)'],
-    ['Distillation (8 runs)','done','warm start, quant, F1','running','generalist + 3 RGB students done 100 / 100 (11-03): from RGB 11.3 → 0.77-0.80, mean generation loss −43.5 %; F1 0.496-0.511 (17189743; E1 0.504); RGB+recipe and depth+recipe done (val 0.47 → 0.44, 0.46 → 0.42, in tab:anysubset); RGB+D at 66 and three-pair at 37 / 100 on nova; quant not written'],
+    ['Distillation (8 runs)','done','warm start, quant, F1','done','generalist + 3 RGB students done 100 / 100 (11-03): from RGB 11.3 → 0.77-0.80, mean generation loss −43.5 %; F1 0.496-0.511 (17189743; E1 0.504); all eight done 100 / 100 (11-06): two-stream RGB+D 1.30 → 0.53, RGB+recipe 0.47 → 0.44, depth+recipe 0.46 → 0.42, three-pair student within 0.03; photograph → cloud test 10.8 → 0.83 (17261514); Regime I table (17265134)'],
     ['Rows (Regime III)','done','fine-tune, control, zero-shot, paired table, figures','done','from maize E1, all three scored and in tab:rows + fig_rows (11-05): row-trained 4.0 on rows vs isolated-trained 1.8 clean / 29.0 on rows; row training removes 92 % of the penalty (first release 91 %)'],
     ['Cross-species','done','transfer arms, probes, generation, rows','running','maize E1 on sorghum done (11-04): frozen probe within 0.01 of native on size, decoder does not transfer (rows, generation, partial clouds); T1 warm start from maize E1 resumed at epoch 25 after an NCCL timeout (17260311); gain-1.0 probe rerun (17260312)'],
     ['E10 real data','blank','nothing','blank','nothing'],
