@@ -21,7 +21,7 @@ elev_tab = pd.read_csv('data_split/maize_view_elevation.csv.gz')
 SPLITC = {'train': '#9aa5a0', 'val': '#1f6f8b', 'test': '#b8860b'}
 
 fig = plt.figure(figsize=(7.1, 4.9))
-gs = GridSpec(3, 4, figure=fig, height_ratios=[0.8, 0.8, 1.25], width_ratios=[1, 1, 1, 1.25], hspace=0.75, wspace=0.42, left=0.065, right=0.99, top=0.95, bottom=0.1)
+gs = GridSpec(3, 4, figure=fig, height_ratios=[0.8, 0.8, 1.25], width_ratios=[1, 1, 1, 1.25], hspace=0.75, wspace=0.42, left=0.065, right=0.99, top=0.95, bottom=0.17)
 
 # ---- a. the range
 for r, sp in enumerate(('sorghum', 'maize')):
@@ -47,8 +47,8 @@ for j, sp in enumerate(('sorghum', 'maize')):
     ax.set_xlabel(f'{sp} leaf count', fontsize=FS); ax.set_ylabel('density', fontsize=FS); ax.tick_params(labelsize=FS - 1)
     ax.legend(fontsize=FS - 1.5, frameon=False, loc='upper right', handlelength=1.2, borderaxespad=0.1); ax.grid(alpha=.3, lw=.5); ax.set_ylim(0, ax.get_ylim()[1] * 1.25)
     for s_ in ('top', 'right'): ax.spines[s_].set_visible(False)
-fig.text(0.005, 0.40, 'b', fontsize=9, fontweight='bold')
-fig.text(0.03, 0.40, 'Splits enriched with extreme plants', fontsize=FS)
+fig.text(0.005, 0.415, 'b', fontsize=9, fontweight='bold')
+fig.text(0.03, 0.415, 'Splits enriched with extreme plants', fontsize=FS)
 
 # ---- c. the trait structure
 ax = fig.add_subplot(gs[2, 2])
@@ -58,8 +58,8 @@ for sp, col in (('sorghum', V.C['gt']), ('maize', V.C['pred'])):
 ax.set_xlabel('leaf count', fontsize=FS); ax.set_ylabel('height (m)', fontsize=FS); ax.tick_params(labelsize=FS - 1)
 ax.legend(fontsize=FS - 1.5, frameon=False, markerscale=4, loc='upper left', handlelength=1.0); ax.grid(alpha=.3, lw=.5)
 for s_ in ('top', 'right'): ax.spines[s_].set_visible(False)
-fig.text(0.49, 0.40, 'c', fontsize=9, fontweight='bold')
-fig.text(0.51, 0.40, 'Height vs leaf count (15,000 plants)', fontsize=FS)
+fig.text(0.49, 0.415, 'c', fontsize=9, fontweight='bold')
+fig.text(0.51, 0.415, 'Height vs leaf count (15,000 plants)', fontsize=FS)
 
 # ---- d. occlusion by yaw (test rows, row mode, all streams)
 ax = fig.add_subplot(gs[2, 3])
@@ -70,11 +70,11 @@ for sp, pat, col in (('sorghum', 'reports/row_sorghum_sorghum_row_ft_checkpoint_
         med = g[key].median() * 100; lo = g[key].quantile(.25) * 100; hi = g[key].quantile(.75) * 100
         ax.plot(med.index, med.values, ls, color=col, lw=1.3, label=f'{sp}: {lab}')
         ax.fill_between(med.index, lo.values, hi.values, color=col, alpha=0.12, lw=0)
-ax.set_xlabel('row yaw (°): 0 broadside, 90 end-on', fontsize=FS); ax.set_ylabel('% of pixels (median, IQR)', fontsize=FS); ax.tick_params(labelsize=FS - 1)
-ax.legend(fontsize=FS - 1.8, frameon=False, loc='upper center', ncol=2, handlelength=1.3, columnspacing=0.8, bbox_to_anchor=(0.5, 1.02)); ax.grid(alpha=.3, lw=.5); ax.set_xticks(range(0, 91, 30)); ax.set_ylim(-3, 100)
+ax.set_xlabel('row yaw (°; 0 = broadside)', fontsize=FS); ax.set_ylabel('% of pixels (median, IQR)', fontsize=FS); ax.tick_params(labelsize=FS - 1)
+ax.legend(fontsize=FS - 1.5, frameon=False, loc='upper center', ncol=1, handlelength=1.8, labelspacing=0.25, bbox_to_anchor=(0.5, -0.26)); ax.grid(alpha=.3, lw=.5); ax.set_xticks(range(0, 91, 30)); ax.set_ylim(-3, 85)
 for s_ in ('top', 'right'): ax.spines[s_].set_visible(False)
-fig.text(0.745, 0.40, 'd', fontsize=9, fontweight='bold')
-fig.text(0.765, 0.40, 'Row occlusion by yaw (test rows)', fontsize=FS)
+fig.text(0.745, 0.415, 'd', fontsize=9, fontweight='bold')
+fig.text(0.765, 0.415, 'Row occlusion by yaw (test rows)', fontsize=FS)
 out = pathlib.Path('paper/figs')
 for ext in ('pdf', 'png'): fig.savefig(out / f'fig_dataset_stats.{ext}', dpi=220)
 shutil.copy(out / 'fig_dataset_stats.pdf', 'paper/overleaf/Figures/fig_dataset_stats.pdf'); print('wrote', out / 'fig_dataset_stats.pdf')

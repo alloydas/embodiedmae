@@ -275,3 +275,33 @@ def row_overlay(species, shot_dir, size=None, nb=(0.86, 0.22, 0.2), hid=(0.95, 0
     out[nbr] = 0.45 * img[nbr] + 0.55 * np.array(nb)
     out[hidden] = 0.35 * img[hidden] + 0.65 * np.array(hid)
     return out, dict(occ=float(hidden.sum() / max(1, tgt.sum())), nbr=float(nbr.sum() / max(1, (nbr | tgt).sum())))
+
+
+# ---------------------------------------------------------------- recipe as text
+RECIPE_COLS = {
+    'sorghum': (('start', 'starting_point', '{:.2f}'), ('len', 'length', '{:.2f}'), ('roll', 'roll_angle', '{:.0f}'),
+                ('branch', 'branching_angle', '{:.0f}'), ('width', 'width', '{:.3f}')),
+    'maize': (('dist', 'distance', '{:.3f}'), ('len', 'leafLength', '{:.2f}'), ('wid', 'leafWidth', '{:.3f}'), ('angle', 'leafAngle', '{:.0f}'),
+              ('droop', 'droopiness', '{:.0f}'), ('curv', 'avgCurvature', '{:.1f}'), ('az', 'azJitterDeg', '{:+.0f}')),
+}
+
+
+def recipe_lines(species, rec, max_leaves=6, fields=None):
+    """The recipe as text: a plant line, a header, one line per leaf (the first `max_leaves`), in the generator's units
+    (sorghum: start = fraction of the stem, len / width in m, roll / branch in deg; maize: dist / len / wid in m,
+    angle / droop / az in deg, curv = average curvature). `fields` = the short column names to keep (default all)."""
+    cols = [c for c in RECIPE_COLS[species] if fields is None or c[0] in fields]
+    head = ('stem' if species == 'sorghum' else 'height') + f" {rec['height']:.2f} m, {rec['n']} leaves"
+    cells = [[fmt.format(float(l[key])) for _, key, fmt in cols] for l in rec['leaves'][:max_leaves]]
+    w = [max([len(name)] + [len(c[i]) for c in cells]) for i, (name, _, _) in enumerate(cols)]
+    lines = [head, 'leaf ' + ' '.join(n.rjust(w[i]) for i, (n, _, _) in enumerate(cols))]
+    for k, c in enumerate(cells, 1):
+        lines.append(f'{k:>3}  ' + ' '.join(v.rjust(w[i]) for i, v in enumerate(c)))
+    if rec['n'] > max_leaves: lines.append(f'     … {rec["n"] - max_leaves} more leaves')
+    return lines
+
+
+def draw_recipe_text(ax, lines, color, title=None, fs=6.5, tfs=5.2):
+    ax.set_axis_off()
+    ax.text(0.02, 0.98, '\n'.join(lines), transform=ax.transAxes, va='top', ha='left', family='monospace', fontsize=tfs, color=color, linespacing=1.3)
+    if title: ax.set_title(title, fontsize=fs, pad=2)
