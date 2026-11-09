@@ -1810,7 +1810,7 @@ error falls by 61\%) and the most challenging plant geometries
 four decoder targets simultaneously outperforms a specialized
 parameter-only regression student} \updtwo{(recipe MAE from the point cloud
 0.019 against 0.036 and 0.038 for specialists trained at $10^{-4}$ and
-$3 \times 10^{-5}$, from the same warm start at 0.045),} \upd{consistent with
+$3 \times 10^{-5}$, from the same warm start at 0.040),} \upd{consistent with
 auxiliary visual reconstruction tasks acting as regularizing gradients for
 parameter regression.}
 
@@ -2175,7 +2175,7 @@ first-release recipe (point-cloud source, half of its tokens hidden, recipe
 target only, 100 epochs), once at the generalist's learning rate of $10^{-4}$
 and once at the first-release rate of $3 \times 10^{-5}$. Scored on the full
 validation split with the point cloud fully visible, the specialists reach a
-recipe MAE of 0.036 and 0.038 (warm start 0.045), the generalist 0.019: the
+recipe MAE of 0.036 and 0.038 (warm start 0.040), the generalist 0.019: the
 student that also generates the photograph, the depth frame and the cloud
 recovers the recipe better than the student trained on the recipe alone, at
 either learning rate.}
