@@ -264,8 +264,8 @@ reconstruction target for the decoder, while in maize the arms that see
 20\,\% of the parameters or only reconstruct them improve every trait.}
 \upd{Supervising parameters as a generation target, however, lets the
 distilled generalist outperform a parameter-only specialist at parameter
-regression \todo{(first-release result: no final-data specialist was
-trained)}.}
+regression} \updtwo{(recipe MAE from the point cloud 0.019 against 0.036 on the
+final data).}
 \upd{One interpretation, consistent with modality
 competition~\citep{peng2022ogm} and negative transfer~\citep{yu2020pcgrad},
 is that a stream that already contains the answer suppresses learning in the
@@ -1808,9 +1808,11 @@ concentrated on the weakest input modalities (photograph-to-cloud Chamfer
 error falls by 61\%) and the most challenging plant geometries
 (Fig.~\ref{fig:views}B).} \upd{Furthermore, supervising student models across all
 four decoder targets simultaneously outperforms a specialized
-parameter-only regression student \todo{(first release; no final-data
-specialist was trained)}, consistent with auxiliary visual reconstruction
-tasks acting as regularizing gradients for parameter regression.}
+parameter-only regression student} \updtwo{(recipe MAE from the point cloud
+0.019 against 0.036 and 0.038 for specialists trained at $10^{-4}$ and
+$3 \times 10^{-5}$, from the same warm start at 0.045),} \upd{consistent with
+auxiliary visual reconstruction tasks acting as regularizing gradients for
+parameter regression.}
 
 \upd{However, distillation exhibits clear boundary limits:}
 \begin{enumerate}
@@ -2167,10 +2169,16 @@ $5.48 \times 10^{-3}$ to $1.39 \times 10^{-3}$, parameter-only-to-cloud
 Chamfer drops from $22.7 \times 10^{-3}$ to $6.83 \times 10^{-3}$, and
 photograph-to-cloud Chamfer in maize falls from $11.3 \times 10^{-3}$ to
 $0.77 \times 10^{-3}$.} \upd{Parameter regression MAE from point clouds alone is
-halved in sorghum ($0.040 \to 0.020$).} \upd{Note that the specialized
-parameter-only regression student was optimized using a learning rate of
-$3 \times 10^{-5}$, whereas generalist distillation used $10^{-4}$
-\todo{(first release; no final-data specialist was trained)}.}
+halved in sorghum ($0.040 \to 0.020$).} \updtwo{The parameter-only specialist
+was retrained on the final data from the same headline warm start with the
+first-release recipe (point-cloud source, half of its tokens hidden, recipe
+target only, 100 epochs), once at the generalist's learning rate of $10^{-4}$
+and once at the first-release rate of $3 \times 10^{-5}$. Scored on the full
+validation split with the point cloud fully visible, the specialists reach a
+recipe MAE of 0.036 and 0.038 (warm start 0.045), the generalist 0.019: the
+student that also generates the photograph, the depth frame and the cloud
+recovers the recipe better than the student trained on the recipe alone, at
+either learning rate.}
 
 \subsection{Label-free view invariance across camera perspectives}
 \upd{Because ten camera perspectives per plant share identical ground-truth
