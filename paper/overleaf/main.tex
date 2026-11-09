@@ -1058,6 +1058,13 @@ number of images.} \upd{Paired bootstraps over plants confirm it: against the
 all-view arm the horizontal arm loses all 11 probe targets and the top-down and
 single-camera arms lose 10 (height $-0.15$, $-0.19$ and $-0.12$ on validation,
 95\,\% intervals of about $\pm 0.02$); no restricted arm wins a target.}
+\updtwo{Reconstruction gives the same reading through the point-cloud $F_1$
+(protocol of Fig.~\ref{fig:precision_recall}, $\tau = 0.01$, test split). In
+sorghum the score is taken on view 0, a top-down camera: the two arms trained
+on that elevation reach 0.27 and 0.28 against 0.25 for the all-view arm, while
+the horizontal arm, which never saw such a camera, falls to 0.03. In maize the
+score is taken on a random camera, and every restricted arm falls below the
+all-view arm's 0.31 (horizontal 0.22, top-down 0.19, single camera 0.17).}
 
 \begin{figure}[t]
   \centering
