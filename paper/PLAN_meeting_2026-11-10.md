@@ -22,6 +22,17 @@ Claude doc "CropCode CVPR Plan — 2026-11-10 Meeting Actions"
 3. **Image-based comparison metrics** (MultiMAE and the other frozen baselines)
    plus point-cloud metrics (Chamfer, precision/recall/F1) for the supplement,
    per Adarsh.
+3b. **Regime I Chamfer in millimetres (added 2026-11-10, after the meeting).**
+   `eval/regime1_eval.py` and `eval/regime1_extra.py` now compute per-plant
+   `scale_m` (metres per unit-sphere unit, from the raw camera-frame cloud) and
+   report `rms_mm_mean` / `rms_mm_median` = sqrt(chamfer_i) x scale_m_i x 1000,
+   plus a per-plant `regime1_items_<job>.csv` so unit changes never need another
+   model rerun. Rerun both on val (1 GPU, same shape as jobs 17265134 /
+   17276693: `python eval/regime1_eval.py` and `python eval/regime1_extra.py`),
+   commit the `reports/regime1*_<job>.csv` files and push; the Mac session then
+   puts the mm numbers into `tab:regime1`. Do NOT convert the aggregate
+   chamfer_e3 by a single scale: the mean of sqrt(c_i)*s_i is not
+   sqrt(mean c)*median s.
 4. **High-quality field teaser with Anthirik**: complex field photo → one
    occluded modality → final 3D reconstruction.
 5. Optional, settles an open label question: render `G(theta_hat)` meshes for

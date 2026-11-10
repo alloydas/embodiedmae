@@ -4,6 +4,10 @@ For each species, the distilled generalist (best_model.pth) given ONE input alon
 the other streams and the recipe masked), and the headline model (E1, epoch 1000) given rgb+depth+pc
 (the teacher row, scored in its masked regime: 80 % of its visible tokens hidden), on the val plants, view 00 (deterministic, as the probe). Per input it reports:
   chamfer   symmetric squared Chamfer of the generated cloud vs the plant cloud, unit-sphere frame (x1e-3)
+  rms_mm    the same error in millimetres: per plant sqrt(chamfer_i) x scale_m_i x 1000, where scale_m_i
+            is the plant's metres-per-unit (max radius of the raw camera-frame cloud about its centroid);
+            mean and median over plants. The loader rescales an 8,196-point subsample, so the sorghum
+            scale is within <1 % of the frame the chamfer was computed in; maize clouds are read whole.
   f1        F1 at tau 0.01 (precision: predicted points within tau of the cloud; recall: the reverse)
   height    relative error of plant height decoded from the predicted recipe's plant token
             (sorghum: stem_length; maize: height)
@@ -12,7 +16,8 @@ the other streams and the recipe masked), and the headline model (E1, epoch 1000
             rule stem_length = 0.05 n - 0.001, R^2 0.988 on the data)
   skill     mean over leaf fields of 1 - MAE_model / MAE_mean, on real leaf tokens (MAE_mean: predicting
             each field's val mean)
-Writes reports/regime1_<job>.csv. CPU smoke: --limit 4 --device cpu.
+Writes reports/regime1_<job>.csv and reports/regime1_items_<job>.csv (per plant: chamfer, scale_m,
+precision, recall), so a later change of units needs no model rerun. CPU smoke: --limit 4 --device cpu.
 """
 import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import argparse, json, os
@@ -57,6 +62,15 @@ def cfg_of(ck):
     return {}
 
 
+def scale_m_of(folder, sp):
+    """Metres per normalised unit: max radius of the raw camera-frame cloud about its centroid."""
+    import open3d as o3d
+    ply = folder / 'pointcloud_cam.ply' if sp == 'maize' else next(folder.glob('*_nc_cam.ply'))
+    pts = np.asarray(o3d.io.read_point_cloud(str(ply)).points)
+    pts = pts - pts.mean(axis=0)
+    return float(np.linalg.norm(pts, axis=1).max())
+
+
 def pr(pred, gt, tau):
     """per-sample chamfer (squared, symmetric), precision, recall"""
     out = []
@@ -67,7 +81,7 @@ def pr(pred, gt, tau):
     return out
 
 
-rows = []
+rows, item_rows = [], []
 for sp in a.species:
     s = SPEC[sp]; cfg = cfg_of(s['gen'])
     if sp == 'sorghum':
@@ -81,9 +95,12 @@ for sp in a.species:
     models = {'gen': load(s, s['gen']), 'teacher': load(s, s['teacher'])}
     acc = {r[1]: dict(ch=[], p=[], r=[], h_err=[], n_ok=[], lf_err=[]) for r in ROWS}
     lf_gt_all, lf_valid_all = [], []
+    folders = {p.name: p for p in ds.samples}
+    scales, plant_names = [], []
     dl = DataLoader(ds, batch_size=a.batch_size, shuffle=False, num_workers=a.num_workers)
     for bi, (rgb, depth, pc, par, tv, names) in enumerate(dl):
         rgb, depth, pc, par, tv = (t.to(a.device) for t in (rgb, depth, pc, par, tv))
+        scales += [scale_m_of(folders[n], sp) for n in names]; plant_names += list(names)
         lf_gt_all.append(par[:, 1:, :s['n_leaf_fields']].cpu()); lf_valid_all.append(tv[:, 1:].cpu())
         h_gt = (par[:, 0, s['h_idx']].cpu().numpy() * s['pscale'][s['h_idx']] - s['pshift'][s['h_idx']])
         if sp == 'maize': n_gt = np.rint(par[:, 0, 0].cpu().numpy() * s['pscale'][0])
@@ -115,10 +132,17 @@ for sp in a.species:
         skills = [1 - float(E[..., f][V].mean()) / base[f] for f in range(s['n_leaf_fields'])]
         P, R = np.mean(acc[lab]['p']), np.mean(acc[lab]['r'])
         f1 = np.mean([2 * p * r / (p + r) if p + r > 0 else 0 for p, r in zip(acc[lab]['p'], acc[lab]['r'])])
+        rms_mm = np.sqrt(np.asarray(acc[lab]['ch'])) * np.asarray(scales) * 1000.0
+        item_rows += [dict(species=sp, model=key, input=lab, plant=nm, scale_m=sc, chamfer=c, precision=p_, recall=r_)
+                      for nm, sc, c, p_, r_ in zip(plant_names, scales, acc[lab]['ch'], acc[lab]['p'], acc[lab]['r'])]
         rows.append(dict(species=sp, model=key, input=lab, n=len(acc[lab]['ch']), chamfer_e3=1e3 * np.mean(acc[lab]['ch']),
+                         rms_mm_mean=float(rms_mm.mean()), rms_mm_median=float(np.median(rms_mm)),
+                         scale_m_median=float(np.median(scales)),
                          f1=f1, precision=P, recall=R, height_rel_err=np.median(acc[lab]['h_err']),
                          leaf_count_acc1=np.mean(acc[lab]['n_ok']), leaf_skill_mean=np.mean(skills),
                          leaf_skill_fields=' '.join(f'{x:.3f}' for x in skills)))
         print(rows[-1])
 out = a.out or f"reports/regime1_{os.environ.get('SLURM_JOB_ID', 'manual')}.csv"
 pd.DataFrame(rows).to_csv(out, index=False); print('wrote', out)
+items_out = out.replace('regime1_', 'regime1_items_')
+pd.DataFrame(item_rows).to_csv(items_out, index=False); print('wrote', items_out)

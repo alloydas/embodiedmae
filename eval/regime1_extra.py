@@ -7,6 +7,8 @@
              that generated cloud is fed back as the point-cloud source to read the recipe. Recipe
              columns from the second stage; Chamfer/F1 of the first-stage cloud (= the RGB row).
 Recipe metrics exactly as eval/regime1_eval.py (height relative error, leaf count +-1, mean leaf skill).
+The two_stage row also reports rms_mm_mean / rms_mm_median: per plant sqrt(chamfer_i) x scale_m_i x 1000,
+scale_m_i = max radius in metres of the raw view-00 camera-frame cloud about its centroid (as regime1_eval).
 Writes reports/regime1_extra_<job>.csv. CPU smoke: --limit 4 --device cpu.
 """
 import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
@@ -49,6 +51,15 @@ def cfg_of(ck):
     return {}
 
 
+def scale_m_of(folder, sp):
+    """Metres per normalised unit (as eval/regime1_eval.py)."""
+    import open3d as o3d
+    ply = folder / 'pointcloud_cam.ply' if sp == 'maize' else next(folder.glob('*_nc_cam.ply'))
+    pts = np.asarray(o3d.io.read_point_cloud(str(ply)).points)
+    pts = pts - pts.mean(axis=0)
+    return float(np.linalg.norm(pts, axis=1).max())
+
+
 @torch.no_grad()
 def run(m, rgb, depth, pc, par, tv, vis, seed):
     torch.manual_seed(seed)
@@ -72,9 +83,11 @@ for sp in a.species:
     if a.limit: plants = plants[:a.limit]
     m = load(s); np.random.seed(a.seed)
     acc = {k: dict(h=[], n=[], lf=[], ch=[], p=[], r=[]) for k in ('rgb3', 'two_stage')}
+    scales = []
     G, V = [], []
     for bi in range(0, len(plants), a.batch_size):
         chunk = plants[bi:bi + a.batch_size]
+        scales += [scale_m_of(ds.samples[by[p][0]], sp) for p in chunk]
         items = {v: [ds[by[p][v]] for p in chunk] for v in (0, 1, 2)}
         T = lambda v, k: torch.stack([it[k] for it in items[v]]).to(a.device)
         rgb0, depth0, pc0, par, tv = T(0, 0), T(0, 1), T(0, 2), T(0, 3), T(0, 4)
@@ -109,7 +122,9 @@ for sp in a.species:
         row = dict(species=sp, input=k, n=len(acc[k]['h']), height_rel_err=float(np.median(acc[k]['h'])),
                    leaf_count_acc1=float(np.mean(acc[k]['n'])), leaf_skill_mean=float(np.mean(sk)), leaf_skill_fields=' '.join(f'{x:.3f}' for x in sk))
         if acc[k]['ch']:
+            rms_mm = np.sqrt(np.asarray(acc[k]['ch'])) * np.asarray(scales) * 1000.0
             row.update(chamfer_e3=1e3 * np.mean(acc[k]['ch']),
+                       rms_mm_mean=float(rms_mm.mean()), rms_mm_median=float(np.median(rms_mm)),
                        f1=float(np.mean([2 * p * r / (p + r) if p + r > 0 else 0 for p, r in zip(acc[k]['p'], acc[k]['r'])])))
         rows.append(row); print(row)
 out = a.out or f"reports/regime1_extra_{os.environ.get('SLURM_JOB_ID', 'manual')}.csv"
