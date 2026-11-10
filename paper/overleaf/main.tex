@@ -1585,14 +1585,16 @@ real-scan evaluation.}}
     \toprule
     & \multicolumn{5}{c}{Sorghum} & & \multicolumn{4}{c}{Maize} \\
     \cmidrule(lr){2-6}\cmidrule(lr){8-11}
-    Frozen Encoder Baseline & Height & Leaf Cnt & Branch & Roll & Leaf Len & & Height & \upd{Leaf Angle} & Curl & Stem Rad \\
+    \updtwo{Frozen Encoder} & Height & Leaf Cnt & Branch & Roll & Leaf Len & & Height & \upd{Leaf Angle} & Curl & Stem Rad \\
     \midrule
+    \multicolumn{11}{l}{\updtwo{\emph{Published Encoders (Released Weights) and a Supervised Reference}}} \\
     DINOv2 ViT-B/14 (RGB)~\cite{oquab2024dinov2} & 0.924 & 0.928 & 0.840 & 0.573 & 0.235 & & 0.561 & 0.816 & 0.072 & 0.588 \\
     MultiMAE-B (RGB+D)~\cite{bachmann2022multimae} & 0.922 & 0.925 & 0.833 & 0.679 & 0.232 & & 0.570 & 0.783 & 0.069 & 0.442 \\
     Point-MAE (PC)~\cite{pang2022pointmae} & 0.958 & 0.963 & 0.863 & 0.716 & 0.188 & & 0.509 & 0.863 & 0.199 & 0.426 \\
     EmbodiedMAE-B (RGB+D+PC)~\cite{dong2025embodiedmae} & 0.976 & 0.979 & 0.871 & 0.765 & 0.265 & & 0.528 & 0.823 & 0.139 & 0.428 \\
     Supervised from Scratch (Ours) & 0.973 & 0.978 & \textbf{0.924} & 0.634 & 0.271 & & \textbf{0.785} & 0.935 & 0.618 & \textbf{0.860} \\
     \midrule
+    \multicolumn{11}{l}{\updtwo{\emph{\CropCode{} (Self-Supervised Pretraining, No Labels)}}} \\
     \CropCode{} PC Only & 0.906 & 0.909 & 0.801 & 0.444 & 0.107 & & \upd{0.222} & \upd{0.814} & \upd{0.175} & \upd{0.490} \\
     \CropCode{} $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & 0.979 & 0.983 & 0.903 & \textbf{0.809} & 0.337 & & \upd{0.669} & \upd{0.943} & \upd{0.337} & \upd{0.762} \\
     \CropCode{} Four Streams & 0.965 & 0.968 & 0.888 & 0.779 & 0.288 & & \upd{0.646} & \upd{0.932} & \upd{0.336} & \upd{0.757} \\
@@ -1603,7 +1605,7 @@ real-scan evaluation.}}
   Published self-supervised visual encoders are evaluated on identical
   held-out \upd{validation} plants using mean-pooled features and the same ridge
   regression probe protocol.} \upd{Every row is mean-pooled, including the
-  headline model of each species at epoch 1{,}000.}}
+  headline model of each species at epoch 1{,}000.} \updtwo{The top block holds the published encoders with their released weights and our architecture trained end to end on the trait labels; the bottom block holds \CropCode{} encoders pretrained without labels.}}
   \label{tab:e8}\label{tab:baselines}
 \end{table*}
 
