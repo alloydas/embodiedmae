@@ -1614,7 +1614,7 @@ real-scan evaluation.}}
   Published self-supervised visual encoders are evaluated on identical
   held-out \upd{validation} plants using mean-pooled features and the same ridge
   regression probe protocol.} \upd{Every row is mean-pooled, including the
-  headline model of each species at epoch 1{,}000.} \updtwo{The top block holds the published encoders with their released weights and our architecture trained end to end on the trait labels; the bottom block holds \CropCode{} encoders pretrained without labels.}}
+  headline model of each species at epoch 1{,}000.} \updtwo{The top block holds the published encoders with their released weights and our architecture trained end to end on the trait labels; the bottom block holds \CropCode{} encoders pretrained without labels.} \updtwo{Values are validation $R^2$ (higher is better); bold marks the best value in each column.}}
   \label{tab:e8}\label{tab:baselines}
 \end{table*}
 
@@ -1646,6 +1646,9 @@ real-scan evaluation.}}
   data helps reconstruction more reliably than it helps the probes.}}
   \label{tab:scaling}\label{tab:scaling_ablations}
 \end{table*}
+
+\paragraph{Probe protocol for the encoder comparison.}
+\updtwo{Table~\ref{tab:baselines} applies the trait probe of Sec.~\ref{sec:field} to every encoder in the same way, with two changes that let the published encoders take part.} \updtwo{First, each plant is represented by the mean of the encoder's output tokens, the one readout that every encoder supports; our models leave their \texttt{[CLS]} token out of this mean.} \updtwo{Second, each encoder receives only the streams it was built for, all taken from view 00 of the plant: DINOv2 the photograph, MultiMAE the photograph and depth frame, Point-MAE the point cloud, EmbodiedMAE all three, and each \method{} encoder the sensor streams it was pretrained on.} \updtwo{The procedural parameters are never an input.} \updtwo{For each encoder and trait, the features of the 10{,}500 training plants are standardized with training statistics only.} \updtwo{A ridge regression is then fitted, with its regularization strength chosen from $\{0.1, 1, 10, 10^2, 10^3, 10^4\}$ by five-fold cross-validation on the training plants.} \updtwo{The table reports $R^2$ on the 2{,}250 validation plants.} \updtwo{The network trained from scratch on the labels goes through the same probe on its frozen features; its own regression head is not used.} \updtwo{The traits are the generator's ground truth for each plant.} \updtwo{In sorghum they are stem length, leaf count, mean leaf branching angle, mean leaf roll and mean leaf length.} \updtwo{In maize they are summed stem internode length, mean leaf angle, mean leaf curvature and stem radius.} \updtwo{The validation and test splits are enriched with extreme plants, with about 1.8 times the training variance in sorghum and 1.5 to 2.6 times in maize.} \updtwo{The $R^2$ values therefore rank the encoders within the table, but they are not comparable with values reported in other work.} \updtwo{Test $R^2$ stays close to validation; for the maize headline model, height reaches $0.747$ on validation and $0.759$ on test.}
 
 \paragraph{Comparison against published encoders.}
 \upd{Table~\ref{tab:baselines} compares \method{} against self-supervised visual
