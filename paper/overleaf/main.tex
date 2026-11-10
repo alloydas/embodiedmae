@@ -7,6 +7,15 @@
 \usepackage[review]{cvpr}      % To produce the REVIEW version
 % \usepackage{cvpr}              % To produce the CAMERA-READY version
 % \usepackage[pagenumbers]{cvpr} % To force page numbers, e.g. for an arXiv version
+% Chart colors (labmate, 2026-11-10: supplement ablation charts)
+\definecolor{seriesF}{HTML}{2A78D6}
+\definecolor{seriesP}{HTML}{1BAF7A}
+\definecolor{seriesR}{HTML}{4A3AA7}
+\definecolor{gridc}{HTML}{E4E3DF}
+\definecolor{axisc}{HTML}{52514E}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 % Import additional packages in the preamble file, before hyperref
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -120,6 +129,31 @@ Paper ID \paperID}
 \date{}
 
 \begin{document}
+
+% Chart style
+\pgfplotsset{
+  abl/.style={
+    width=\columnwidth,
+    height=4.4cm,
+    axis x line*=bottom,
+    axis y line*=left,
+    axis line style={axisc},
+    tick style={axisc, line width=0.4pt},
+    ymajorgrids,
+    grid style={gridc, line width=0.4pt},
+    tick label style={font=\footnotesize},
+    label style={font=\footnotesize},
+    legend style={
+      font=\footnotesize,
+      draw=none,
+      fill=none,
+      at={(0.5,1.03)},
+      anchor=south,
+      legend columns=3,
+      /tikz/every even column/.append style={column sep=8pt}
+    },
+  },
+}
 
 % Title and teaser share the one-column head of page 1
 \twocolumn[{%
@@ -1506,9 +1540,12 @@ choices:}
 ($\min_{q} \|p-q\|_2$).} \upd{On slender crop geometry, placing points near
 central stems minimizes Chamfer distance even if entire leaf blades are
 omitted.} \upd{In contrast, downstream linear probing evaluates structural
-phenotype recovery.} \todo{The ablation of the Sinkhorn term (E7, run by
-collaborators) is pending; its effect on Chamfer and $F_1$ will be
-reported here.}
+phenotype recovery.} \updtwo{The loss ablation (Supp.~\ref{sec:abl_loss}) confirms the
+diagnosis on the training side: QAL alone places points precisely but
+covers little of the plant (recall 0.14 at 10\,mm), the Sinkhorn
+divergence alone covers the plant but places points poorly (precision
+0.14), and their combination, the headline loss, gives the best $F_1$ at
+both thresholds.}
 
 \upd{Figure~\ref{fig:precision_recall} plots reconstruction precision, recall,
 and $F_1$-score across spatial thresholds $\tau$.} \upd{Across all variants,
@@ -2234,6 +2271,348 @@ $6.7\text{--}11.3$ in maize.} \upd{Explaining 90\% of latent variance requires
 14--15 principal components in sorghum and 18--19 in maize.} \upd{In sorghum, the
 leading principal component aligns with global plant scale (correlation
 with leaf count $|r| = 0.73\text{--}0.94$).}
+
+
+\subsection{Source of Occlusion}
+\label{sec:abl_occ}
+
+\updtwo{Rendering realistic occluded scenes is expensive, so we ask whether cheaper, synthetic occlusion can replace it
+during training. We compare four sources of occlusion (\cref{fig:occ_sources}) and test every model on the same
+rendered occluded scenes.}
+
+\begin{figure*}[t]
+  \centering
+  \IfFileExists{Figures/fig_sources_maize.png}{\includegraphics[width=\textwidth]{Figures/fig_sources_maize.png}}{\todo{[fig\_sources\_maize.png is in the labmate's Overleaf only; copy it into Figures/]}}
+  \caption{\updtwo{The four training sources of occlusion, shown for the same maize target plant. Columns: the target
+  plant alone; synthetic neighbours (the 3D point clouds of other plants placed beside the target and rendered
+  into the image and depth map); B\'ezier leaves (leaf-shaped occluders drawn in the image and depth map and
+  lifted to 3D through the camera); and the rendered row. Rows: RGB image, depth map (one colour scale for all
+  panels) and point cloud, with target points in green and occluder points in orange.}}
+  \label{fig:occ_sources}
+\end{figure*}
+
+\paragraph{\updtwo{Setup.}}
+\updtwo{Each rendered maize row shows a target plant with two neighbouring plants 0.15\,m to either side, captured by a
+level camera 1\,m away; the reconstruction target is the point cloud of the target plant alone, rendered from
+the same camera. All models are EmbodiedMAE-4M (base), start from the same checkpoint pretrained on single
+plants, and are trained for 200 epochs with a cosine schedule, learning rate $1.5\times10^{-4}$, a global batch
+of 32, 80\% random token masking and the point-cloud loss QAL $+\,0.5\times$Sinkhorn. They differ only in the
+occlusion added to the training inputs. \emph{Plant alone}: no occlusion. \emph{Synthetic neighbours}: the
+point clouds of two other plants from the batch are placed beside the target in 3D, 0.15--0.35\,m away, and
+rendered into the image and depth map with a z-buffer. \emph{B\'ezier leaves}: three to eight leaf-shaped
+B\'ezier curves are drawn into the image and depth map, and their visible pixels are lifted to 3D points
+through the camera. \emph{Rendered row}: the rendered scene itself. Half of the training samples receive the
+occlusion and half show the target plant alone, and the procedural parameters are hidden on half of the steps.}
+
+\paragraph{\updtwo{Metrics.}}
+\updtwo{All models are tested on the rendered rows: 2{,}250 test plants, one fixed view each, with the occluded scene
+as input and no procedural parameters. Precision is the fraction of predicted points within 10\,mm of the
+target plant, recall the fraction of target points with a prediction within 10\,mm, and F1 their harmonic
+mean, averaged over plants.}
+
+\begin{table}[t]
+  \caption{\updtwo{Effect of the training occlusion on reconstruction of occluded maize plants. All models are tested
+  on the rendered occluded rows (2{,}250 test plants, metrics at 10\,mm).}}
+  \label{tab:abl_occ}
+  \centering
+  \small
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    Training occlusion & F1 $\uparrow$ & Precision $\uparrow$ & Recall $\uparrow$ \\
+    \midrule
+    Plant alone            & 0.416          & 0.460          & 0.391 \\
+    B\'ezier leaves        & 0.552          & 0.639          & 0.507 \\
+    Synthetic neighbours   & 0.717          & 0.764          & 0.691 \\
+    Rendered row           & \textbf{0.789} & \textbf{0.804} & \textbf{0.782} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[abl,
+        ybar, bar width=7pt, ymin=0, ymax=1, ytick={0,0.2,0.4,0.6,0.8,1},
+        xtick={1,2,3,4}, xmin=0.45, xmax=4.55,
+        xticklabels={Plant alone, B\'ezier leaves, Synthetic neighbours, Rendered row},
+        x tick label style={font=\footnotesize, align=center, text width=1.55cm},
+        ylabel={Score at 10\,mm},
+        legend image code/.code={\fill[#1] (0cm,-0.08cm) rectangle (0.22cm,0.12cm);},
+      ]
+      \addplot[fill=seriesF, draw=white, line width=0.8pt]
+        coordinates {(1,0.416) (2,0.552) (3,0.717) (4,0.789)};
+      \addplot[fill=seriesP, draw=white, line width=0.8pt] coordinates {(1,0.460) (2,0.639) (3,0.764) (4,0.804)};
+      \addplot[fill=seriesR, draw=white, line width=0.8pt] coordinates {(1,0.391) (2,0.507) (3,0.691) (4,0.782)};
+      \legend{F1, Precision, Recall}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{\updtwo{Reconstruction of occluded maize plants by training occlusion (data of \cref{tab:abl_occ}). F1, precision and recall rise together as the training occlusion becomes more realistic.}}
+  \label{fig:abl_occ}
+\end{figure}
+
+\paragraph{\updtwo{Results.}}
+\updtwo{\cref{tab:abl_occ,fig:abl_occ} show that the closer the training occlusion is to the test scenes, the better the
+reconstruction. Training on the plant alone gives the lowest F1 (0.416). B\'ezier leaves recover part of the
+gap (0.552), and synthetic neighbours, which are real plant geometry placed in 3D, recover most of it (0.717),
+but training on the rendered rows remains the best (0.789). Precision and recall improve together at every
+step.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Mask Ratio During Post-Training}
+\label{sec:abl_mask}
+
+\updtwo{We study how much of the input should be masked when the model is trained to reconstruct a plant that is
+partly hidden by its neighbours.}
+
+\paragraph{\updtwo{Setup.}}
+\updtwo{We use rendered sorghum rows: each scene shows a target plant with two neighbouring plants 0.15\,m to either
+side, captured by a level camera 2.5\,m away. The input is the RGB image, depth map and point cloud of the
+scene; the target is the point cloud of the target plant alone, rendered from the same camera. All variants
+are EmbodiedMAE-4M (base) and start from the same checkpoint, pretrained on single plants and then trained
+for 1{,}000 epochs on the rows at a mask ratio of 0.8. Each variant is fine-tuned for 200 further epochs at
+its own mask ratio $m$, with a cosine schedule, learning rate $5\times10^{-5}$, a global batch of 32 and the
+point-cloud loss QAL (10\,mm) $+\,0.5\times$Sinkhorn. The mask ratio is the fraction of all input tokens that
+are hidden, split across the streams by a Dirichlet draw; $m=0$ keeps every token visible. Half of the
+training samples show the occluded scene and half the target plant alone, and the procedural parameters are
+hidden on half of the steps. Since every variant starts from a model trained at $m=0.8$, this ablation
+measures the mask ratio used for fine-tuning on occluded scenes.}
+
+\paragraph{\updtwo{Metrics.}}
+\updtwo{Each model is tested at the mask ratio it was trained with, on all 2{,}250 test plants (one fixed view each),
+with the occluded scene as input and no procedural parameters, using the same metrics at 10\,mm as above.}
+
+\begin{table}[t]
+  \caption{\updtwo{Effect of the mask ratio on occluded-plant reconstruction (rendered sorghum rows, 2{,}250 test
+  plants, metrics at 10\,mm). The mask ratio is the same at training and test time.}}
+  \label{tab:abl_mask}
+  \centering
+  \small
+  \begin{tabular}{@{}cccc@{}}
+    \toprule
+    Mask ratio & F1 $\uparrow$ & Precision $\uparrow$ & Recall $\uparrow$ \\
+    \midrule
+    0.0 & \textbf{0.576} & \textbf{0.606} & \textbf{0.551} \\
+    0.2 & 0.555 & 0.590 & 0.526 \\
+    0.4 & 0.527 & 0.568 & 0.494 \\
+    0.6 & 0.475 & 0.529 & 0.436 \\
+    0.8 & 0.379 & 0.464 & 0.325 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[abl, width=0.86\columnwidth,
+        xmin=-0.04, xmax=0.86, ymin=0.3, ymax=0.65, clip=false,
+        xtick={0,0.2,0.4,0.6,0.8}, ytick={0.3,0.4,0.5,0.6},
+        xticklabel style={/pgf/number format/.cd, fixed, precision=1, zerofill},
+        yticklabel style={/pgf/number format/.cd, fixed, precision=1, zerofill},
+        xlabel={Mask ratio (training $=$ test)}, ylabel={Score at 10\,mm},
+        legend image code/.code={\draw[#1, line width=1pt] (0cm,0cm) -- (0.3cm,0cm); \fill[#1] (0.15cm,0cm) circle (1.5pt);},
+      ]
+      \addplot[seriesF, line width=1pt, mark=*, mark size=1.7pt, mark options={fill=seriesF, draw=white, line width=0.4pt}]
+        coordinates {(0,0.576) (0.2,0.555) (0.4,0.527) (0.6,0.475) (0.8,0.379)}
+        node[pos=1, anchor=west, font=\scriptsize, text=black, xshift=2pt] {F1};
+      \addplot[seriesP, line width=1pt, mark=*, mark size=1.7pt, mark options={fill=seriesP, draw=white, line width=0.4pt}]
+        coordinates {(0,0.606) (0.2,0.590) (0.4,0.568) (0.6,0.529) (0.8,0.464)}
+        node[pos=1, anchor=west, font=\scriptsize, text=black, xshift=2pt] {Precision};
+      \addplot[seriesR, line width=1pt, mark=*, mark size=1.7pt, mark options={fill=seriesR, draw=white, line width=0.4pt}]
+        coordinates {(0,0.551) (0.2,0.526) (0.4,0.494) (0.6,0.436) (0.8,0.325)}
+        node[pos=1, anchor=west, font=\scriptsize, text=black, xshift=2pt] {Recall};
+      \legend{F1, Precision, Recall}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{\updtwo{Occluded-plant reconstruction against the mask ratio (data of \cref{tab:abl_mask}). All three
+  metrics fall steadily as more of the input is hidden; keeping every token visible is best.}}
+  \label{fig:abl_mask}
+\end{figure}
+
+\paragraph{\updtwo{Results.}}
+\updtwo{\cref{tab:abl_mask,fig:abl_mask} show that reconstruction improves steadily as the mask ratio decreases: F1
+rises from 0.379 at $m=0.8$ to 0.576 with no masking, and precision and recall improve together. Note that every
+variant has already been trained with heavy masking (masked pretraining on single plants and 1{,}000 epochs on the
+rows at $m=0.8$), so the benefit of masking for learning the representation is already in place. In this
+fine-tuning stage, hiding further input tokens only removes evidence about the target plant, and keeping the
+whole occluded scene visible works best. This does not imply that training without masking from scratch would be
+better, which we did not test.}
+
+
+\subsection{Point-Cloud Loss}
+\label{sec:abl_loss}
+
+\updtwo{We compare point-cloud losses for reconstructing single sorghum plants.}
+
+\paragraph{\updtwo{Losses.}}
+\updtwo{Let $\mathcal{P}$ be the predicted point cloud and $\mathcal{T}$ the target cloud, and let}
+\begin{equation}
+  \updtwo{
+  d(x,\mathcal{S})=\min_{s\in\mathcal{S}}\lVert x-s\rVert_2
+  =\min_{s\in\mathcal{S}}\sqrt{\textstyle\sum_{k=1}^{3}(x_k-s_k)^2}
+  }
+  \label{eq:dist}
+\end{equation}
+\updtwo{be the Euclidean (not squared) distance from a point $x$ to the nearest point of a cloud $\mathcal{S}$. The
+quality-aware loss (QAL) weights every nearest-neighbour distance by how far it is from a tolerance $\tau$:}
+\begin{equation}
+  \updtwo{
+  \begin{aligned}
+    \mathcal{L}_{\mathrm{QAL}} ={}& \frac{1}{|\mathcal{P}|}\sum_{p\in\mathcal{P}} w\big(d(p,\mathcal{T})\big)\,d(p,\mathcal{T})\\
+      &+ \frac{1}{|\mathcal{T}|}\sum_{t\in\mathcal{T}} w\big(d(t,\mathcal{P})\big)\,d(t,\mathcal{P}),
+  \end{aligned}
+  }
+  \label{eq:qal}
+\end{equation}
+\begin{equation}
+  \updtwo{
+  w(d) = \sigma\big(\alpha\,(d-\tau)\big),
+  }
+  \label{eq:qal_w}
+\end{equation}
+\updtwo{where $\sigma$ is the logistic function. Points within $\tau$ of the other cloud get a weight below $1/2$
+(down to $\sigma(-\alpha\tau)$ at $d=0$), while points far beyond $\tau$ get a weight close to 1, so training
+concentrates on the badly placed points, such as missing leaf tips; $\alpha$ sets how sharply the weight switches
+at $\tau$. We use
+$\alpha=100$ and $\tau=10$\,mm (the clouds are normalised per plant, so $\tau$ is 0.01 of the plant radius, \ie
+10\,mm for a plant of median size). \emph{Sinkhorn} is the debiased Sinkhorn divergence $S_\varepsilon(\mathcal{P},\mathcal{T})$ ($p=2$,
+blur 0.02) on 1{,}024 sampled points, and \emph{QAL\,+\,Sinkhorn} is
+$\mathcal{L}_{\mathrm{QAL}}+\lambda\,S_\varepsilon(\mathcal{P},\mathcal{T})$ with $\lambda=0.5$. Each point-cloud
+loss enters the total loss with weight 1.}
+
+\paragraph{\updtwo{Single plants.}}
+\updtwo{Models are trained from scratch on Sorghum\_15K (10{,}500 training plants, one random view per plant per epoch,
+each plant rendered alone) for 200 epochs (65.8k steps) with a cosine schedule, learning rate
+$1.5\times10^{-4}$, a global batch of 32 and 80\% token masking, and differ only in the point-cloud loss. They
+are tested on all 2{,}250 test plants with the plant alone as input.}
+
+\paragraph{\updtwo{Metrics.}}
+\updtwo{Precision is the fraction of predicted points within a threshold of the target plant, recall the fraction of
+target points with a prediction within the threshold, and F1 their harmonic mean, averaged over plants. We write
+F1@$x$, Prec.@$x$ and Rec.@$x$ for a threshold of $x$\,mm.}
+
+\begin{table}[t]
+  \caption{\updtwo{Point-cloud losses on single plants (sorghum, trained from scratch, 2{,}250 test plants).}}
+  \label{tab:loss_single}
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    \updtwo{Loss} & \updtwo{F1@5} & \updtwo{F1@10} & \updtwo{Prec.@10} & \updtwo{Rec.@10} \\
+    \midrule
+    \updtwo{QAL}              & \updtwo{0.057}          & \updtwo{0.224}          & \updtwo{\textbf{0.561}} & \updtwo{0.144} \\
+    \updtwo{Sinkhorn}         & \updtwo{0.045}          & \updtwo{0.168}          & \updtwo{0.142}          & \updtwo{\textbf{0.206}} \\
+    \updtwo{QAL\,+\,Sinkhorn} & \updtwo{\textbf{0.083}} & \updtwo{\textbf{0.259}} & \updtwo{0.422}          & \updtwo{0.189} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \caption{\updtwo{QAL parameter screen (sorghum single plants, epoch 300, 225 validation views). Here @10 is a
+  threshold of 0.01 of the plant radius ($\approx$10\,mm). The row $\tau=10$\,mm, $\alpha=100$ is taken from a longer run
+  (300k-step schedule) at the same epoch, so its learning rate had not yet decayed.}}
+  \label{tab:qal_params}
+  \centering
+  \small
+  \begin{tabular}{@{}ccccc@{}}
+    \toprule
+    \updtwo{$\tau$} & \updtwo{$\alpha$} & \updtwo{F1@10} & \updtwo{Prec.@10} & \updtwo{Rec.@10} \\
+    \midrule
+    \updtwo{5\,mm}  & \updtwo{100} & \updtwo{0.155} & \updtwo{0.398} & \updtwo{0.107} \\
+    \updtwo{10\,mm} & \updtwo{100} & \updtwo{0.154} & \updtwo{0.398} & \updtwo{0.107} \\
+    \updtwo{20\,mm} & \updtwo{100} & \updtwo{0.139} & \updtwo{0.384} & \updtwo{0.097} \\
+    \updtwo{10\,mm} & \updtwo{30}  & \updtwo{0.146} & \updtwo{0.403} & \updtwo{0.101} \\
+    \updtwo{10\,mm} & \updtwo{300} & \updtwo{\textbf{0.164}} & \updtwo{\textbf{0.406}} & \updtwo{\textbf{0.115}} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{\updtwo{Results.}}
+\updtwo{Neither kind of loss is sufficient on its own (\cref{tab:loss_single}). QAL, which matches every point to its
+nearest neighbour, places points precisely but leaves much of the plant uncovered (Rec.@10 0.144), while the
+Sinkhorn divergence covers more of the plant but places points poorly (Prec.@10 0.142). Adding a Sinkhorn term to
+QAL gives the best F1 at both thresholds: it improves F1@5 over QAL by 0.026 and F1@10 by 0.035 (better on 82\% of
+plants), mainly by raising recall at a moderate cost in precision.}
+
+\paragraph{\updtwo{QAL parameters.}}
+\updtwo{We screened the tolerance $\tau$ and the sharpness $\alpha$ of \cref{eq:qal_w} in a shorter setting: sorghum
+single plants, 3{,}000 training plants, trained from scratch with a 30k-step (320-epoch) cosine schedule, 75\% token
+masking and synthetic leaf occluders with sensor noise added to the training inputs, using QAL alone as the
+point-cloud loss. Each setting was trained once and is scored at epoch 300 on 225 clean validation views
+(\cref{tab:qal_params}).}
+
+\updtwo{A sharper weighting ($\alpha=300$) gives the highest F1, precision and recall, and a tolerance of 20\,mm is the
+weakest; a tolerance of 5 or 10\,mm performs the same. The differences are small (at most 0.025 F1), come from a
+single seed and a short schedule, and should be read as a screen rather than a final ranking.}
+
+
+
+\subsection{Mixed Masking}
+\label{sec:abl_mixed}
+
+\updtwo{When the training input is occluded, the masking can target the occluder. \emph{Structured} masking hides the
+tokens that show an occluder first (an image patch that is at least 30\% occluder pixels, or a point-cloud token
+whose centre is an occluder point) and fills the rest of the masking budget at random. \emph{Mixed} masking flips
+one coin per occluded training scene: with probability 0.5 the scene is masked structured, otherwise uniformly at
+random (\cref{fig:mixed}). We compare mixed masking with uniform \emph{random} masking. Validation and test always
+use random masking.}
+
+\begin{figure*}[t]
+  \centering
+  \IfFileExists{Figures/fig_mixed_masking.png}{\includegraphics[width=0.85\textwidth]{Figures/fig_mixed_masking.png}}{\todo{[fig\_mixed\_masking.png is in the labmate's Overleaf only; copy it into Figures/]}}
+  \caption{\updtwo{Mixed masking with one coin per scene, on two occluded maize scenes from the rendered rows. Columns: the
+  occluded input (point cloud: target plant in green, occluders in orange); random masking; structured masking, which
+  masks the occluder tokens first; and mixed masking, where a coin per training scene selects structured masking
+  (scene 1) or random masking (scene 2). For illustration, every masked panel keeps the same 20\% of the tokens of
+  each modality visible, drawn with the same random numbers, so only the policy differs. Images: masked patches are
+  faded, visible patches are in full colour (the render background is grey), and visible occluder patches are
+  outlined in orange. Point clouds: dots mark the centres of the visible point
+  tokens (green: target, orange: occluder). Below each panel: visible tokens that lie on occluders, out of 39.}}
+  \label{fig:mixed}
+\end{figure*}
+
+\paragraph{\updtwo{Setup.}}
+\updtwo{All models are EmbodiedMAE-4M (base) trained for 200 epochs with a cosine schedule, a global batch of 32, 80\% token
+masking and the point-cloud loss QAL\,$+\,0.5\times$Sinkhorn; half of the training samples are
+occluded. The two models of each pair differ only in the masking. \emph{Synthetic scenes}: the point clouds of two
+other plants from the batch are placed beside the target plant in 3D and rendered into its image and depth map;
+these models are trained from scratch and receive the target's procedural parameters as input in training and
+test. \emph{Rendered rows}: the target plant is rendered with its two neighbouring plants 0.15\,m to either side,
+and no procedural parameters are given at test. The maize rendered-row models are trained from scratch; the
+sorghum ones are fine-tuned from a model already trained for 1{,}000 epochs on the rendered rows with random
+masking. In the maize pair, the mixed model was trained with 8 samples per GPU on 4 GPUs and the random model with
+16 per GPU on 2 GPUs (the same global batch).}
+
+\paragraph{\updtwo{Metrics.}}
+\updtwo{Every model is tested on all 2{,}250 test plants, one view each, with the occluded input. F1@$x$ is the harmonic
+mean of precision (predicted points within $x$\,mm of the target plant) and recall (target points with a
+prediction within $x$\,mm), averaged over plants.}
+
+\begin{table*}[t]
+  \caption{\updtwo{Mixed masking (one coin per scene) against random masking on occluded test input (2{,}250 test plants).
+  $\Delta$ is mixed minus random in F1@10. The better F1@10 of each pair is in bold.}}
+  \label{tab:mixed_scene}
+  \centering
+  \small
+  \begin{tabular}{@{}lllccccc@{}}
+    \toprule
+    & & & \multicolumn{2}{c}{\updtwo{Random}} & \multicolumn{2}{c}{\updtwo{Mixed}} & \\
+    \cmidrule(lr){4-5}\cmidrule(lr){6-7}
+    \updtwo{Training occlusion} & \updtwo{Tested on} & \updtwo{Species} & \updtwo{F1@5} & \updtwo{F1@10} & \updtwo{F1@5} & \updtwo{F1@10} & \updtwo{$\Delta$F1@10} \\
+    \midrule
+    \updtwo{Synthetic scenes} & \updtwo{synthetic scenes} & \updtwo{maize}   & \updtwo{0.160} & \updtwo{0.439} & \updtwo{0.190} & \updtwo{\textbf{0.487}} & \updtwo{$+0.048$} \\
+    \updtwo{Synthetic scenes} & \updtwo{synthetic scenes} & \updtwo{sorghum} & \updtwo{0.112} & \updtwo{0.310} & \updtwo{0.119} & \updtwo{\textbf{0.323}} & \updtwo{$+0.013$} \\
+    \midrule
+    \updtwo{Rendered rows} & \updtwo{rendered rows} & \updtwo{maize}   & \updtwo{0.525} & \updtwo{\textbf{0.775}} & \updtwo{0.522} & \updtwo{0.771} & \updtwo{$-0.003$} \\
+    \updtwo{Rendered rows} & \updtwo{rendered rows} & \updtwo{sorghum} & \updtwo{0.133} & \updtwo{\textbf{0.377}} & \updtwo{0.133} & \updtwo{0.373} & \updtwo{$-0.004$} \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\paragraph{\updtwo{Results.}}
+\updtwo{Mixed masking helps only on the synthetic scenes: F1@10 rises by 0.048 in maize and by 0.013 in sorghum
+(\cref{tab:mixed_scene}). On the rendered rows it gives no gain in either species ($-0.003$ in maize and $-0.004$
+in sorghum).}
 
 % =========================================================================
 \section{Dataset Generation Details}
