@@ -1,0 +1,277 @@
+<title>Maize Rows Seed 1</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Source+Sans+3:wght@400;600&family=Source+Code+Pro:wght@400&display=swap">
+<style>
+/* layout: a header with the dataset in numbers, one control bar (layout, row), then four stacked sections:
+   the row's 18 stops, one stop (photo beside its cloud), the whole row (cloud + top-down map), all 520 rows */
+:root {
+  color-scheme: light;
+  --bg: #ffffff; --ink: #1e2a1f; --muted: #5d6a5e; --line: #d7ded4; --panel: #f4f7f2;
+  --accent: #2f6b2a; --stalk: #8a5a2b; --leaf: #2e8b3e; --cam: #20262e; --warn: #9a3b1e;
+  --display: "Source Serif 4", Georgia, serif; --body: "Source Sans 3", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Source Code Pro", ui-monospace, Menlo, monospace;
+}
+body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--body); padding-block: 22px 60px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 30px; }
+h1 { font: 600 2rem/1.15 var(--display); margin: 0 0 6px; text-wrap: balance; }
+h2 { font: 600 1.3rem/1.2 var(--display); margin: 0 0 4px; text-wrap: balance; }
+p { margin: 0; max-width: 72ch; }
+.muted { color: var(--muted); } .small { font-size: .88rem; } .mono { font-family: var(--mono); font-size: .86em; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+.fact { border: 1px solid var(--line); border-radius: 6px; padding: 9px 12px; min-width: 0; }
+.fact b { display: block; font: 600 1.25rem/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.fact span { font-size: .82rem; color: var(--muted); }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+  padding-block: 10px; display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.group > .lbl { font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+button { font: 600 .9rem var(--body); padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+section { display: grid; gap: 12px; }
+.strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+.strip figure { margin: 0; flex: 0 0 auto; text-align: center; }
+.strip img { display: block; width: 96px; height: auto; border: 1px solid var(--line); border-radius: 3px; }
+.strip figure.sel img { outline: 3px solid var(--accent); outline-offset: 1px; }
+.strip figcaption { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.two { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.photo img { width: 100%; max-width: 300px; height: auto; border: 1px solid var(--line); border-radius: 4px; display: block; }
+.view { position: relative; border: 1px solid var(--line); border-radius: 6px; background: #fff; min-width: 0; }
+.view canvas { display: block; width: 100%; height: 520px; touch-action: none; cursor: grab; }
+.view .hint { position: absolute; left: 10px; bottom: 8px; font-size: .78rem; color: var(--muted); pointer-events: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .84rem; color: var(--muted); }
+.sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.map svg, .hists svg { width: 100%; height: auto; display: block; }
+.hists { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.hists figure { margin: 0; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; min-width: 0; }
+.hists figcaption { font-size: .9rem; font-weight: 600; margin-bottom: 4px; }
+.notes { background: var(--panel); border-radius: 6px; padding: 14px 16px; display: grid; gap: 8px; font-size: .92rem; }
+.notes code { font-family: var(--mono); font-size: .85em; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } .view canvas { height: 380px; } }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Maize rows, seed 1</h1>
+  <p class="muted">The two zips in <span class="mono">/work/mech-ai/alloydas</span>, unpacked. Each row is one of 520 maize plant models repeated along a row; a camera 1 m to the side stops 18 times along it and saves a photograph and a labelled point cloud at every stop. The leaf planes run along the row in one layout and across it in the other.</p>
+  <div class="facts" id="facts"></div>
+</header>
+
+<div class="bar" role="toolbar" aria-label="Choose the data shown">
+  <div class="group" id="g-layout"><span class="lbl">Layout</span></div>
+  <div class="group" id="g-row"><span class="lbl">Row</span></div>
+  <div class="group" id="g-color"><span class="lbl">Colour</span></div>
+</div>
+
+<section id="s-stops">
+  <h2>The 18 stops along the row</h2>
+  <p class="small muted" id="stops-cap"></p>
+  <div class="strip" id="strip"></div>
+</section>
+
+<section id="s-stop">
+  <h2 id="stop-title">One stop: the photograph and its point cloud</h2>
+  <p class="small muted">The cloud holds every plant surface point inside the camera's field of view, sampled about every 3 mm, including points hidden behind other leaves; soil and litter are not in it. It is in the camera frame.</p>
+  <div class="two">
+    <div class="photo"><img id="photo" alt="Photograph from the selected stop"></div>
+    <div class="view"><canvas id="c-stop" aria-label="Point cloud of the selected stop; drag to rotate"></canvas><div class="hint">drag to rotate · scroll to zoom · double-click to reset</div></div>
+  </div>
+  <div class="legend" id="legend-stop"></div>
+</section>
+
+<section id="s-row">
+  <h2>The whole row</h2>
+  <p class="small muted">The 18 stop clouds moved into the world frame (row along +x, ground at z = 0, z up), merged on an 8 mm grid and subsampled. Dark dots are the camera stops; the map below shows the same row from above, with the selected stop's field of view.</p>
+  <div class="view"><canvas id="c-row" aria-label="Point cloud of the whole row; drag to rotate"></canvas><div class="hint">drag to rotate · scroll to zoom · double-click to reset</div></div>
+  <div class="map" id="map"></div>
+</section>
+
+<section id="s-all">
+  <h2>All 520 rows</h2>
+  <div class="hists" id="hists"></div>
+</section>
+
+<section>
+  <div class="notes" id="notes"></div>
+</section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const D = /*__DATA__*/null;
+const st = { layout: 'parallel', row: 0, color: 'plant' };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = n => n.toLocaleString('en-US');
+const b64u8 = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+const cloudCache = new Map();
+function decode(c) {
+  if (cloudCache.has(c)) return cloudCache.get(c);
+  const u = b64u8(c.xyz), q = new Int16Array(u.buffer, u.byteOffset, u.byteLength >> 1);
+  const o = { xyz: Float32Array.from(q, v => v / 1000), lab: b64u8(c.lab), part: b64u8(c.part), n: c.n };
+  cloudCache.set(c, o); return o;
+}
+const hex = h => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+const PART = { 1: hex('#8a5a2b'), 2: hex('#2e8b3e') };
+// the dataset's own plant colours are bright on white; darken them a little so thin leaves stay visible
+const plantRGB = (row, n) => { const p = row.plants.find(q => q.n === n); const c = p ? hex(p.color) : [0.4, 0.4, 0.4]; return c.map(v => v * 0.82); };
+
+function cur() { return D.rows[st.layout][st.row]; }
+
+/* ---------- controls ---------- */
+function buttons(group, items, key) {
+  const g = $(group); g.querySelectorAll('button').forEach(b => b.remove());
+  items.forEach(([val, label]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.dataset.v = val;
+    b.setAttribute('aria-pressed', String(String(st[key]) === String(val)));
+    b.addEventListener('click', () => { st[key] = key === 'row' ? +val : val; render(); });
+    g.appendChild(b);
+  });
+}
+
+/* ---------- 3D viewers (three.js r128, own orbit) ---------- */
+function noGL(canvas, why) {
+  const p = document.createElement('p'); p.className = 'small muted'; p.style.padding = '16px';
+  p.textContent = `The 3D view needs WebGL, and ${why}. The photographs, the map and the charts still work.`;
+  canvas.replaceWith(p);
+}
+function makeViewer(canvas) {
+  if (typeof THREE === 'undefined') { noGL(canvas, 'three.js did not load'); return null; }
+  const v = { canvas, theta: 0, phi: 0.2, dist: 3, target: new THREE.Vector3(), home: null };
+  try { v.r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false }); }
+  catch (e) { noGL(canvas, 'this browser did not provide it'); return null; }
+  v.r.setClearColor(0xffffff, 1); v.r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  v.scene = new THREE.Scene(); v.cam = new THREE.PerspectiveCamera(40, 1, 0.01, 200);
+  v.geo = new THREE.BufferGeometry(); v.mat = new THREE.PointsMaterial({ size: 0.006, vertexColors: true, sizeAttenuation: true });
+  v.scene.add(new THREE.Points(v.geo, v.mat));
+  v.mgeo = new THREE.BufferGeometry(); v.mmat = new THREE.PointsMaterial({ size: 0.05, color: 0x20262e, sizeAttenuation: true });
+  v.scene.add(new THREE.Points(v.mgeo, v.mmat));
+  let drag = null;
+  canvas.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; });
+  canvas.addEventListener('pointermove', e => { if (!drag) return; v.theta -= (e.clientX - drag[0]) * 0.008; v.phi = Math.max(-1.5, Math.min(1.5, v.phi + (e.clientY - drag[1]) * 0.008)); drag = [e.clientX, e.clientY]; draw(v); });
+  const up = () => { drag = null; canvas.style.cursor = 'grab'; };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); v.dist *= e.deltaY > 0 ? 1.1 : 0.9; draw(v); }, { passive: false });
+  canvas.addEventListener('dblclick', () => { Object.assign(v, v.home); draw(v); });
+  return v;
+}
+function draw(v) {
+  if (!v) return;
+  const w = v.canvas.clientWidth, h = v.canvas.clientHeight; if (!w || !h) return;
+  v.r.setSize(w, h, false); v.cam.aspect = w / h; v.cam.updateProjectionMatrix();
+  const t = v.target, c = Math.cos(v.phi);
+  v.cam.position.set(t.x + v.dist * c * Math.sin(v.theta), t.y + v.dist * Math.sin(v.phi), t.z + v.dist * c * Math.cos(v.theta));
+  v.cam.lookAt(t); v.r.render(v.scene, v.cam);
+}
+// toThree maps a dataset point to three.js axes (y up)
+function setCloud(v, cloud, toThree, row, markers, view) {
+  if (!v) return;
+  const n = cloud.n, pos = new Float32Array(3 * n), col = new Float32Array(3 * n);
+  let cx = 0, cy = 0, cz = 0, mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+  for (let i = 0; i < n; i++) {
+    const p = toThree(cloud.xyz[3 * i], cloud.xyz[3 * i + 1], cloud.xyz[3 * i + 2]);
+    pos[3 * i] = p[0]; pos[3 * i + 1] = p[1]; pos[3 * i + 2] = p[2];
+    for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k]); mx[k] = Math.max(mx[k], p[k]); }
+    const c = st.color === 'part' ? (PART[cloud.part[i]] || [0.5, 0.5, 0.5]) : plantRGB(row, cloud.lab[i]);
+    col[3 * i] = c[0]; col[3 * i + 1] = c[1]; col[3 * i + 2] = c[2];
+  }
+  v.geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); v.geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  v.geo.computeBoundingSphere();
+  const m = new Float32Array(3 * (markers || []).length);
+  (markers || []).forEach((q, i) => { const p = toThree(q[0], q[1], q[2]); m[3 * i] = p[0]; m[3 * i + 1] = p[1]; m[3 * i + 2] = p[2]; });
+  v.mgeo.setAttribute('position', new THREE.BufferAttribute(m, 3)); v.mgeo.computeBoundingSphere();
+  const ext = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+  v.mat.size = view.pt; v.mmat.size = view.marker || 0.05;
+  if (view.reset) {
+    v.target.set((mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2);
+    v.theta = view.theta; v.phi = view.phi; v.dist = ext * view.zoom;
+    v.home = { theta: v.theta, phi: v.phi, dist: v.dist };
+  }
+  draw(v);
+}
+
+/* ---------- SVG helpers ---------- */
+const svgEl = (w, h, inner, label) => `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">${inner}</svg>`;
+function histogram(hd, xlabel, unitFmt, label) {
+  const W = 360, H = 190, L = 40, R = 10, T = 12, B = 40, n = hd.counts.length, mx = Math.max(...hd.counts, 1);
+  const bw = (W - L - R) / n; let g = '';
+  const ticks = [0, Math.round(mx / 2), mx];
+  ticks.forEach(t => { const y = T + (H - T - B) * (1 - t / mx); g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#e6ebe3"/><text x="${L - 6}" y="${y + 4}" font-size="11" text-anchor="end" fill="#5d6a5e">${t}</text>`; });
+  hd.counts.forEach((c, i) => {
+    const h = (H - T - B) * c / mx, x = L + i * bw + 1, y = H - B - h;
+    const lo = hd.edges[i], hi = hd.edges[i + 1];
+    g += `<rect x="${x}" y="${y}" width="${Math.max(1, bw - 2)}" height="${h}" rx="2" fill="#3d7f3a"><title>${unitFmt(lo)} to ${unitFmt(hi)}: ${c}</title></rect>`;
+  });
+  const every = Math.ceil(n / 6);
+  hd.edges.forEach((e, i) => { if (i % every === 0) g += `<text x="${L + i * bw}" y="${H - B + 15}" font-size="11" text-anchor="middle" fill="#5d6a5e">${unitFmt(e)}</text>`; });
+  g += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#9aa79a"/>`;
+  g += `<text x="${(L + W - R) / 2}" y="${H - 6}" font-size="12" text-anchor="middle" fill="#1e2a1f">${esc(xlabel)}</text>`;
+  return svgEl(W, H, g, label);
+}
+function topMap(row) {
+  const xs = row.plants.map(p => p.x).concat(row.cams.map(c => c[0]));
+  const x0 = Math.min(...xs) - 0.15, x1 = Math.max(...xs) + 0.15, y0 = -1.12, y1 = 0.18;
+  const W = 1100, sx = W / (x1 - x0), H = Math.round((y1 - y0) * sx) + 30;
+  const X = x => (x - x0) * sx, Y = y => (y1 - y) * sx + 4;
+  let g = `<line x1="${X(x0)}" x2="${X(x1)}" y1="${Y(0)}" y2="${Y(0)}" stroke="#c9d3c5" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+  const s = row.cams[row.stop - 1], half = (row.hfov / 2) * Math.PI / 180, reach = Math.abs(s[1]) + 0.12;
+  const wx = reach * Math.tan(half);
+  g += `<path d="M${X(s[0])},${Y(s[1])} L${X(s[0] - wx)},${Y(s[1] + reach)} L${X(s[0] + wx)},${Y(s[1] + reach)} Z" fill="#2f6b2a" fill-opacity=".10" stroke="#2f6b2a" stroke-opacity=".5"/>`;
+  row.plants.forEach(p => { g += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="7" fill="${p.color}" stroke="#1e2a1f" stroke-width=".8"><title>plant ${p.n} at x = ${p.x.toFixed(2)} m</title></circle>`; });
+  row.cams.forEach((c, i) => {
+    const sel = i + 1 === row.stop;
+    g += `<rect x="${X(c[0]) - 5}" y="${Y(c[1]) - 5}" width="10" height="10" rx="2" fill="${sel ? '#2f6b2a' : '#20262e'}"><title>stop ${i + 1} at x = ${c[0].toFixed(2)} m, height ${c[2].toFixed(2)} m</title></rect>`;
+    if (i % 3 === 0 || sel) g += `<text x="${X(c[0])}" y="${Y(c[1]) + 20}" font-size="12" text-anchor="middle" fill="#5d6a5e">${i + 1}</text>`;
+  });
+  g += `<text x="${X(x0) + 4}" y="${Y(0) - 12}" font-size="12" fill="#5d6a5e">plants (row along +x)</text>`;
+  g += `<text x="${X(x0) + 4}" y="${Y(-1) - 10}" font-size="12" fill="#5d6a5e">camera stops, 1 m from the row</text>`;
+  return svgEl(W, H, g, 'Top-down map of the row with plants and camera stops');
+}
+
+/* ---------- render ---------- */
+const VSTOP = makeViewer($('c-stop')), VROW = makeViewer($('c-row'));
+let last = '';
+function render() {
+  const S = D.stats[st.layout], row = cur(), key = st.layout + row.row;
+  buttons('g-layout', [['parallel', 'Leaves along the row'], ['perpendicular', 'Leaves across the row']], 'layout');
+  buttons('g-row', D.rows[st.layout].map((r, i) => [i, `row ${r.row} · ${r.height.toFixed(2)} m, ${r.leaves} leaves`]), 'row');
+  buttons('g-color', [['plant', 'by plant'], ['part', 'stalk / leaf']], 'color');
+  $('facts').innerHTML = [
+    [fmt(S.n_rows), 'rows per layout, one plant model each'],
+    ['18', 'camera stops per row'],
+    [fmt(S.n_frames), 'photo + cloud pairs per layout'],
+    [`${S.h_range[0].toFixed(2)}–${S.h_range[2].toFixed(2)} m`, `plant height (median ${S.h_range[1].toFixed(2)} m)`],
+    [`${S.l_range[0]}–${S.l_range[2]}`, `leaves per plant (median ${S.l_range[1]})`],
+    [`${Math.round(S.p_range[0] / 1000)}k–${Math.round(S.p_range[2] / 1000)}k`, `points per cloud (median ${Math.round(S.p_range[1] / 1000)}k)`]
+  ].map(([b, s]) => `<div class="fact"><b>${b}</b><span>${s}</span></div>`).join('');
+  const sp = row.spacing_in, mean = sp.reduce((a, b) => a + b, 0) / sp.length;
+  $('stops-cap').textContent = `Row ${row.row}: one ${row.height.toFixed(2)} m plant model with ${row.leaves} leaves, placed ${row.n_plants} times ${Math.min(...sp).toFixed(1)}–${Math.max(...sp).toFixed(1)} in apart (mean ${mean.toFixed(1)} in). The camera is ${row.dist} m from the row at ${row.cam_height.toFixed(2)} m, level, with a ${row.hfov.toFixed(0)}° × ${row.vfov.toFixed(0)}° field of view (${row.img[0]} × ${row.img[1]} px). The highlighted stop is shown below.`;
+  $('strip').innerHTML = row.thumbs.map((t, i) => `<figure class="${i + 1 === row.stop ? 'sel' : ''}"><img src="${t}" alt="Stop ${i + 1}" loading="lazy"><figcaption>stop ${i + 1} · ${Math.round(row.points[i] / 1000)}k pts</figcaption></figure>`).join('');
+  $('stop-title').textContent = `Stop ${row.stop}: the photograph and its point cloud`;
+  $('photo').src = row.photo;
+  const plantsIn = [...new Set(Array.from(decode(row.stop_cloud).lab))].sort((a, b) => a - b);
+  $('legend-stop').innerHTML = st.color === 'part'
+    ? `<span><i class="sw" style="background:#8a5a2b"></i>stalk</span><span><i class="sw" style="background:#2e8b3e"></i>leaf</span>`
+    : plantsIn.map(n => { const c = plantRGB(row, n).map(v => Math.round(v * 255)); return `<span><i class="sw" style="background:rgb(${c})"></i>plant ${n}</span>`; }).join('') + `<span>· ${fmt(row.points[row.stop - 1])} points in the file, ${fmt(row.stop_cloud.n)} drawn</span>`;
+  const reset = key !== last; last = key;
+  // camera frame (OpenCV: x right, y down, z forward) -> three (x, -y, -z): first view is the camera's own
+  setCloud(VSTOP, decode(row.stop_cloud), (x, y, z) => [x, -y, -z], row, [], { reset, theta: 0, phi: 0, zoom: 1.25, pt: 0.0045 });
+  // world (x along the row, z up) -> three (x, z, -y): first view from the camera side, slightly above
+  setCloud(VROW, decode(row.row_cloud), (x, y, z) => [x, z, -y], row, row.cams, { reset, theta: 0, phi: 0.18, zoom: 1.05, pt: 0.007, marker: 0.045 });
+  $('map').innerHTML = topMap(row);
+  $('hists').innerHTML = [
+    ['Plant height', histogram(S.height, 'plant height (m)', v => v.toFixed(1), 'Histogram of plant height over 520 plant models')],
+    ['Leaves per plant', histogram(S.leaves, 'leaves', v => Math.round(v), 'Histogram of leaf count over 520 plant models')],
+    ['Points per stop cloud', histogram(S.points, 'thousand points', v => Math.round(v), 'Histogram of points per cloud over all stops')]
+  ].map(([t, s]) => `<figure><figcaption>${t}</figcaption>${s}</figure>`).join('');
+  const se = S.settings;
+  $('notes').innerHTML = `<strong>What is in each row folder</strong>
+    <div>18 × <code>row_NNNN_seed1_frameKK.png</code> (RGBA photograph, white background) and <code>…frameKK.pcd</code> (binary PCD; fields <code>x y z rgb label part leaf</code>; camera frame, OpenCV axes: x right, y down, z forward; <code>label</code> = plant number in the row, <code>part</code> 1 stalk / 2 leaf, <code>leaf</code> = leaf number, 0 for the stalk), plus <code>_frames.csv</code> (camera pose and intrinsics per stop), <code>_plants.csv</code> (plant positions, heights, leaf counts) and <code>_scene.json</code> (everything above in one file).</div>
+    <div>Generator settings for this layout: ${se.plants} plants per row, spacing ${se.spMin}–${se.spMax} in, leaf variation ${se.leafVar}, ${se.litter} litter pieces, camera ${se.dist} m away on the ${esc(se.side)} side, PCD spacing ${se.pcdSpacing} mm${se.minClear ? `, minimum clearance ${se.minClear} m` : ''}. World frame: ${esc(se.units)}.</div>
+    <div class="muted">Shown here: three of the 520 rows per layout (plant heights at the 10th, 50th and 90th percentile). Clouds are subsampled for the browser; the files are complete.</div>`;
+}
+render();
+window.addEventListener('resize', () => { draw(VSTOP); draw(VROW); });
+</script>
