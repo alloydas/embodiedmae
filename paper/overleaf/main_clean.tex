@@ -16,6 +16,7 @@
 \usepackage{tikz}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta}
 
 % Import additional packages in the preamble file, before hyperref
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -141,7 +142,7 @@ Paper ID \paperID}
 \renewcommand\twocolumn[1][]{#1}%
 \maketitle
 \begin{center}%
-  \includegraphics[width=\textwidth]{Figures/fig_teaser.pdf}%
+  \resizebox{\textwidth}{!}{\input{Figures/fig_teaser_tikz}}%
   \captionof{figure}{\textbf{Any sensor in, procedural plant out.} From any subset of field-practical modalities (a single photograph, a depth frame, or a point cloud truncated by row neighbors), \method{} recovers the full procedural representation of the plant: a kilobyte-scale, physiologically interpretable parameter set that can be re-rendered to complete geometry, used as simulation input, and used for trait analytics at field scale. Shown: one held-out simulated test row per species, seen broadside by the rover camera. The model fine-tuned on rows reads the photograph, depth frame and point cloud of the whole row, with nothing marking the center plant, and writes that plant's recipe; the re-rendered plant and its traits are shown beside the true values (Regime III, Sec.~\ref{sec:regime3}).}
   \label{fig:teaser}%
 \end{center}%
