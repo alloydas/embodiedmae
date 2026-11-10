@@ -134,10 +134,27 @@ def png_array(arr, max_side=448):
     b = io.BytesIO(); im.save(b, 'PNG', optimize=True); return b.getvalue()
 
 
-def png_cloud(P, frame, side, dpi=400):
+PLANT_CMAP = matplotlib.colors.LinearSegmentedColormap.from_list('plant', ['#1f4d22', '#2f7d32', '#5aa83e', '#a8d26a'])
+
+
+def png_cloud(P, frame, side, dpi=400, elev=12, azim=-35):
+    """A cloud drawn to read as a plant: leaf greens from dark at the base to light at the top, each point
+    darkened with its distance from the viewer, and drawn far to near so the front leaves cover the back."""
+    P = np.asarray(P, dtype=np.float64)
+    X = np.stack([P[:, 0], P[:, 2], P[:, 1]], 1)                      # plotted axes, as V.scatter_cloud
+    e, z = np.radians(elev), np.radians(azim)
+    toward = X @ np.array([np.cos(e) * np.cos(z), np.cos(e) * np.sin(z), np.sin(e)])
+    h = (X[:, 2] - X[:, 2].min()) / max(np.ptp(X[:, 2]), 1e-9)
+    near = (toward - toward.min()) / max(np.ptp(toward), 1e-9)
+    rgb = PLANT_CMAP(0.15 + 0.85 * h)[:, :3] * (0.55 + 0.45 * near)[:, None]
+    o = np.argsort(toward)
     fig = plt.figure(figsize=(side, side), dpi=dpi)
     ax = fig.add_axes([0, 0, 1, 1], projection='3d')
-    V.scatter_cloud(ax, P, c=-np.asarray(P)[:, 1], cmap='viridis', frame=frame, s=0.35, elev=12, azim=-35)
+    ctr, hw = frame
+    ax.scatter(X[o, 0], X[o, 1], X[o, 2], s=0.9, c=rgb[o], alpha=0.95, linewidths=0, depthshade=False, rasterized=True)
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_xlim(ctr[0] - hw, ctr[0] + hw); ax.set_ylim(ctr[2] - hw, ctr[2] + hw); ax.set_zlim(ctr[1] - hw, ctr[1] + hw)
+    ax.set_box_aspect((1, 1, 1), zoom=1.45); ax.set_axis_off()
     b = io.BytesIO(); fig.savefig(b, format='png', dpi=dpi, transparent=True); plt.close(fig); return b.getvalue()
 
 
