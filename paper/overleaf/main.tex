@@ -162,7 +162,7 @@ Paper ID \paperID}
 \maketitle
 \begin{center}%
   \resizebox{\textwidth}{!}{\input{Figures/fig_teaser_tikz}}%
-  \captionof{figure}{\textbf{Any sensor in, procedural plant out.} \upd{From any subset of field-practical modalities (a single photograph, a depth frame, or a point cloud truncated by row neighbors), \method{} recovers the full procedural representation of the plant: a kilobyte-scale, physiologically interpretable parameter set that can be re-rendered to complete geometry, used as simulation input, and used for trait analytics at field scale.} \updtwo{Shown: one held-out simulated test row per species, seen broadside by the rover camera. The model fine-tuned on rows reads the photograph, depth frame and point cloud of the whole row, with nothing marking the center plant, and writes that plant's recipe; the re-rendered plant and its traits are shown beside the true values (Regime III, Sec.~\ref{sec:regime3}).}}
+  \captionof{figure}{\textbf{Any sensor in, procedural plant out.} \upd{From any subset of field-practical modalities (a single photograph, a depth frame, or a point cloud truncated by row neighbors), \method{} recovers the full procedural representation of the plant: a kilobyte-scale, physiologically interpretable parameter set that can be re-rendered to complete geometry, used as simulation input, and used for trait analytics at field scale.} \updtwo{Shown: one held-out simulated test row per species, seen broadside by the rover camera. The model fine-tuned on rows reads the photograph, depth frame and point cloud of the whole row, with nothing marking the center plant, and writes that plant's recipe; the generated point cloud and the traits read from the recipe are shown beside the true values (Regime III, Sec.~\ref{sec:regime3}).}}
   \label{fig:teaser}%
 \end{center}%
 \vspace{4pt}
@@ -576,7 +576,7 @@ scene.}
     Row scenes $\times$ orientations & $15{,}000 \times 10$ & $15{,}000 \times 10$ \\
     Row camera & level rover, 1.0\,m & level rover, 2.5\,m \\
     Row cloud (input / target) & \multicolumn{2}{c}{24{,}576 / 8{,}192 pts} \\
-    Real-field split & MaizeField3D & \todo{Field scans} \\
+    Real-field split & \updtwo{field scans} & \todo{field scans} \\
     \bottomrule
   \end{tabular}
   \caption{\upd{\textbf{\dataset{} dataset configuration.} Parameter dimensions
@@ -964,6 +964,7 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
     Point Cloud & \textbf{0.998} & 0.022 & 0.674 & 0.369 & 1.46 \\
     $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.891 & 0.038 & 0.635 & 0.394 & 1.35 \\
     \upd{RGB, three views (recipes averaged)} & \upd{0.995} & \upd{\textbf{0.018}} & \upd{\textbf{0.747}} & -- & -- \\
+    \midrule
     \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.301} & \upd{0.221} & \upd{$-0.010$} & \upd{0.386} & \upd{1.36} \\
     \midrule
     \multicolumn{6}{l}{\emph{Maize}} \\
@@ -972,6 +973,7 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
     Point Cloud & 0.986 & \textbf{0.043} & 0.587 & 0.455 & 0.87 \\
     $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 \\
     \upd{RGB, three views (recipes averaged)} & \upd{\textbf{0.988}} & \upd{0.044} & \upd{\textbf{0.597}} & -- & -- \\
+    \midrule
     \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.066} & \upd{0.131} & \upd{0.015} & \upd{0.482} & \upd{0.83} \\
     \bottomrule
   \end{tabular}
@@ -993,7 +995,14 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
   cloud from the view-00 photograph and reads the recipe from that generated
   cloud; its cloud columns are the RGB row's. Reading the recipe from a
   generated cloud loses almost all of it (sorghum leaf skill 0.66 to
-  $-0.01$), so the recipe is read from the sensor directly.}}
+  $-0.01$), so the recipe is read from the sensor directly.}
+  \updtwo{Leaf-count accuracy is the fraction of the 2{,}250 plants whose
+  predicted count is within one leaf of the true count; height error is the
+  median relative error $|\hat h - h|/h$ over the same plants. Chamfer is
+  the symmetric squared distance in the unit-sphere frame ($\times10^{-3}$;
+  1.0 corresponds to $\approx 22$\,mm RMS on a 1.4\,m plant). The rule
+  above the two-stage row separates the end-to-end model, which reads the
+  recipe from the sensor, from this modular alternative.}}
   \label{tab:regime1}
 \end{table*}
 
