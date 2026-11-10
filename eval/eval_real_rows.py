@@ -1,0 +1,93 @@
+"""E10: the maize models on the rows built from the 520 real plants (eval/real_rows.py converts each camera stop
+into the row model's input conventions). For every stop the model reads the row (photograph, depth, point cloud;
+the recipe is never an input) and writes the centre plant: its cloud is scored against the centre plant as the
+camera sees it (Chamfer in m^2 and the share of its points missed by more than 5 mm, as eval/eval_row.py), its
+recipe on the plant's true height and leaf count (the files carry no per-leaf recipe).
+Sources: 'all' = photograph + depth + cloud at the run's mask ratio (the Regime III protocol), or one stream alone.
+usage: python eval/eval_real_rows.py --out reports/e10_real_rows_<job> [--models run:ckpt ...] [--sources all rgb depth pc]
+                                     [--layouts parallel perpendicular] [--rows 0001 0305] [--stops 9] [--device cuda]
+"""
+import sys, pathlib; sys.path[:0] = [str(pathlib.Path(__file__).resolve().parents[1]), str(pathlib.Path(__file__).resolve().parent)]
+import argparse, json, time
+import numpy as np, pandas as pd, torch
+from torch.utils.data import DataLoader
+from eval_row import build_model, predict, score_cloud, recipe_scored, bootstrap_ci
+from real_rows import RealRowDataset, collate
+from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2
+
+ap = argparse.ArgumentParser()
+ap.add_argument('--models', nargs='+', default=['maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth',
+                                               'maize_row_iso_e1:checkpoints/checkpoint_epoch_100.pth',
+                                               'maize_4m_pretrain_15k_d2:checkpoints/checkpoint_epoch_1000.pth'])
+ap.add_argument('--sources', nargs='+', default=['all', 'rgb', 'depth', 'pc'])
+ap.add_argument('--layouts', nargs='+', default=['parallel', 'perpendicular'])
+ap.add_argument('--rows', nargs='+', default=None); ap.add_argument('--stops', nargs='+', type=int, default=None)
+ap.add_argument('--batch-size', type=int, default=8); ap.add_argument('--num-workers', type=int, default=8)
+ap.add_argument('--seed', type=int, default=0)
+ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
+ap.add_argument('--out', required=True, help='prefix: writes <out>.csv and <out>.json')
+a = ap.parse_args()
+dev = torch.device(a.device)
+H_IDX, N_IDX = PLANT_FIELDS_V2.index('height'), PLANT_FIELDS_V2.index('leafCount')
+
+models = []
+for spec in a.models:
+    run, ckpt = spec.split(':', 1)
+    m, cfg, ep = build_model(pathlib.Path('outputs') / run, ckpt, dev, 'maize')
+    models.append(dict(run=run, ckpt=ckpt, epoch=ep, model=m, mask=float(cfg.get('mask_ratio', 0.8)),
+                       recipe=recipe_scored(cfg, 'maize', m)))
+    print(f'{run} @ {ckpt} (epoch {ep}): mask ratio {models[-1]["mask"]}, recipe scored {models[-1]["recipe"]}', flush=True)
+
+ds = RealRowDataset(layouts=a.layouts, rows=a.rows, stops=set(a.stops) if a.stops else None, seed=a.seed)
+loader = DataLoader(ds, batch_size=a.batch_size, shuffle=False, num_workers=a.num_workers, collate_fn=collate, persistent_workers=False)
+rows, t0 = [], time.time()
+for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
+    rgb, depth, pc, params, gt = (x.to(dev) for x in (rgb, depth, pc, params, gt))
+    scale = torch.tensor([i['scale'] for i in info], device=dev)
+    for M in models:
+        for src in a.sources:
+            if dev.type == 'cuda': torch.cuda.synchronize()
+            tf = time.time()
+            pred_pc, pred_par = predict(M['model'], src, rgb, depth, pc, params, M['mask'] if src == 'all' else 0.0, a.seed + 1000003 * bi)
+            if dev.type == 'cuda': torch.cuda.synchronize()
+            ms = (time.time() - tf) * 1000 / len(info)
+            if pred_pc is None:
+                continue
+            cd, cd_m2, miss, miss5 = score_cloud(pred_pc.float(), gt, scale)
+            if M['recipe']:
+                p0 = pred_par[:, 0].clamp(0, 1).float().cpu().numpy()
+                h = p0[:, H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]
+                n = np.rint(p0[:, N_IDX] * _PLANT_SCALE_V2[N_IDX] - _PLANT_SHIFT_V2[N_IDX])
+            for k, inf in enumerate(info):
+                r = dict(model=M['run'], epoch=M['epoch'], source=src, **inf, chamfer=float(cd[k]), chamfer_m2=float(cd_m2[k]),
+                         miss_0p01=float(miss[k]), miss_5mm=float(miss5[k]), ms_per_stop=ms)
+                if M['recipe']:
+                    r.update(height_pred=float(h[k]), leaves_pred=int(n[k]), height_rel_err=abs(float(h[k]) - inf['height']) / inf['height'],
+                             leaves_abs_err=abs(int(n[k]) - inf['leaves']))
+                rows.append(r)
+    if bi % 20 == 0:
+        print(f'  {min((bi + 1) * a.batch_size, len(ds))}/{len(ds)} stops ({time.time() - t0:.0f} s)', flush=True)
+
+df = pd.DataFrame(rows); df.to_csv(f'{a.out}.csv', index=False)
+summary = {'n_stops': len(ds), 'rows': int(df[['layout', 'row']].drop_duplicates().shape[0]) if len(df) else 0, 'groups': []}
+for (model, src, layout), g in list(df.groupby(['model', 'source', 'layout'])) + [((m, s, 'both'), g) for (m, s), g in df.groupby(['model', 'source'])]:
+    per_plant = g.groupby('row')
+    e = dict(model=model, source=src, layout=layout, n_stops=len(g), n_plants=per_plant.ngroups)
+    for col in ('chamfer_m2', 'miss_5mm'):
+        mean, lo, hi = bootstrap_ci(per_plant[col].mean().values)
+        e[col] = dict(mean=mean, lo=lo, hi=hi, median=float(g[col].median()))
+    if 'height_rel_err' in g and g['height_rel_err'].notna().any():
+        e['height_rel_err_median'] = float(g['height_rel_err'].median())
+        e['height_mae_m'] = float((g['height_pred'] - g['height']).abs().mean())
+        e['leaves_acc_pm1'] = float((g['leaves_abs_err'] <= 1).mean())
+        e['leaves_acc_exact'] = float((g['leaves_abs_err'] == 0).mean())
+        e['leaves_mae'] = float(g['leaves_abs_err'].mean())
+    e['occ_frac_mean'] = float(g['occ_frac'].mean()); e['ms_per_stop'] = float(g['ms_per_stop'].mean())
+    summary['groups'].append(e)
+json.dump(summary, open(f'{a.out}.json', 'w'), indent=1)
+print(f'wrote {a.out}.csv ({len(df)} rows) and {a.out}.json')
+for e in summary['groups']:
+    if e['layout'] == 'both':
+        print(f"{e['model']:26s} {e['source']:5s} chamfer {e['chamfer_m2']['mean'] * 1e4:6.1f}e-4 m2 [{e['chamfer_m2']['lo'] * 1e4:.1f}, {e['chamfer_m2']['hi'] * 1e4:.1f}]"
+              f"  miss5mm {e['miss_5mm']['mean']:.2f}" + (f"  height err {e['height_rel_err_median'] * 100:.1f} %  leaves +-1 {e['leaves_acc_pm1']:.2f}" if 'leaves_acc_pm1' in e else '')
+              + f"  {e['ms_per_stop']:.1f} ms/stop")
