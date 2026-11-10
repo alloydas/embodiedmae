@@ -2282,7 +2282,7 @@ rendered occluded scenes.}
 
 \begin{figure*}[t]
   \centering
-  \IfFileExists{Figures/fig_sources_maize.png}{\includegraphics[width=\textwidth]{Figures/fig_sources_maize.png}}{\todo{[fig\_sources\_maize.png is in the labmate's Overleaf only; copy it into Figures/]}}
+  \includegraphics[width=\textwidth]{Figures/fig_sources_maize.png}
   \caption{\updtwo{The four training sources of occlusion, shown for the same maize target plant. Columns: the target
   plant alone; synthetic neighbours (the 3D point clouds of other plants placed beside the target and rendered
   into the image and depth map); B\'ezier leaves (leaf-shaped occluders drawn in the image and depth map and
@@ -2559,7 +2559,7 @@ use random masking.}
 
 \begin{figure*}[t]
   \centering
-  \IfFileExists{Figures/fig_mixed_masking.png}{\includegraphics[width=0.85\textwidth]{Figures/fig_mixed_masking.png}}{\todo{[fig\_mixed\_masking.png is in the labmate's Overleaf only; copy it into Figures/]}}
+  \includegraphics[width=0.85\textwidth]{Figures/fig_mixed_masking.png}
   \caption{\updtwo{Mixed masking with one coin per scene, on two occluded maize scenes from the rendered rows. Columns: the
   occluded input (point cloud: target plant in green, occluders in orange); random masking; structured masking, which
   masks the occluder tokens first; and mixed masking, where a coin per training scene selects structured masking
