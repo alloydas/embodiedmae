@@ -22,7 +22,8 @@ IMG_NAME = {'c3': 's_rgb', 'c4': 's_depth', 'c5': 's_pc', 'c6': 's_gen',
 LABEL_MAP = {'photograph': 'Image', 'depth frame': 'Depth image',
              'point cloud': 'Point cloud',
              'recipe of the center plant': 'Procedural parameters',
-             're-rendered plant': 'Generated point cloud', 'traits': 'Traits'}
+             're-rendered plant': 'Generated point cloud',
+             'traits': 'Procedural\nparameter / trait'}
 PT = 72.0 / 200.0            # px -> pt
 IN = 1.0 / 200.0             # px -> in
 
@@ -49,7 +50,7 @@ def node_text(value, mono):
     v = re.sub(r'<div[^>]*>', '', value or '').replace('</div>', '')
     lines = [html.unescape(x).replace('\u00a0', ' ') for x in v.split('<br>')]
     if len(lines) == 1 and lines[0] in LABEL_MAP:
-        lines = [LABEL_MAP[lines[0]]]
+        lines = LABEL_MAP[lines[0]].split('\n')
     out = []
     for ln in lines:
         ln = tex_escape(ln)
