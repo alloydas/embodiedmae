@@ -40,6 +40,27 @@ BG_THRESH, VIS_TOL, ZB_RES = 235, 0.010, 160
 NEAR, FAR = 0.05, 3.0                       # maize_row depth encoding (training camera_pose.json near / far)
 N_TOKENS, N_PARAMS = 29, 14                 # maize recipe tensor (1 plant + 28 leaf tokens); zeros, never an input
 
+# Sorghum (2026-11-11 upload): 30 scanned real sorghum plants, each repeated along a row, two layouts, 18 stops.
+# Each frame is a tall strip (7-17 deg wide, 61-76 deg high, ~0.58 m of row) framed to the whole plant, and its
+# PCD holds 25,000 points drawn from the scan inside that frustum (hidden points included). Differences from maize:
+#   window  the frame's full vertical field of view as a square (the plant fills it, as in the training rows),
+#           the sides padded with background; the training sorghum rows are 40 deg at 2.5 m, framed the same way.
+#   depth   encoded in the sorghum renders' convention, (z - 0.0238) / 50 (species_conventions.sorghum_std).
+#   colour  served at the sorghum run's brighten gain (the row runs trained on 1.85x the raw renders).
+#   recipe  zeros of the sorghum width (1 + 24 tokens x 9); truth is the plant height only (no leaf count).
+SPECIES = {
+    'maize': dict(layouts=LAYOUTS, window='fov40', near=NEAR, far=FAR, encode=lambda z: (z - NEAR) / (FAR - NEAR),
+                  tokens=N_TOKENS, params=N_PARAMS),
+    'sorghum': dict(layouts={'parallel': ROOT / 'sorghum_rows_parallel_25000pts_seed1_d1_156248-p1d1V_585524',
+                             'perpendicular': ROOT / 'sorghum_rows_perpendicular_25000pts_seed1_d1_156248-p1d1V_585524'},
+                    window='full', encode=lambda z: (z - 0.0238) / 50.0, tokens=25, params=9),
+}
+
+
+def row_id(d):
+    """'row_0001_seed1' -> '0001'; 'row_d1_156248_seed1' -> 'd1_156248'"""
+    return d.name[len('row_'):].rsplit('_seed', 1)[0]
+
 
 def read_pcd(path):
     raw = pathlib.Path(path).read_bytes(); i = raw.find(b'DATA'); j = raw.find(b'\n', i) + 1
@@ -59,14 +80,17 @@ def subsample(pts, k, rng):
 
 
 class RealRowDataset(torch.utils.data.Dataset):
-    def __init__(self, layouts=('parallel', 'perpendicular'), rows=None, stops=None, seed=0, with_targets=False):
+    def __init__(self, layouts=('parallel', 'perpendicular'), rows=None, stops=None, seed=0, with_targets=False,
+                 species='maize', rgb_gain=None):
         # with_targets: also return the centre plant's own depth image (all its points, splatted alone), the
         # depth target of the real-row fine-tune (train_real_rows.py). Off = the E10 evaluation's items, unchanged.
+        # rgb_gain: multiply the colour channels by this (sorghum: the run's rgb_brighten_gain); None = as on disk.
         self.seed, self.items, self._tables, self.with_targets = seed, [], {}, with_targets
-        rows = None if rows is None else {f'{int(r):04d}' for r in rows}
+        self.species, self.sp, self.rgb_gain = species, SPECIES[species], rgb_gain
+        rows = None if rows is None else {(f'{int(r):04d}' if str(r).isdigit() else str(r)) for r in rows}
         for layout in layouts:
-            for d in sorted(LAYOUTS[layout].glob('row_*_seed1')):
-                rid = d.name.split('_')[1]
+            for d in sorted(self.sp['layouts'][layout].glob('row_*_seed1')):
+                rid = row_id(d)
                 if rows is not None and rid not in rows:
                     continue
                 f_csv, p_csv = d / f'row_{rid}_seed1_frames.csv', d / f'row_{rid}_seed1_plants.csv'
@@ -80,7 +104,7 @@ class RealRowDataset(torch.utils.data.Dataset):
                         self.items.append((layout, str(d), rid, int(f['frame'])))
         self.tf = transforms.Compose([transforms.Resize((IMG, IMG)), transforms.ToTensor(),
                                       transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-        print(f'real maize rows: {len(self.items)} stops from {len({(i[0], i[2]) for i in self.items})} rows, layouts {list(layouts)}')
+        print(f'real {species} rows: {len(self.items)} stops from {len({(i[0], i[2]) for i in self.items})} rows, layouts {list(layouts)}')
 
     def __len__(self):
         return len(self.items)
@@ -98,7 +122,10 @@ class RealRowDataset(torch.utils.data.Dataset):
         frames, plants = self._table(d, rid)
         f = frames[stop - 1]
         fx, fy, cx, cy = (float(f[k]) for k in ('fx', 'fy', 'cx', 'cy'))
-        half = np.tan(np.radians(FOV_DEG / 2)) * fx                      # window half-width in image pixels
+        if self.sp['window'] == 'fov40':
+            half = np.tan(np.radians(FOV_DEG / 2)) * fx                  # window half-width in image pixels
+        else:
+            half = max(cy, float(f['height_px']) - cy)                   # the full vertical extent, as a square
         xs = np.array([float(p['x_m']) for p in plants])
         tp = plants[int(np.argmin(np.abs(xs - float(f['camera_x_m']))))]  # the plant on the optical axis
         target = int(tp['plant_number'])
@@ -143,7 +170,7 @@ class RealRowDataset(torch.utils.data.Dataset):
             filled = np.isfinite(nb).sum(0)
             hole = ~np.isfinite(zb) & (filled >= 5)
             zb[hole] = np.min(nb, axis=0)[hole]
-            return np.where(np.isfinite(zb), np.clip((zb - NEAR) / (FAR - NEAR), 1e-6, 1.0), 0.0).astype(np.float32)
+            return np.where(np.isfinite(zb), np.clip(self.sp['encode'](zb), 1e-6, 1.0), 0.0).astype(np.float32)
 
         dep = splat(np.flatnonzero(vis_scene))
 
@@ -154,13 +181,15 @@ class RealRowDataset(torch.utils.data.Dataset):
         ys, xs_ = slice(max(0, r0), min(H, r0 + n)), slice(max(0, c0), min(W, c0 + n))
         canvas[ys.start - r0:ys.stop - r0, xs_.start - c0:xs_.stop - c0] = im[ys, xs_]
         canvas[(canvas >= BG_THRESH).all(-1)] = 0
+        if self.rgb_gain is not None:
+            canvas = np.clip(canvas.astype(np.float32) * self.rgb_gain, 0, 255).astype(np.uint8)
         rgb = self.tf(Image.fromarray(canvas))
 
-        info = dict(layout=layout, row=rid, stop=stop, target=target, height=float(tp['height_m']), leaves=int(tp['leaves']),
+        info = dict(layout=layout, row=rid, stop=stop, target=target, height=float(tp['height_m']), leaves=int(tp.get('leaves') or -1),
                     occ_frac=occ, scale=scale, n_scene_visible=int(vis_scene.sum()), n_target_visible=int(vis_target.sum()),
                     plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']))
         out = (rgb, torch.from_numpy(dep)[None], torch.from_numpy(pin.astype(np.float32)),
-               torch.zeros(N_TOKENS, N_PARAMS), torch.zeros(N_TOKENS), torch.from_numpy(pgt.astype(np.float32)))
+               torch.zeros(self.sp['tokens'], self.sp['params']), torch.zeros(self.sp['tokens']), torch.from_numpy(pgt.astype(np.float32)))
         if self.with_targets:
             out = out + (torch.from_numpy(splat(np.flatnonzero(win & (lab == target))))[None],)
         return out + (info,)

@@ -21,29 +21,39 @@ import argparse, json, math, os, shutil, time
 import numpy as np, pandas as pd, torch, torch.nn.functional as F
 from torch.utils.data import DataLoader
 from eval_row import build_model, predict, score_cloud
-from real_rows import RealRowDataset, collate, LAYOUTS
+from real_rows import RealRowDataset, collate, SPECIES, row_id
 from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2
 
+# Sorghum (--species sorghum): the 30 scanned plants. Their truth is the plant height, which the sorghum recipe does
+# not hold (its plant token carries the stem length) and which is 2.2-5.3 m against 0.2-1.7 m in training, so the
+# recipe gets no loss by default (--recipe-weight 0): cloud and depth only. Defaults: 3 validation plants.
 ap = argparse.ArgumentParser()
-ap.add_argument('--init', default='maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth')
-ap.add_argument('--run', default='maize_real_ft')
+ap.add_argument('--species', default='maize', choices=('maize', 'sorghum'))
+ap.add_argument('--init', default=None, help='run:ckpt (default: the species row fine-tune at epoch 100)')
+ap.add_argument('--run', default=None, help='default <species>_real_ft')
 ap.add_argument('--out-root', default='/work/mech-ai/alloydas/embodiedmae_outputs')
-ap.add_argument('--test-frac', type=float, default=0.25); ap.add_argument('--val-plants', type=int, default=39)
+ap.add_argument('--test-frac', type=float, default=0.25); ap.add_argument('--val-plants', type=int, default=None)
 ap.add_argument('--split-seed', type=int, default=0)
 ap.add_argument('--epochs', type=int, default=15); ap.add_argument('--warmup-epochs', type=int, default=1)
 ap.add_argument('--lr', type=float, default=2e-5); ap.add_argument('--weight-decay', type=float, default=0.05)
 ap.add_argument('--batch-size', type=int, default=16); ap.add_argument('--num-workers', type=int, default=14)
-ap.add_argument('--recipe-weight', type=float, default=5.0, help='= the row run spline_loss_weight')
+ap.add_argument('--recipe-weight', type=float, default=None, help='maize 5.0 (= the row run spline_loss_weight); sorghum 0')
 ap.add_argument('--val-every', type=int, default=1)
 ap.add_argument('--smoke', type=int, default=0, help='>0: that many train/val plants, 2 epochs, CPU-friendly')
 ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
 a = ap.parse_args()
+SORG = a.species == 'sorghum'
+a.init = a.init or ('sorghum_row_ft:checkpoints/checkpoint_epoch_100.pth' if SORG else 'maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth')
+a.run = a.run or f'{a.species}_real_ft'
+a.val_plants = a.val_plants if a.val_plants is not None else (3 if SORG else 39)
+a.recipe_weight = a.recipe_weight if a.recipe_weight is not None else (0.0 if SORG else 5.0)
+LAY = SPECIES[a.species]['layouts']
 dev = torch.device(a.device)
 H_IDX, N_IDX = PLANT_FIELDS_V2.index('height'), PLANT_FIELDS_V2.index('leafCount')
 
 # ---- split by plant --------------------------------------------------------------------------------
-plants = sorted({d.name.split('_')[1] for d in LAYOUTS['parallel'].glob('row_*_seed1')} &
-                {d.name.split('_')[1] for d in LAYOUTS['perpendicular'].glob('row_*_seed1')})
+plants = sorted({row_id(d) for d in LAY['parallel'].glob('row_*_seed1')} &
+                {row_id(d) for d in LAY['perpendicular'].glob('row_*_seed1')})
 rng = np.random.default_rng(a.split_seed); perm = list(rng.permutation(plants))
 n_test = int(round(a.test_frac * len(plants)))
 test, rest = sorted(perm[:n_test]), perm[n_test:]
@@ -63,10 +73,11 @@ if not run_dir.exists():
 (run_dir / 'checkpoints').mkdir(parents=True, exist_ok=True)
 split.to_csv(run_dir / 'split.csv', index=False)
 if not a.smoke:
-    split.to_csv('data_split/e10_real_split.csv', index=False)
+    split.to_csv('data_split/e10_real_split.csv' if not SORG else 'data_split/e10_real_split_sorghum.csv', index=False)
 
 init_run, init_ckpt = a.init.split(':', 1)
-model, cfg, init_ep = build_model(pathlib.Path('outputs') / init_run, init_ckpt, dev, 'maize')
+model, cfg, init_ep = build_model(pathlib.Path('outputs') / init_run, init_ckpt, dev, a.species)
+gain = float(cfg.get('rgb_brighten_gain', 1.0)) if SORG else None
 model.pc_sinkhorn_weight = float(cfg.get('pc_sinkhorn_weight', 0.0))      # build_model turns it off for eval
 model.pc_sinkhorn_points = int(cfg.get('pc_sinkhorn_points', 1024)); model.pc_sinkhorn_blur = float(cfg.get('pc_sinkhorn_blur', 0.02))
 mask = float(cfg.get('mask_ratio', 0.8)); pc_w = float(cfg.get('pc_loss_weight', 1.0))
@@ -75,8 +86,8 @@ run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_se
                                        supervised=['pc', 'depth', 'height', 'leafCount'], source_mask_ratio=mask))
 (run_dir / 'config.json').write_text(json.dumps(run_cfg, indent=1, default=str))
 
-train_ds = RealRowDataset(rows=train, with_targets=True, seed=1)
-val_ds = RealRowDataset(rows=val, seed=0)
+train_ds = RealRowDataset(rows=train, with_targets=True, seed=1, species=a.species, rgb_gain=gain)
+val_ds = RealRowDataset(rows=val, seed=0, species=a.species, rgb_gain=gain)
 mk = lambda ds, sh: DataLoader(ds, batch_size=a.batch_size, shuffle=sh, num_workers=a.num_workers, collate_fn=collate,
                                persistent_workers=False, drop_last=sh)
 opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.weight_decay)
@@ -99,8 +110,12 @@ def validate():
         scale = torch.tensor([i['scale'] for i in info], device=dev)
         ch += score_cloud(pp.float(), pgt, scale)[1].tolist()
         p0 = ppar[:, 0].clamp(0, 1).float().cpu().numpy()
-        h = p0[:, H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]
-        n = np.rint(p0[:, N_IDX] * _PLANT_SCALE_V2[N_IDX] - _PLANT_SHIFT_V2[N_IDX])
+        if SORG:                                    # stem length (plant token field 0) against the plant height
+            import embodied_mae_4m as S4
+            h = p0[:, 0] * S4._PLANT_SCALE[0] - S4._PLANT_SHIFT[0]; n = np.full(len(info), -99)
+        else:
+            h = p0[:, H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]
+            n = np.rint(p0[:, N_IDX] * _PLANT_SCALE_V2[N_IDX] - _PLANT_SHIFT_V2[N_IDX])
         hs += list(np.abs(h - np.array([i['height'] for i in info])) / np.array([i['height'] for i in info]))
         ns += list(np.abs(n - np.array([i['leaves'] for i in info])) <= 1)
     model.train()
@@ -118,7 +133,8 @@ for ep in range(1, a.epochs + 1):
         rgb, dep, pin, par, valid, pgt, g_dep = (x.to(dev) for x in (rgb, dep, pin, par, valid, pgt, g_dep))
         _, (_, ld, lp, _), (_, _, _, ppar), _ = model(rgb, dep, pin, torch.zeros_like(par), valid, visible={'rgb', 'depth', 'pc'},
                                                       source_mask_ratio=mask, targets=(rgb, g_dep, pgt))
-        lr_ = F.smooth_l1_loss(ppar[:, 0, [N_IDX, H_IDX]], recipe_target(info).to(dev), beta=0.1)
+        lr_ = (F.smooth_l1_loss(ppar[:, 0, [N_IDX, H_IDX]], recipe_target(info).to(dev), beta=0.1) if a.recipe_weight > 0
+               else ppar.new_zeros(()))
         loss = pc_w * lp + ld + a.recipe_weight * lr_
         opt.zero_grad(set_to_none=True); loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step(); sched.step(); step += 1
