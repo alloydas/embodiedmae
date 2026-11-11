@@ -828,6 +828,13 @@ Figure~\ref{fig:precision_recall} plots reconstruction precision, recall, and $F
 
 We validate \method{} on real field laser scans and RGB images from the MaizeField3D benchmark~\citep{maizefield3d2025}, comparing single-forward-pass predictions against ground-truth procedural models reconstructed by a staged vision-language annotation pipeline~\citep{hadadi2026vlmmaize}. E10 has not yet run. This subsection's numbers (parameter accuracy against the pipeline fits, re-rendered Chamfer against the laser scans, zero-shot and fine-tuned rows, runtime per plant) are pending the real-scan evaluation.
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{Figures/fig_e10_real.pdf}
+  \caption{Real maize rows (E10). Each row of panels is one camera stop on a crop row assembled from the 520 real maize plants, in the parallel and perpendicular row layouts, picked at the row fine-tune's median Chamfer for its layout. From left: the image, depth image and scene point cloud the model reads (the training camera's $40^\circ$ window), the center plant as the camera sees it, and the center plant written by the row fine-tune and by the headline model without row fine-tuning, each with its Chamfer and predicted height. The row fine-tune keeps the center plant's stem and leaf layout and drops the neighbors; both models under-predict the height of these plants, which are taller than any training plant.}
+  \label{fig:e10_real}
+\end{figure*}
+
 \subsection{Representation quality, scaling, and transfer}
 \label{sec:res-repr}\label{sec:exp-repr}
 
