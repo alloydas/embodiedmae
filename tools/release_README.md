@@ -24,7 +24,7 @@ model in the paper is `EmbodiedMAE4M` (`embodied_mae_4m.py`) and its maize subcl
 | `train_sorghum_4m.py`, `train_maize_4m.py` | pretraining (headline model, ablation arms) |
 | `train_sorghum_4m_distill.py`, `train_maize_4m_distill.py` | cross-modal distillation (generalist and single-source students) |
 | `train_row_4m.py` | row fine-tune and its isolated-plant control (Regime III) |
-| `train_supervised_4m.py`, `train_supervised_maize_4m.py` | supervised-from-scratch reference of Table 9 |
+| `train_supervised_4m.py`, `train_supervised_maize_4m.py` | supervised-from-scratch reference of Table 10 |
 | `eval/` | every evaluation behind the tables (list below); `eval/baselines/` holds the frozen-encoder adapters |
 | `configs/` | one YAML per run reported in the paper |
 | `data_split/` | split construction and the target tables the probes read |
@@ -89,11 +89,11 @@ and resume from `checkpointing.resume`. The ablation arms are compared at their 
 | prefix | experiment |
 |---|---|
 | `4m_pretrain15k_d2_sink`, `maize_4m_pretrain_15k_d2` | headline model (E1) |
-| `e2_*`, `maize_e2_*`, `maize_4m_d2` | which streams are present (Table 7, supplement Table 11) |
+| `e2_*`, `maize_e2_*`, `maize_4m_d2` | which streams are present (Table 7, supplement Table 12) |
 | `e2_pcrgbdt_tg*`, `maize_4m_tg*` | token-budget controls for the recipe stream (Table 8) |
-| `e3_*`, `e4_*` (and `maize_`) | data scale and model scale (Table 10, supplement Table 12) |
+| `e3_*`, `e4_*` (and `maize_`) | data scale and model scale (Table 11, supplement Table 13) |
 | `e5_*` (and `maize_`) | camera-elevation regime (Regime II) |
-| `e8_supervised_d2`, `maize_e8_supervised_d2` | supervised reference (Table 9) |
+| `e8_supervised_d2`, `maize_e8_supervised_d2` | supervised reference (Table 10) |
 | `4m_distill_15k_*`, `maize_distill_*` | distillation: generalist, RGB students, two-stream students, recipe specialists |
 | `*_row_ft*`, `*_row_iso*` | Regime III row fine-tune and isolated control |
 | `*_xfer_*` | cross-species warm start vs scratch |
@@ -107,10 +107,10 @@ and resume from `checkpointing.resume`. The ablation arms are compared at their 
 | Regime III, crop rows (Table 5) | `eval/eval_row.py`, `eval/row_pair_bootstrap.py` |
 | Any-subset generation and distillation (Table 6) | `eval/eval_warmstart.py`, `eval/eval_rgb2pc_quant.py`, `eval/eval_specialists.py`, `eval/pc_fscore.py`, `eval/pc_fscore_maize.py` |
 | Stream ablation and controls (Tables 7, 8) | `eval/linear_probe.py`, `eval/linear_probe_maize.py`, `eval/probe_pair_bootstrap.py` |
-| Frozen-encoder comparison (Table 9) | `eval/baseline_probe.py` with `eval/baselines/`; reconstruction companion `eval/recon_compare.py` |
+| Frozen-encoder comparison (Table 10) | `eval/baseline_probe.py` with `eval/baselines/`; reconstruction companion `eval/recon_compare.py` |
 | Representation analysis | `eval/latent_analysis.py`, `eval/latent_analysis_maize.py` |
 | Cross-species | `eval/cross_species_probe.py`, `eval/eval_rgb2pc_quant.py --model_species/--data_species`, `eval/eval_row.py --model-species` |
-| Real maize rows (E10) | `eval/real_rows.py`, `eval/eval_real_rows.py` |
+| Real maize rows (Table 9) | `eval/real_rows.py`, `eval/eval_real_rows.py` |
 
 Examples:
 
@@ -122,7 +122,7 @@ python eval/eval_row.py --species sorghum --run sorghum_row_ft --ckpt checkpoint
 python eval/baseline_probe.py --species sorghum --baselines pointmae multimae dinov2_vitb14
 ```
 
-The probe (Table 9 and the stream ablation) is a ridge regression on frozen features: one deterministic
+The probe (Table 10 and the stream ablation) is a ridge regression on frozen features: one deterministic
 view per plant, the standardiser fitted on train plants only, the ridge strength chosen by 5-fold
 cross-validation, scored as validation R^2. The recipe stream is never visible at probe time and its
 tensor is zeroed, because the plant token carries the height target verbatim. Features are cached under
