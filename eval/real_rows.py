@@ -59,8 +59,10 @@ def subsample(pts, k, rng):
 
 
 class RealRowDataset(torch.utils.data.Dataset):
-    def __init__(self, layouts=('parallel', 'perpendicular'), rows=None, stops=None, seed=0):
-        self.seed, self.items, self._tables = seed, [], {}
+    def __init__(self, layouts=('parallel', 'perpendicular'), rows=None, stops=None, seed=0, with_targets=False):
+        # with_targets: also return the centre plant's own depth image (all its points, splatted alone), the
+        # depth target of the real-row fine-tune (train_real_rows.py). Off = the E10 evaluation's items, unchanged.
+        self.seed, self.items, self._tables, self.with_targets = seed, [], {}, with_targets
         rows = None if rows is None else {f'{int(r):04d}' for r in rows}
         for layout in layouts:
             for d in sorted(LAYOUTS[layout].glob('row_*_seed1')):
@@ -128,20 +130,22 @@ class RealRowDataset(torch.utils.data.Dataset):
 
         # depth: the visible points splatted at 224^2 with a 2 x 2 footprint (near leaves are sampled more coarsely
         # than one pixel), then one-pixel holes filled from the 3 x 3 neighbourhood minimum
-        sel = np.flatnonzero(vis_scene)
-        uf = (u[sel] - (cx - half)) / (2 * half) * IMG; vf = (v[sel] - (cy - half)) / (2 * half) * IMG
-        zb = np.full((IMG, IMG), np.inf)
-        for du in (0.0, 1.0):
-            for dv in (0.0, 1.0):
-                ui = np.clip(np.floor(uf - 0.5 + du).astype(np.int64), 0, IMG - 1)
-                vi = np.clip(np.floor(vf - 0.5 + dv).astype(np.int64), 0, IMG - 1)
-                np.minimum.at(zb, (vi, ui), z[sel])
-        pad = np.pad(zb, 1, constant_values=np.inf)
-        nb = np.stack([pad[1 + dy:IMG + 1 + dy, 1 + dx:IMG + 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1)])
-        filled = np.isfinite(nb).sum(0)
-        hole = ~np.isfinite(zb) & (filled >= 5)
-        zb[hole] = np.min(nb, axis=0)[hole]
-        dep = np.where(np.isfinite(zb), np.clip((zb - NEAR) / (FAR - NEAR), 1e-6, 1.0), 0.0).astype(np.float32)
+        def splat(sel):
+            uf = (u[sel] - (cx - half)) / (2 * half) * IMG; vf = (v[sel] - (cy - half)) / (2 * half) * IMG
+            zb = np.full((IMG, IMG), np.inf)
+            for du in (0.0, 1.0):
+                for dv in (0.0, 1.0):
+                    ui = np.clip(np.floor(uf - 0.5 + du).astype(np.int64), 0, IMG - 1)
+                    vi = np.clip(np.floor(vf - 0.5 + dv).astype(np.int64), 0, IMG - 1)
+                    np.minimum.at(zb, (vi, ui), z[sel])
+            pad = np.pad(zb, 1, constant_values=np.inf)
+            nb = np.stack([pad[1 + dy:IMG + 1 + dy, 1 + dx:IMG + 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1)])
+            filled = np.isfinite(nb).sum(0)
+            hole = ~np.isfinite(zb) & (filled >= 5)
+            zb[hole] = np.min(nb, axis=0)[hole]
+            return np.where(np.isfinite(zb), np.clip((zb - NEAR) / (FAR - NEAR), 1e-6, 1.0), 0.0).astype(np.float32)
+
+        dep = splat(np.flatnonzero(vis_scene))
 
         # photograph: the 40 deg window, padded with background, white background -> black
         im = np.asarray(Image.open(pathlib.Path(d) / f['photo']).convert('RGB'))
@@ -155,10 +159,14 @@ class RealRowDataset(torch.utils.data.Dataset):
         info = dict(layout=layout, row=rid, stop=stop, target=target, height=float(tp['height_m']), leaves=int(tp['leaves']),
                     occ_frac=occ, scale=scale, n_scene_visible=int(vis_scene.sum()), n_target_visible=int(vis_target.sum()),
                     plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']))
-        return (rgb, torch.from_numpy(dep)[None], torch.from_numpy(pin.astype(np.float32)),
-                torch.zeros(N_TOKENS, N_PARAMS), torch.zeros(N_TOKENS), torch.from_numpy(pgt.astype(np.float32)), info)
+        out = (rgb, torch.from_numpy(dep)[None], torch.from_numpy(pin.astype(np.float32)),
+               torch.zeros(N_TOKENS, N_PARAMS), torch.zeros(N_TOKENS), torch.from_numpy(pgt.astype(np.float32)))
+        if self.with_targets:
+            out = out + (torch.from_numpy(splat(np.flatnonzero(win & (lab == target))))[None],)
+        return out + (info,)
 
 
 def collate(batch):
-    out = [torch.stack([b[k] for b in batch]) for k in range(6)]
-    return (*out, [b[6] for b in batch])
+    n = len(batch[0]) - 1
+    out = [torch.stack([b[k] for b in batch]) for k in range(n)]
+    return (*out, [b[n] for b in batch])
