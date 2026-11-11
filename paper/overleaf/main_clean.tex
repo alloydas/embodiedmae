@@ -434,7 +434,7 @@ To establish controlled comparisons across ablations, all variant models share a
 The headline full-modality model is trained on an extended schedule of 1{,}000 epochs across all ten camera views at a global batch size of 256, incorporating the Sinkhorn optimal-transport point cloud loss (Sec.~\ref{sec:method-pretrain}). The headline model encodes the procedural parameter stream within its shared Dirichlet masking budget and serves as the weight initialization for all teacher and student models in Sec.~\ref{sec:exp-main}. Results are reported on the validation split unless stated otherwise.
 
 \paragraph{Evaluation metrics.}
-We evaluate 3D geometric accuracy using symmetric Chamfer distance on squared point displacements in the unit-sphere frame ($\times 10^{-3}$; a value of 1.0 corresponds to a root-mean-square displacement of $\approx 22$\,mm on a 1.4\,m plant). For pretrained models, Chamfer distance is evaluated in the masked input regime of pretraining; for distilled student models, it is evaluated with unmasked sensor inputs.
+We evaluate 3D geometric accuracy using symmetric Chamfer distance on squared point displacements in the unit-sphere frame ($\times 10^{-3}$; a value of 1.0 corresponds to a root-mean-square displacement of $\approx 33$\,mm on the median sorghum plant and $\approx 19$\,mm on the median maize plant, whose metric scales we measure per plant on the raw camera-frame clouds). For pretrained models, Chamfer distance is evaluated in the masked input regime of pretraining; for distilled student models, it is evaluated with unmasked sensor inputs.
 
 Parameter regression accuracy is quantified via mean absolute error (MAE) evaluated over normalized $[0,1]$ continuous fields of hidden, non-padding leaf parameter tokens. Where per-trait relative performance is informative, we report trait \emph{skill}, defined as
 \begin{equation}
@@ -454,36 +454,36 @@ In sorghum, four core developmental traits have effective rank two due to genera
 \begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{4.5pt}
-  \begin{tabular}{l cc c cc}
+  \begin{tabular}{l cc c ccc}
     \toprule
-    & Leaf Count & Height Error & Leaf Parameters & $F_1$-score & Chamfer \\
-    Input Modality & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ \\
+    & Leaf Count & Height Error & Leaf Parameters & $F_1$-score & Chamfer & RMS Error \\
+    Input Modality & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ & (mm) $\downarrow$ \\
     \midrule
-    \multicolumn{6}{l}{\emph{Sorghum}} \\
-    RGB & 0.909 & 0.036 & 0.656 & 0.386 & 1.36 \\
-    Depth & 0.956 & 0.026 & 0.679 & \textbf{0.441} & \textbf{0.92} \\
-    Point Cloud & \textbf{0.998} & 0.022 & 0.674 & 0.369 & 1.46 \\
-    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.891 & 0.038 & 0.635 & 0.394 & 1.35 \\
-    RGB, three views (recipes averaged) & 0.995 & \textbf{0.018} & \textbf{0.747} & -- & -- \\
+    \multicolumn{7}{l}{\emph{Sorghum}} \\
+    RGB & 0.909 & 0.036 & 0.656 & 0.386 & 1.36 & 37.1 \\
+    Depth & 0.956 & 0.026 & 0.679 & \textbf{0.440} & \textbf{0.93} & \textbf{30.3} \\
+    Point Cloud & \textbf{0.998} & 0.022 & 0.675 & 0.370 & 1.45 & 38.7 \\
+    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.889 & 0.038 & 0.636 & 0.392 & 1.36 & 37.0 \\
+    RGB, three views (recipes averaged) & 0.995 & \textbf{0.018} & \textbf{0.747} & -- & -- & -- \\
     \midrule
-    Two-stage: RGB $\to$ cloud $\to$ recipe & 0.301 & 0.221 & $-0.010$ & 0.386 & 1.36 \\
+    Two-stage: RGB $\to$ cloud $\to$ recipe & 0.301 & 0.221 & $-0.010$ & 0.386 & 1.36 & 37.1 \\
     \midrule
-    \multicolumn{6}{l}{\emph{Maize}} \\
-    RGB & 0.973 & 0.045 & 0.567 & 0.482 & 0.83 \\
-    Depth & 0.972 & 0.046 & 0.571 & \textbf{0.529} & \textbf{0.64} \\
-    Point Cloud & 0.986 & \textbf{0.043} & 0.587 & 0.455 & 0.87 \\
-    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 \\
-    RGB, three views (recipes averaged) & \textbf{0.988} & 0.044 & \textbf{0.597} & -- & -- \\
+    \multicolumn{7}{l}{\emph{Maize}} \\
+    RGB & 0.973 & 0.045 & 0.567 & 0.482 & 0.83 & 13.6 \\
+    Depth & 0.972 & 0.046 & 0.571 & \textbf{0.529} & \textbf{0.64} & \textbf{12.4} \\
+    Point Cloud & 0.986 & \textbf{0.043} & 0.587 & 0.455 & 0.87 & 15.0 \\
+    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 & 15.4 \\
+    RGB, three views (recipes averaged) & \textbf{0.988} & 0.044 & \textbf{0.597} & -- & -- & -- \\
     \midrule
-    Two-stage: RGB $\to$ cloud $\to$ recipe & 0.066 & 0.131 & 0.015 & 0.482 & 0.83 \\
+    Two-stage: RGB $\to$ cloud $\to$ recipe & 0.066 & 0.131 & 0.015 & 0.482 & 0.83 & 13.6 \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{Regime I: single-view reconstruction on isolated
-  plants.} Each row is the distilled generalist given that input alone, on view 00 of every validation plant (2{,}250 per species). $^\dagger$The headline model given all three sensor streams, scored in its masked pretraining regime (80\% of tokens hidden); with every token visible its cloud collapses. Leaf count and height are read from the predicted recipe: maize stores the leaf count in the plant token, sorghum does not, so its count is derived from the predicted stem length through the generator's rule (stem length $= 0.05n - 0.001$). Leaf-parameter skill is Eq.~\eqref{eq:trait-skill} averaged over leaf fields on real leaf slots. Chamfer and $F_1$ against the complete plant cloud, unit-sphere frame; the distillation history of Tab.~\ref{tab:main} averages over random views, so its Chamfer differs. The three-view row averages the recipes predicted from the photographs of views 00, 01 and 02 (recipe columns only: each view's cloud is in its own camera frame). The two-stage row generates the cloud from the view-00 photograph and reads the recipe from that generated cloud; its cloud columns are the RGB row's. Reading the recipe from a generated cloud loses almost all of it (sorghum leaf skill 0.66 to $-0.01$), so the recipe is read from the sensor directly. Leaf-count accuracy is the fraction of the 2{,}250 plants whose predicted count is within one leaf of the true count; height error is the median relative error $|\hat h - h|/h$ over the same plants. Chamfer is the symmetric squared distance in the unit-sphere frame ($\times10^{-3}$; 1.0 corresponds to $\approx 22$\,mm RMS on a 1.4\,m plant). The rule above the two-stage row separates the end-to-end model, which reads the recipe from the sensor, from this modular alternative.}
+  plants.} Each row is the distilled generalist given that input alone, on view 00 of every validation plant (2{,}250 per species). $^\dagger$The headline model given all three sensor streams, scored in its masked pretraining regime (80\% of tokens hidden); with every token visible its cloud collapses. Leaf count and height are read from the predicted recipe: maize stores the leaf count in the plant token, sorghum does not, so its count is derived from the predicted stem length through the generator's rule (stem length $= 0.05n - 0.001$). Leaf-parameter skill is Eq.~\eqref{eq:trait-skill} averaged over leaf fields on real leaf slots. Chamfer and $F_1$ against the complete plant cloud, unit-sphere frame; the distillation history of Tab.~\ref{tab:main} averages over random views, so its Chamfer differs. The three-view row averages the recipes predicted from the photographs of views 00, 01 and 02 (recipe columns only: each view's cloud is in its own camera frame). The two-stage row generates the cloud from the view-00 photograph and reads the recipe from that generated cloud; its cloud columns are the RGB row's. Reading the recipe from a generated cloud loses almost all of it (sorghum leaf skill 0.66 to $-0.01$), so the recipe is read from the sensor directly. Leaf-count accuracy is the fraction of the 2{,}250 plants whose predicted count is within one leaf of the true count; height error is the median relative error $|\hat h - h|/h$ over the same plants. Chamfer is the symmetric squared distance in the unit-sphere frame ($\times10^{-3}$). The RMS column converts it to millimetres per plant (its square root times the plant's metric scale, the metres per unit-sphere unit measured on the raw camera-frame cloud; median 1.03\,m in sorghum, 0.61\,m in maize) and reports the median over plants. The rule above the two-stage row separates the end-to-end model, which reads the recipe from the sensor, from this modular alternative.}
   \label{tab:regime1}
 \end{table*}
 
-Table~\ref{tab:regime1} covers deployment on an isolated plant: from one photograph, one depth frame, or one point cloud, the model returns the recipe and the other streams in a single forward pass. Depth is the best single input for the cloud in both species (Chamfer $0.92$ in sorghum and $0.64 \times 10^{-3}$ in maize, $F_1$ $0.44$ and $0.53$), and the photograph alone comes within a factor of 1.5 of it. On the full test split the photograph-to-cloud Chamfer is $0.88$ in sorghum and $0.83$ in maize; relative to the Chamfer between two random plants of the split, that is a skill of $0.98$ and $0.99$ (Sec.~\ref{sec:res-distill}). The recipe is recovered from any single sensor: the leaf count is within one leaf for $91$ to $100\%$ of plants, the height is within $2$ to $5\%$, and the mean leaf-parameter skill is $0.66$ to $0.68$ in sorghum and $0.57$ to $0.59$ in maize. The skill is high on the leaf's position along the stem ($0.93$ to $0.97$ in sorghum, $0.83$ in maize) and on its angle ($0.89$ to $0.95$; $0.76$ to $0.79$), moderate on length ($0.62$ to $0.70$), and lowest on sorghum blade width ($0.20$ to $0.22$), whose spread between plants is small. The headline model given all three streams is no better than the generalist given one, because it was never trained to read every token of its input. On the first release, three waviness fields were unrecoverable from any source (skill $-0.04$ to $0.02$); the final generator does not include them.
+Table~\ref{tab:regime1} covers deployment on an isolated plant: from one photograph, one depth frame, or one point cloud, the model returns the recipe and the other streams in a single forward pass. Depth is the best single input for the cloud in both species (Chamfer $0.93$ in sorghum and $0.64 \times 10^{-3}$ in maize, a median of $30$ and $12$\,mm RMS per plant, $F_1$ $0.44$ and $0.53$), and the photograph alone comes within a factor of 1.5 of it. On the full test split the photograph-to-cloud Chamfer is $0.88$ in sorghum and $0.83$ in maize; relative to the Chamfer between two random plants of the split, that is a skill of $0.98$ and $0.99$ (Sec.~\ref{sec:res-distill}). The recipe is recovered from any single sensor: the leaf count is within one leaf for $91$ to $100\%$ of plants, the height is within $2$ to $5\%$, and the mean leaf-parameter skill is $0.66$ to $0.68$ in sorghum and $0.57$ to $0.59$ in maize. The skill is high on the leaf's position along the stem ($0.93$ to $0.97$ in sorghum, $0.83$ in maize) and on its angle ($0.89$ to $0.95$; $0.76$ to $0.79$), moderate on length ($0.62$ to $0.70$), and lowest on sorghum blade width ($0.20$ to $0.22$), whose spread between plants is small. The headline model given all three streams is no better than the generalist given one, because it was never trained to read every token of its input. On the first release, three waviness fields were unrecoverable from any source (skill $-0.04$ to $0.02$); the final generator does not include them.
 
 Figure~\ref{fig:qual} illustrates qualitative single-photograph reconstructions on held-out test plants. While the headline model before distillation generates diffuse point clouds around target silhouettes, the distilled generalist model resolves individual leaf blades, accurately recovering normalized leaf length profiles along the central stem from base to apex. Furthermore, because the output representation is procedural, predicted parameters can be interactively modified (such as adjusting individual blade insertion angles) and re-rendered to create editable, simulation-ready 3D models.
 

@@ -912,8 +912,10 @@ unless stated otherwise.}
 \paragraph{Evaluation metrics.}
 \upd{We evaluate 3D geometric accuracy using symmetric Chamfer distance on
 squared point displacements in the unit-sphere frame
-($\times 10^{-3}$; a value of 1.0 corresponds to
-a root-mean-square displacement of $\approx 22$\,mm on a 1.4\,m plant).} \upd{For pretrained models, Chamfer distance is evaluated in the
+($\times 10^{-3}$; \updtwo{a value of 1.0 corresponds to
+a root-mean-square displacement of $\approx 33$\,mm on the median sorghum
+plant and $\approx 19$\,mm on the median maize plant, whose metric scales we
+measure per plant on the raw camera-frame clouds}).} \upd{For pretrained models, Chamfer distance is evaluated in the
 masked input regime of pretraining; for distilled student models, it is
 evaluated with unmasked sensor inputs.}
 
@@ -953,28 +955,28 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
 \begin{table*}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{4.5pt}
-  \begin{tabular}{l cc c cc}
+  \begin{tabular}{l cc c ccc}
     \toprule
-    & Leaf Count & Height Error & Leaf Parameters & $F_1$-score & Chamfer \\
-    Input Modality & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ \\
+    & Leaf Count & Height Error & Leaf Parameters & $F_1$-score & Chamfer & \updtwo{RMS Error} \\
+    Input Modality & (Acc. $\pm 1$) $\uparrow$ & (Rel. Err.) $\downarrow$ & (Mean Skill) $\uparrow$ & ($\tau=0.01$) $\uparrow$ & $\times10^{-3}\downarrow$ & \updtwo{(mm) $\downarrow$} \\
     \midrule
-    \multicolumn{6}{l}{\emph{Sorghum}} \\
-    RGB & 0.909 & 0.036 & 0.656 & 0.386 & 1.36 \\
-    Depth & 0.956 & 0.026 & 0.679 & \textbf{0.441} & \textbf{0.92} \\
-    Point Cloud & \textbf{0.998} & 0.022 & 0.674 & 0.369 & 1.46 \\
-    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.891 & 0.038 & 0.635 & 0.394 & 1.35 \\
-    \upd{RGB, three views (recipes averaged)} & \upd{0.995} & \upd{\textbf{0.018}} & \upd{\textbf{0.747}} & -- & -- \\
+    \multicolumn{7}{l}{\emph{Sorghum}} \\
+    RGB & 0.909 & 0.036 & 0.656 & 0.386 & 1.36 & \updtwo{37.1} \\
+    Depth & 0.956 & 0.026 & 0.679 & \textbf{0.440} & \textbf{0.93} & \updtwo{\textbf{30.3}} \\
+    Point Cloud & \textbf{0.998} & 0.022 & 0.675 & 0.370 & 1.45 & \updtwo{38.7} \\
+    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.889 & 0.038 & 0.636 & 0.392 & 1.36 & \updtwo{37.0} \\
+    \upd{RGB, three views (recipes averaged)} & \upd{0.995} & \upd{\textbf{0.018}} & \upd{\textbf{0.747}} & -- & -- & -- \\
     \midrule
-    \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.301} & \upd{0.221} & \upd{$-0.010$} & \upd{0.386} & \upd{1.36} \\
+    \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.301} & \upd{0.221} & \upd{$-0.010$} & \upd{0.386} & \upd{1.36} & \updtwo{37.1} \\
     \midrule
-    \multicolumn{6}{l}{\emph{Maize}} \\
-    RGB & 0.973 & 0.045 & 0.567 & 0.482 & 0.83 \\
-    Depth & 0.972 & 0.046 & 0.571 & \textbf{0.529} & \textbf{0.64} \\
-    Point Cloud & 0.986 & \textbf{0.043} & 0.587 & 0.455 & 0.87 \\
-    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 \\
-    \upd{RGB, three views (recipes averaged)} & \upd{\textbf{0.988}} & \upd{0.044} & \upd{\textbf{0.597}} & -- & -- \\
+    \multicolumn{7}{l}{\emph{Maize}} \\
+    RGB & 0.973 & 0.045 & 0.567 & 0.482 & 0.83 & \updtwo{13.6} \\
+    Depth & 0.972 & 0.046 & 0.571 & \textbf{0.529} & \textbf{0.64} & \updtwo{\textbf{12.4}} \\
+    Point Cloud & 0.986 & \textbf{0.043} & 0.587 & 0.455 & 0.87 & \updtwo{15.0} \\
+    $\mathrm{RGB}+\mathrm{D}+\mathrm{PC}$ (headline)$^\dagger$ & 0.953 & 0.045 & 0.552 & 0.445 & 0.93 & \updtwo{15.4} \\
+    \upd{RGB, three views (recipes averaged)} & \upd{\textbf{0.988}} & \upd{0.044} & \upd{\textbf{0.597}} & -- & -- & -- \\
     \midrule
-    \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.066} & \upd{0.131} & \upd{0.015} & \upd{0.482} & \upd{0.83} \\
+    \upd{Two-stage: RGB $\to$ cloud $\to$ recipe} & \upd{0.066} & \upd{0.131} & \upd{0.015} & \upd{0.482} & \upd{0.83} & \updtwo{13.6} \\
     \bottomrule
   \end{tabular}
   \caption{\upd{\textbf{Regime I: single-view reconstruction on isolated
@@ -999,8 +1001,11 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
   \updtwo{Leaf-count accuracy is the fraction of the 2{,}250 plants whose
   predicted count is within one leaf of the true count; height error is the
   median relative error $|\hat h - h|/h$ over the same plants. Chamfer is
-  the symmetric squared distance in the unit-sphere frame ($\times10^{-3}$;
-  1.0 corresponds to $\approx 22$\,mm RMS on a 1.4\,m plant). The rule
+  the symmetric squared distance in the unit-sphere frame ($\times10^{-3}$).
+  The RMS column converts it to millimetres per plant (its square root times
+  the plant's metric scale, the metres per unit-sphere unit measured on the
+  raw camera-frame cloud; median 1.03\,m in sorghum, 0.61\,m in maize) and
+  reports the median over plants. The rule
   above the two-stage row separates the end-to-end model, which reads the
   recipe from the sensor, from this modular alternative.}}
   \label{tab:regime1}
@@ -1010,7 +1015,8 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
 photograph, one depth frame, or one point cloud, the model returns the recipe
 and the other streams in a single forward pass.}
 \upd{Depth is the best single input for the cloud in both species (Chamfer
-$0.92$ in sorghum and $0.64 \times 10^{-3}$ in maize, $F_1$ $0.44$ and
+$0.93$ in sorghum and $0.64 \times 10^{-3}$ in maize\updtwo{, a median of
+$30$ and $12$\,mm RMS per plant}, $F_1$ $0.44$ and
 $0.53$), and the photograph alone comes within a factor of 1.5 of it.}
 \upd{On the full test split the photograph-to-cloud Chamfer is $0.88$ in
 sorghum and $0.83$ in maize; relative to the Chamfer between two random
