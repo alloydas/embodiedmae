@@ -576,7 +576,7 @@ scene.}
     Row scenes $\times$ orientations & $15{,}000 \times 10$ & $15{,}000 \times 10$ \\
     Row camera & level rover, 1.0\,m & level rover, 2.5\,m \\
     Row cloud (input / target) & \multicolumn{2}{c}{24{,}576 / 8{,}192 pts} \\
-    Real-field split & \updtwo{field scans} & \todo{field scans} \\
+    Real-field split & \updtwo{520 real plants $\times$ 2 row layouts} & \todo{field scans} \\
     \bottomrule
   \end{tabular}
   \caption{\upd{\textbf{\dataset{} dataset configuration.} Parameter dimensions
@@ -1581,14 +1581,30 @@ structures while omitting thin outer leaf extremities.}
 \subsection{Real-world field validation}
 \label{sec:res-field}\label{sec:exp-real}
 
-\upd{We validate \method{} on real field laser scans and RGB images from the
-MaizeField3D benchmark~\citep{maizefield3d2025}, comparing
-single-forward-pass predictions against ground-truth procedural models
-reconstructed by a staged vision-language annotation
-pipeline~\citep{hadadi2026vlmmaize}.} \upd{\todo{E10 has not yet run.} \upd{This subsection's numbers (parameter accuracy
-against the pipeline fits, re-rendered Chamfer against the laser scans,
-zero-shot and fine-tuned rows, runtime per plant) are pending the
-real-scan evaluation.}}
+\updtwo{We test the maize models on crop rows assembled from the procedural models of 520 real maize plants, whose procedural parameters come from real plants rather than from the generator's distribution. Each row repeats one plant 20 times at 15--25\,cm spacing with per-leaf variation, in two layouts with the leaf planes parallel and perpendicular to the row. A level camera 1\,m from the row at half the plant height stops 18 times along it, each stop centered on one plant, which gives 9{,}360 stops per layout. Each stop provides an image and a point cloud labeled by plant. We convert both to the Regime~III input conventions (the $40^\circ$ window, the points the camera sees, and a depth image rendered from them) and score the center plant as the camera sees it, with the plant's height and leaf count as the recipe targets, since the files carry no per-leaf recipe. The images and clouds are rendered from the plant models, so this test changes the plants and keeps the sensor synthetic: real illumination and sensor noise are not part of it. The three models are those of Sec.~\ref{sec:regime3}, unchanged: the row fine-tune, its isolated-plant control, and the headline model without row fine-tuning. None of them saw these plants.}
+
+\updtwo{The row fine-tune is the best of the three on both layouts (Tab.~\ref{tab:e10}, Fig.~\ref{fig:e10_real}), with non-overlapping 95\% intervals over plants on Chamfer. It also gives the best height (36\% median relative error, against 41\% for the isolated control and 52\% for the headline model) and the best leaf count (46\% of stops within $\pm1$, against 8\% and 20\%), so training on occluded rows carries over to real plant geometry. With all three streams it beats any single stream (Chamfer 61 against 75 for the cloud alone, 79 for depth and 96 for the image, in $10^{-4}$\,m$^2$ over both layouts). The absolute errors are an order of magnitude above the synthetic test rows, where the row fine-tune reaches a Chamfer of 4.0. Most of this gap is plant size. The real plants are 0.71--2.47\,m tall (median 1.61\,m), 83\% of them are taller than the tallest training plant (1.33\,m), and no model predicts a height above 1.24\,m. On the 87 plants inside the training range, the row fine-tune's median height error is 14\% and its Chamfer 46, against 38\% and 64 on the taller plants. Reading the center plant takes 10.6\,ms per stop on one GPU in batches of 16.}
+
+\begin{table}[t]
+  \centering\scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{llcccc}
+    \toprule
+    Layout & Model & Chamfer $\downarrow$ & Miss@5\,mm $\downarrow$ & Height $\downarrow$ & Leaves $\pm1$ $\uparrow$ \\
+    \midrule
+    Parallel & Headline (no row FT) & 75.1 {\tiny[73.1, 77.2]} & 0.92 & 53\% & 17\% \\
+     & Isolated control & 55.6 {\tiny[54.2, 57.2]} & 0.93 & 43\% & 4\% \\
+     & Row fine-tune (FT) & \textbf{41.2} {\tiny[39.7, 42.8]} & 0.93 & \textbf{37\%} & \textbf{47\%} \\
+    \midrule
+    Perpend. & Headline (no row FT) & 121.2 {\tiny[116.6, 127.2]} & 0.96 & 52\% & 23\% \\
+     & Isolated control & 137.3 {\tiny[133.6, 141.9]} & 0.98 & 40\% & 13\% \\
+     & Row fine-tune (FT) & \textbf{80.0} {\tiny[76.4, 85.2]} & 0.97 & \textbf{35\%} & \textbf{46\%} \\
+    \bottomrule
+  \end{tabular}}
+  \caption{\updtwo{\textbf{Real maize plants in crop rows (E10).} 520 real plants, 9{,}360 camera stops per layout, all three streams in. Chamfer of the center plant in $10^{-4}$\,m$^2$ with a 95\% bootstrap interval over plants; Miss@5\,mm is the share of the true center plant's points farther than 5\,mm from the prediction; height error is the median relative error; Leaves $\pm1$ is the share of stops whose predicted leaf count is within one of the true count. On synthetic test rows the row fine-tune reaches a Chamfer of 4.0.}}
+  \label{tab:e10}
+\end{table}
 
 \begin{figure*}[t]
   \centering
@@ -1984,7 +2000,7 @@ captures under simulated row occlusion with exact procedural ground truth
 and a real-field evaluation split.} \upd{By unifying generative priors with
 self-supervised multimodal representation learning, \method{} connects
 field-practical sensor observations with high-throughput, editable 3D plant
-analytics.} \todo{Add the real-scan result sentence once E10 lands.}
+analytics.} \updtwo{On crop rows built from 520 real maize plants the row fine-tune remains the best model in both row layouts, but its error is an order of magnitude above that on synthetic rows, mostly because 83\% of these plants are taller than any training plant.}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ==== end sec/6_conclution.tex ====
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
