@@ -36,6 +36,7 @@
   .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
   .pair figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
   .pair .sheet img { max-width: 420px; }
+  figure.stack { margin: 0; display: grid; gap: 8px; min-width: 0; }
   figcaption { font-size: 13px; color: var(--muted); }
   .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 28px; }
   .note { display: grid; gap: 4px; min-width: 0; border-top: 1px solid var(--rule); padding-top: 10px; }
@@ -75,7 +76,7 @@
   </section>
 
   <section id="fig9">
-    <div class="sec-head"><span class="num">Figure 9</span><h2>Row occlusion, cherry-picked plants</h2><span class="where">Results, page 15</span></div>
+    <div class="sec-head"><span class="num">Figure 9</span><h2>Row occlusion, cherry-picked plants</h2><span class="where">Results, page 14</span></div>
     <div class="sheet"><img src="fig_rows_examples.png" alt="Figure 9: three sorghum and three maize held-out test plants; columns row image, truth and row-trained prediction in blue with its Chamfer"></div>
     <div class="notes">
       <div class="note"><b>How they were picked</b><span>From the plants where the row-trained model is in its best 35 % and the isolated-trained control in its worst 40 % at both yaws, chosen by eye. The caption says so.</span></div>
@@ -96,20 +97,18 @@
   </section>
 
   <section id="fig11">
-    <div class="sec-head"><span class="num">Figures 11 and 12</span><h2>One image in, every stream out</h2><span class="where">Results, page 18 · one column each</span></div>
-    <div class="pair">
-      <figure>
-        <div class="sheet"><img src="fig_any2all_maize.png" alt="Figure 11, maize: input image on the left of a dashed divider; outputs point cloud with Chamfer 0.12, depth image, and procedural parameters with height 0.98 m (true 1.02) and 14 leaves (true 14)"></div>
-        <figcaption class="num-row">Figure 11 · maize plant 14506, view 02. Chamfer 0.12 ×10⁻³ (test median 0.51); height 0.98 m (1.02); 14 leaves (14).</figcaption>
-      </figure>
-      <figure>
-        <div class="sheet"><img src="fig_any2all_sorghum.png" alt="Figure 12, sorghum: input image on the left of a dashed divider; outputs point cloud with Chamfer 0.30, depth image, and procedural parameters with height 0.94 m (true 0.95) and 19 leaves (true 19)"></div>
-        <figcaption class="num-row">Figure 12 · sorghum plant 10548, view 04. Chamfer 0.30 ×10⁻³ (test median 0.77); height 0.94 m (0.95); 19 leaves (19).</figcaption>
-      </figure>
-    </div>
+    <div class="sec-head"><span class="num">Figures 11 and 12</span><h2>Each stream alone in, the other three out</h2><span class="where">Results, page 16 · full width each</span></div>
+    <figure class="stack">
+      <div class="sheet"><img src="fig_any2all_maize.png" alt="Figure 11, maize: four blocks, one per input stream (image, depth image, point cloud, procedural parameters), each with the input tile, a dashed divider and the three generated streams"></div>
+      <figcaption class="num-row">Figure 11 · maize plant 1875, view 09 (truth 1.12 m, 14 leaves). Point-cloud Chamfer ×10⁻³: 0.15 from the image, 0.21 from the depth image, 7.48 from the parameters.</figcaption>
+    </figure>
+    <figure class="stack">
+      <div class="sheet"><img src="fig_any2all_sorghum.png" alt="Figure 12, sorghum: four blocks, one per input stream, each with the input tile, a dashed divider and the three generated streams"></div>
+      <figcaption class="num-row">Figure 12 · sorghum plant 7712, view 05 (truth 1.43 m, 24 leaves). Point-cloud Chamfer ×10⁻³: 0.34 from the image, 0.25 from the depth image, 3.62 from the parameters.</figcaption>
+    </figure>
     <div class="notes">
-      <div class="note"><b>How they were picked</b><span>Among the 2,250 test plants per species seen within 25° of the horizon, the lowest image-to-point-cloud Chamfer in the full test run; the best 15 regenerated, one chosen by eye.</span></div>
-      <div class="note"><b>What was dropped</b><span>The old Figure 11 also showed generation from depth, point cloud and parameters alone. Those numbers stay in the any-subset table.</span></div>
+      <div class="note"><b>How they were picked</b><span>The 15 test plants per species with the lowest image-to-point-cloud Chamfer (views within 25° of the horizon) were regenerated from all four inputs; one per species was chosen to read well from every input.</span></div>
+      <div class="note"><b>Reading the numbers</b><span>Under each generated point cloud: Chamfer. Under each generated parameter set: height and leaf count. The parameters alone give a coarse plant, as in the any-subset table (now Table 8, appendix).</span></div>
     </div>
   </section>
 
