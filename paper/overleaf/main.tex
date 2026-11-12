@@ -1755,7 +1755,7 @@ beats every published encoder on all eleven traits, including tassel droop
 ($0.319$ against DINOv2's $0.297$). Unlike sorghum, the maize network trained from
 scratch on the probe targets stays ahead on height ($0.785$ against $0.747$) and
 tassel droop, while the headline model passes it on six of eleven traits (leaf
-angle $0.967$ against $0.935$, curl $0.739$ against $0.618$).}
+angle $0.967$ against $0.935$, curl $0.739$ against $0.618$).}\updtwo{ Appendix~\ref{sec:supp-recon} compares masked image, depth and point-cloud reconstruction with the encoders that have a decoder.}
 
 \paragraph{Camera pose artifact analysis.}
 \upd{Evaluating Point-MAE with full camera pose matrices yields strong maize
@@ -2368,6 +2368,42 @@ matrices to leak plant azimuth orientation.} \upd{Evaluating Point-MAE with
 gravity-aligned camera poses (realistic field calibration) reduces its
 height $R^2$ from $0.720$ to $0.588$, while pose-free \method{} wins 5 of 9
 decided traits.}
+
+\subsection{Masked reconstruction against published encoders}
+\label{sec:supp-recon}
+
+\updtwo{Table~\ref{tab:baselines} compares frozen features. Table~\ref{tab:supp-recon} compares what the encoders that have a decoder reconstruct when part of the input is hidden, on the same 2{,}250 validation plants per species and view 00. Image block: the photograph and the depth image are given with 75\% of each image's 16-pixel patches hidden (MultiMAE's pretraining budget) and the point cloud hidden; MultiMAE-B is compared with the \method{} encoders that read images. Both models predict per-patch standardized color, so both are de-standardized with the true patch mean and variance, the usual MAE convention, and the photograph is scored by PSNR on the plant pixels of the hidden patches. Each model's normalized depth is mapped back with the two per-image numbers its own normalization used and scored in millimeters on the same pixels. Cloud block: the point cloud alone is given with 60\% of its point groups hidden (Point-MAE's pretraining ratio). Point-MAE copies the visible 40\% of the points into its output and is given the centers of the hidden groups, as in its pretraining; \method{} receives neither and generates the whole cloud. Prediction and truth are each subsampled to 2{,}048 points and compared in the unit-sphere frame by Chamfer and by precision, recall and F1 at $\tau = 0.01$ and $0.02$.}
+
+\updtwo{The three-stream \method{} encoder reconstructs hidden photograph patches better than MultiMAE in both species (28.0 against 24.7\,dB in sorghum, 19.7 against 14.4\,dB in maize); the headline model is below MultiMAE in sorghum (23.4\,dB) and above it in maize (18.1\,dB). Depth is \method{}'s weak stream under this protocol. MultiMAE is better in sorghum (RMSE 280 against 400--483\,mm), and the three-stream encoder only matches it in maize (216 against 215\,mm). A predictor that fills every hidden plant pixel with the mean depth of the visible plant pixels reaches 336\,mm in sorghum and 236\,mm in maize (300 plants), so in sorghum the \method{} depth reconstruction is worse than this trivial baseline. Point-MAE reconstructs the cloud far more closely (F1 at $\tau = 0.01$: 0.26 against at most 0.13 in sorghum, 0.52 against at most 0.16 in maize), which its copied visible points and given group centers explain in part. Among the \method{} encoders, the headline model reconstructs the cloud best in both species. Its precision at $\tau = 0.01$ is nearer Point-MAE's than its recall (sorghum 0.22 against 0.32, recall 0.10 against 0.22): it places points on the plant but misses part of it.}
+
+\begin{table}[t]
+  \centering\scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{l ccc ccc}
+    \toprule
+    & \multicolumn{3}{c}{Sorghum} & \multicolumn{3}{c}{Maize} \\
+    \cmidrule(lr){2-4}\cmidrule(lr){5-7}
+    \emph{Image block} & PSNR $\uparrow$ & Depth RMSE $\downarrow$ & Depth MAE $\downarrow$ & PSNR $\uparrow$ & Depth RMSE $\downarrow$ & Depth MAE $\downarrow$ \\
+    \midrule
+    MultiMAE-B (RGB+D) & 24.7 & \textbf{280} & \textbf{184} & 14.4 & \textbf{215} & 150 \\
+    \method{} PC+RGB+D & \textbf{28.0} & 423 & 245 & \textbf{19.7} & 216 & \textbf{145} \\
+    \method{} four streams & 26.9 & 483 & 299 & 18.3 & 263 & 183 \\
+    \method{} headline & 23.4 & 400 & 229 & 18.1 & 280 & 200 \\
+    Mean visible plant depth & -- & 336 & 258 & -- & 236 & 174 \\
+    \midrule
+    \emph{Cloud block} & Chamfer $\downarrow$ & F1@0.01 $\uparrow$ & F1@0.02 $\uparrow$ & Chamfer $\downarrow$ & F1@0.01 $\uparrow$ & F1@0.02 $\uparrow$ \\
+    \midrule
+    Point-MAE (PC) & \textbf{1.14} & \textbf{0.257} & \textbf{0.645} & \textbf{0.67} & \textbf{0.516} & \textbf{0.826} \\
+    \method{} PC only & 9.58 & 0.044 & 0.225 & 4.95 & 0.061 & 0.230 \\
+    \method{} PC+RGB+D & 7.73 & 0.069 & 0.250 & 4.13 & 0.080 & 0.276 \\
+    \method{} four streams & 8.50 & 0.067 & 0.251 & 4.57 & 0.071 & 0.267 \\
+    \method{} headline & 5.93 & 0.134 & 0.351 & 2.94 & 0.161 & 0.431 \\
+    \bottomrule
+  \end{tabular}}
+  \caption{\updtwo{\textbf{Masked reconstruction against published encoders (validation, 2{,}250 plants per species).} Image block: 75\% of the photograph and depth patches hidden, the point cloud hidden; PSNR (dB) on the plant pixels of the hidden patches; depth RMSE and MAE in mm on the same pixels. The last row fills hidden plant pixels with the mean depth of the visible ones (300 plants). Maize depth images are encoded per plant, so maize millimeters are approximate. Cloud block: the point cloud alone, 60\% of its groups hidden; Chamfer ($\times10^{-3}$, unit sphere) and F1 at two thresholds at 2{,}048 points per side. Point-MAE keeps the visible 40\% of the points and is given the hidden groups' centers; \method{} is given neither. The \method{} encoders are those of Table~\ref{tab:baselines} (epoch 600; headline epoch 1{,}000).}}
+  \label{tab:supp-recon}
+\end{table}
 
 \subsection{Latent space structure analysis (E9)}
 \upd{Frozen encoder \texttt{[CLS]} embedding spaces form continuous, smooth
