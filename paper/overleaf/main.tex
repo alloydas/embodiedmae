@@ -895,6 +895,7 @@ independently reconstructed ground truth.}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Experiments}
 \label{sec:results}\label{sec:experiments}
+\updtwo{Unless a figure number five or lower is named, the figures referenced in this and the following sections are in Appendix~\ref{app:figures}.}
 
 \upd{In this section, we present an extensive experimental evaluation of
 \method{}.} \upd{We describe our experimental setup (Sec.~\ref{sec:exp-setup}),
@@ -1107,34 +1108,10 @@ predicted parameters can be interactively modified (such as adjusting
 individual blade insertion angles) and re-rendered to create editable,
 simulation-ready 3D models.}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_qual.pdf}
-  \caption{\upd{\textbf{Single-photograph 3D plant reconstruction on held-out
-  test plants.} Each row shows inference given only a single input
-  photograph (left).} \upd{The headline model before distillation and the
-  distilled generalist generate 3D point clouds, with Chamfer distance
-  indicated above.} \upd{The rightmost panel demonstrates parameter recovery by
-  comparing the generalist's recovered normalized leaf lengths with exact
-  ground truth across leaf indices from base to top.}}
-  \label{fig:qual}
-\end{figure*}
 
 \subsection{Regime II: viewpoint elevation, self-occlusion, and complexity}
 \label{sec:regime2}\label{sec:exp-regime2}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_view_elevation.png}
-  \caption{\upd{\textbf{Viewpoint elevation determines reconstruction
-  difficulty.} (A) Photograph-to-cloud Chamfer distance of test plants
-  plotted by camera elevation angle (208--244 plants per elevation view).} \upd{Pretrained and distilled single-sensor models follow a symmetric U-shaped
-  error curve centered on horizontal side views; camera elevation accounts
-  for $\eta^2 = 0.24\text{--}0.31$ of per-plant reconstruction variance.} \upd{(B) Performance gain from masking 50\% of source tokens during
-  distillation, grouped by error quartile of the control model,
-  demonstrating concentrated improvement on challenging plant geometries.}}
-  \label{fig:views}
-\end{figure}
 
 \paragraph{Viewpoint elevation.}
 \upd{Camera perspectives form an elevation ladder spanning angles from steep
@@ -1185,30 +1162,7 @@ the horizontal arm, which never saw such a camera, falls to 0.03. In maize the
 score is taken on a random camera, and every restricted arm falls below the
 all-view arm's 0.31 (horizontal 0.22, top-down 0.19, single camera 0.17).}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_e5_views.pdf}
-  \caption{\upd{\textbf{Effect of training view distribution on downstream
-  phenotype probing (sorghum test).} Probes are fitted and evaluated on
-  individual views $k$ for model variants trained on all ten views versus
-  restricted bands of the elevation ladder.} \upd{Filled markers indicate
-  training views.} \upd{Restricted training view bands improve probe performance
-  specifically within those elevations but degrade generalization on
-  unobserved view angles.}}
-  \label{fig:e5views}
-\end{figure}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_partial_clouds.pdf}
-  \caption{\upd{\textbf{Phenotypic information persistence under partial
-  visibility.} Plant height prediction performance ($R^2$, test set)
-  plotted against the visible percentage of the plant under 1-camera,
-  3-camera, and full coverage.} \upd{Solid lines represent probes refit per
-  visibility condition; dashed lines show direct transfer of the
-  full-cloud readout probe.}}
-  \label{fig:partial}
-\end{figure}
 
 \paragraph{Self-occlusion under partial camera coverage.}
 \upd{To evaluate model performance under partial observations, point clouds are
@@ -1235,15 +1189,6 @@ leaf-count deciles (Spearman $\rho = -0.07$ for sorghum, $+0.04$ for
 maize), confirming that model performance does not degrade as organ count
 increases.}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_leafcount.pdf}
-  \caption{\upd{\textbf{Error against plant complexity (test, 2{,}250 plants per
-  species).} Chamfer distance of point clouds generated from single
-  photographs across leaf-count deciles for the headline model before
-  distillation and the distilled generalist.}}
-  \label{fig:leafcount}
-\end{figure}
 
 \subsection{Regime III: neighbor occlusion in realistic crop rows}
 \label{sec:regime3}\label{sec:exp-occlusion}
@@ -1275,29 +1220,11 @@ uniformly at random, so occlusion error remains constant across all yaw
 angles.}
 
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_rows.pdf}
-  \caption{\upd{\textbf{Quantitative row occlusion performance on maize (a, b)
-  and sorghum (c, d) test rows.} (a, c) Target plant Chamfer distance
-  comparing isolated-trained models on clean versus row inputs, row-trained
-  models on row inputs, and zero-shot baselines.} \upd{(b, d) Reconstruction
-  error plotted across row orientation yaw angles ($\theta$).} \upd{Fine-tuning
-  on row scenes eliminates the vast majority of neighbor-induced occlusion
-  error in both species.}}
-  \label{fig:rows}\label{fig:row_reconstruction_quant}
-\end{figure*}
 
 \subsection{Any-subset modality reconstruction and distillation}
 \label{sec:res-distill}\label{sec:exp-main}
 
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum.pdf}
-  \caption{\updtwo{\textbf{Any-to-all, sorghum: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.43\,m, 24 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 3.62 here, 6.83 on average in Table~\ref{tab:anysubset}).}}
-  \label{fig:any2any-sorghum}
-\end{figure*}
 
 \upd{Table~\ref{tab:main} (Appendix~\ref{app:tables}) reports cross-modal generation performance before and
 after teacher--student feature distillation, and \updtwo{Figs.~\ref{fig:any2any-maize} and~\ref{fig:any2any-sorghum} show}
@@ -1356,36 +1283,11 @@ dynamics:}
   regularize sensor feature representations.}
 \end{itemize}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_e2_streams.pdf}
-  \caption{\upd{\textbf{Modality contributions to latent representation and
-  geometry reconstruction (sorghum).} (a) Frozen-probe $R^2$ across
-  phenotypic traits.} \upd{(b) Reconstruction $F_1$ score at threshold
-  $\tau = 0.01$ ($\approx 1$\,cm).}}
-  \label{fig:stream_contributions}
-\end{figure*}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_param_controls.pdf}
-  \caption{\upd{\textbf{Influence of procedural parameter stream visibility
-  during pretraining.} Linear probe $R^2$ performance across parameter
-  visibility levels under matched sensor token budgets.}}
-  \label{fig:controls}
-\end{figure*}
 
 \subsection{Divergence between Chamfer distance and probing metrics}
 \label{sec:res-metrics}\label{sec:exp-metrics}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_metrics.pdf}
-  \caption{\upd{\textbf{Divergence between Chamfer distance and frozen-latent
-  probe metrics.} Validation Chamfer distance plotted against height probe
-  $R^2$ across twelve model variants.}}
-  \label{fig:metrics}\label{fig:metric_divergence}
-\end{figure}
 
 \upd{Figure~\ref{fig:metric_divergence} compares validation Chamfer distance
 against frozen-latent probe $R^2$ across twelve model variants.} \upd{While the
@@ -1416,14 +1318,6 @@ precision exceeds recall ($P > R$), confirming that nearest-neighbor
 Chamfer loss rewards decoders that cluster points onto central stem
 structures while omitting thin outer leaf extremities.}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_fscore.pdf}
-  \caption{\upd{\textbf{Point cloud completion precision, recall, and $F_1$
-  evaluation (sorghum test).} (a) $F_1$ score against distance threshold
-  $\tau$.} \upd{(b) Precision vs. recall at $\tau = 0.01$.}}
-  \label{fig:fscore}\label{fig:precision_recall}
-\end{figure*}
 
 \subsection{Real-world field validation}
 \label{sec:res-field}\label{sec:exp-real}
@@ -1438,26 +1332,9 @@ structures while omitting thin outer leaf extremities.}
 
 \updtwo{The gain holds across inputs, layouts and occlusion (Tab.~\ref{tab:e10_detail}, Appendix~\ref{app:tables}). Every single stream improves: on maize the Chamfer from the image alone falls from 95 to 49, from depth from 77 to 44 and from the cloud from 75 to 47, and on sorghum from depth from 834 to 89; all three streams together remain best. Parallel rows stay easier than perpendicular ones (15.6 against 23.9 after fine-tuning), and across the four quartiles of occlusion the fine-tuned Chamfer stays between 18.5 and 21.6, so the remaining error does not come from the neighbors. Height shows the clearest change (Fig.~\ref{fig:e10_height}). The row fine-tune writes about 1.03\,m for every plant, so its error grows from 15\% inside the training range to 51\% above 2\,m. After fine-tuning the median error is 1.2--2.0\% for plants up to 2.0\,m and 5.9\% above it, where the recipe's height range ends.}\updtwo{ Appendix~\ref{sec:supp-e10} shows 20 more held-out plants, chosen across the range of results.}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=0.92\columnwidth]{Figures/fig_e10_height.pdf}
-  \caption{\updtwo{Predicted against true plant height on the 130 held-out real maize plants (median over each plant's 36 camera stops, all three streams in). Trained on synthetic rows only, the model writes about 1.03\,m for every plant; after fine-tuning on the other 75\% of the real plants it follows the true height up to the 2.0\,m end of the recipe's range. The shaded band is the training height range.}}
-  \label{fig:e10_height}
-\end{figure}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{Figures/fig_e10_real.pdf}
-  \caption{\updtwo{Real maize rows (E10), held-out test plants. Each row of panels is one camera stop on a crop row of a real maize plant that the real-row fine-tune never saw, in the parallel and perpendicular layouts, picked at its median Chamfer for the layout. From left: the image, depth image and scene point cloud the model reads, the center plant as the camera sees it, and the center plant written by the headline model without row fine-tuning, by the row fine-tune trained on synthetic rows, and by the real-row fine-tune trained on 75\% of the real plants, each with its Chamfer and predicted height. Row fine-tuning removes the neighbors; fine-tuning on real plants recovers the leaf layout and the height.}}
-  \label{fig:e10_real}
-\end{figure*}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=0.62\textwidth]{Figures/fig_e10_real_sorghum.pdf}
-  \caption{\updtwo{Real sorghum rows (E10), held-out test plants. Columns as in Fig.~\ref{fig:e10_real}; the image is the camera photograph, a tall strip framed to the whole plant. The plants are 2.2--5.3\,m tall; the stems of the training plants reach at most 1.74\,m. Without real data every model writes a short, dense plant; the real-row fine-tune, trained on 19 real plants, recovers the stalk over the full plant height but few of the leaves.}}
-  \label{fig:e10_real_sorghum}
-\end{figure*}
+
 
 \subsection{Representation quality, scaling, and transfer}
 \label{sec:res-repr}\label{sec:exp-repr}
@@ -1497,14 +1374,6 @@ monotone in maize (height $0.393 \to 0.635$ with dips at intermediate
 scales).} \upd{Scaling model capacity from ViT-Base (114M) to ViT-Large (332M)
 degrades representation quality under fixed compute steps.}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_scaling.pdf}
-  \caption{\upd{\textbf{Dataset and model capacity scaling at equal step compute
-  (sorghum).} Linear probe validation $R^2$ plotted against dataset size
-  (a) and encoder parameter capacity (b).}}
-  \label{fig:data_model_scaling_fig}
-\end{figure*}
 
 \paragraph{Cross-species latent transfer.}
 \upd{Pretraining on one crop species and fine-tuning on another for 150 epochs
@@ -1529,15 +1398,6 @@ clusters.} \upd{Latent effective participation ratio is low ($4.4\text{--}6.3$
 for sorghum, $6.7\text{--}11.3$ for maize out of 768 dimensions),
 indicating a low-dimensional representation.}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_e9_tsne.pdf}
-  \caption{\upd{\textbf{Latent space visualization (sorghum validation set).}
-  t-SNE projections of frozen encoder \texttt{[CLS]} tokens for 3-stream
-  ($\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$) and 4-stream ($+\theta$) models,
-  colored by plant leaf count and mean leaf roll.}}
-  \label{fig:tsne}\label{fig:latent_tsne}
-\end{figure}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ==== end sec/4_experiments.tex ====
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2080,6 +1940,169 @@ analytics.} \updtwo{On crop rows built from real maize and sorghum plants, the r
   \caption{\updtwo{\textbf{Real-row fine-tune in detail (E10, held-out plants).} Top: Chamfer of the center plant ($10^{-4}$\,m$^2$) for each input, before (row fine-tune) and after fine-tuning on 75\% of the real plants. Bottom: maize, all three streams in, split by the plant's true height; height error is the median relative error. The recipe's height range ends at 2.0\,m.}}
   \label{tab:e10_detail}
 \end{table}
+
+\section{Result Figures}
+\label{app:figures}
+
+\updtwo{The result figures referenced from the main text, in the order of their sections.}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_qual.pdf}
+  \caption{\upd{\textbf{Single-photograph 3D plant reconstruction on held-out
+  test plants.} Each row shows inference given only a single input
+  photograph (left).} \upd{The headline model before distillation and the
+  distilled generalist generate 3D point clouds, with Chamfer distance
+  indicated above.} \upd{The rightmost panel demonstrates parameter recovery by
+  comparing the generalist's recovered normalized leaf lengths with exact
+  ground truth across leaf indices from base to top.}}
+  \label{fig:qual}
+\end{figure*}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_view_elevation.png}
+  \caption{\upd{\textbf{Viewpoint elevation determines reconstruction
+  difficulty.} (A) Photograph-to-cloud Chamfer distance of test plants
+  plotted by camera elevation angle (208--244 plants per elevation view).} \upd{Pretrained and distilled single-sensor models follow a symmetric U-shaped
+  error curve centered on horizontal side views; camera elevation accounts
+  for $\eta^2 = 0.24\text{--}0.31$ of per-plant reconstruction variance.} \upd{(B) Performance gain from masking 50\% of source tokens during
+  distillation, grouped by error quartile of the control model,
+  demonstrating concentrated improvement on challenging plant geometries.}}
+  \label{fig:views}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_e5_views.pdf}
+  \caption{\upd{\textbf{Effect of training view distribution on downstream
+  phenotype probing (sorghum test).} Probes are fitted and evaluated on
+  individual views $k$ for model variants trained on all ten views versus
+  restricted bands of the elevation ladder.} \upd{Filled markers indicate
+  training views.} \upd{Restricted training view bands improve probe performance
+  specifically within those elevations but degrade generalization on
+  unobserved view angles.}}
+  \label{fig:e5views}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_partial_clouds.pdf}
+  \caption{\upd{\textbf{Phenotypic information persistence under partial
+  visibility.} Plant height prediction performance ($R^2$, test set)
+  plotted against the visible percentage of the plant under 1-camera,
+  3-camera, and full coverage.} \upd{Solid lines represent probes refit per
+  visibility condition; dashed lines show direct transfer of the
+  full-cloud readout probe.}}
+  \label{fig:partial}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_leafcount.pdf}
+  \caption{\upd{\textbf{Error against plant complexity (test, 2{,}250 plants per
+  species).} Chamfer distance of point clouds generated from single
+  photographs across leaf-count deciles for the headline model before
+  distillation and the distilled generalist.}}
+  \label{fig:leafcount}
+\end{figure}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_rows.pdf}
+  \caption{\upd{\textbf{Quantitative row occlusion performance on maize (a, b)
+  and sorghum (c, d) test rows.} (a, c) Target plant Chamfer distance
+  comparing isolated-trained models on clean versus row inputs, row-trained
+  models on row inputs, and zero-shot baselines.} \upd{(b, d) Reconstruction
+  error plotted across row orientation yaw angles ($\theta$).} \upd{Fine-tuning
+  on row scenes eliminates the vast majority of neighbor-induced occlusion
+  error in both species.}}
+  \label{fig:rows}\label{fig:row_reconstruction_quant}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum.pdf}
+  \caption{\updtwo{\textbf{Any-to-all, sorghum: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.43\,m, 24 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 3.62 here, 6.83 on average in Table~\ref{tab:anysubset}).}}
+  \label{fig:any2any-sorghum}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_e2_streams.pdf}
+  \caption{\upd{\textbf{Modality contributions to latent representation and
+  geometry reconstruction (sorghum).} (a) Frozen-probe $R^2$ across
+  phenotypic traits.} \upd{(b) Reconstruction $F_1$ score at threshold
+  $\tau = 0.01$ ($\approx 1$\,cm).}}
+  \label{fig:stream_contributions}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_param_controls.pdf}
+  \caption{\upd{\textbf{Influence of procedural parameter stream visibility
+  during pretraining.} Linear probe $R^2$ performance across parameter
+  visibility levels under matched sensor token budgets.}}
+  \label{fig:controls}
+\end{figure*}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_metrics.pdf}
+  \caption{\upd{\textbf{Divergence between Chamfer distance and frozen-latent
+  probe metrics.} Validation Chamfer distance plotted against height probe
+  $R^2$ across twelve model variants.}}
+  \label{fig:metrics}\label{fig:metric_divergence}
+\end{figure}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_fscore.pdf}
+  \caption{\upd{\textbf{Point cloud completion precision, recall, and $F_1$
+  evaluation (sorghum test).} (a) $F_1$ score against distance threshold
+  $\tau$.} \upd{(b) Precision vs. recall at $\tau = 0.01$.}}
+  \label{fig:fscore}\label{fig:precision_recall}
+\end{figure*}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\columnwidth]{Figures/fig_e10_height.pdf}
+  \caption{\updtwo{Predicted against true plant height on the 130 held-out real maize plants (median over each plant's 36 camera stops, all three streams in). Trained on synthetic rows only, the model writes about 1.03\,m for every plant; after fine-tuning on the other 75\% of the real plants it follows the true height up to the 2.0\,m end of the recipe's range. The shaded band is the training height range.}}
+  \label{fig:e10_height}
+\end{figure}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{Figures/fig_e10_real.pdf}
+  \caption{\updtwo{Real maize rows (E10), held-out test plants. Each row of panels is one camera stop on a crop row of a real maize plant that the real-row fine-tune never saw, in the parallel and perpendicular layouts, picked at its median Chamfer for the layout. From left: the image, depth image and scene point cloud the model reads, the center plant as the camera sees it, and the center plant written by the headline model without row fine-tuning, by the row fine-tune trained on synthetic rows, and by the real-row fine-tune trained on 75\% of the real plants, each with its Chamfer and predicted height. Row fine-tuning removes the neighbors; fine-tuning on real plants recovers the leaf layout and the height.}}
+  \label{fig:e10_real}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.62\textwidth]{Figures/fig_e10_real_sorghum.pdf}
+  \caption{\updtwo{Real sorghum rows (E10), held-out test plants. Columns as in Fig.~\ref{fig:e10_real}; the image is the camera photograph, a tall strip framed to the whole plant. The plants are 2.2--5.3\,m tall; the stems of the training plants reach at most 1.74\,m. Without real data every model writes a short, dense plant; the real-row fine-tune, trained on 19 real plants, recovers the stalk over the full plant height but few of the leaves.}}
+  \label{fig:e10_real_sorghum}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_scaling.pdf}
+  \caption{\upd{\textbf{Dataset and model capacity scaling at equal step compute
+  (sorghum).} Linear probe validation $R^2$ plotted against dataset size
+  (a) and encoder parameter capacity (b).}}
+  \label{fig:data_model_scaling_fig}
+\end{figure*}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_e9_tsne.pdf}
+  \caption{\upd{\textbf{Latent space visualization (sorghum validation set).}
+  t-SNE projections of frozen encoder \texttt{[CLS]} tokens for 3-stream
+  ($\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$) and 4-stream ($+\theta$) models,
+  colored by plant leaf count and mean leaf roll.}}
+  \label{fig:tsne}\label{fig:latent_tsne}
+\end{figure}
 
 \section{Detailed Literature Review}
 \label{app:litreview}
