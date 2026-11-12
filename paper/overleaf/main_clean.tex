@@ -69,9 +69,8 @@
 %%
 % \usepackage{soul}
 % \setuldepth{foobar}
-%% Allow a double-column top float to fill nearly the whole page: fig:rowsex is
-%% padded to ~\textheight so it gets a page of its own next to its section
-%% ([p] double floats flush only at \clearpage, i.e. after the references).
+%% Allow a double-column top float to fill nearly the whole page (tall figure* floats such as
+%% fig:rowsex, 5.3 in, stay next to their section; [p] double floats flush only at \clearpage).
 \renewcommand{\dbltopfraction}{0.99}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -647,17 +646,10 @@ Evaluating models on the ``echo test'' (comparing Chamfer distance against input
 Figure~\ref{fig:rowsex} shows qualitative reconstructions under row occlusion. While isolated control models generate spurious leaf structures corresponding to neighboring plants, row-fine-tuned models isolate target main plant geometry behind occluding foliage. Figure~\ref{fig:row_reconstruction_quant} plots reconstruction error across row orientation angles ($\theta$). In maize rows, occlusion error peaks broadside ($\theta=0^\circ$, where leaf planes align along the row) and drops end-on ($\theta=90^\circ$). In sorghum rows, plant headings are drawn uniformly at random, so occlusion error remains constant across all yaw angles.
 
 \begin{figure*}[t]
-  % This figure takes a page of its own: padded to ~0.97\textheight, so the
-  % \textfraction rule leaves no room for text below (needs the raised
-  % \dbltopfraction in preamble.tex).
   \centering
-  \vspace*{\dimexpr0.5\textheight-215pt\relax}
-  \includegraphics[width=0.49\linewidth,trim=0 551.7 0 0,clip]{Figures/fig_rows_examples.pdf}\hfill
-  \includegraphics[width=0.49\linewidth,trim=0 0 0 551.7,clip]{Figures/fig_rows_examples.pdf}
-  \caption{\textbf{Row occlusion reconstruction on held-out plants.}
-  Sorghum (left) and maize (right) plants shown broadside ($0^\circ$) and end-on ($90^\circ$). Columns display raw row photographs, ground-truth target plant geometry, and predicted point clouds from row-trained models (blue) versus isolated-trained controls (orange).}
+  \includegraphics[width=\linewidth]{Figures/fig_rows_examples.pdf}
+  \caption{\textbf{Row occlusion reconstruction on held-out test plants.} Sorghum (left) and maize (right), each row seen broadside ($0^\circ$) and end-on ($90^\circ$). Columns: the row image the model reads (neighbors included), the center plant's true point cloud, and the point clouds written by the row-trained model (blue) and the isolated-trained control (vermillion), each over the truth in grey, with its Chamfer distance to the truth ($10^{-4}\,\mathrm{m}^2$). The six plants were selected for clarity among those where the row-trained model is in its best 35\% and the control in its worst 40\% at both yaws; Figs.~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize} show ten more plants per species spread over the whole error range.}
   \label{fig:rowsex}
-  \vspace*{\dimexpr0.5\textheight-215pt\relax}
 \end{figure*}
 
 \begin{figure*}[t]
@@ -1539,6 +1531,28 @@ Figures~\ref{fig:supp-e10-maize} and~\ref{fig:supp-e10-sorghum} extend the real-
   \caption{\textbf{Real sorghum rows, all eight held-out plants (E10).} The middle camera stop of each plant, layouts alternating; columns as in Fig.~\ref{fig:supp-e10-maize}. The image is the camera photograph, a tall strip framed to the whole plant. Sorghum has no height truth comparable to the recipe, so only Chamfer ($10^{-4}$\,m$^2$) is given.}
   \label{fig:supp-e10-sorghum}
 \end{figure*}
+
+% =========================================================================
+\section{Row Occlusion Gallery (Regime III)}
+\label{sec:supp-rows}
+
+Figures~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize} extend Fig.~\ref{fig:rowsex} to ten more held-out test plants per species. Unlike Fig.~\ref{fig:rowsex}, these plants are not selected for clarity: they sit at the 5th, 15th, \dots, 95th percentile of the row-trained model's Chamfer distance (mean of the two yaws) over the 2{,}250 test plants of each species, so the lower rows show its harder cases.
+
+\begin{figure*}[p]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_rows_more_sorghum.pdf}
+  \caption{\textbf{Sorghum rows, ten held-out test plants at evenly spaced percentiles of the row-trained error.} Each row gives the plant number and its percentile; broadside ($0^\circ$, left) and end-on ($90^\circ$, right); columns as in Fig.~\ref{fig:rowsex}: row image, truth, row-trained model (blue), isolated-trained control (vermillion), Chamfer in $10^{-4}\,\mathrm{m}^2$.}
+  \label{fig:supp-rows-sorghum}
+\end{figure*}
+
+\begin{figure*}[p]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_rows_more_maize.pdf}
+  \caption{\textbf{Maize rows, ten held-out test plants at evenly spaced percentiles of the row-trained error.} Each row gives the plant number and its percentile; broadside ($0^\circ$, left) and end-on ($90^\circ$, right); columns as in Fig.~\ref{fig:rowsex}: row image, truth, row-trained model (blue), isolated-trained control (vermillion), Chamfer in $10^{-4}\,\mathrm{m}^2$.}
+  \label{fig:supp-rows-maize}
+\end{figure*}
+
+\clearpage   % print the two row galleries right after their section
 
 \section{Dataset Generation Details}
 \label{app:data}
