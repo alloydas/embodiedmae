@@ -693,15 +693,21 @@ Figure~\ref{fig:rowsex} shows qualitative reconstructions under row occlusion. W
   \label{tab:anysubset}\label{tab:main}
 \end{table*}
 
-\begin{figure*}[t]
+\begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2any.pdf}
-  \caption{\textbf{Any source in, every stream out.} The distilled
-  generalist on one validation plant per species. Each row is given one stream alone (framed in orange) and generates the other three; Chamfer against the complete cloud is printed above each generated cloud, and the recipe is shown as text (ground truth in green, generated in blue; the first six leaves, maize with five of its seven leaf fields). The photograph, the depth frame and the cloud each recover the recipe to within a few percent; the recipe alone does not recover the cloud ($5.2$ and $13.6 \times 10^{-3}$), as in Tab.~\ref{tab:main}.}
-  \label{fig:any2any}
-\end{figure*}
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_maize.pdf}
+  \caption{\textbf{Any-to-all, maize: one image in, every stream out.} The distilled generalist is given only the image of a held-out test plant (left of the dashed line) and generates the point cloud, the depth image and the procedural parameters. Outputs are drawn over the ground truth in grey; the parameters as a stem-and-leaves schematic with height and leaf count (truth in brackets). Chamfer in $10^{-3}$ (test median 0.51). The plant is selected for clarity: among test plants seen within $25^\circ$ of the horizon, its Chamfer is among the lowest.}
+  \label{fig:any2any-maize}\label{fig:any2any}
+\end{figure}
 
-Table~\ref{tab:main} reports cross-modal generation performance before and after teacher--student feature distillation, and Fig.~\ref{fig:any2any} shows the generalist's outputs on one plant per species. Distillation from the full-modality teacher reduces mean cross-modal generation loss by 30.2\% in sorghum and 43.5\% in maize.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum.pdf}
+  \caption{\textbf{Any-to-all, sorghum: one image in, every stream out.} The distilled generalist is given only the image of a held-out test plant (left of the dashed line) and generates the point cloud, the depth image and the procedural parameters. Outputs are drawn over the ground truth in grey; the parameters as a stem-and-leaves schematic with height and leaf count (truth in brackets). Chamfer in $10^{-3}$ (test median 0.77). The plant is selected for clarity: among test plants seen within $25^\circ$ of the horizon, its Chamfer is among the lowest.}
+  \label{fig:any2any-sorghum}
+\end{figure}
+
+Table~\ref{tab:main} reports cross-modal generation performance before and after teacher--student feature distillation, and Figs.~\ref{fig:any2any-maize} and~\ref{fig:any2any-sorghum} show the generalist's outputs on one plant per species. Distillation from the full-modality teacher reduces mean cross-modal generation loss by 30.2\% in sorghum and 43.5\% in maize.
 
 Reconstruction from single photographs improves substantially: on sorghum, photograph-to-cloud Chamfer error drops by 61\% ($2.27 \to 0.88 \times 10^{-3}$) and parameter MAE falls by 76\% ($0.058 \to 0.014$). On point-cloud inputs, parameter regression MAE is halved ($0.040 \to 0.020$). Dual-stream inputs combining sensor data with procedural parameters ($\mathrm{RGB}+\theta$ and $\mathrm{D}+\theta$) achieve the overall lowest point cloud reconstruction errors ($0.36\text{--}0.44 \times 10^{-3}$). A single student trained on all three input pairs matches the dedicated two-stream students within $0.03$ in both species.
 
