@@ -160,22 +160,22 @@ def render_main(D, picks):
 
 
 def render_more(D, sp):
-    """supplement: ten plants of one species, one per row; broadside on the left, end-on on the right"""
-    W = 6.875; s, g, gy, gg = 0.70, 0.035, 0.05, 0.16; lab = 0.42
-    block = 4 * s + 3 * g
-    hdr = 0.62; H = hdr + 10 * s + 9 * gy + 0.02
+    """supplement: ten plants of one species, one per row; broadside on the left, end-on on the right; image, truth, row-trained"""
+    W = 6.875; s, g, gy, gg = 0.73, 0.04, 0.05, 0.30; lab = 0.50; nc = 3
+    block = nc * s + (nc - 1) * g
+    hdr = 0.50; H = hdr + 10 * s + 9 * gy + 0.02
     x0 = (W - (lab + 2 * block + gg)) / 2
     fig = plt.figure(figsize=(W, H))
     for b, th in enumerate(THETAS):
         xb = x0 + lab + b * (block + gg)
         fig.text((xb + block / 2) / W, (H - 0.01) / H, 'Broadside (0°)' if th == 0 else 'End-on (90°)', fontsize=FS, fontweight='bold', ha='center', va='top')
-        for k in range(4):
-            fig.text((xb + k * (s + g) + s / 2) / W, (H - 0.22) / H, HEAD[k], fontsize=FS, ha='center', va='top', color=HEAD_C[k], linespacing=0.95)
+        for k in range(nc):
+            fig.text((xb + k * (s + g) + s / 2) / W, (H - 0.22) / H, HEAD[k].replace('\n', ' ').replace('- ', '-'), fontsize=FS, ha='center', va='top', color=HEAD_C[k])
     y = H - hdr
     for pl, q in D[sp]['more']:
         y -= s
         for b, th in enumerate(THETAS):
-            draw_tiles(fig, x0 + lab + b * (block + gg), y, s, D[sp]['items'][(pl, th)], g, W, H)
+            draw_tiles(fig, x0 + lab + b * (block + gg), y, s, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
         fig.text((x0 + lab - 0.06) / W, (y + s / 2) / H, f"{pl.split('_')[-1]}\n{q:.0f}th", fontsize=FS, ha='right', va='center', linespacing=1.05)
         y -= gy
     return fig
