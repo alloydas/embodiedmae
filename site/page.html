@@ -58,6 +58,14 @@
   .cell canvas, .cell img.view { display: block; width: 100%; aspect-ratio: 1 / 1; height: auto; cursor: grab; }
   .cell img.view { object-fit: contain; background: #000; cursor: default; }
   .cell canvas:active { cursor: grabbing; }
+  .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 860px) { .grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .cell img.view.white { background: #fff; }
+  .inbox { position: relative; }
+  .inbox .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: #000; aspect-ratio: 1 / 1; align-content: center; }
+  .inbox .pair img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: #fff; display: block; }
+  .inbox > img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: #fff; }
+  .legend .bar { display: inline-block; vertical-align: middle; }
   .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; font-size: 13.5px; color: var(--muted); }
   .bar { width: 160px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, #440154, #414487, #2a788e, #22a884, #7ad151, #fde725); }
   .sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 5px; }
@@ -104,6 +112,80 @@
     <div class="legend" id="d-legend"><span><i class="sw" style="background:#5aa83e"></i>plant (center plant in rows)</span><span id="d-legend-nb"><i class="sw" style="background:#c9c2b0"></i>neighbouring plants</span></div>
   </section>
 
+  <!-- ====================================================== Stage 1: masked pretraining -->
+  <section class="task" id="pretrain">
+    <div class="task-head">
+      <div class="eyebrow">Stage 1 · masked pretraining</div>
+      <h2>80 % of every stream hidden, all four streams rebuilt</h2>
+      <p class="lede">The headline model sees a fifth of the tokens, split across the streams by a Dirichlet draw, and reconstructs the rest. Top row: what it sees (hidden image patches in grey, hidden point groups in tan). Bottom row: what it writes.</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span>Species</span><div class="seg" id="p-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><label for="p-plant">Plant</label><select id="p-plant"></select></div>
+      <div class="ctl"><span>Colour</span><div class="seg" id="p-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
+      <div class="ctl"><input type="checkbox" id="p-truth" checked><label for="p-truth">Truth in grey</label></div>
+    </div>
+    <div class="grid" id="p-grid">
+      <div class="cell input"><header><b>Image, as seen</b><span class="chip" id="p-vis-rgb"></span></header><img class="view" id="p-rgb-m" alt="The image with the hidden patches in grey"></div>
+      <div class="cell input"><header><b>Depth image, as seen</b><span class="chip" id="p-vis-depth"></span></header><img class="view white" id="p-depth-m" alt="The depth image with the hidden patches in grey"></div>
+      <div class="cell input"><header><b>Point cloud, as seen</b><span class="chip" id="p-vis-pc"></span></header><canvas data-k="masked"></canvas></div>
+      <div class="cell output"><header><b>Image, rebuilt</b></header><img class="view" id="p-rgb-r" alt="The reconstructed image"></div>
+      <div class="cell output"><header><b>Depth image, rebuilt</b></header><img class="view white" id="p-depth-r" alt="The reconstructed depth image"></div>
+      <div class="cell output"><header><b>Point cloud, rebuilt</b><span class="chip" id="p-rec-chip"></span></header><canvas data-k="recon"></canvas></div>
+    </div>
+    <div class="legend"><span>Chip: Chamfer to the true cloud (×10⁻³, unit sphere)</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span><span><i class="sw" style="background:#c9c2b0"></i>hidden point groups</span></div>
+  </section>
+
+  <!-- ====================================================== Stage 2: any input -> every stream -->
+  <section class="task" id="any">
+    <div class="task-head">
+      <div class="eyebrow">Stage 2 · cross-modal distillation</div>
+      <h2>Any sensor in, the whole plant out</h2>
+      <p class="lede">Give the model one stream (or a pair) and it writes the point cloud. Before: the pretrained model. After: the distilled generalist, trained against a frozen teacher that reads all four streams.</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span>Species</span><div class="seg" id="a-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><label for="a-plant">Plant</label><select id="a-plant"></select></div>
+      <div class="ctl"><label for="a-src">Input</label><select id="a-src"><option value="rgb">Image</option><option value="depth">Depth image</option><option value="pc">Point cloud</option><option value="text">Procedural parameters</option><option value="rgb+depth">Image + depth image</option><option value="rgb+text">Image + parameters</option><option value="depth+text">Depth image + parameters</option></select></div>
+      <div class="ctl"><span>Colour</span><div class="seg" id="a-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
+      <div class="ctl"><input type="checkbox" id="a-truth" checked><label for="a-truth">Truth in grey</label></div>
+    </div>
+    <div class="grid four" id="a-grid">
+      <div class="cell input"><header><b>Input</b><span class="chip" id="a-in-chip"></span></header><div class="inbox" id="a-in"><canvas data-k="input"></canvas></div></div>
+      <div class="cell output"><header><b>Before distillation</b><span class="chip" data-m="before"></span></header><canvas data-k="before"></canvas></div>
+      <div class="cell output"><header><b>After distillation</b><span class="chip" data-m="after"></span></header><canvas data-k="after"></canvas></div>
+      <div class="cell"><header><b>Truth</b><span class="chip" id="a-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
+    </div>
+    <div class="legend"><span>Chips: Chamfer to the true cloud (×10⁻³) · height · leaves</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span></div>
+  </section>
+
+  <!-- ====================================================== Regime II: partial clouds -->
+  <section class="task" id="partial">
+    <div class="task-head">
+      <div class="eyebrow">Regime II · partial point clouds</div>
+      <h2>One camera, three cameras, or the whole plant</h2>
+      <p class="lede">The headline model gets the image and depth image of camera 00 and a point cloud from one camera, three cameras, or the full plant, and reconstructs the plant. Sorghum: the points of the complete plant that each camera sees; its model trained on complete plants, so more cameras help. Maize: the clouds of the cameras fused (full = all ten); its model trained on single-camera clouds, so one camera is its home ground and fused clouds are new to it, as in the paper's table.</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span>Species</span><div class="seg" id="v-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><label for="v-plant">Plant</label><select id="v-plant"></select></div>
+      <div class="ctl"><span>Colour</span><div class="seg" id="v-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
+      <div class="ctl"><input type="checkbox" id="v-truth" checked><label for="v-truth">Truth in grey</label></div>
+    </div>
+    <div class="grid four" id="v-grid">
+      <div class="cell input"><header><b>Image (camera 00)</b></header><img class="view" id="v-img" alt="Camera 00 image"></div>
+      <div class="cell input"><header><b>1 camera</b><span class="chip" data-c="1view"></span></header><canvas data-k="1view:input"></canvas></div>
+      <div class="cell input"><header><b>3 cameras</b><span class="chip" data-c="3view"></span></header><canvas data-k="3view:input"></canvas></div>
+      <div class="cell input"><header><b>Full</b><span class="chip" data-c="full"></span></header><canvas data-k="full:input"></canvas></div>
+      <div class="cell"><header><b>Truth</b></header><canvas data-k="truth"></canvas></div>
+      <div class="cell output"><header><b>From 1 camera</b><span class="chip" data-m="1view"></span></header><canvas data-k="1view:recon"></canvas></div>
+      <div class="cell output"><header><b>From 3 cameras</b><span class="chip" data-m="3view"></span></header><canvas data-k="3view:recon"></canvas></div>
+      <div class="cell output"><header><b>From the full cloud</b><span class="chip" data-m="full"></span></header><canvas data-k="full:recon"></canvas></div>
+    </div>
+    <div class="legend"><span>Input chips: share of the full cloud within 5 mm. Output chips: Chamfer (×10⁻³).</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span></div>
+    <p class="hint">Eight evenly spaced test plants, not selected.</p>
+  </section>
+
   <!-- ====================================================== crop rows -->
   <section class="task" id="rows">
     <div class="task-head">
@@ -134,6 +216,30 @@
       <span><i class="sw" style="background:#c9c2b0"></i>neighbours in the row cloud</span>
     </div>
     <p class="hint">“Fig. 9” marks the plants shown in the paper; the others sit at the 5th to 95th percentile of the row fine-tune’s error, so typical and hard cases are both here.</p>
+  </section>
+
+  <!-- ====================================================== E10: real plants -->
+  <section class="task" id="real">
+    <div class="task-head">
+      <div class="eyebrow">Real plants · rows built from real plant models and scans</div>
+      <h2>From synthetic rows to real plants</h2>
+      <p class="lede">Rows of real maize plant models and scanned sorghum plants, seen by a rover camera. The model trained on synthetic rows is fine-tuned on 75 % of the real plants; every plant here is from the other 25 %.</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span>Species</span><div class="seg" id="e-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><label for="e-stop">Plant</label><select id="e-stop"></select></div>
+      <div class="ctl"><span>Colour</span><div class="seg" id="e-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
+      <div class="ctl"><input type="checkbox" id="e-truth" checked><label for="e-truth">Truth in grey</label></div>
+    </div>
+    <div class="grid" id="e-grid">
+      <div class="cell input"><header><b>Camera image</b><span class="chip" id="e-occ"></span></header><img class="view" id="e-img" alt="The camera image of the real-plant row"></div>
+      <div class="cell input"><header><b>Row point cloud</b><span class="chip">input</span></header><canvas data-k="scene"></canvas></div>
+      <div class="cell"><header><b>Center plant (truth)</b><span class="chip" id="e-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
+      <div class="cell output"><header><b>No row training</b><span class="chip" data-m="head"></span></header><canvas data-k="head"></canvas></div>
+      <div class="cell output"><header><b>Synthetic-row fine-tune</b><span class="chip" data-m="row"></span></header><canvas data-k="row"></canvas></div>
+      <div class="cell output"><header><b>Real-row fine-tune</b><span class="chip" data-m="real"></span></header><canvas data-k="real"></canvas></div>
+    </div>
+    <div class="legend"><span>Chips: Chamfer to the true plant (×10⁻⁴ m²) · predicted height (maize)</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span><span><i class="sw" style="background:#c9c2b0"></i>neighbours in the row cloud</span></div>
   </section>
 
   <footer>Held-out test plants throughout. Clouds are subsampled to 4,096 points per plant (8,192 for row scenes) for the browser; metrics are computed on the full clouds.</footer>
@@ -243,9 +349,127 @@
       ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '');
     });
   }
+  // ------------------------------------------------------------------ shared pieces for the other tasks
+  const cache = {};
+  const loadItem = url => cache[url] || (cache[url] = PCV.load(url));
+  const indexes = {};
+  const loadIndex = url => indexes[url] || (indexes[url] = fetch(url).then(r => r.json()));
+  function predLayers(c, truth, col, showTruth, errMax) {
+    const L = [];
+    if (showTruth && truth) L.push({ pos: truth.pos, col: PCV.flat(truth.n, truthGrey()), size: 1.1 });
+    L.push({ pos: c.pos, col: col === 'err' && c.err ? PCV.errorColors(c.err, errMax) : PCV.plantColors(c.pos) });
+    return L;
+  }
+  function errLegend(sec, on, max) { sec.querySelectorAll('.errleg').forEach(e => { e.hidden = !on; }); sec.querySelectorAll('.errmax').forEach(e => { e.textContent = max; }); }
+  function task(o) {
+    // o: {sec, prefix, dir, select, label(item), draw(state, item)}
+    const sec = document.getElementById(o.sec), st = { g: PCV.group(), species: 'sorghum', col: 'plant', truth: true, item: null, panels: {} };
+    sec.querySelectorAll('canvas[data-k]').forEach(cv => { st.panels[cv.dataset.k] = PCV.panel(cv, st.g); });
+    const sel = document.getElementById(`${o.prefix}-${o.select || 'plant'}`);
+    seg(`${o.prefix}-species`, v => { st.species = v; fill(); });
+    seg(`${o.prefix}-col`, v => { st.col = v; redraw(); });
+    const tb = document.getElementById(`${o.prefix}-truth`); if (tb) tb.addEventListener('change', e => { st.truth = e.target.checked; redraw(); });
+    sel.addEventListener('change', show);
+    async function fill() {
+      const idx = await loadIndex(`data/${o.dir}/${st.species}/index.json`);
+      sel.innerHTML = idx.items.map(i => `<option value="${i.json}">${o.label(i)}</option>`).join('');
+      show();
+    }
+    async function show() {
+      const grid = sec.querySelector('.grid'); grid.classList.add('loading');
+      st.item = await loadItem(`data/${o.dir}/${st.species}/${sel.value}`); grid.classList.remove('loading');
+      st.base = `data/${o.dir}/${st.species}/`;
+      o.frame(st); redraw();
+    }
+    function redraw() {
+      if (!st.item) return;
+      Object.values(st.panels).forEach(p => { p.bg = panelBg(); });
+      errLegend(sec, st.col === 'err', st.item.meta.err_max_mm);
+      o.draw(st);
+    }
+    st.redraw = redraw; st.fill = fill; ALL.push(st);
+    return st;
+  }
+  const ALL = [R, D];
+  const plantNo = s => s.replace(/^(Sorghum_|plant_)/, '').replace(/_(\d+)$/, ' · view $1');
+
+  // Stage 1: masked pretraining
+  task({ sec: 'pretrain', prefix: 'p', dir: 'single', label: i => `${plantNo(i.id)} · ${i.tag}`,
+    frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.12 }),
+    draw: st => {
+      const it = st.item, m = it.meta, C = it.clouds;
+      document.getElementById('p-rgb-m').src = st.base + m.files.rgb_masked; document.getElementById('p-rgb-r').src = st.base + m.files.rgb_rec;
+      document.getElementById('p-depth-m').src = st.base + m.files.depth_masked; document.getElementById('p-depth-r').src = st.base + m.files.depth_rec;
+      document.getElementById('p-vis-rgb').textContent = `${m.visible.rgb} of 196 patches`;
+      document.getElementById('p-vis-depth').textContent = `${m.visible.depth} of 196 patches`;
+      document.getElementById('p-vis-pc').textContent = `${m.visible.pc} of 196 groups`;
+      document.getElementById('p-rec-chip').textContent = fmt(m.metrics.recon.chamfer, 2);
+      st.panels.masked.set([{ pos: C.masked.pos, col: PCV.markColors(C.masked.pos, C.masked.mark) }]);
+      st.panels.recon.set(predLayers(C.recon, C.truth, st.col, st.truth, m.err_max_mm));
+    } }).fill();
+
+  // Stage 2: any input -> every stream
+  const A = task({ sec: 'any', prefix: 'a', dir: 'single', label: i => `${plantNo(i.id)} · ${i.tag}`,
+    frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.12 }),
+    draw: st => {
+      const it = st.item, m = it.meta, C = it.clouds, src = document.getElementById('a-src').value;
+      const box = document.getElementById('a-in'), cv = box.querySelector('canvas');
+      box.querySelectorAll('img, .pair').forEach(e => e.remove());
+      const imgOf = s => s === 'rgb' ? m.files.rgb : s === 'depth' ? m.files.depth : m.files.params;
+      const parts = src.split('+');
+      if (src === 'pc') { cv.hidden = false; st.panels.input.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]); }
+      else {
+        cv.hidden = true;
+        if (parts.length === 1) { const im = new Image(); im.src = st.base + imgOf(src); im.alt = 'input'; box.prepend(im); if (src === 'rgb') im.style.background = '#000'; }
+        else { const d = document.createElement('div'); d.className = 'pair'; parts.forEach(p => { const im = new Image(); im.src = st.base + imgOf(p); im.alt = p; if (p === 'rgb') im.style.background = '#000'; d.append(im); }); box.prepend(d); }
+      }
+      document.getElementById('a-in-chip').textContent = { rgb: 'image', depth: 'depth image', pc: 'point cloud', text: 'parameters' }[parts[0]] + (parts[1] ? ` + ${{ depth: 'depth', text: 'parameters' }[parts[1]]}` : '');
+      for (const k of ['before', 'after']) st.panels[k].set(predLayers(C[`${src}:${k}`], C.truth, st.col, st.truth, m.err_max_mm));
+      st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
+      document.getElementById('a-truth-chip').textContent = `${fmt(m.truth.height, 2)} m · ${m.truth.leaves} leaves`;
+      document.querySelectorAll('#a-grid .chip[data-m]').forEach(ch => {
+        const x = m.metrics[`${src}:${ch.dataset.m}`];
+        ch.textContent = `${fmt(x.chamfer, 2)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m · ${x.leaves}` : '');
+      });
+    } });
+  document.getElementById('a-src').addEventListener('change', () => A.redraw());
+  A.fill();
+
+  // Regime II: partial clouds
+  task({ sec: 'partial', prefix: 'v', dir: 'partial', label: i => plantNo(i.id),
+    frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.12 }),
+    draw: st => {
+      const it = st.item, m = it.meta, C = it.clouds;
+      document.getElementById('v-img').src = st.base + m.img;
+      for (const c of ['1view', '3view', 'full']) {
+        st.panels[`${c}:input`].set([{ pos: C[`${c}:input`].pos, col: PCV.plantColors(C[`${c}:input`].pos) }]);
+        st.panels[`${c}:recon`].set(predLayers(C[`${c}:recon`], C.truth, st.col, st.truth, m.err_max_mm));
+      }
+      st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
+      document.querySelectorAll('#v-grid .chip[data-c]').forEach(ch => { ch.textContent = `${Math.round(m.metrics[ch.dataset.c].coverage * 100)} % covered`; });
+      document.querySelectorAll('#v-grid .chip[data-m]').forEach(ch => { ch.textContent = fmt(m.metrics[ch.dataset.m].chamfer, 2); });
+    } }).fill();
+
+  // real plants (E10)
+  task({ sec: 'real', prefix: 'e', dir: 'real', select: 'stop', label: i => `${i.id.split('_').slice(1, -1).join('_')} · ${i.layout} · ${i.tag}`,
+    frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.08 }),
+    draw: st => {
+      const it = st.item, m = it.meta, C = it.clouds;
+      document.getElementById('e-img').src = st.base + m.img;
+      document.getElementById('e-occ').textContent = `${m.layout} row`;
+      document.getElementById('e-truth-chip').textContent = `height ${fmt(m.truth.height, 2)} m`;
+      st.panels.scene.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]);
+      st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
+      for (const k of ['head', 'row', 'real']) st.panels[k].set(predLayers(C[k], C.truth, st.col, st.truth, m.err_max_mm));
+      document.querySelectorAll('#e-grid .chip[data-m]').forEach(ch => {
+        const x = m.metrics[ch.dataset.m]; ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '');
+      });
+    } }).fill();
+
   // keep panels sharp and themed on resize / theme change
-  let raf = 0; window.addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { R.g.draw(); D.g.draw(); }); });
-  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { rDraw(); if (D.item) dShow(dSel.value); });
+  let raf = 0; window.addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => ALL.forEach(s => s.g.draw())); });
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { rDraw(); if (D.item) dShow(dSel.value); ALL.forEach(s => s.redraw && s.redraw()); });
+  document.getElementById('r-size').addEventListener('input', e => ALL.forEach(s => { s.g.size = +e.target.value; s.g.draw(); }));
   dFill().catch(e => console.error(e)); rFill().catch(e => console.error(e));
 })();
 </script>
