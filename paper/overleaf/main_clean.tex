@@ -834,6 +834,51 @@ Sorghum is further from training in every respect: the scanned plants are 2.2--5
 
 We then fine-tune the row model on 75\% of the real plants of each species and score it on the remaining 25\%, which it never sees. The split is by plant, so both layouts of a plant fall on the same side (maize: 351 training, 39 validation and 130 test plants; sorghum: 19, 3 and 8). The real files supervise the center plant's cloud and its own depth image, rendered from all its points including those the neighbors hide, and, for maize, the plant token's height and leaf count; there is no image loss, because the photograph does not show the hidden parts of the plant. Starting from the row fine-tune, we train for 15 epochs at learning rate $2\times10^{-5}$ on one GPU (24 minutes for sorghum, about an hour for maize, evaluation included). On the held-out maize plants the Chamfer falls from 59.5 to 19.7 $\times10^{-4}$\,m$^2$, the median height error from 36\% to 1.6\%, and the share of stops with the leaf count within $\pm1$ rises from 45\% to 70\% (Tab.~\ref{tab:e10}, Fig.~\ref{fig:e10_real}). On the held-out sorghum plants the Chamfer falls from 2{,}113 to 79; with eight test plants this number is indicative only, and the written plants recover the stalk over the full plant height but few of the leaves (Fig.~\ref{fig:e10_real_sorghum}). A few hundred real maize plants, or 19 real sorghum plants, therefore suffice to close most of the gap between the generator and real plant geometry, while the representation and the procedural output stay unchanged.
 
+The gain holds across inputs, layouts and occlusion (Tab.~\ref{tab:e10_detail}). Every single stream improves: on maize the Chamfer from the image alone falls from 95 to 49, from depth from 77 to 44 and from the cloud from 75 to 47, and on sorghum from depth from 834 to 89; all three streams together remain best. Parallel rows stay easier than perpendicular ones (15.6 against 23.9 after fine-tuning), and across the four quartiles of occlusion the fine-tuned Chamfer stays between 18.5 and 21.6, so the remaining error does not come from the neighbors. Height shows the clearest change (Fig.~\ref{fig:e10_height}). The row fine-tune writes about 1.03\,m for every plant, so its error grows from 15\% inside the training range to 51\% above 2\,m. After fine-tuning the median error is 1.2--2.0\% for plants up to 2.0\,m and 5.9\% above it, where the recipe's height range ends.
+
+\begin{table}[t]
+  \centering\scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{l cc cc}
+    \toprule
+    & \multicolumn{2}{c}{Maize (130 plants)} & \multicolumn{2}{c}{Sorghum (8 plants)} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+    Input & Row FT & Real-row FT & Row FT & Real-row FT \\
+    \midrule
+    Image + depth + cloud & 59.5 & \textbf{19.7} & 2{,}113 & \textbf{79.4} \\
+    Image only & 95.4 & 48.7 & 1{,}033 & 106.2 \\
+    Depth only & 76.8 & 43.6 & 834 & 89.0 \\
+    Cloud only & 75.0 & 47.4 & 3{,}773 & 311.8 \\
+    \bottomrule
+  \end{tabular}}
+
+  \vspace{4pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{l c cc cc}
+    \toprule
+    & & \multicolumn{2}{c}{Height error} & \multicolumn{2}{c}{Chamfer} \\
+    \cmidrule(lr){3-4}\cmidrule(lr){5-6}
+    Maize plant height & Plants & Row FT & Real-row FT & Row FT & Real-row FT \\
+    \midrule
+    $\le$1.33\,m (training range) & 22 & 15\% & \textbf{2.0\%} & 47.0 & \textbf{16.3} \\
+    1.33--1.6\,m & 45 & 30\% & \textbf{1.2\%} & 57.7 & \textbf{18.8} \\
+    1.6--2.0\,m & 51 & 41\% & \textbf{1.4\%} & 62.7 & \textbf{20.4} \\
+    $>$2.0\,m & 12 & 51\% & \textbf{5.9\%} & 75.4 & \textbf{26.7} \\
+    \bottomrule
+  \end{tabular}}
+  \caption{\textbf{Real-row fine-tune in detail (E10, held-out plants).} Top: Chamfer of the center plant ($10^{-4}$\,m$^2$) for each input, before (row fine-tune) and after fine-tuning on 75\% of the real plants. Bottom: maize, all three streams in, split by the plant's true height; height error is the median relative error. The recipe's height range ends at 2.0\,m.}
+  \label{tab:e10_detail}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\columnwidth]{Figures/fig_e10_height.pdf}
+  \caption{Predicted against true plant height on the 130 held-out real maize plants (median over each plant's 36 camera stops, all three streams in). Trained on synthetic rows only, the model writes about 1.03\,m for every plant; after fine-tuning on the other 75\% of the real plants it follows the true height up to the 2.0\,m end of the recipe's range. The shaded band is the training height range.}
+  \label{fig:e10_height}
+\end{figure}
+
+
 \begin{table}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{2.5pt}
