@@ -59,7 +59,6 @@
 %%
 % \setlength{\abovecaptionskip}{.5em}
 
-
 %%
 %% Allows "the use of \paper to refer to the project name"
 %% with automatic management of space at the end of the word
@@ -984,6 +983,62 @@ traits are evaluated directly (Sec.~\ref{sec:method-data}).}
   \label{tab:e8}\label{tab:baselines}
 \end{table*}
 
+\begin{table*}[t]
+  \centering\scriptsize
+  \updtwo{\textbf{(a) Modality value-add (E2)}}\\[3pt]
+  \setlength{\tabcolsep}{3.2pt}
+  \begin{tabular}{l c cccccc}
+    \toprule
+    & Chamfer & \multicolumn{6}{c}{Frozen-Probe $R^2$ (Validation Set)} \\
+    \cmidrule(lr){3-8}
+    Stream Set & $\times10^{-3}$ & Height & Leaf Cnt & Biomass & Branch & Roll & Leaf Len \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Sorghum}} \\
+    PC & 5.00 & 0.895 & 0.896 & 0.892 & 0.792 & 0.393 & 0.088 \\
+    $\mathrm{PC}+\mathrm{D}$ & 2.45 & 0.976 & 0.979 & 0.982 & 0.903 & 0.798 & 0.307 \\
+    $\mathrm{PC}+\mathrm{RGB}$ & 2.57 & \textbf{0.979} & \textbf{0.983} & \textbf{0.986} & \textbf{0.934} & 0.808 & 0.267 \\
+    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & \textbf{1.85} & 0.977 & 0.980 & 0.982 & 0.926 & 0.781 & \textbf{0.309} \\
+    $\mathrm{PC}+\theta$ & 4.84 & 0.860 & 0.864 & 0.863 & 0.780 & 0.481 & 0.078 \\
+    $\mathrm{PC}+\mathrm{D}+\theta$ & 4.08 & 0.907 & 0.909 & 0.916 & 0.856 & 0.694 & 0.191 \\
+    $\mathrm{PC}+\mathrm{RGB}+\theta$ & 3.00 & 0.962 & 0.964 & 0.967 & 0.890 & \textbf{0.810} & 0.225 \\
+    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}+\theta$ & 2.53 & 0.962 & 0.964 & 0.965 & 0.880 & 0.760 & 0.249 \\
+    \midrule
+    & & Height & Leaf Cnt & Biomass & Branch & Curl & Stem Rad \\
+    \multicolumn{8}{l}{\emph{Maize}} \\
+    PC & 2.63 & 0.171 & 0.670 & 0.610 & 0.756 & 0.114 & 0.289 \\
+    $\mathrm{PC}+\mathrm{D}$ & 2.55 & 0.453 & 0.773 & 0.683 & 0.804 & 0.082 & 0.550 \\
+    $\mathrm{PC}+\mathrm{RGB}$ & 1.61 & 0.620 & \textbf{0.914} & \textbf{0.783} & \textbf{0.927} & 0.334 & 0.753 \\
+    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & 1.21 & 0.633 & \textbf{0.914} & 0.774 & 0.926 & 0.236 & 0.760 \\
+    $\mathrm{PC}+\theta$ & 2.49 & 0.256 & 0.740 & 0.662 & 0.787 & 0.114 & 0.363 \\
+    $\mathrm{PC}+\mathrm{D}+\theta$ & 2.54 & 0.382 & 0.801 & 0.670 & 0.795 & 0.136 & 0.408 \\
+    $\mathrm{PC}+\mathrm{RGB}+\theta$ & 1.21 & 0.509 & 0.881 & 0.780 & 0.912 & \textbf{0.371} & \textbf{0.763} \\
+    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}+\theta$ & \textbf{0.99} & \textbf{0.635} & 0.908 & 0.781 & 0.919 & 0.304 & 0.743 \\
+    \bottomrule
+  \end{tabular}\\[8pt]
+  \updtwo{\textbf{(b) Training dataset scale (E3) and encoder capacity (E4)}}\\[3pt]
+  \setlength{\tabcolsep}{3.0pt}
+  \begin{tabular}{l r c ccc c c ccc}
+    \toprule
+    & & \multicolumn{4}{c}{Sorghum} & & \multicolumn{4}{c}{Maize} \\
+    \cmidrule(lr){3-6}\cmidrule(lr){8-11}
+    Dataset / Capacity Variant & Epochs & Chamfer & Height & Roll & Leaf Len & & Chamfer & Height & Branch & Stem Rad \\
+    \midrule
+    \multicolumn{11}{l}{\emph{Training Dataset Scale (E3, Base Model)}} \\
+    1{,}000 Plants & 6{,}169 & 3.13 & 0.952 & 0.716 & 0.249 & & 3.54 & 0.393 & 0.851 & 0.593 \\
+    3{,}000 Plants & 2{,}100 & 2.86 & 0.932 & 0.679 & 0.213 & & 1.46 & 0.524 & 0.867 & 0.624 \\
+    10{,}000 Plants & 631 & 2.48 & 0.962 & 0.749 & 0.245 & & 0.87 & 0.427 & 0.853 & 0.717 \\
+    10{,}500 Plants & 600 & 2.53 & 0.962 & 0.760 & 0.249 & & 0.99 & 0.635 & 0.919 & 0.743 \\
+    \midrule
+    \multicolumn{11}{l}{\emph{Encoder Capacity Scale (E4, Full Dataset)}} \\
+    ViT-Small (25\,M) & 600 & 2.86 & 0.964 & \textbf{0.817} & \textbf{0.277} & & 1.22 & 0.563 & 0.886 & 0.682 \\
+    ViT-Base (114\,M) & 600 & \textbf{2.53} & 0.962 & 0.760 & 0.249 & & \textbf{0.99} & \textbf{0.635} & \textbf{0.919} & \textbf{0.743} \\
+    ViT-Large (332\,M) & 600 & 2.68 & 0.948 & 0.711 & 0.246 & & 1.06 & 0.580 & 0.887 & 0.614 \\
+    \bottomrule
+  \end{tabular}
+  \caption{\updtwo{\textbf{Ablations at the shared step budget (197{,}400 optimizer steps).} \textbf{(a)}~Modality value-add: models differing only in active input token streams; $\theta$ is the parameter stream as an encoder input under the shared Dirichlet budget. \textbf{(b)}~Dataset scale and encoder capacity: at fixed step compute, larger encoders do not help and more data helps reconstruction more reliably than it helps the probes. Chamfer $\times 10^{-3}$ and linear-probe $R^2$ (validation).}}
+  \label{tab:e2}\label{tab:modality_value_add}\label{tab:scaling}\label{tab:scaling_ablations}
+\end{table*}
+
 \subsection{Regime I: single-view reconstruction of isolated plants}
 \label{sec:regime1}\label{sec:exp-regime1}
 
@@ -1424,43 +1479,6 @@ both species.}}
 \subsection{Influence of procedural parameter stream placement}
 \label{sec:param-stream}\label{sec:exp-params}
 
-\begin{table*}[t]
-  \centering\scriptsize
-  \setlength{\tabcolsep}{3.2pt}
-  \begin{tabular}{l c cccccc}
-    \toprule
-    & Chamfer & \multicolumn{6}{c}{Frozen-Probe $R^2$ (Validation Set)} \\
-    \cmidrule(lr){3-8}
-    Stream Set & $\times10^{-3}$ & Height & Leaf Cnt & Biomass & Branch & Roll & Leaf Len \\
-    \midrule
-    \multicolumn{8}{l}{\emph{Sorghum}} \\
-    PC & 5.00 & 0.895 & 0.896 & 0.892 & 0.792 & 0.393 & 0.088 \\
-    $\mathrm{PC}+\mathrm{D}$ & 2.45 & 0.976 & 0.979 & 0.982 & 0.903 & 0.798 & 0.307 \\
-    $\mathrm{PC}+\mathrm{RGB}$ & 2.57 & \textbf{0.979} & \textbf{0.983} & \textbf{0.986} & \textbf{0.934} & 0.808 & 0.267 \\
-    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & \textbf{1.85} & 0.977 & 0.980 & 0.982 & 0.926 & 0.781 & \textbf{0.309} \\
-    $\mathrm{PC}+\theta$ & 4.84 & 0.860 & 0.864 & 0.863 & 0.780 & 0.481 & 0.078 \\
-    $\mathrm{PC}+\mathrm{D}+\theta$ & 4.08 & 0.907 & 0.909 & 0.916 & 0.856 & 0.694 & 0.191 \\
-    $\mathrm{PC}+\mathrm{RGB}+\theta$ & 3.00 & 0.962 & 0.964 & 0.967 & 0.890 & \textbf{0.810} & 0.225 \\
-    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}+\theta$ & 2.53 & 0.962 & 0.964 & 0.965 & 0.880 & 0.760 & 0.249 \\
-    \midrule
-    & & Height & Leaf Cnt & Biomass & Branch & Curl & Stem Rad \\
-    \multicolumn{8}{l}{\emph{Maize}} \\
-    PC & 2.63 & 0.171 & 0.670 & 0.610 & 0.756 & 0.114 & 0.289 \\
-    $\mathrm{PC}+\mathrm{D}$ & 2.55 & 0.453 & 0.773 & 0.683 & 0.804 & 0.082 & 0.550 \\
-    $\mathrm{PC}+\mathrm{RGB}$ & 1.61 & 0.620 & \textbf{0.914} & \textbf{0.783} & \textbf{0.927} & 0.334 & 0.753 \\
-    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & 1.21 & 0.633 & \textbf{0.914} & 0.774 & 0.926 & 0.236 & 0.760 \\
-    $\mathrm{PC}+\theta$ & 2.49 & 0.256 & 0.740 & 0.662 & 0.787 & 0.114 & 0.363 \\
-    $\mathrm{PC}+\mathrm{D}+\theta$ & 2.54 & 0.382 & 0.801 & 0.670 & 0.795 & 0.136 & 0.408 \\
-    $\mathrm{PC}+\mathrm{RGB}+\theta$ & 1.21 & 0.509 & 0.881 & 0.780 & 0.912 & \textbf{0.371} & \textbf{0.763} \\
-    $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}+\theta$ & \textbf{0.99} & \textbf{0.635} & 0.908 & 0.781 & 0.919 & 0.304 & 0.743 \\
-    \bottomrule
-  \end{tabular}
-  \caption{\upd{\textbf{Modality value-add ablations (E2).} Pre-trained models
-  trained at equal optimizer step budgets differing only in active input
-  token streams. $\theta$ indicates inclusion of the parameter stream as an
-  encoder input under the shared Dirichlet budget.}}
-  \label{tab:e2}\label{tab:modality_value_add}
-\end{table*}
 
 \begin{table*}[t]
   \centering\scriptsize
@@ -1658,7 +1676,6 @@ structures while omitting thin outer leaf extremities.}
   \label{fig:e10_height}
 \end{figure}
 
-
 \begin{table}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{2.5pt}
@@ -1707,34 +1724,6 @@ structures while omitting thin outer leaf extremities.}
 \label{sec:res-repr}\label{sec:exp-repr}
 
 
-\begin{table*}[t]
-  \centering\scriptsize
-  \setlength{\tabcolsep}{3.0pt}
-  \begin{tabular}{l r c ccc c c ccc}
-    \toprule
-    & & \multicolumn{4}{c}{Sorghum} & & \multicolumn{4}{c}{Maize} \\
-    \cmidrule(lr){3-6}\cmidrule(lr){8-11}
-    Dataset / Capacity Variant & Epochs & Chamfer & Height & Roll & Leaf Len & & Chamfer & Height & Branch & Stem Rad \\
-    \midrule
-    \multicolumn{11}{l}{\emph{Training Dataset Scale (E3, Base Model)}} \\
-    1{,}000 Plants & 6{,}169 & 3.13 & 0.952 & 0.716 & 0.249 & & 3.54 & 0.393 & 0.851 & 0.593 \\
-    3{,}000 Plants & 2{,}100 & 2.86 & 0.932 & 0.679 & 0.213 & & 1.46 & 0.524 & 0.867 & 0.624 \\
-    10{,}000 Plants & 631 & 2.48 & 0.962 & 0.749 & 0.245 & & 0.87 & 0.427 & 0.853 & 0.717 \\
-    10{,}500 Plants & 600 & 2.53 & 0.962 & 0.760 & 0.249 & & 0.99 & 0.635 & 0.919 & 0.743 \\
-    \midrule
-    \multicolumn{11}{l}{\emph{Encoder Capacity Scale (E4, Full Dataset)}} \\
-    ViT-Small (25\,M) & 600 & 2.86 & 0.964 & \textbf{0.817} & \textbf{0.277} & & 1.22 & 0.563 & 0.886 & 0.682 \\
-    ViT-Base (114\,M) & 600 & \textbf{2.53} & 0.962 & 0.760 & 0.249 & & \textbf{0.99} & \textbf{0.635} & \textbf{0.919} & \textbf{0.743} \\
-    ViT-Large (332\,M) & 600 & 2.68 & 0.948 & 0.711 & 0.246 & & 1.06 & 0.580 & 0.887 & 0.614 \\
-    \bottomrule
-  \end{tabular}
-  \caption{\upd{\textbf{Dataset scaling and encoder capacity ablations at equal
-  step budgets.} Evaluated at a fixed budget of 197{,}400 optimizer steps.
-  Chamfer distance ($\times 10^{-3}$) and linear probe $R^2$ (validation)
-  show that, at fixed step compute, larger encoders do not help and more
-  data helps reconstruction more reliably than it helps the probes.}}
-  \label{tab:scaling}\label{tab:scaling_ablations}
-\end{table*}
 
 \paragraph{Probe protocol for the encoder comparison.}
 \updtwo{Table~\ref{tab:baselines} applies the trait probe of Sec.~\ref{sec:field} to every encoder in the same way, with two changes that let the published encoders take part.} \updtwo{First, each plant is represented by the mean of the encoder's output tokens, the one readout that every encoder supports; our models leave their \texttt{[CLS]} token out of this mean.} \updtwo{Second, each encoder receives only the streams it was built for, all taken from view 00 of the plant: DINOv2 the photograph, MultiMAE the photograph and depth frame, Point-MAE the point cloud, EmbodiedMAE all three, and each \method{} encoder the sensor streams it was pretrained on.} \updtwo{The procedural parameters are never an input.} \updtwo{For each encoder and trait, the features of the 10{,}500 training plants are standardized with training statistics only.} \updtwo{A ridge regression is then fitted, with its regularization strength chosen from $\{0.1, 1, 10, 10^2, 10^3, 10^4\}$ by five-fold cross-validation on the training plants.} \updtwo{The table reports $R^2$ on the 2{,}250 validation plants.} \updtwo{The network trained from scratch on the labels goes through the same probe on its frozen features; its own regression head is not used.} \updtwo{The traits are the generator's ground truth for each plant.} \updtwo{In sorghum they are stem length, leaf count, mean leaf branching angle, mean leaf roll and mean leaf length.} \updtwo{In maize they are summed stem internode length, mean leaf angle, mean leaf curvature and stem radius.} \updtwo{The validation and test splits are enriched with extreme plants, with about 1.8 times the training variance in sorghum and 1.5 to 2.6 times in maize.} \updtwo{The $R^2$ values therefore rank the encoders within the table, but they are not comparable with values reported in other work.} \updtwo{Test $R^2$ stays close to validation; for the maize headline model, height reaches $0.747$ on validation and $0.759$ on test.}
@@ -1991,7 +1980,7 @@ parameter regression.}
 \upd{We acknowledge several limitations in our current study:}
 \begin{itemize}
 \item \upd{ \textbf{Single-seed ablation budgets}: Controlled ablation
-  experiments (Tabs.~\ref{tab:modality_value_add}--\ref{tab:scaling_ablations})
+  experiments (Tabs.~\ref{tab:modality_value_add} and~\ref{tab:token_budget})
   were executed under a standardized compute budget of 197{,}400 optimizer
   steps using a single seed per arm.} \upd{Run-to-run baseline variance estimated
   from near-duplicate runs is $\approx 2\%$ in Chamfer distance and
@@ -2412,7 +2401,6 @@ $6.7\text{--}11.3$ in maize.} \upd{Explaining 90\% of latent variance requires
 leading principal component aligns with global plant scale (correlation
 with leaf count $|r| = 0.73\text{--}0.94$).}
 
-
 \subsection{Source of Occlusion}
 \label{sec:abl_occ}
 
@@ -2577,7 +2565,6 @@ fine-tuning stage, hiding further input tokens only removes evidence about the t
 whole occluded scene visible works best. This does not imply that training without masking from scratch would be
 better, which we did not test.}
 
-
 \subsection{Point-Cloud Loss}
 \label{sec:abl_loss}
 
@@ -2684,7 +2671,6 @@ point-cloud loss. Each setting was trained once and is scored at epoch 300 on 22
 \updtwo{A sharper weighting ($\alpha=300$) gives the highest F1, precision and recall, and a tolerance of 20\,mm is the
 weakest; a tolerance of 5 or 10\,mm performs the same. The differences are small (at most 0.025 F1), come from a
 single seed and a short schedule, and should be read as a screen rather than a final ranking.}
-
 
 
 \subsection{Mixed Masking}
