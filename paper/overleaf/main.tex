@@ -1253,7 +1253,7 @@ neighbor-induced reconstruction error in maize
 \upd{Figure~\ref{fig:rowsex} shows qualitative reconstructions under row
 occlusion.} \upd{While isolated control models generate spurious leaf structures
 corresponding to neighboring plants, row-fine-tuned models isolate target
-main plant geometry behind occluding foliage.} \upd{Figure~\ref{fig:row_reconstruction_quant} plots reconstruction error across
+main plant geometry behind occluding foliage.} \updtwo{The supplement galleries (Figs.~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize}) show the row-trained model on ten more plants per species.} \upd{Figure~\ref{fig:row_reconstruction_quant} plots reconstruction error across
 row orientation angles ($\theta$).} \upd{In maize rows, occlusion error peaks
 broadside ($\theta=0^\circ$, where leaf planes align along the row) and
 drops end-on ($\theta=90^\circ$).} \upd{In sorghum rows, plant headings are drawn
@@ -1263,7 +1263,7 @@ angles.}
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_rows_examples.pdf}
-  \caption{\updtwo{\textbf{Row occlusion reconstruction on held-out test plants.} Sorghum (left) and maize (right), each row seen broadside ($0^\circ$) and end-on ($90^\circ$). Columns: the row image the model reads (neighbors included), the center plant's true point cloud, and the point clouds written by the row-trained model (blue) and the isolated-trained control (vermillion), each over the truth in grey, with its Chamfer distance to the truth ($10^{-4}\,\mathrm{m}^2$). The six plants were selected for clarity among those where the row-trained model is in its best 35\% and the control in its worst 40\% at both yaws; Figs.~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize} show ten more plants per species spread over the whole error range.}}
+  \caption{\updtwo{\textbf{Row occlusion reconstruction on held-out test plants.} Sorghum (left) and maize (right); $0^\circ$ is broadside, $90^\circ$ end-on. Columns: the row image the model reads (neighbors included), the center plant's true point cloud, and the point cloud written by the row-trained model (blue) over the truth in grey, with its Chamfer distance to the truth ($10^{-4}\,\mathrm{m}^2$). The plants were selected for clarity among those where the row-trained model is in its best 35\% and the isolated-trained control in its worst 40\% at both yaws; Figs.~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize} show ten more plants per species, spread over the whole error range.}}
   \label{fig:rowsex}
 \end{figure*}
 
@@ -1283,23 +1283,22 @@ angles.}
 \subsection{Any-subset modality reconstruction and distillation}
 \label{sec:res-distill}\label{sec:exp-main}
 
-\begin{figure*}[t]
+\begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2any.pdf}
-  \caption{\upd{\textbf{Any source in, every stream out.} The distilled
-  generalist on one validation plant per species. Each row is given one stream
-  alone (framed in orange) and generates the other three; Chamfer against the
-  complete cloud is printed above each generated cloud, and the recipe is shown
-  as text (ground truth in green, generated in blue; the first six leaves, maize
-  with five of its seven leaf fields). The photograph, the depth frame and the
-  cloud each recover the recipe to within a few percent; the recipe alone does
-  not recover the cloud ($5.2$ and $13.6 \times 10^{-3}$), as in
-  Tab.~\ref{tab:main}.}}
-  \label{fig:any2any}
-\end{figure*}
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_maize.pdf}
+  \caption{\updtwo{\textbf{Any-to-all, maize: one image in, every stream out.} The distilled generalist is given only the image of a held-out test plant (left of the dashed line) and generates the point cloud, the depth image and the procedural parameters. Outputs are drawn over the ground truth in grey; the parameters as a stem-and-leaves schematic with height and leaf count (truth in brackets). Chamfer in $10^{-3}$ (test median 0.51). The plant is selected for clarity: among test plants seen within $25^\circ$ of the horizon, its Chamfer is among the lowest.}}
+  \label{fig:any2any-maize}\label{fig:any2any}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum.pdf}
+  \caption{\updtwo{\textbf{Any-to-all, sorghum: one image in, every stream out.} The distilled generalist is given only the image of a held-out test plant (left of the dashed line) and generates the point cloud, the depth image and the procedural parameters. Outputs are drawn over the ground truth in grey; the parameters as a stem-and-leaves schematic with height and leaf count (truth in brackets). Chamfer in $10^{-3}$ (test median 0.77). The plant is selected for clarity: among test plants seen within $25^\circ$ of the horizon, its Chamfer is among the lowest.}}
+  \label{fig:any2any-sorghum}
+\end{figure}
 
 \upd{Table~\ref{tab:main} (Appendix~\ref{app:tables}) reports cross-modal generation performance before and
-after teacher--student feature distillation, and Fig.~\ref{fig:any2any} shows
+after teacher--student feature distillation, and \updtwo{Figs.~\ref{fig:any2any-maize} and~\ref{fig:any2any-sorghum} show}
 the generalist's outputs on one plant per species.} \upd{Distillation from the
 full-modality teacher reduces mean cross-modal generation loss by 30.2\% in
 sorghum and 43.5\% in maize.}
@@ -2780,14 +2779,14 @@ in sorghum).}
 \begin{figure*}[p]
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_rows_more_sorghum.pdf}
-  \caption{\updtwo{\textbf{Sorghum rows, ten held-out test plants at evenly spaced percentiles of the row-trained error.} Each row gives the plant number and its percentile; broadside ($0^\circ$, left) and end-on ($90^\circ$, right); columns as in Fig.~\ref{fig:rowsex}: row image, truth, row-trained model (blue), isolated-trained control (vermillion), Chamfer in $10^{-4}\,\mathrm{m}^2$.}}
+  \caption{\updtwo{\textbf{Sorghum rows, ten held-out test plants at evenly spaced percentiles of the row-trained error.} Each row gives the plant number and its percentile; broadside ($0^\circ$, left) and end-on ($90^\circ$, right); columns as in Fig.~\ref{fig:rowsex}: row image, truth, row-trained model (blue) over the truth in grey, Chamfer in $10^{-4}\,\mathrm{m}^2$.}}
   \label{fig:supp-rows-sorghum}
 \end{figure*}
 
 \begin{figure*}[p]
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_rows_more_maize.pdf}
-  \caption{\updtwo{\textbf{Maize rows, ten held-out test plants at evenly spaced percentiles of the row-trained error.} Each row gives the plant number and its percentile; broadside ($0^\circ$, left) and end-on ($90^\circ$, right); columns as in Fig.~\ref{fig:rowsex}: row image, truth, row-trained model (blue), isolated-trained control (vermillion), Chamfer in $10^{-4}\,\mathrm{m}^2$.}}
+  \caption{\updtwo{\textbf{Maize rows, ten held-out test plants at evenly spaced percentiles of the row-trained error.} Each row gives the plant number and its percentile; broadside ($0^\circ$, left) and end-on ($90^\circ$, right); columns as in Fig.~\ref{fig:rowsex}: row image, truth, row-trained model (blue) over the truth in grey, Chamfer in $10^{-4}\,\mathrm{m}^2$.}}
   \label{fig:supp-rows-maize}
 \end{figure*}
 

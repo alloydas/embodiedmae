@@ -16,7 +16,7 @@ Selection, from the per-plant test reports of eval/eval_row.py (all three stream
 
   python figures/make_row_gallery_v2.py --dump          # CPU job: predictions -> <OUT>/row_gallery_dump.pkl
   python figures/make_row_gallery_v2.py --sheet         # contact sheet of the candidates (to pick by eye)
-  python figures/make_row_gallery_v2.py --render --main sorghum:A,B,C maize:D,E,F
+  python figures/make_row_gallery_v2.py --render --main sorghum:A@90,B@0,C@0 maize:D@90,E@0,F@0    (plant@yaw rows)
         -> paper/figs/fig_rows_examples.pdf, fig_rows_more_{sorghum,maize}.pdf (+ PNG), copied to paper/overleaf/Figures/
 """
 import sys, pathlib; R = pathlib.Path(__file__).resolve().parents[1]; sys.path[:0] = [str(R), str(R / 'figures'), str(R / 'eval')]
@@ -109,15 +109,15 @@ def dump(n_cand):
 
 
 # ====================================================================== drawing
-def draw_tiles(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True):
+def draw_tiles(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncols=4):
     """four tiles at (x, y) inches (lower left of the first): image, truth, row-trained, isolated-trained"""
     gt = it['gt']; lim = np.abs(gt[:, :2]).max() * 1.12
     cx = (gt[:, 0].max() + gt[:, 0].min()) / 2; cy = (gt[:, 1].max() + gt[:, 1].min()) / 2
-    axs = [fig.add_axes([(x + k * (s + gap)) / W, y / H, s / W, s / H]) for k in range(4)]
+    axs = [fig.add_axes([(x + k * (s + gap)) / W, y / H, s / W, s / H]) for k in range(ncols)]
     axs[0].imshow(it['img'])
     ps = 0.10 * (s / 0.72) ** 2
     axs[1].scatter(gt[:, 0], gt[:, 1], s=ps * 1.2, c='#3c3b38', lw=0, rasterized=True)
-    for ax, (tag, col) in zip(axs[2:], (('ft', BLUE), ('iso', ORANGE))):
+    for ax, (tag, col) in zip(axs[2:], (('ft', BLUE), ('iso', ORANGE))[:ncols - 2]):
         p, cd = it['out'][tag]
         ax.scatter(gt[:, 0], gt[:, 1], s=ps * 1.2, c=GREY, lw=0, rasterized=True)
         ax.scatter(p[:, 0], p[:, 1], s=ps, c=col, lw=0, rasterized=True)
@@ -138,47 +138,44 @@ import matplotlib.patheffects
 
 
 def render_main(D, picks):
-    """Fig. 9: sorghum left, maize right; three plants each, broadside and end-on."""
-    W = 6.875; s, g, gp = 0.70, 0.04, 0.12; lab = 0.44
-    half = lab + 4 * s + 3 * g
-    hdr = 0.50; rows_h = 6 * s + 3 * g + 2 * gp
-    H = hdr + rows_h + 0.02
+    """Fig. 9: sorghum left, maize right; three (plant, yaw) rows each; image, truth, row-trained prediction."""
+    W = 6.875; s, g, gy = 0.90, 0.05, 0.07; lab = 0.62; nc = 3
+    half = lab + nc * s + (nc - 1) * g
+    hdr = 0.48; n = max(len(v) for v in picks.values())
+    H = hdr + n * s + (n - 1) * gy + 0.02
     fig = plt.figure(figsize=(W, H))
     for c, sp in enumerate(('sorghum', 'maize')):
         x0 = c * (W - half)
-        fig.text((x0 + lab + (4 * s + 3 * g) / 2) / W, (H - 0.01) / H, sp.capitalize(), fontsize=FS, fontweight='bold', ha='center', va='top')
-        for k in range(4):
-            fig.text((x0 + lab + k * (s + g) + s / 2) / W, (H - 0.20) / H, HEAD[k], fontsize=FS, ha='center', va='top', color=HEAD_C[k], linespacing=0.95)
+        fig.text((x0 + lab + (nc * s + (nc - 1) * g) / 2) / W, (H - 0.01) / H, sp.capitalize(), fontsize=FS, fontweight='bold', ha='center', va='top')
+        for k in range(nc):
+            fig.text((x0 + lab + k * (s + g) + s / 2) / W, (H - 0.20) / H, HEAD[k].replace('\n', ' ').replace('- ', '-'), fontsize=FS,
+                     ha='center', va='top', color=HEAD_C[k], linespacing=0.95)
         y = H - hdr
-        for pl in picks[sp]:
-            for j, th in enumerate(THETAS):
-                y -= s
-                draw_tiles(fig, x0 + lab, y, s, D[sp]['items'][(pl, th)], g, W, H)
-                fig.text((x0 + lab - 0.05) / W, (y + s / 2) / H, f'{th}°', fontsize=FS, ha='right', va='center', color=MUTED)
-                if j == 0:
-                    fig.text((x0 + 0.08) / W, (y + g / 2) / H, f"plant {pl.split('_')[-1]}", fontsize=FS, rotation=90, ha='center', va='center')
-                y -= g if j == 0 else 0
-            y -= gp - 0
+        for pl, th in picks[sp]:
+            y -= s
+            draw_tiles(fig, x0 + lab, y, s, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
+            fig.text((x0 + lab - 0.06) / W, (y + s / 2) / H, f"plant\n{pl.split('_')[-1]}\n{th}°", fontsize=FS, ha='right', va='center', linespacing=1.1)
+            y -= gy
     return fig
 
 
 def render_more(D, sp):
-    """supplement: ten plants of one species, one per row; broadside on the left, end-on on the right"""
-    W = 6.875; s, g, gy, gg = 0.70, 0.035, 0.05, 0.16; lab = 0.42
-    block = 4 * s + 3 * g
-    hdr = 0.62; H = hdr + 10 * s + 9 * gy + 0.02
+    """supplement: ten plants of one species, one per row; broadside on the left, end-on on the right; image, truth, row-trained"""
+    W = 6.875; s, g, gy, gg = 0.73, 0.04, 0.05, 0.30; lab = 0.50; nc = 3
+    block = nc * s + (nc - 1) * g
+    hdr = 0.50; H = hdr + 10 * s + 9 * gy + 0.02
     x0 = (W - (lab + 2 * block + gg)) / 2
     fig = plt.figure(figsize=(W, H))
     for b, th in enumerate(THETAS):
         xb = x0 + lab + b * (block + gg)
         fig.text((xb + block / 2) / W, (H - 0.01) / H, 'Broadside (0°)' if th == 0 else 'End-on (90°)', fontsize=FS, fontweight='bold', ha='center', va='top')
-        for k in range(4):
-            fig.text((xb + k * (s + g) + s / 2) / W, (H - 0.22) / H, HEAD[k], fontsize=FS, ha='center', va='top', color=HEAD_C[k], linespacing=0.95)
+        for k in range(nc):
+            fig.text((xb + k * (s + g) + s / 2) / W, (H - 0.22) / H, HEAD[k].replace('\n', ' ').replace('- ', '-'), fontsize=FS, ha='center', va='top', color=HEAD_C[k])
     y = H - hdr
     for pl, q in D[sp]['more']:
         y -= s
         for b, th in enumerate(THETAS):
-            draw_tiles(fig, x0 + lab + b * (block + gg), y, s, D[sp]['items'][(pl, th)], g, W, H)
+            draw_tiles(fig, x0 + lab + b * (block + gg), y, s, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
         fig.text((x0 + lab - 0.06) / W, (y + s / 2) / H, f"{pl.split('_')[-1]}\n{q:.0f}th", fontsize=FS, ha='right', va='center', linespacing=1.05)
         y -= gy
     return fig
@@ -217,6 +214,6 @@ if __name__ == '__main__':
         D = pickle.load(open(OUT, 'rb'))
         if a.sheet: sheet(D)
         if a.render:
-            picks = {m.split(':')[0]: m.split(':')[1].split(',') for m in a.main}
+            picks = {m.split(':')[0]: [(q.rsplit('@', 1)[0], int(q.rsplit('@', 1)[1])) for q in m.split(':')[1].split(',')] for m in a.main}
             save(render_main(D, picks), 'fig_rows_examples')
             for sp in ('sorghum', 'maize'): save(render_more(D, sp), f'fig_rows_more_{sp}')

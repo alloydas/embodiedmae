@@ -13,3 +13,4 @@ The figures themselves come from `figures/make_fig12_assets.py` + `figures/make_
 `figures/make_e10_fig.py`, `figures/make_e10_height_fig.py` and `figures/make_e10_gallery.py` (E10).
 Table numbers quoted on the Figures 1 and 2 page follow the paper as of 2026-11-11 (the encoder comparison was
 Table 10 then; it is Table 11 since the E10 detail table was added).
+| CropCode Revised Figures (Fig. 2, Fig. 9 + supplement galleries, Figs. 11-12) | https://claude.ai/artifact/W2ZF6VXpK4sUGF9Ex3EixC | `paper_figs_page.html` | `fig2_stages.png`, `fig_rows_examples.png`, `fig_rows_more_{sorghum,maize}.png`, `fig_any2all_{maize,sorghum}.png` <- the PNGs of the same name in `paper/figs/` |
