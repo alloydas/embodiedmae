@@ -834,7 +834,7 @@ Sorghum is further from training in every respect: the scanned plants are 2.2--5
 
 We then fine-tune the row model on 75\% of the real plants of each species and score it on the remaining 25\%, which it never sees. The split is by plant, so both layouts of a plant fall on the same side (maize: 351 training, 39 validation and 130 test plants; sorghum: 19, 3 and 8). The real files supervise the center plant's cloud and its own depth image, rendered from all its points including those the neighbors hide, and, for maize, the plant token's height and leaf count; there is no image loss, because the photograph does not show the hidden parts of the plant. Starting from the row fine-tune, we train for 15 epochs at learning rate $2\times10^{-5}$ on one GPU (24 minutes for sorghum, about an hour for maize, evaluation included). On the held-out maize plants the Chamfer falls from 59.5 to 19.7 $\times10^{-4}$\,m$^2$, the median height error from 36\% to 1.6\%, and the share of stops with the leaf count within $\pm1$ rises from 45\% to 70\% (Tab.~\ref{tab:e10}, Fig.~\ref{fig:e10_real}). On the held-out sorghum plants the Chamfer falls from 2{,}113 to 79; with eight test plants this number is indicative only, and the written plants recover the stalk over the full plant height but few of the leaves (Fig.~\ref{fig:e10_real_sorghum}). A few hundred real maize plants, or 19 real sorghum plants, therefore suffice to close most of the gap between the generator and real plant geometry, while the representation and the procedural output stay unchanged.
 
-The gain holds across inputs, layouts and occlusion (Tab.~\ref{tab:e10_detail}). Every single stream improves: on maize the Chamfer from the image alone falls from 95 to 49, from depth from 77 to 44 and from the cloud from 75 to 47, and on sorghum from depth from 834 to 89; all three streams together remain best. Parallel rows stay easier than perpendicular ones (15.6 against 23.9 after fine-tuning), and across the four quartiles of occlusion the fine-tuned Chamfer stays between 18.5 and 21.6, so the remaining error does not come from the neighbors. Height shows the clearest change (Fig.~\ref{fig:e10_height}). The row fine-tune writes about 1.03\,m for every plant, so its error grows from 15\% inside the training range to 51\% above 2\,m. After fine-tuning the median error is 1.2--2.0\% for plants up to 2.0\,m and 5.9\% above it, where the recipe's height range ends.
+The gain holds across inputs, layouts and occlusion (Tab.~\ref{tab:e10_detail}). Every single stream improves: on maize the Chamfer from the image alone falls from 95 to 49, from depth from 77 to 44 and from the cloud from 75 to 47, and on sorghum from depth from 834 to 89; all three streams together remain best. Parallel rows stay easier than perpendicular ones (15.6 against 23.9 after fine-tuning), and across the four quartiles of occlusion the fine-tuned Chamfer stays between 18.5 and 21.6, so the remaining error does not come from the neighbors. Height shows the clearest change (Fig.~\ref{fig:e10_height}). The row fine-tune writes about 1.03\,m for every plant, so its error grows from 15\% inside the training range to 51\% above 2\,m. After fine-tuning the median error is 1.2--2.0\% for plants up to 2.0\,m and 5.9\% above it, where the recipe's height range ends. Appendix~\ref{sec:supp-e10} shows 20 more held-out plants, chosen across the range of results.
 
 \begin{table}[t]
   \centering\scriptsize
@@ -1470,6 +1470,25 @@ Every model is tested on all 2{,}250 test plants, one view each, with the occlud
 Mixed masking helps only on the synthetic scenes: F1@10 rises by 0.048 in maize and by 0.013 in sorghum (\cref{tab:mixed_scene}). On the rendered rows it gives no gain in either species ($-0.003$ in maize and $-0.004$ in sorghum).
 
 % =========================================================================
+\section{Real-Row Fine-Tuning Gallery (E10)}
+\label{sec:supp-e10}
+
+Figures~\ref{fig:supp-e10-maize} and~\ref{fig:supp-e10-sorghum} extend the real-row results of Sec.~\ref{sec:res-field} to 20 more held-out plants, none of which the real-row fine-tune saw. Each tile shows the image the model reads, the true center plant as the camera sees it, and the center plant written before fine-tuning on real plants (the row fine-tune, trained on synthetic rows only) and after it (the real-row fine-tune, trained on the other 75\% of the real plants). All three streams are in. Chamfer is in $10^{-4}$\,m$^2$. The maize tiles are chosen across the range of the fine-tuned model's results, at the 10th, 30th, 50th, 70th, 90th and 98th percentile of its Chamfer in each row layout, so the bottom tiles are among its worst cases. Every tile improves: the maize Chamfer goes from 20--195 before fine-tuning to 6--52 after, and the predicted height moves from about 1.0\,m for every plant to within a few centimeters of the true height (for example 1.52 against 1.52\,m and 1.88 against 1.85\,m). The worst maize tile after fine-tuning (Chamfer 52) also has the largest height error in the gallery, 1.23 against 1.30\,m. The sorghum tiles cover all eight held-out plants. Their Chamfer goes from 661--2{,}781 before to 52--122 after; the fine-tuned model recovers the stalk over the full height of plants 2.8--4.9\,m tall, but few of the leaves.
+
+\begin{figure*}[p]
+  \centering
+  \includegraphics[width=0.92\textwidth]{Figures/fig_e10_gallery_maize.png}
+  \caption{\textbf{Real maize rows, held-out plants (E10).} Left column: parallel rows; right column: perpendicular rows; from top to bottom the 10th, 30th, 50th, 70th, 90th and 98th percentile of the real-row fine-tune's Chamfer. In each tile: the image the model reads, the true center plant, and the center plant from the row fine-tune (synthetic rows) and from the real-row fine-tune (75\% of the real plants), with Chamfer ($10^{-4}$\,m$^2$) and height.}
+  \label{fig:supp-e10-maize}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_sorghum.png}
+  \caption{\textbf{Real sorghum rows, all eight held-out plants (E10).} The middle camera stop of each plant, layouts alternating; columns as in Fig.~\ref{fig:supp-e10-maize}. The image is the camera photograph, a tall strip framed to the whole plant. Sorghum has no height truth comparable to the recipe, so only Chamfer ($10^{-4}$\,m$^2$) is given.}
+  \label{fig:supp-e10-sorghum}
+\end{figure*}
+
 \section{Dataset Generation Details}
 \label{app:data}
 
