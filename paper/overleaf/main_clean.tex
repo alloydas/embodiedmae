@@ -464,6 +464,27 @@ Phenotypic trait representation quality is evaluated with linear ridge regressio
 \paragraph{Species developmental traits.}
 In sorghum, four core developmental traits have effective rank two due to generator allometry (height and leaf count are tightly coupled, $r = 0.994$). We therefore supplement sorghum trait probing with independent parameter axes varied by the generator, including leaf roll and leaf blade length. In maize, eleven largely independent morphological traits are evaluated directly (Sec.~\ref{sec:method-data}).
 
+\begin{table*}[t]
+  \centering\scriptsize
+  \setlength{\tabcolsep}{2.6pt}
+  \begin{tabular}{l ccc cc c cccc}
+    \toprule
+    & \multicolumn{5}{c}{Sorghum} & & \multicolumn{4}{c}{Maize} \\
+    \cmidrule(lr){2-6}\cmidrule(lr){8-11}
+    Frozen Encoder & Height & Leaf Cnt & Branch & Roll & Leaf Len & & Height & Leaf Angle & Curl & Stem Rad \\
+    \midrule
+    DINOv2 ViT-B/14 (RGB)~\cite{oquab2024dinov2} & 0.924 & 0.928 & 0.840 & 0.573 & 0.235 & & 0.561 & 0.816 & 0.072 & 0.588 \\
+    MultiMAE-B (RGB+D)~\cite{bachmann2022multimae} & 0.922 & 0.925 & 0.833 & 0.679 & 0.232 & & 0.570 & 0.783 & 0.069 & 0.442 \\
+    Point-MAE (PC)~\cite{pang2022pointmae} & 0.958 & 0.963 & 0.863 & 0.716 & 0.188 & & 0.509 & 0.863 & 0.199 & 0.426 \\
+    EmbodiedMAE-B (RGB+D+PC)~\cite{dong2025embodiedmae} & 0.976 & 0.979 & 0.871 & 0.765 & 0.265 & & 0.528 & 0.823 & 0.139 & 0.428 \\
+    \CropCode{} Headline (1{,}000 ep) & \textbf{0.983} & \textbf{0.988} & \textbf{0.912} & \textbf{0.798} & \textbf{0.371} & & \textbf{0.747} & \textbf{0.967} & \textbf{0.739} & \textbf{0.841} \\
+    \bottomrule
+  \end{tabular}
+  \caption{\textbf{Comparison against published pre-trained encoders (E8).}
+  Published self-supervised visual encoders are evaluated on identical held-out validation plants using mean-pooled features and the same ridge regression probe protocol. Every row is mean-pooled, including the headline model of each species at epoch 1{,}000. Values are validation $R^2$ (higher is better); bold marks the best value in each column.}
+  \label{tab:e8}\label{tab:baselines}
+\end{table*}
+
 \subsection{Regime I: single-view reconstruction of isolated plants}
 \label{sec:regime1}\label{sec:exp-regime1}
 
@@ -935,33 +956,7 @@ The gain holds across inputs, layouts and occlusion (Tab.~\ref{tab:e10_detail}).
 \subsection{Representation quality, scaling, and transfer}
 \label{sec:res-repr}\label{sec:exp-repr}
 
-\begin{table*}[t]
-  \centering\scriptsize
-  \setlength{\tabcolsep}{2.6pt}
-  \begin{tabular}{l ccc cc c cccc}
-    \toprule
-    & \multicolumn{5}{c}{Sorghum} & & \multicolumn{4}{c}{Maize} \\
-    \cmidrule(lr){2-6}\cmidrule(lr){8-11}
-    Frozen Encoder & Height & Leaf Cnt & Branch & Roll & Leaf Len & & Height & Leaf Angle & Curl & Stem Rad \\
-    \midrule
-    \multicolumn{11}{l}{\emph{Published Encoders (Released Weights) and a Supervised Reference}} \\
-    DINOv2 ViT-B/14 (RGB)~\cite{oquab2024dinov2} & 0.924 & 0.928 & 0.840 & 0.573 & 0.235 & & 0.561 & 0.816 & 0.072 & 0.588 \\
-    MultiMAE-B (RGB+D)~\cite{bachmann2022multimae} & 0.922 & 0.925 & 0.833 & 0.679 & 0.232 & & 0.570 & 0.783 & 0.069 & 0.442 \\
-    Point-MAE (PC)~\cite{pang2022pointmae} & 0.958 & 0.963 & 0.863 & 0.716 & 0.188 & & 0.509 & 0.863 & 0.199 & 0.426 \\
-    EmbodiedMAE-B (RGB+D+PC)~\cite{dong2025embodiedmae} & 0.976 & 0.979 & 0.871 & 0.765 & 0.265 & & 0.528 & 0.823 & 0.139 & 0.428 \\
-    Supervised from Scratch (Ours) & 0.973 & 0.978 & \textbf{0.924} & 0.634 & 0.271 & & \textbf{0.785} & 0.935 & 0.618 & \textbf{0.860} \\
-    \midrule
-    \multicolumn{11}{l}{\emph{\CropCode{} (Self-Supervised Pretraining, No Labels)}} \\
-    \CropCode{} PC Only & 0.906 & 0.909 & 0.801 & 0.444 & 0.107 & & 0.222 & 0.814 & 0.175 & 0.490 \\
-    \CropCode{} $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}$ & 0.979 & 0.983 & 0.903 & \textbf{0.809} & 0.337 & & 0.669 & 0.943 & 0.337 & 0.762 \\
-    \CropCode{} Four Streams & 0.965 & 0.968 & 0.888 & 0.779 & 0.288 & & 0.646 & 0.932 & 0.336 & 0.757 \\
-    \CropCode{} Headline (1{,}000 ep) & \textbf{0.983} & \textbf{0.988} & 0.912 & 0.798 & \textbf{0.371} & & 0.747 & \textbf{0.967} & \textbf{0.739} & 0.841 \\
-    \bottomrule
-  \end{tabular}
-  \caption{\textbf{Comparison against published pre-trained encoders (E8).}
-  Published self-supervised visual encoders are evaluated on identical held-out validation plants using mean-pooled features and the same ridge regression probe protocol. Every row is mean-pooled, including the headline model of each species at epoch 1{,}000. The top block holds the published encoders with their released weights and our architecture trained end to end on the trait labels; the bottom block holds \CropCode{} encoders pretrained without labels. Values are validation $R^2$ (higher is better); bold marks the best value in each column.}
-  \label{tab:e8}\label{tab:baselines}
-\end{table*}
+
 
 \begin{table*}[t]
   \centering\scriptsize
