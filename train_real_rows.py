@@ -83,7 +83,7 @@ model.pc_sinkhorn_points = int(cfg.get('pc_sinkhorn_points', 1024)); model.pc_si
 mask = float(cfg.get('mask_ratio', 0.8)); pc_w = float(cfg.get('pc_loss_weight', 1.0))
 run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_seed=a.split_seed, n_train=len(train), n_val=len(val),
                                        n_test=len(test), epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
-                                       supervised=['pc', 'depth', 'height', 'leafCount'], source_mask_ratio=mask))
+                                       supervised=['pc', 'depth'] + (['height', 'leafCount'] if a.recipe_weight > 0 else []), source_mask_ratio=mask))
 (run_dir / 'config.json').write_text(json.dumps(run_cfg, indent=1, default=str))
 
 train_ds = RealRowDataset(rows=train, with_targets=True, seed=1, species=a.species, rgb_gain=gain)
