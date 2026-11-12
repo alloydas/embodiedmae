@@ -17,7 +17,7 @@ import html, io, json, re
 import xml.etree.ElementTree as ET
 import numpy as np, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
-from _scene import Scene, png_file
+from _scene import Scene, png_file, text_size
 
 A = R / 'paper/figs/fig12_assets'; TILES = R / 'paper/overleaf/Figures/teaser'
 INK, MUTED, NAVY, BOXFILL, LOSS = '#1d221c', '#5f685c', '#2b3a67', '#eef1f7', '#c0392b'
@@ -166,113 +166,149 @@ def bars_png(kind, w, h):
 
 
 def figure2():
-    W, H = 7.0, 3.82
-    S = Scene(W, H, 'Fig 2 stages'); te = json.load(open(A / 'text.json'))
-    XL, XS1 = 0.42, 5.30                   # stage panels span x XL..XS1
-    bands = {1: (2.44, 1.18), 2: (1.27, 1.02), 3: (0.10, 1.02)}   # y, height
-    titles = {1: 'Stage 1: four-stream pretraining on single plants', 2: 'Stage 2: cross-modal distillation (any one stream)',
-              3: 'Stage 3: row fine-tuning under occlusion'}
-    for k, (y, h) in bands.items():
-        stroke, fill = STAGE[k]
-        S.rect(XL, y, XS1 - XL, h, stroke, lw=1.3, fill=fill, r=0.08)
-        S.rect(XL + 0.12, y + h - 0.075, 2.40, 0.15, stroke, lw=0.9, fill='#ffffff', r=0.04, z=0)
-        S.text(XL + 0.19, y + h + 0.0, titles[k], 5.6, color=INK, bold=True)
-    # warm start: Stage 2 (teacher and student) and Stage 3 both start from the Stage 1 model
-    S.arrow((XL, 3.00), (XL, 1.84), color=LOSS, lw=1.2, curve=0.20)
-    S.arrow((XL, 2.80), (XL, 0.62), color=LOSS, lw=1.2, curve=0.10)
-    S.text(0.07, 1.75, 'warm start from Stage 1', 4.6, color=LOSS, rot=90, ha='center', bold=True)
-    t, g = 0.36, 0.03
+    """Fig. 2 at the paper's text width (6.875 in, drawn at 100 %), every label 9 pt. Real tiles throughout: Stage 1 and
+    Stage 2 use one held-out sorghum test plant (Sorghum_10036, view 00), Stage 3 one held-out test row (Sorghum_10113,
+    broadside). Data: figures/make_fig12_dump.py. The procedural parameters are drawn as the stem-and-leaves schematic
+    (insertion height, length, width and side of each leaf), not as text. Numbers: sorghum test means of Table
+    tab:anysubset (photograph to cloud, x1e-3) and tab:rows (all streams, x1e-4 m^2)."""
+    import _fig12_kit as K
+    from _scene import cloud_frame
+    F = 9.0                                                     # the one type size
+    D = K.load_dump(); d = D['stage']['sorghum']['Sorghum_10036_00']; r = D['rows']['sorghum']['Sorghum_10113']
+    W, H = 6.875, 4.42
+    S = Scene(W, H, 'Fig 2 stages')
+    V = dict(elev=10.0, azim=20.0)
+    fr = cloud_frame(d['pc'], **V); frr = cloud_frame(r['gt_pc'], **V)
+    hidden_c = '#d3d6cf'
 
-    def grid(x, y, names):
-        cols = [CS['rgb'], CS['depth'], CS['pc'], CS['text']]
-        for i, nm in enumerate(names):
-            xx, yy = x + (i % 2) * (t + g), y + (1 - i // 2) * (t + g)
-            if nm.endswith('.png'): S.image(xx, yy, t, t, png_file(A / nm), nm)
-            else:
-                S.rect(xx, yy, t, t, cols[i], lw=0.6, fill='#ffffff', z=0)
-                S.text(xx + 0.02, yy + t - 0.02, '\n'.join(l.replace('stem ', '')[:21] for l in nm.split('\n')), 2.4, color=cols[i], va='top', mono=True, ls=1.15)
-            S.rect(xx, yy, t, t, cols[i], lw=0.6)
-    # ---- Stage 1
-    y1 = 2.66; gw = 2 * t + g
-    grid(0.58, y1, ['s1_rgb.png', 's1_depth.png', 's1_pc.png', '\n'.join(te['recipe_true'][:4])])
-    S.text(0.58 + gw / 2, y1 + gw + 0.05, 'four streams', 4.6, ha='center', bold=True)
-    S.arrow((0.58 + gw + 0.03, y1 + gw / 2), (1.55 - 0.03, y1 + gw / 2))
-    v = te['visible']
-    grid(1.55, y1, ['s1_rgb_masked.png', 's1_depth_masked.png', 's1_pc_masked.png', '(hidden)'])
-    S.text(1.55 + gw / 2, y1 + gw + 0.05, '80 % of tokens hidden', 4.6, ha='center', bold=True)
-    S.text(1.55 + gw / 2, y1 - 0.02, f"visible tokens {v['rgb']} / {v['depth']} / {v['pc']} / {v['text']}", 3.4, color=MUTED, ha='center', va='top')
-    S.arrow((1.55 + gw + 0.03, y1 + gw / 2), (2.52 - 0.03, y1 + gw / 2))
-    S.rect(2.52, y1 + 0.06, 0.62, 0.63, NAVY, lw=0.9, fill='#d9e2f3', r=0.05)
-    S.text(2.83, y1 + gw / 2, 'shared\nViT-B\nencoder', 5, color=NAVY, ha='center', bold=True)
-    S.arrow((3.17, y1 + gw / 2), (3.31, y1 + gw / 2))
-    for i, (nm, c) in enumerate((('image', CS['rgb']), ('depth', CS['depth']), ('cloud', CS['pc']), ('parameters', CS['text']))):
-        S.rect(3.34, y1 + 0.58 - i * 0.18, 0.52, 0.14, c, lw=0.6, fill='#ffffff', r=0.03, z=0)
-        S.text(3.60, y1 + 0.65 - i * 0.18, f'{nm} head', 3.6, color=c, ha='center')
-    S.arrow((3.89, y1 + gw / 2), (4.03, y1 + gw / 2))
-    grid(4.06, y1, ['s1_rec_rgb.png', 's1_rec_depth.png', 's1_rec_pc.png', '\n'.join(te['recipe_rec'][:4])])
-    S.text(4.06 + gw / 2, y1 + gw + 0.05, 'reconstruction', 4.6, ha='center', bold=True)
-    S.arrow((4.06 + gw / 2, y1 - 0.10), (0.58 + gw / 2, y1 - 0.10), color=LOSS, lw=0.8, dash=True)
-    S.text(2.82, y1 - 0.13, 'losses: image and depth MSE and parameter Smooth-L1 on hidden tokens; QAL + Sinkhorn on the whole cloud',
-           3.6, color=LOSS, ha='center', va='top')
-    # ---- Stage 2
-    y2 = 1.36
-    S.rect(0.58, y2 + 0.04, 1.18, 0.70, '#888888', lw=0.8, fill='#ffffff', r=0.05)
-    S.text(1.17, y2 + 0.62, '❄ teacher (frozen)', 4.8, ha='center', bold=True)
-    S.text(1.17, y2 + 0.38, 'reads all four\nstreams', 3.9, color=MUTED, ha='center')
-    for i, c in enumerate(CS.values()):
-        S.rect(0.68 + i * 0.25, y2 + 0.10, 0.2, 0.08, c, lw=0.4, fill=c, r=0.01, z=0)
-    S.rect(2.10, y2 + 0.04, 1.18, 0.70, NAVY, lw=0.9, fill='#ffffff', r=0.05)
-    S.text(2.69, y2 + 0.62, 'student', 4.8, color=NAVY, ha='center', bold=True)
-    S.text(2.69, y2 + 0.42, 'reads one stream,\nthe rest hidden', 3.9, color=MUTED, ha='center')
-    S.image(2.42, y2 + 0.08, 0.2, 0.2, png_file(A / 's1_rgb.png'), 'student input'); S.rect(2.42, y2 + 0.08, 0.2, 0.2, CS['rgb'], lw=0.5)
-    S.text(2.66, y2 + 0.18, 'e.g. the image', 3.7, color=CS['rgb'])
-    S.arrow((1.79, y2 + 0.44), (2.07, y2 + 0.44), color=LOSS, lw=0.8, dash=True)
-    S.text(1.93, y2 + 0.50, 'features\n+ latent', 3.5, color=LOSS, ha='center', va='bottom', ls=1.05)
-    S.arrow((3.31, y2 + 0.39), (3.50, y2 + 0.39))
-    S.image(3.52, y2 + 0.04, 0.72, 0.72, png_file(A / 's2_gen_pc.png'), 'cloud from image'); S.rect(3.52, y2 + 0.04, 0.72, 0.72, CS['pc'], lw=0.6)
-    S.text(3.88, y2 + 0.01, 'cloud from the image alone', 3.5, color=MUTED, ha='center', va='top')
-    S.image(4.30, y2 + 0.02, 0.95, 0.76, bars_png('distill', 0.95, 0.76), 'Table 6')
-    # ---- Stage 3
-    y3 = 0.19
-    for i, (nm, c) in enumerate((('s_rgb', CS['rgb']), ('s_depth', CS['depth']), ('s_pc', CS['pc']))):
-        S.image(0.58 + i * 0.41, y3 + 0.18, 0.37, 0.37, png_file(TILES / f'{nm}.png'), nm); S.rect(0.58 + i * 0.41, y3 + 0.18, 0.37, 0.37, c, lw=0.6)
-    S.text(1.17, y3 + 0.63, 'a crop row (three streams)', 4.6, ha='center', bold=True)
-    S.text(1.17, y3 + 0.13, 'nothing marks the center plant', 3.6, color=MUTED, ha='center', va='top')
-    S.arrow((1.81, y3 + 0.37), (2.07, y3 + 0.37))
-    S.rect(2.10, y3 + 0.05, 1.18, 0.66, NAVY, lw=0.9, fill='#ffffff', r=0.05)
-    S.text(2.69, y3 + 0.52, 'row fine-tune', 4.8, color=NAVY, ha='center', bold=True)
-    S.text(2.69, y3 + 0.28, 'loss against the\ncenter plant alone', 3.9, color=MUTED, ha='center')
-    S.arrow((3.31, y3 + 0.37), (3.50, y3 + 0.37))
-    S.image(3.52, y3 + 0.02, 0.72, 0.72, png_file(TILES / 's_gen.png'), 'center plant'); S.rect(3.52, y3 + 0.02, 0.72, 0.72, CS['pc'], lw=0.6)
-    S.text(3.88, y3 - 0.01, 'the center plant, written out', 3.5, color=MUTED, ha='center', va='top')
-    S.image(4.30, y3 + 0.0, 0.95, 0.76, bars_png('rows', 0.95, 0.76), 'Table 5')
-    # ---- zoom-in on the network
-    XZ, WZ = 5.42, 1.52
-    S.rect(XZ, 0.10, WZ, 3.52, '#8a8a8a', lw=1.6, fill='#f4f4f4', r=0.1)
-    S.text(XZ + WZ / 2, 3.47, 'Inside CropCode', 6, ha='center', bold=True)
-    rows = [('image: 16 px patches → 196 tokens', CS['rgb']), ('depth: 16 px patches → 196 tokens', CS['depth']),
-            ('cloud: FPS + kNN groups,\nPointNet → 196 tokens', CS['pc']), ('parameters: 1 plant + K leaf\ntokens (character embedding)', CS['text'])]
-    yy = 3.28
-    for s_, c in rows:
-        hh = 0.27 if '\n' in s_ else 0.17
-        S.rect(XZ + 0.08, yy - hh, WZ - 0.16, hh, c, lw=0.6, fill='#ffffff', r=0.03, z=0)
-        S.text(XZ + 0.13, yy - hh / 2, s_, 3.8, color=c, ls=1.1); yy -= hh + 0.05
-    S.text(XZ + WZ / 2, yy - 0.02, '+ position and stream embeddings', 3.7, color=MUTED, ha='center', va='top'); yy -= 0.24
-    S.text(XZ + 0.10, yy, 'Dirichlet split of the visible budget', 3.9, va='top', bold=True); yy -= 0.17
-    x = XZ + 0.10
-    for frac, c in zip((0.35, 0.15, 0.30, 0.20), CS.values()):
-        S.rect(x, yy - 0.10, (WZ - 0.20) * frac, 0.09, c, lw=0.3, fill=c, r=0.005, z=0); x += (WZ - 0.20) * frac
-    S.text(XZ + WZ / 2, yy - 0.14, 'one draw per batch; every stream\nkeeps at least 25 % hidden', 3.4, color=MUTED, ha='center', va='top', ls=1.1)
-    yy -= 0.44
-    for s_, f, hh in (('ViT-B encoder: 12 blocks, 768-d,\n[CLS] + visible tokens only', '#d9e2f3', 0.30),
-                      ('decoder: 8 blocks, 512-d, mask\ntokens back at their positions', '#fbe3c4', 0.30)):
-        S.rect(XZ + 0.08, yy - hh, WZ - 0.16, hh, NAVY, lw=0.6, fill=f, r=0.03, z=0)
-        S.text(XZ + WZ / 2, yy - hh / 2, s_, 3.7, color=NAVY, ha='center', ls=1.1); yy -= hh + 0.09
-        S.arrow((XZ + WZ / 2, yy + 0.085), (XZ + WZ / 2, yy + 0.005), color=NAVY, lw=0.5)
-    heads = [('patch pixels', CS['rgb']), ('patch depth', CS['depth']), ('folding → 8,192 pts', CS['pc']), ('9 / 14 floats per token', CS['text'])]
-    for i, (s_, c) in enumerate(heads):
-        S.rect(XZ + 0.08 + (i % 2) * 0.69, yy - 0.17 - (i // 2) * 0.21, 0.66, 0.17, c, lw=0.6, fill='#ffffff', r=0.03, z=0)
-        S.text(XZ + 0.41 + (i % 2) * 0.69, yy - 0.085 - (i // 2) * 0.21, s_, 3.4, color=c, ha='center')
+    def glyph_png(rec, side, vis=None):
+        """the parameter schematic; vis: per-token visibility (token 0 = plant, 1.. = leaves): hidden leaves light grey"""
+        fig = plt.figure(figsize=(side, side), dpi=600); ax = fig.add_axes([0.05, 0.05, 0.9, 0.9])
+        if vis is not None:
+            K.glyph(ax, 'sorghum', rec, hidden_c, stem=hidden_c, lw_scale=0.55)
+            keep = dict(rec, leaves=[l for i, l in enumerate(rec['leaves']) if vis[1 + i]])
+            if keep['leaves'] or vis[0]: K.glyph(ax, 'sorghum', keep, CS['text'], stem='#4a3b2a' if vis[0] else hidden_c, lw_scale=0.55)
+        else:
+            K.glyph(ax, 'sorghum', rec, CS['text'], lw_scale=0.55)
+        Hh = rec['height']; ax.set_xlim(-0.55 * Hh, 0.55 * Hh); ax.set_ylim(-0.02 * Hh, 1.08 * Hh); ax.set_aspect('equal'); ax.set_axis_off()
+        return K.png_fig(fig, 600)
+
+    def pred_depth(pn):
+        z = pn * (d['depth'].max() - d['depth'].min()) + d['depth'].min(); z = z.copy(); z[pn < 0.05] = 0; return z
+
+    def grid(x, y, t, tiles, g=0.03):
+        """2 x 2 tiles: image, depth image / point cloud, parameters; each (png, colour, name)"""
+        for i, (png, c, nm) in enumerate(tiles):
+            K.tile(S, x + (i % 2) * (t + g), y + (1 - i // 2) * (t + g), t, png, c, lw=0.8, name=nm)
+        return 2 * t + g
+
+    # ---------------------------------------------------------------- stage panels
+    XL, XR = 0.40, 4.98
+    bands = {1: (2.72, 1.56), 2: (1.40, 1.16), 3: (0.04, 1.20)}
+    titles = {1: 'Stage 1: masked pretraining', 2: 'Stage 2: cross-modal distillation', 3: 'Stage 3: row fine-tuning'}
+    for k, (y, h) in bands.items():
+        stroke, fill = K.STAGE[k]
+        S.rect(XL, y, XR - XL, h, stroke, lw=1.2, fill=fill, r=0.09)
+        tw = text_size(titles[k], F, bold=True)[0] + 0.18
+        S.rect(XL + 0.14, y + h - 0.11, tw, 0.22, stroke, lw=0.9, fill='#ffffff', r=0.05, z=0)
+        S.text(XL + 0.23, y + h, titles[k], F, bold=True)
+    # warm start: Stages 2 and 3 begin from the Stage 1 weights
+    S.arrow((XL, 3.40), (XL, 2.00), color=LOSS, lw=1.1, curve=0.22)
+    S.arrow((XL, 3.20), (XL, 0.66), color=LOSS, lw=1.1, curve=0.11)
+    S.text(0.10, 2.00, 'warm start', F, color=LOSS, rot=90, ha='center', bold=True)
+
+    # ---------------------------------------------------------------- Stage 1
+    t, y1 = 0.40, 3.03
+    full = [(K.tile_img(d['rgb']), CS['rgb'], 'image'), (K.tile_depth(d['depth']), CS['depth'], 'depth image'),
+            (K.tile_cloud(d['pc'], fr, t, s=0.35, **V), CS['pc'], 'point cloud'), (glyph_png(d['recipe_true'], t), CS['text'], 'parameters')]
+    gw = grid(0.52, y1, t, full)
+    vis_t = [m < 0.5 for m in d['mask']['text']]
+    masked = [(K.tile_img(K.masked(d['rgb'], d['mask']['rgb'])), CS['rgb'], 'image masked'),
+              (K.tile_img(K.masked(K.depth_rgb(d['depth']), d['mask']['depth'])), CS['depth'], 'depth masked'),
+              (K.tile_masked_cloud(d['pc'], d['pc_centers'], d['mask']['pc'], fr, t, s=0.35, **V), CS['pc'], 'cloud masked'),
+              (glyph_png(d['recipe_true'], t, vis_t), CS['text'], 'parameters masked')]
+    grid(1.55, y1, t, masked)
+    rec = [(K.tile_img(d['rec']['rgb']), CS['rgb'], 'image output'), (K.tile_depth(pred_depth(d['rec']['depth'])), CS['depth'], 'depth output'),
+           (K.tile_cloud(d['rec']['pc'], fr, t, s=0.35, **V), CS['pc'], 'cloud output'), (glyph_png(d['rec']['recipe'], t), CS['text'], 'parameters output')]
+    grid(4.06, y1, t, rec)
+    yl = y1 + gw + 0.10
+    S.text(0.52 + gw / 2, yl, 'Input', F, ha='center', va='bottom', bold=True)
+    S.text(1.55 + gw / 2, yl, '80 % hidden', F, ha='center', va='bottom', bold=True)
+    S.text(4.06 + gw / 2, yl, 'Output', F, ha='center', va='bottom', bold=True)
+    S.arrow((0.52 + gw + 0.03, y1 + gw / 2), (1.55 - 0.03, y1 + gw / 2))
+    S.arrow((1.55 + gw + 0.03, y1 + gw / 2), (2.62 - 0.03, y1 + gw / 2))
+    K.model(S, 2.62, y1, 1.28, gw, size=F, names=('Encoder', 'Decoder'))
+    K.icon(S, 'fire', 2.62 + 0.66, y1 + gw - 0.05, 0.17)
+    S.arrow((2.62 + 1.28 + 0.03, y1 + gw / 2), (4.06 - 0.03, y1 + gw / 2))
+    S.arrow((4.06 + gw / 2, y1 - 0.08), (0.52 + gw / 2, y1 - 0.08), color=LOSS, lw=0.9, dash=True)
+    S.text(2.69, y1 - 0.13, 'loss on the hidden tokens', F, color=LOSS, ha='center', va='top')
+
+    # ---------------------------------------------------------------- Stage 2
+    ts, y2 = 0.26, 1.62
+    S.rect(0.52, y2 - 0.07, 1.25, 0.72, '#888888', lw=0.9, fill='#ffffff', r=0.05)
+    K.icon(S, 'snow', 0.68, y2 + 0.49, 0.17)
+    S.text(0.80, y2 + 0.49, 'Teacher', F, bold=True)
+    for i, (png, c, nm) in enumerate(full):
+        K.tile(S, 0.58 + i * (ts + 0.04), y2, ts, png, c, lw=0.6, name=f'teacher {nm}')
+    S.arrow((1.80, y2 + 0.26), (2.27, y2 + 0.26), color=LOSS, lw=0.9, dash=True)
+    S.text(2.035, y2 + 0.31, 'features', F, color=LOSS, ha='center', va='bottom')
+    S.rect(2.30, y2 - 0.07, 1.25, 0.72, NAVY, lw=1.0, fill='#ffffff', r=0.05)
+    K.icon(S, 'fire', 2.46, y2 + 0.49, 0.17)
+    S.text(2.58, y2 + 0.49, 'Student', F, color=NAVY, bold=True)
+    K.tile(S, 2.36, y2, ts, full[0][0], CS['rgb'], lw=0.9, name='student image')
+    for i, c in enumerate((CS['depth'], CS['pc'], CS['text'])):
+        K.tile(S, 2.36 + (i + 1) * (ts + 0.04), y2, ts, K.tile_hidden(c), c, lw=0.6, dash=True, name=f'student hidden {i}')
+    S.arrow((3.58, y2 + 0.29), (3.72, y2 + 0.29))
+    to = 0.58; xo = (3.75, 4.37)
+    for x, key, lab, c in ((xo[0], 'rgb:before', 'before', MUTED), (xo[1], 'rgb:after', 'after', NAVY)):
+        K.tile(S, x, y2 + 0.02, to, K.tile_cloud(d['one'][key]['pc'], fr, to, s=0.4, **V), CS['pc'] if lab == 'after' else MUTED,
+               lw=0.8, dash=lab == 'before', name=f'stage 2 {lab}')
+        S.text(x + to / 2, y2 + 0.02 + to + 0.05, lab, F, color=c, ha='center', va='bottom', bold=lab == 'after')
+    S.text((xo[0] + xo[1] + to) / 2, y2 - 0.04, 'Chamfer 2.27 → 0.88', F, ha='center', va='top')
+
+    # ---------------------------------------------------------------- Stage 3
+    tr, y3 = 0.40, 0.44
+    for i, (png, c, nm) in enumerate(((K.tile_rgba(r['rgba'], r['gain']), CS['rgb'], 'row image'), (K.tile_depth(r['depth448']), CS['depth'], 'row depth'),
+                                      (K.tile_cloud(r['scene'], cloud_frame(r['scene'], **V), tr, s=0.18, **V), CS['pc'], 'row cloud'))):
+        K.tile(S, 0.52 + i * (tr + 0.04), y3, tr, png, c, lw=0.8, name=nm)
+    S.text(0.52 + (3 * tr + 0.08) / 2, y3 + tr + 0.08, 'Crop row', F, ha='center', va='bottom', bold=True)
+    S.arrow((1.85, y3 + tr / 2), (2.20, y3 + tr / 2))
+    K.model(S, 2.23, y3 - 0.02, 1.20, tr + 0.04, size=F, names=('Enc', 'Dec'))
+    K.icon(S, 'fire', 2.23 + 0.62, y3 + tr - 0.03, 0.17)
+    S.text(2.83, y3 - 0.09, 'loss: center plant only', F, color=LOSS, ha='center', va='top')
+    S.arrow((3.46, y3 + tr / 2), (3.72, y3 + tr / 2))
+    for x, key, lab, c in ((xo[0], 'head:all', 'before', MUTED), (xo[1], 'ft:all', 'after', NAVY)):
+        K.tile(S, x, y3 - 0.06, to, K.tile_cloud(r['pred'][key]['pc'], frr, to, s=0.4, **V), CS['pc'] if lab == 'after' else MUTED,
+               lw=0.8, dash=lab == 'before', name=f'stage 3 {lab}')
+        S.text(x + to / 2, y3 - 0.06 + to + 0.05, lab, F, color=c, ha='center', va='bottom', bold=lab == 'after')
+    S.text((xo[0] + xo[1] + to) / 2, y3 - 0.12, 'Chamfer 230 → 31', F, ha='center', va='top')
+
+    # ---------------------------------------------------------------- Inside CropCode
+    XZ, WZ = 5.10, W - 0.02 - 5.10
+    S.rect(XZ, 0.04, WZ, 4.24, '#8a8a8a', lw=1.3, fill='#f4f4f2', r=0.09)
+    S.text(XZ + WZ / 2, 4.06, 'Inside CropCode', F, ha='center', bold=True)
+    a, gp = 0.12, 0.035
+    for i, (nm, c, hid) in enumerate((('Image  196', CS['rgb'], (1, 3)), ('Depth  196', CS['depth'], (0, 2, 3)),
+                                      ('Cloud  196', CS['pc'], (2,)), ('Params  1+K', CS['text'], (1, 2)))):
+        yy = 3.65 - i * 0.30
+        K.tok_row(S, XZ + 0.14, yy, 4, a=a, gap=gp, color=c, hidden=hid, lw=0.6)
+        S.text(XZ + 0.14 + 4 * a + 3 * gp + 0.10, yy + a / 2, nm, F, color=c, va='center', bold=True)
+    S.text(XZ + 0.14, 2.52, 'tokens (hollow = hidden)', F, color=MUTED, va='center')
+    S.text(XZ + 0.14, 2.20, 'Dirichlet split', F, va='center', bold=True)
+    x = XZ + 0.14; tot = sum(d['visible'].values()); bw = WZ - 0.28
+    for kk in ('rgb', 'depth', 'pc', 'text'):
+        w_ = bw * d['visible'][kk] / tot; S.rect(x, 1.92, w_, 0.13, CS[kk], lw=0.3, fill=CS[kk], r=0.01, z=0); x += w_
+    S.text(XZ + 0.14, 1.76, 'of the visible tokens', F, color=MUTED, va='center')
+    for (lab, sub, fill, y0) in (('Encoder', '12 blocks', K.ENC_FILL, 1.06), ('Decoder', '8 blocks', K.DEC_FILL, 0.50)):
+        S.rect(XZ + 0.14, y0, WZ - 0.28, 0.42, NAVY, lw=0.8, fill=fill, r=0.04)
+        S.text(XZ + WZ / 2, y0 + 0.21, f'{lab}, {sub}', F, color=NAVY, ha='center', bold=True)
+    S.arrow((XZ + WZ / 2, 1.62), (XZ + WZ / 2, 1.49), color=NAVY, lw=0.8)
+    S.arrow((XZ + WZ / 2, 1.05), (XZ + WZ / 2, 0.93), color=NAVY, lw=0.8)
+    for i, (lab, c) in enumerate((('pixels', CS['rgb']), ('depth', CS['depth']), ('points', CS['pc']), ('params', CS['text']))):
+        wq = (WZ - 0.28 - 0.09) / 4; xx = XZ + 0.14 + i * (wq + 0.03)
+        S.rect(xx, 0.13, wq, 0.10, c, lw=0.5, fill=c, r=0.02, z=0)
+    S.arrow((XZ + WZ / 2, 0.49), (XZ + WZ / 2, 0.42), color=NAVY, lw=0.8)
+    S.text(XZ + WZ / 2, 0.32, 'one head per stream', F, color=NAVY, ha='center')
     return S
 
 
