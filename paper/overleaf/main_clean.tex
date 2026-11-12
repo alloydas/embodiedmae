@@ -230,9 +230,8 @@ In this section, we introduce \method{}, a unified multimodal masked-autoencoder
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_architecture.pdf}
-  \caption{\textbf{\method{} framework overview.} (a) \textbf{Four-stream
-  pretraining}: Tokenized streams for RGB images, metric depth frames, 3D point clouds, and continuous procedural parameters enter a shared ViT encoder under a dynamic Dirichlet masking budget. Modality-specific decoder heads reconstruct all target streams. During pretraining, procedural parameters act as both masked encoder input and decoder target. (b) \textbf{Teacher--student distillation}: A frozen full-modality teacher model supervises single-sensor and dual-sensor student models, transferring privileged multi-sensor latents to single-forward-pass field models.}
+  \resizebox{\linewidth}{!}{\input{Figures/fig2_stages_tikz}}
+  \caption{\textbf{\method{} in three training stages.} Stage~1: the four streams of a plant (image, depth image, point cloud, procedural parameters) are tokenized, 80\% of the tokens are hidden under a Dirichlet split across streams, and a shared ViT encoder with one decoder head per stream reconstructs every stream. Image, depth and parameter losses are taken on the hidden tokens; the point-cloud loss (QAL plus Sinkhorn) on the whole cloud. Stage~2: a frozen teacher that reads all four streams passes its decoder features and latent to a student that reads one stream, so that any single sensor reconstructs all four; the bars give single-stream point-cloud Chamfer before and after distillation (Table~\ref{tab:anysubset}). Stage~3: fine-tuning on crop rows, with the loss taken against the center plant alone; the bars give Chamfer on rows for the zero-shot, isolated-trained and row fine-tuned models (Table~\ref{tab:rows}). Stages~2 and~3 start from the Stage~1 weights. Right: the tokenizers, masking, encoder, decoder and output heads. Examples: one held-out sorghum test plant and row.}
   \label{fig:arch}
 \end{figure*}
 

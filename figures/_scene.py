@@ -251,6 +251,106 @@ class Scene:
         pathlib.Path(path).write_text(xml, encoding='utf-8')
         return len(cells)
 
+    # ---- renderer 3: TikZ (native boxes, text and arrows; images and plots as PNG files)
+    def render_tikz(self, tex_path, img_dir, img_prefix, dpi=600):
+        """Writes tex_path (a tikzpicture of W x H inches) and the PNGs it includes to img_dir; in the .tex they are
+        referenced as <img_prefix>/<name>.png (the path as seen from the main .tex file). Needs \\usetikzlibrary{arrows.meta}.
+        Coordinates are the scene's inches (y up), so the picture is exactly W x H inches at 100 %."""
+        W, H = self.W, self.H
+        img_dir = pathlib.Path(img_dir); img_dir.mkdir(parents=True, exist_ok=True)
+        cols, used, body = {}, set(), []
+
+        def col(c):
+            if c is None or c == 'none': return None
+            h = matplotlib.colors.to_hex(c).lstrip('#').upper()
+            cols[h] = f'c{h}'; return f'c{h}'
+
+        def esc(s):
+            out = []
+            for ch in s:
+                out.append({'%': r'\%', '&': r'\&', '#': r'\#', '_': r'\_', '$': r'\$', '{': r'\{', '}': r'\}', '~': r'\textasciitilde{}',
+                            '^': r'\textasciicircum{}', '\\': r'\textbackslash{}', '[': '{[}', ']': '{]}', '→': r'$\rightarrow$', '←': r'$\leftarrow$',
+                            '×': r'$\times$', '²': r'\textsuperscript{2}', '°': r'$^\circ$', '…': r'\dots{}', '≈': r'$\approx$',
+                            '⁻': r'\textsuperscript{$-$}', '⁴': r'\textsuperscript{4}', '³': r'\textsuperscript{3}', '–': '--', '—': '---',
+                            '❄': r'\raisebox{-0.12em}{\includegraphics[height=0.95em]{' + img_prefix + '/icon_snow.png}}'}.get(ch, ch))
+            return ''.join(out)
+        if any('❄' in o['s'] for o in self.ops if o['kind'] == 'text'):
+            (img_dir / 'icon_snow.png').write_bytes(png_icon('snow'))
+
+        def pt(v): return f'{v:.3f}pt'
+        def xy(p): return f'({p[0]:.4f},{p[1]:.4f})'
+
+        def head(ms):                                  # matplotlib '-|>': head length 0.4, half-width 0.2, x mutation_scale (pt)
+            return f'-{{Triangle[length={0.4 * ms:.2f}pt,width={0.4 * ms:.2f}pt]}}'
+
+        def dash(o):
+            return f", dash pattern=on {3 * o['lw']:.2f}pt off {2 * o['lw']:.2f}pt" if o.get('dash') else ''
+
+        def shape(o):
+            st = col(o['stroke']); fl = col(o['fill'])
+            opt = f"draw={st}, line width={pt(o['lw'])}" + (f', fill={fl}' if fl else '') + dash(o)
+            if o['kind'] == 'rect':
+                r = min(o['r'], o['w'] / 2, o['h'] / 2)
+                body.append(f"\\draw[{opt}, rounded corners={r:.4f}in] {xy((o['x'], o['y']))} rectangle {xy((o['x'] + o['w'], o['y'] + o['h']))};")
+            elif o['kind'] == 'poly':
+                body.append(f"\\draw[{opt}, line join=round] " + ' -- '.join(xy(p) for p in o['pts']) + ' -- cycle;')
+            else:
+                body.append(f"\\draw[{opt}] {xy((o['cx'], o['cy']))} ellipse [x radius={o['rx']:.4f}, y radius={o['ry']:.4f}];")
+
+        def image(o, png):
+            base = ''.join(ch if ch.isalnum() else '_' for ch in o.get('name', 'img'))[:40] or 'img'
+            name, k = base, 1
+            while name in used: k += 1; name = f'{base}_{k}'
+            used.add(name); (img_dir / f'{name}.png').write_bytes(png)
+            body.append(f"\\node[anchor=south west, inner sep=0] at {xy((o['x'], o['y']))} "
+                        f"{{\\includegraphics[width={o['w']:.4f}in, height={o['h']:.4f}in]{{{img_prefix}/{name}.png}}}};")
+
+        SH = ('rect', 'poly', 'ellipse')
+        for o in self.ops:
+            if o['kind'] in SH and o['z'] == 0: shape(o)
+        for o in self.ops:
+            if o['kind'] == 'image': image(o, o['png'])
+            elif o['kind'] == 'plot':
+                f = plt.figure(figsize=(o['w'], o['h'])); o['draw'](f, (0, 0, 1, 1))
+                b = io.BytesIO(); f.savefig(b, format='png', dpi=o['dpi'], transparent=True); plt.close(f); image(o, b.getvalue())
+        for o in self.ops:
+            k = o['kind']
+            if k in SH and o['z'] != 0: shape(o)
+            elif k == 'arrow':
+                (x0, y0), (x1, y1) = o['p'], o['q']
+                opt = f"draw={col(o['color'])}, line width={pt(o['lw'])}" + (', ' + head(o['ms']) if o['head'] else '') + dash(o)
+                if o['curve']:                              # matplotlib arc3: one quadratic control point -> cubic
+                    cx, cy = (x0 + x1) / 2 + o['curve'] * (y1 - y0), (y0 + y1) / 2 - o['curve'] * (x1 - x0)
+                    c1 = (x0 + 2 / 3 * (cx - x0), y0 + 2 / 3 * (cy - y0)); c2 = (x1 + 2 / 3 * (cx - x1), y1 + 2 / 3 * (cy - y1))
+                    body.append(f"\\draw[{opt}] {xy((x0, y0))} .. controls {xy(c1)} and {xy(c2)} .. {xy((x1, y1))};")
+                else:
+                    body.append(f"\\draw[{opt}] {xy((x0, y0))} -- {xy((x1, y1))};")
+            elif k == 'path':
+                opt = f"draw={col(o['color'])}, line width={pt(o['lw'])}, rounded corners={o['r']:.4f}in" + (', ' + head(o['ms']) if o['head'] else '') + dash(o)
+                body.append(f"\\draw[{opt}] " + ' -- '.join(xy(p) for p in o['pts']) + ';')
+            elif k == 'text':
+                av = {'top': 'north', 'center': '', 'bottom': 'south', 'baseline': 'base'}[o['va']]
+                ah = {'left': 'west', 'center': '', 'right': 'east'}[o['ha']]
+                anchor = (av + ' ' + ah).strip() or 'center'
+                if o['rot'] and anchor != 'center':          # rotated labels here are centred; keep it simple and exact
+                    anchor = 'center'
+                fs = o['size']; font = f"\\fontsize{{{fs:.2f}}}{{{fs * o['ls']:.2f}}}\\selectfont" + (r'\ttfamily' if o['mono'] else r'\sffamily')
+                if o['bold']: font += r'\bfseries'
+                if o['italic']: font += r'\itshape'
+                lines = o['s'].split('\n')
+                txt = r'\\'.join((esc(l).replace(' ', '~') if o['mono'] else esc(l)) or '~' for l in lines)
+                opt = f"anchor={anchor}, inner sep=0, outer sep=0, align={ {'left': 'left', 'center': 'center', 'right': 'right'}[o['ha']] }, text={col(o['color'])}, font={{{font}}}"
+                if o['rot']: opt += f", rotate={o['rot']}"
+                if o['halo']: opt += f", fill={col(o['halo'])}, fill opacity=0.85, text opacity=1"
+                body.append(f"\\node[{opt}] at {xy((o['x'], o['y']))} {{{txt}}};")
+        defs = '\n'.join(f'\\definecolor{{{v}}}{{HTML}}{{{k}}}%' for k, v in sorted(cols.items()))
+        tex = (f"% Generated by figures/_scene.py (Scene.render_tikz) for '{self.name}'; do not edit by hand, re-run the figure script.\n"
+               f"% {W} x {H} in at 100 %; needs \\usetikzlibrary{{arrows.meta}}; images in {img_prefix}/.\n"
+               "{%\n" + defs + "\n\\begin{tikzpicture}[x=1in, y=1in]%\n"
+               f"\\useasboundingbox (0,0) rectangle ({W:.4f},{H:.4f});\n" + '\n'.join(body) + "\n\\end{tikzpicture}%\n}%\n")
+        pathlib.Path(tex_path).write_text(tex, encoding='utf-8')
+        print('wrote', tex_path, f'({len(body)} TikZ commands, {len(used)} images in {img_dir})', flush=True)
+
     def render(self, stem, dpi=300, drawio=True):
         stem = pathlib.Path(stem)
         self.render_mpl(stem, dpi=dpi)

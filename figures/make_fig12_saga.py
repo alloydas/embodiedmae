@@ -9,7 +9,8 @@ Figure 2 (paper/figs/fig2_stages.*): Stage 1 four-stream pretraining, Stage 2 cr
   row fine-tuning, stacked as rounded panels with warm-start arrows; a zoom-in on the network at the right; each stage
   ends in its result (reconstruction, Table 6, Table 5).
 Each figure is drawn by figures/_scene.py to PDF / PNG (matplotlib) and to an editable .drawio file.
-Assets: python figures/make_fig12_assets.py (CPU job) first.   usage: python figures/make_fig12_saga.py
+Assets: python figures/make_fig12_assets.py (CPU job) first.   usage: python figures/make_fig12_saga.py [--fig2-tikz]
+--fig2-tikz writes Figure 2 only, plus paper/overleaf/Figures/fig2_stages_tikz.tex and its images in Figures/fig2/ (the paper's Fig. 2).
 """
 import sys, pathlib; R = pathlib.Path(__file__).resolve().parents[1]; sys.path[:0] = [str(R), str(R / 'figures')]
 import html, io, json, re
@@ -152,7 +153,7 @@ def bars_png(kind, w, h):
         data = (('sorghum', [230.5, 133.8, 30.7]), ('maize', [29.6, 29.0, 4.0]))
         for ax, (sp, v) in zip(axs, data):
             ax.bar(np.arange(3), v, 0.62, color=['#d9d4c7', '#a7b3c9', NAVY])
-            ax.set_xticks(range(3)); ax.set_xticklabels(['zero-shot', 'isolated', 'row FT'], fontsize=3.3, rotation=35, ha='right', rotation_mode='anchor')
+            ax.set_xticks(range(3)); ax.set_xticklabels(['zero-\nshot', 'iso-\nlated', 'row\nFT'], fontsize=2.9, linespacing=0.95)
             for k, vv in enumerate(v): ax.text(k, vv, f'{vv:g}', ha='center', va='bottom', fontsize=3.3)
             ax.set_ylim(0, max(v) * 1.25); ax.set_title(sp, fontsize=4.4, pad=1)
         axs[0].set_ylabel('Chamfer on rows\n×1e-4 m²', fontsize=3.6, labelpad=1, linespacing=0.95)
@@ -160,7 +161,7 @@ def bars_png(kind, w, h):
         ax.tick_params(labelsize=3.5, length=1.2, width=0.3, pad=1)
         for sp_ in ax.spines.values(): sp_.set_linewidth(0.3)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-    fig.subplots_adjust(left=0.2, right=0.98, bottom=0.24 if kind == 'rows' else 0.2, top=0.86, wspace=0.42)
+    fig.subplots_adjust(left=0.27 if kind == 'rows' else 0.2, right=0.98, bottom=0.27 if kind == 'rows' else 0.2, top=0.86, wspace=0.5)
     return png_fig(fig)
 
 
@@ -189,7 +190,7 @@ def figure2():
             if nm.endswith('.png'): S.image(xx, yy, t, t, png_file(A / nm), nm)
             else:
                 S.rect(xx, yy, t, t, cols[i], lw=0.6, fill='#ffffff', z=0)
-                S.text(xx + 0.02, yy + t - 0.02, '\n'.join(l[:24] for l in nm.split('\n')), 2.4, color=cols[i], va='top', mono=True, ls=1.15)
+                S.text(xx + 0.02, yy + t - 0.02, '\n'.join(l.replace('stem ', '')[:21] for l in nm.split('\n')), 2.4, color=cols[i], va='top', mono=True, ls=1.15)
             S.rect(xx, yy, t, t, cols[i], lw=0.6)
     # ---- Stage 1
     y1 = 2.66; gw = 2 * t + g
@@ -211,13 +212,13 @@ def figure2():
     grid(4.06, y1, ['s1_rec_rgb.png', 's1_rec_depth.png', 's1_rec_pc.png', '\n'.join(te['recipe_rec'][:4])])
     S.text(4.06 + gw / 2, y1 + gw + 0.05, 'reconstruction', 4.6, ha='center', bold=True)
     S.arrow((4.06 + gw / 2, y1 - 0.10), (0.58 + gw / 2, y1 - 0.10), color=LOSS, lw=0.8, dash=True)
-    S.text(2.82, y1 - 0.13, 'losses on the hidden tokens: image and depth MSE, cloud QAL + Sinkhorn, parameter Smooth-L1',
+    S.text(2.82, y1 - 0.13, 'losses: image and depth MSE and parameter Smooth-L1 on hidden tokens; QAL + Sinkhorn on the whole cloud',
            3.6, color=LOSS, ha='center', va='top')
     # ---- Stage 2
     y2 = 1.36
     S.rect(0.58, y2 + 0.04, 1.18, 0.70, '#888888', lw=0.8, fill='#ffffff', r=0.05)
     S.text(1.17, y2 + 0.62, '❄ teacher (frozen)', 4.8, ha='center', bold=True)
-    S.text(1.17, y2 + 0.38, 'reads all four streams\n(half of each visible)', 3.9, color=MUTED, ha='center')
+    S.text(1.17, y2 + 0.38, 'reads all four\nstreams', 3.9, color=MUTED, ha='center')
     for i, c in enumerate(CS.values()):
         S.rect(0.68 + i * 0.25, y2 + 0.10, 0.2, 0.08, c, lw=0.4, fill=c, r=0.01, z=0)
     S.rect(2.10, y2 + 0.04, 1.18, 0.70, NAVY, lw=0.9, fill='#ffffff', r=0.05)
@@ -277,5 +278,9 @@ def figure2():
 
 if __name__ == '__main__':
     out = R / 'paper/figs'
-    figure1().render(out / 'fig1_overview')
-    figure2().render(out / 'fig2_stages')
+    if '--fig2-tikz' in sys.argv:               # Figure 2 only, as native TikZ for the paper (+ the PDF / PNG / draw.io copies)
+        S = figure2(); S.render(out / 'fig2_stages')
+        S.render_tikz(R / 'paper/overleaf/Figures/fig2_stages_tikz.tex', R / 'paper/overleaf/Figures/fig2', 'Figures/fig2')
+    else:
+        figure1().render(out / 'fig1_overview')
+        figure2().render(out / 'fig2_stages')
