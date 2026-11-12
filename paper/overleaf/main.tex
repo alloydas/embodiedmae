@@ -200,11 +200,12 @@ improves the maize one.}
 We further show that Chamfer distance and linear probes on the frozen
 representation rank input modalities differently on slender geometry, and we
 adopt the probe as the deciding metric.
-\upd{On real field scans with independently reconstructed ground truth,
-\method{} \todo{matches} the accuracy of a staged annotation pipeline and
-reduces the time required for procedural reconstruction from hours of manual
-specification, or minutes of pipeline computation, to milliseconds per
-plant.}
+\updtwo{On crop rows built from real plants of both species, accuracy
+degrades zero-shot on plants taller than any training plant, and a brief
+fine-tune on 75\% of the real plants brings the held-out rest to a 1.6\%
+median height error and a leaf count within one leaf on 70\% of maize stops,
+at milliseconds per plant against hours of manual specification or minutes
+of staged-pipeline computation.}
 \upd{We will release \dataset{}, the 30{,}000-plant, two-species benchmark
 behind these experiments, which pairs multimodal field captures under
 simulated row occlusion with exact procedural ground truth.}
@@ -326,11 +327,13 @@ decisions~\citep{chen2020simclr,wu2021dcd}.
 \upd{We claim that fragmentary field sensing suffices to recover a complete,
 interpretable procedural plant, provided the generator is used for both the
 training data and the output representation.}
-\upd{We validate this claim on real field scans of maize and sorghum with
-independently reconstructed ground
-truth~\citep{maizefield3d2025,hadadi2026vlmmaize}, including rows in which
-neighbors occlude the target, \todo{demonstrating accuracy matching staged
-annotation pipelines while running in milliseconds per plant}.}
+\updtwo{We test this claim on rows built from real maize and sorghum plants
+with independently reconstructed ground
+truth~\citep{maizefield3d2025,hadadi2026vlmmaize}, in which neighbors occlude
+the target: zero-shot, accuracy degrades on plants outside the generator's
+size range, and fine-tuning on 75\% of the real plants recovers the held-out
+plants' height to a 1.6\% median error and their leaf count to within one
+leaf on 70\% of maize stops, in milliseconds per plant.}
 The key contributions of this work are:
 \begin{enumerate}
   \item \textbf{Task and framework.} \upd{The first formulation and system,
@@ -576,7 +579,7 @@ scene.}
     Row scenes $\times$ orientations & $15{,}000 \times 10$ & $15{,}000 \times 10$ \\
     Row camera & level rover, 1.0\,m & level rover, 2.5\,m \\
     Row cloud (input / target) & \multicolumn{2}{c}{24{,}576 / 8{,}192 pts} \\
-    Real-field split & \updtwo{520 real plants $\times$ 2 row layouts} & \todo{field scans} \\
+    Real-field split & \updtwo{520 real plants $\times$ 2 row layouts} & \updtwo{30 scanned plants $\times$ 2 row layouts} \\
     \bottomrule
   \end{tabular}
   \caption{\upd{\textbf{\dataset{} dataset configuration.} Parameter dimensions
