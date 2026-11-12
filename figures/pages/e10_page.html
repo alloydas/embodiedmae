@@ -1,0 +1,163 @@
+<title>E10 Real-Row Figures</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+  /* Layout: one reading column; a short results table, then each figure on a white sheet with its notes. */
+  :root {
+    --bg: #f2f4f0; --fg: #1c221d; --muted: #5d675d; --rule: #d6dbd2; --sheet: #ffffff; --accent: #2b3a67; --good: #2f7d32;
+    --display: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --body: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #151a16; --fg: #e5e9e3; --muted: #a2ab9f; --rule: #2e352f; --sheet: #ffffff; --accent: #9fb2e6; --good: #8fcf86; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #151a16; --fg: #e5e9e3; --muted: #a2ab9f; --rule: #2e352f; --sheet: #ffffff; --accent: #9fb2e6; --good: #8fcf86; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font-family: var(--body); line-height: 1.55;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 1120px; margin: 0 auto; padding-block: 36px 64px; display: grid; gap: 40px; }
+  header { display: grid; gap: 8px; max-width: 72ch; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-family: var(--display); font-weight: 600; font-size: clamp(26px, 4vw, 34px); line-height: 1.15; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 21px; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  .lede { color: var(--muted); font-size: 15px; }
+  section { display: grid; gap: 14px; min-width: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 560px; }
+  th, td { text-align: left; padding: 7px 14px 7px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  th { font-weight: 600; font-size: 12.5px; color: var(--muted); letter-spacing: .02em; }
+  td.num { text-align: right; padding-right: 22px; }
+  td.after { color: var(--good); font-weight: 600; }
+  .ci { color: var(--muted); font-size: 12px; }
+  .sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; overflow-x: auto; }
+  .sheet img { display: block; height: auto; }
+  .sheet.wide img { width: 100%; min-width: 760px; }
+  .sheet.narrow { justify-self: start; max-width: 100%; }
+  .sheet.narrow img { width: 640px; max-width: none; }
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px 28px; }
+  .note { display: grid; gap: 4px; min-width: 0; border-top: 1px solid var(--rule); padding-top: 10px; font-size: 13.5px; color: var(--muted); }
+  .note b { color: var(--fg); font-weight: 600; font-size: 14px; }
+  code { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .gallery { display: grid; gap: 18px; }
+  .gallery.maize { grid-template-columns: repeat(auto-fill, minmax(min(100%, 500px), 1fr)); }
+  .gallery.sorghum { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .tile { margin: 0; display: grid; gap: 8px; min-width: 0; align-content: start; }
+  .tile img { width: 100%; height: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 6px; box-sizing: border-box; }
+  .tile figcaption { display: grid; gap: 2px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tile figcaption b { color: var(--fg); font-weight: 600; }
+  .tile em { font-style: normal; color: var(--good); font-weight: 600; }
+  h3 { font-family: var(--display); font-weight: 600; font-size: 17px; margin: 8px 0 0; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">CVPR 28592 · Section 4.8, real-world validation</div>
+    <h1>Real plants in crop rows, before and after fine-tuning on real data</h1>
+    <p class="lede">The row model was fine-tuned on 75% of the real plants of each species and scored on the other 25%, which it never saw. Both figures show those held-out plants.</p>
+  </header>
+
+  <section>
+    <h2>Held-out plants, all three streams in</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Species (held-out plants)</th><th>Model</th><th style="text-align:right;padding-right:22px">Chamfer ×10⁻⁴ m²</th><th style="text-align:right;padding-right:22px">Height error</th><th style="text-align:right;padding-right:22px">Leaf count ±1</th></tr></thead>
+        <tbody>
+          <tr><td>Maize (130)</td><td>Row fine-tune, synthetic rows</td><td class="num">59.5 <span class="ci">[56.0, 63.2]</span></td><td class="num">36%</td><td class="num">45%</td></tr>
+          <tr><td></td><td>Real-row fine-tune</td><td class="num after">19.7 <span class="ci">[18.6, 21.0]</span></td><td class="num after">1.6%</td><td class="num after">70%</td></tr>
+          <tr><td>Sorghum (8)</td><td>Row fine-tune, synthetic rows</td><td class="num">2,113 <span class="ci">[1,647, 2,520]</span></td><td class="num">–</td><td class="num">–</td></tr>
+          <tr><td></td><td>Real-row fine-tune</td><td class="num after">79.4 <span class="ci">[68.3, 92.6]</span></td><td class="num">–</td><td class="num">–</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede">Brackets are 95% bootstrap intervals over plants. Sorghum has no comparable height or leaf-count truth, and with eight test plants its number is indicative.</p>
+  </section>
+
+  <section>
+    <h2>Figure 1 · real maize rows</h2>
+    <div class="sheet wide"><img src="fig_e10_real.png" alt="Four camera stops on real maize rows: image, depth, scene cloud, true center plant, and the center plant written by the headline model, the row fine-tune and the real-row fine-tune, with Chamfer and height"></div>
+    <div class="notes">
+      <div class="note"><b>What each row is</b>One camera stop on a held-out plant, two per layout (parallel and perpendicular), picked at the real-row fine-tune's median Chamfer, so it shows a typical case.</div>
+      <div class="note"><b>What changes across the last three columns</b>The headline model writes a blurred plant; the row fine-tune drops the neighbors; the real-row fine-tune recovers the leaf layout and the height (for example 1.74 m against a true 1.70 m).</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Figure 2 · real sorghum rows</h2>
+    <div class="sheet narrow"><img src="fig_e10_real_sorghum.png" alt="Two camera stops on real sorghum rows: camera photograph strip, depth, scene cloud, true center plant 3.9 and 4.8 m tall, and the center plant written by the three models"></div>
+    <div class="notes">
+      <div class="note"><b>Why the tiles are tall</b>Each sorghum frame is a strip 7–17° wide and 61–76° high, framed to the whole plant. The plants are 2.2–5.3 m tall; training stems reach 1.74 m.</div>
+      <div class="note"><b>What the fine-tune fixes and what it does not</b>Without real data every model writes a short, dense plant. After 19 training plants the model recovers the stalk over the full height, but few of the leaves.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The fine-tune in detail</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Input (Chamfer ×10⁻⁴ m²)</th><th style="text-align:right;padding-right:22px">Maize before</th><th style="text-align:right;padding-right:22px">Maize after</th><th style="text-align:right;padding-right:22px">Sorghum before</th><th style="text-align:right;padding-right:22px">Sorghum after</th></tr></thead>
+        <tbody>
+          <tr><td>Image + depth + cloud</td><td class="num">59.5</td><td class="num after">19.7</td><td class="num">2,113</td><td class="num after">79.4</td></tr>
+          <tr><td>Image only</td><td class="num">95.4</td><td class="num after">48.7</td><td class="num">1,033</td><td class="num after">106.2</td></tr>
+          <tr><td>Depth only</td><td class="num">76.8</td><td class="num after">43.6</td><td class="num">834</td><td class="num after">89.0</td></tr>
+          <tr><td>Cloud only</td><td class="num">75.0</td><td class="num after">47.4</td><td class="num">3,773</td><td class="num after">311.8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Maize plant height</th><th style="text-align:right;padding-right:22px">Plants</th><th style="text-align:right;padding-right:22px">Height error before</th><th style="text-align:right;padding-right:22px">after</th><th style="text-align:right;padding-right:22px">Chamfer before</th><th style="text-align:right;padding-right:22px">after</th></tr></thead>
+        <tbody>
+          <tr><td>≤ 1.33 m (training range)</td><td class="num">22</td><td class="num">15%</td><td class="num after">2.0%</td><td class="num">47.0</td><td class="num after">16.3</td></tr>
+          <tr><td>1.33–1.6 m</td><td class="num">45</td><td class="num">30%</td><td class="num after">1.2%</td><td class="num">57.7</td><td class="num after">18.8</td></tr>
+          <tr><td>1.6–2.0 m</td><td class="num">51</td><td class="num">41%</td><td class="num after">1.4%</td><td class="num">62.7</td><td class="num after">20.4</td></tr>
+          <tr><td>&gt; 2.0 m</td><td class="num">12</td><td class="num">51%</td><td class="num after">5.9%</td><td class="num">75.4</td><td class="num after">26.7</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="sheet narrow"><img src="fig_e10_height.png" alt="Scatter of predicted against true plant height for 130 held-out maize plants: before fine-tuning every plant is predicted near 1.03 m; after, points follow the diagonal up to 2.0 m" style="width:420px"></div>
+    <div class="notes">
+      <div class="note"><b>Every input improves</b>Each single stream gains, on both species; all three streams together stay best.</div>
+      <div class="note"><b>Layout and occlusion</b>Parallel rows stay easier than perpendicular ones (15.6 against 23.9 after). Across the four occlusion quartiles the fine-tuned Chamfer stays between 18.5 and 21.6.</div>
+      <div class="note"><b>Height</b>Before, the model writes about 1.03 m for every plant. After, it follows the true height up to 2.0 m, where the recipe's height range ends; above that the error is 5.9%.</div>
+    </div>
+  </section>
+
+<section id="gallery">
+<h2>Gallery · more held-out plants</h2>
+<p class="lede">Every tile is a plant the real-row fine-tune never saw. Each shows the image the model reads, the true center plant, and the center plant before (row fine-tune, synthetic rows) and after (real-row fine-tune). Chamfer is in 10⁻⁴ m².</p>
+<h3>Maize · picked across the range of results</h3>
+<p class="lede">Six stops per layout, at the 10th, 30th, 50th, 70th, 90th and 98th percentile of the real-row fine-tune's Chamfer, so the last tile of each layout is among its worst cases.</p>
+<div class="gallery maize">
+<figure class="tile"><img loading="lazy" src="gallery/maize_parallel_0148_14.png" alt="maize parallel plant 0148 stop 14: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant 0148, stop 14</b><span>10th percentile · true height 1.52 m · 9% hidden by neighbors</span><span>Chamfer 32 → <em>6</em> · height 1.05 → <em>1.52 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_parallel_0086_17.png" alt="maize parallel plant 0086 stop 17: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant 0086, stop 17</b><span>30th percentile · true height 1.49 m · 26% hidden by neighbors</span><span>Chamfer 22 → <em>10</em> · height 1.05 → <em>1.51 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_parallel_0380_03.png" alt="maize parallel plant 0380 stop 3: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant 0380, stop 3</b><span>50th percentile · true height 1.61 m · 29% hidden by neighbors</span><span>Chamfer 45 → <em>9</em> · height 1.02 → <em>1.70 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_parallel_0373_07.png" alt="maize parallel plant 0373 stop 7: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant 0373, stop 7</b><span>70th percentile · true height 1.55 m · 23% hidden by neighbors</span><span>Chamfer 20 → <em>11</em> · height 1.03 → <em>1.53 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_parallel_0069_12.png" alt="maize parallel plant 0069 stop 12: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant 0069, stop 12</b><span>90th percentile · true height 1.48 m · 25% hidden by neighbors</span><span>Chamfer 78 → <em>36</em> · height 0.98 → <em>1.51 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_parallel_0290_11.png" alt="maize parallel plant 0290 stop 11: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant 0290, stop 11</b><span>98th percentile · true height 1.30 m · 14% hidden by neighbors</span><span>Chamfer 72 → <em>52</em> · height 1.03 → <em>1.23 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_perpendicular_0286_15.png" alt="maize perpendicular plant 0286 stop 15: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant 0286, stop 15</b><span>10th percentile · true height 1.05 m · 7% hidden by neighbors</span><span>Chamfer 137 → <em>10</em> · height 1.00 → <em>1.07 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_perpendicular_0418_08.png" alt="maize perpendicular plant 0418 stop 8: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant 0418, stop 8</b><span>30th percentile · true height 1.87 m · 5% hidden by neighbors</span><span>Chamfer 31 → <em>13</em> · height 1.04 → <em>1.93 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_perpendicular_0215_10.png" alt="maize perpendicular plant 0215 stop 10: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant 0215, stop 10</b><span>50th percentile · true height 1.70 m · 5% hidden by neighbors</span><span>Chamfer 76 → <em>22</em> · height 0.93 → <em>1.80 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_perpendicular_0509_02.png" alt="maize perpendicular plant 0509 stop 2: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant 0509, stop 2</b><span>70th percentile · true height 1.85 m · 9% hidden by neighbors</span><span>Chamfer 124 → <em>18</em> · height 1.02 → <em>1.88 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_perpendicular_0197_03.png" alt="maize perpendicular plant 0197 stop 3: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant 0197, stop 3</b><span>90th percentile · true height 1.69 m · 23% hidden by neighbors</span><span>Chamfer 141 → <em>45</em> · height 0.96 → <em>1.70 m</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/maize_perpendicular_0247_06.png" alt="maize perpendicular plant 0247 stop 6: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant 0247, stop 6</b><span>98th percentile · true height 1.91 m · 18% hidden by neighbors</span><span>Chamfer 195 → <em>33</em> · height 0.93 → <em>2.00 m</em></span></figcaption></figure>
+</div>
+<h3>Sorghum · all eight held-out plants</h3>
+<p class="lede">The middle stop of each held-out plant, layouts alternating. Sorghum has no height truth comparable to the recipe, so only Chamfer is given.</p>
+<div class="gallery sorghum">
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_parallel_d1_267633_09.png" alt="sorghum parallel plant d1_267633 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant d1_267633, stop 9</b><span>true height 4.64 m · 29% hidden by neighbors</span><span>Chamfer 2,135 → <em>66</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_perpendicular_d1_329299_09.png" alt="sorghum perpendicular plant d1_329299 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant d1_329299, stop 9</b><span>true height 4.86 m · 7% hidden by neighbors</span><span>Chamfer 2,154 → <em>91</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_parallel_d1_330167_09.png" alt="sorghum parallel plant d1_330167 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant d1_330167, stop 9</b><span>true height 4.50 m · 29% hidden by neighbors</span><span>Chamfer 1,484 → <em>52</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_perpendicular_d1_330210_09.png" alt="sorghum perpendicular plant d1_330210 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant d1_330210, stop 9</b><span>true height 4.81 m · 9% hidden by neighbors</span><span>Chamfer 2,173 → <em>82</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_parallel_d2_330167_09.png" alt="sorghum parallel plant d2_330167 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant d2_330167, stop 9</b><span>true height 3.89 m · 19% hidden by neighbors</span><span>Chamfer 2,521 → <em>58</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_perpendicular_p1d1V_329392_09.png" alt="sorghum perpendicular plant p1d1V_329392 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant p1d1V_329392, stop 9</b><span>true height 4.81 m · 25% hidden by neighbors</span><span>Chamfer 2,781 → <em>102</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_parallel_p1d1V_455867_09.png" alt="sorghum parallel plant p1d1V_455867 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Parallel row, plant p1d1V_455867, stop 9</b><span>true height 4.15 m · 23% hidden by neighbors</span><span>Chamfer 2,067 → <em>56</em></span></figcaption></figure>
+<figure class="tile"><img loading="lazy" src="gallery/sorghum_perpendicular_p1d1V_524505_09.png" alt="sorghum perpendicular plant p1d1V_524505 stop 9: image, true center plant, and the center plant before and after the real-row fine-tune"><figcaption><b>Perpendicular row, plant p1d1V_524505, stop 9</b><span>true height 2.81 m · 12% hidden by neighbors</span><span>Chamfer 661 → <em>122</em></span></figcaption></figure>
+</div>
+</section>
+
+  <section>
+    <h2>Files</h2>
+    <p class="lede">Paper: Section 4.8, Table 9, <code>fig:e10_real</code> and <code>fig:e10_real_sorghum</code> in <code>paper/overleaf/main.tex</code> (purple) and <code>main_clean.tex</code>. Figures: <code>figures/make_e10_fig.py --species maize|sorghum</code>.</p>
+  </section>
+</main>

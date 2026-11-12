@@ -1,0 +1,86 @@
+<title>CropCode Figures 1 and 2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+  /* Layout: one reading column; each figure sits on a white "paper" sheet with its panel notes beneath. */
+  :root {
+    --bg: #f3f4f1; --fg: #1d221c; --muted: #5f685c; --rule: #d8dbd3; --sheet: #ffffff; --accent: #2b3a67; --flag: #9a5b00;
+    --display: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --body: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161a17; --fg: #e6e9e3; --muted: #a3ab9f; --rule: #2f3530; --sheet: #ffffff; --accent: #9fb2e6; --flag: #e0a650; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161a17; --fg: #e6e9e3; --muted: #a3ab9f; --rule: #2f3530; --sheet: #ffffff; --accent: #9fb2e6; --flag: #e0a650; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font-family: var(--body); line-height: 1.55;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 1120px; margin: 0 auto; padding-block: 36px 64px; display: grid; gap: 44px; }
+  header { display: grid; gap: 8px; max-width: 70ch; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-family: var(--display); font-weight: 600; font-size: clamp(26px, 4vw, 36px); line-height: 1.15; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  .lede { color: var(--muted); font-size: 15px; }
+  section { display: grid; gap: 14px; }
+  .sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; overflow-x: auto; }
+  .sheet img { display: block; width: 100%; min-width: 720px; height: auto; }
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 28px; }
+  .note { display: grid; gap: 4px; min-width: 0; border-top: 1px solid var(--rule); padding-top: 10px; }
+  .note b { font-weight: 600; font-size: 14px; }
+  .note span { font-size: 13.5px; color: var(--muted); }
+  .checks { display: grid; gap: 10px; max-width: 78ch; }
+  .check { display: grid; grid-template-columns: 10px 1fr; gap: 12px; font-size: 14.5px; }
+  .check::before { content: ""; width: 10px; height: 10px; margin-top: 7px; border-radius: 2px; background: var(--flag); }
+  code { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .files { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+  .hint { font-size: 12.5px; color: var(--muted); }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">CVPR 28592 · draft figures in the layout of SAGA (CVPR 2026)</div>
+    <h1>Figures 1 and 2, rebuilt as editable draw.io</h1>
+    <p class="lede">Both figures follow SAGA's structure: a three-panel teaser, and a method figure with stacked training stages and a zoom-in on the network. Every box, label and arrow is a native draw.io shape; the plant tiles, plots and charts are embedded images.</p>
+  </header>
+
+  <section>
+    <h2>Figure 1 · overview teaser</h2>
+    <div class="sheet"><img src="fig1_overview.png" alt="Figure 1: (a) crop rows in, CropCode, procedural parameters, generated point cloud and traits out for sorghum and maize; (b) t-SNE of the latents for both species; (c) radar chart of trait-probe R² against published encoders"></div>
+    <p class="hint">On a phone, scroll the figure sideways.</p>
+    <div class="notes">
+      <div class="note"><b>(a) Overview</b><span>The current teaser's held-out test rows: image, depth image and scene point cloud in; the center plant's procedural parameters, generated point cloud and traits out. The CropCode box shows its four internal steps, as SAGA's framework box does.</span></div>
+      <div class="note"><b>(b) Latent space</b><span>t-SNE of the headline models' mean-pooled features, 2,250 validation plants per species, coloured by leaf count (sorghum) and height (maize). It shows a smooth trait gradient, not clusters: there are no genotypes to cluster.</span></div>
+      <div class="note"><b>(c) Trait probe radar</b><span>The nine trait columns of Table 10 (validation R²). Each axis is scaled from the lowest to the highest model; CropCode's value is printed at each axis. The supervised reference is drawn dashed.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Figure 2 · training stages</h2>
+    <div class="sheet"><img src="fig2_stages.png" alt="Figure 2: Stage 1 four-stream pretraining with masked inputs and reconstructions; Stage 2 cross-modal distillation from a frozen teacher to a one-stream student with before/after Chamfer bars; Stage 3 row fine-tuning with row Chamfer bars; a zoom-in panel on tokenizers, Dirichlet masking, encoder, decoder and heads"></div>
+    <div class="notes">
+      <div class="note"><b>Stage 1 · pretraining</b><span>One held-out sorghum test plant: its four streams, what the headline model sees at mask ratio 0.8 (visible tokens 37 / 11 / 56 / 18), and its reconstruction. Losses run back along the red dashed line.</span></div>
+      <div class="note"><b>Stage 2 · distillation</b><span>Frozen teacher with all four streams, student with one. The cloud is the distilled generalist's output from the image alone. Bars: single-stream Chamfer before and after distillation (Table 6).</span></div>
+      <div class="note"><b>Stage 3 · rows</b><span>A crop row in, the center plant out. Bars: Chamfer on rows for the zero-shot, isolated-trained and row fine-tuned models (Table 5). Stages 2 and 3 both warm-start from Stage 1, as the runs did.</span></div>
+      <div class="note"><b>Inside CropCode</b><span>Tokenizers per stream, the Dirichlet split of the visible budget, the ViT-B encoder and decoder, and the four output heads.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Check before these go in the paper</h2>
+    <div class="checks">
+      <div class="check"><span><b>Space.</b> Figure 1 takes about a quarter of a page and Figure 2 about 40%. The main-versus-supplement cut on Thursday decides whether both fit.</span></div>
+      <div class="check"><span><b>The radar's claim.</b> CropCode leads on 6 of 9 axes; the supervised network leads on the other three: sorghum branch angle, maize height and maize stem radius. The figure shows that honestly, so it reads as "best without labels", not "best everywhere".</span></div>
+      <div class="check"><span><b>Figure 1 is also edited on the Mac.</b> The current paper uses the TikZ teaser. These files are separate (<code>fig1_overview</code>), so nothing is overwritten until you choose to swap.</span></div>
+      <div class="check"><span><b>Stage 1 reconstruction</b> is the headline model under random masking of one plant; the depth tile marks as background the pixels the model itself predicts near zero.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Files</h2>
+    <div class="files">
+      <span>Editable draw.io: <code>paper/figs/fig1_overview.drawio</code> and <code>paper/figs/fig2_stages.drawio</code> (open in app.diagrams.net or the desktop app).</span>
+      <span>PDF and PNG beside them. Rebuild with <code>python figures/make_fig12_saga.py</code> after <code>figures/make_fig12_assets.py</code>.</span>
+    </div>
+  </section>
+</main>
