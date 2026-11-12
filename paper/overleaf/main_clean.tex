@@ -323,8 +323,10 @@ A ground-rover camera captures full row scenes (yielding an RGB photograph, dept
 \paragraph{Dataset partitioning.}
 Plants are split into training (70\%, 10{,}500 plants), validation (15\%, 2{,}250 plants), and test sets (15\%, 2{,}250 plants) by plant instance. Validation and test splits are enriched with extreme morphological outliers, selected via Mahalanobis distance ranking across core structural features.
 
-\begin{table*}[t]
-\centering\small
+\begin{table}[t]
+\centering\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lcccccc}
 \toprule
 Dataset & Real scans & Slender & Row occl. & RGB+D+PC & Exact proc.\ GT & Scale \\
@@ -333,13 +335,13 @@ PCN / ShapeNet-55~\citep{yuan2018pcn,yu2021pointr} & \xmark & \xmark & \xmark & 
 Pheno4D~\citep{schunck2021pheno4d} & \cmark & \cmark & \xmark & \xmark & \xmark & 84 \\
 Crops3D~\citep{crops3d2024} & \cmark & \cmark & \xmark & \xmark & \xmark & 2{,}500 \\
 MaizeField3D~\citep{maizefield3d2025} & \cmark & \cmark & \xmark & \xmark & (\cmark) & 1{,}000 \\
-\dataset{} (ours) & \cmark$^{\dagger}$ & \cmark & \cmark & \cmark & \cmark & 30{,}000 \\
+\textbf{\dataset{} (ours)} & \textbf{\cmark}$^{\dagger}$ & \textbf{\cmark} & \textbf{\cmark} & \textbf{\cmark} & \textbf{\cmark} & \textbf{30{,}000} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \caption{\textbf{Dataset comparison.} Exact Procedural GT indicates exact
 ground-truth generative parameter vectors per plant; (\cmark) denotes parameters fitted post hoc via optimization. $^{\dagger}$\dataset{} includes real-field evaluation scans; training splits consist of procedural synthetic data.}
 \label{tab:datacompare}
-\end{table*}
+\end{table}
 
 \subsection{Four-stream masked pretraining}
 \label{sec:method-pretrain}
