@@ -2,8 +2,8 @@
 
 usage: python tools/make_release.py OUT_DIR
 
-Copies only the code behind the paper's final-data results (models, loaders, trainers, evaluation,
-split tooling, the final configs), rewrites cluster paths to repository-relative ones (data/, outputs/),
+Copies only training and testing code: models, loaders, trainers, the scripts that score trained models on
+held-out plants, the training configs, and the split / target tables those scripts read (data, no split code); rewrites cluster paths to repository-relative ones (data/, outputs/),
 strips internal notes from comments, sets every config's batch shape to the one its run recorded in
 outputs/<run>/config.json (same global batch as the paper), and writes README.md, environment.yml and
 .gitignore. OUT_DIR is replaced. The release is the input of the separate `cropcode` repository.
@@ -18,14 +18,13 @@ ROOT_FILES = ['embodied_mae.py', 'embodied_mae_4m.py', 'embodied_mae_4m_maize.py
               'species_conventions.py', 'sorghum_dataset.py', 'sorghum_dataset_4m.py', 'maize_dataset_4m.py',
               'row_dataset.py', 'train_sorghum_4m.py', 'train_maize_4m.py', 'train_sorghum_4m_distill.py',
               'train_maize_4m_distill.py', 'train_row_4m.py', 'train_supervised_4m.py', 'train_supervised_maize_4m.py',
-              'utils.py']
-EVAL_FILES = ['linear_probe', 'linear_probe_maize', 'latent_analysis', 'latent_analysis_maize', 'probe_pair_bootstrap',
-              'baseline_probe', 'cross_species_probe', 'eval_row', 'row_pair_bootstrap', 'pc_fscore', 'pc_fscore_maize',
-              'pc_view_eval', 'pc_view_eval_maize', 'pc_view_masks', 'pc_view_bootstrap', 'regime1_eval', 'regime1_extra',
-              'eval_specialists', 'eval_warmstart', 'recon_compare', 'real_rows', 'eval_real_rows']
-SPLIT_FILES = ['data_split/make_split.py', 'data_split/make_leaf_width_targets.py', 'data_split/assignment.csv',
-               'data_split/features.csv', 'data_split/leaf_width_targets.csv', 'data_split/maize_view_elevation.csv.gz',
-               'tools/maize_view_elevation.py']
+              'utils.py', 'train_real_rows.py']
+# testing only: scripts that score trained models on held-out plants (analysis, bootstraps, baselines and
+# figure code are not released)
+EVAL_FILES = ['linear_probe', 'linear_probe_maize', 'regime1_eval', 'eval_row', 'pc_fscore', 'pc_fscore_maize',
+              'real_rows', 'eval_real_rows']
+SPLIT_FILES = ['data_split/assignment.csv', 'data_split/features.csv', 'data_split/leaf_width_targets.csv',
+               'data_split/maize_view_elevation.csv.gz']                     # data read by the loaders and probes
 CONFIGS = '''4m_pretrain15k_d2_sink e2_pc_d2 e2_pcrgb_d2 e2_pcrgbd_d2 e2_pcrgbdt_d2 e2_pcd_d2 e2_pct_d2 e2_pcrgbt_d2 e2_pcdt_d2
 e2_pcrgbdt_tg_d2 e2_pcrgbdt_tg40_d2 e2_pcrgbdt_tg100_d2 e3_1k_d2 e3_3k_d2 e3_10k_d2 e4_small_d2 e4_large_d2 e5_topdown_d2
 e5_horizon_d2 e5_single_d2 e8_supervised_d2 4m_distill_15k_all_d2 4m_distill_15k_rgb2pc_full_d2 4m_distill_15k_rgb2pc_smr50_d2
@@ -53,7 +52,7 @@ PATHS = [('/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K', '
          ('/work/mech-ai/alloydas), one item', 'data/), one item'),
          ('/work/mech-ai-scratch/alloy/plant_point_cloud/embodiedmae_adapted.pth loaded', 'An earlier adapted checkpoint loaded'),
          ('the shared /work/hdd filesystem', 'the shared filesystem')]
-NOTES = [('the yongyun branch', 'the loss-study branch'), ('yongyun branch', 'loss-study branch'),
+NOTES = [('(outputs on /work/mech-ai, symlinked under outputs/)', '(under outputs/)'), ('the yongyun branch', 'the loss-study branch'), ('yongyun branch', 'loss-study branch'),
          ('(see the param-metric note in CLAUDE.md)', '(see the parameter-metric note in README.md)'),
          ('CLAUDE.md', 'the development notes'), ('NFS (novastor010)', 'NFS'),
          ('(e.g. one queued on nova and one on scavenger, whichever gets a GPU', '(e.g. two copies queued on different partitions, whichever gets a GPU'),
@@ -90,7 +89,6 @@ for f in ROOT_FILES:
 for f in EVAL_FILES:
     shutil.copy(SRC / 'eval' / f'{f}.py', OUT / 'eval' / f'{f}.py')
 shutil.copy(SRC / 'eval_rgb2pc_quant.py', OUT / 'eval' / 'eval_rgb2pc_quant.py')
-shutil.copytree(SRC / 'eval' / 'baselines', OUT / 'eval' / 'baselines', ignore=shutil.ignore_patterns('__pycache__'))
 for f in SPLIT_FILES:
     shutil.copy(SRC / f, OUT / 'data_split' / pathlib.Path(f).name)
 
@@ -102,6 +100,14 @@ for f in OUT.rglob('*.py'):
     t = re.sub(r'slurm/(delta/)?[A-Za-z0-9_]+\.sbatch', 'the launch script', t)
     if f.name == 'eval_rgb2pc_quant.py':
         t = t.replace('import os\n', 'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))\nimport os\n', 1)
+    if f.name in ('train_supervised_4m.py', 'train_supervised_maize_4m.py'):   # the seed of the untrained baseline, inlined
+        t = t.replace("INIT_SEED = _import_file(\n    '_e8_random_init', REPO / 'eval' / 'baselines' / 'random_init.py').INIT_SEED",
+                      "INIT_SEED = 0   # the seed of the untrained-model reference (random init), so step 0 matches that row")
+        assert "random_init.py').INIT_SEED" not in t, f.name
+    if f.name == 'train_real_rows.py':                    # the release writes runs straight to outputs/<run> (no symlink)
+        old = t[t.index("# ---- run directory"):t.index("(run_dir / 'checkpoints').mkdir")]
+        t = t.replace(old, "# ---- run directory --------------------------------------------------------------------------------\n"
+                           "run_dir = pathlib.Path(a.out_root) / ('_smoke' if a.smoke else '') / a.run\n")
     if f.name == 'make_split.py':
         t = re.sub(r'import numpy as np, csv, sys, json\nSP="[^"]*"\n',
                    '"""Sorghum split: Mahalanobis extremeness on six standardized traits, a 30 % pool drawn with\n'
@@ -148,8 +154,24 @@ bad = [f'{f.relative_to(OUT)}:{i + 1}: {l.strip()[:120]}' for f in OUT.rglob('*'
        for i, l in enumerate(f.read_text().splitlines()) if FORBIDDEN.search(l)]
 named = set(re.findall(r'configs/config_[A-Za-z0-9_]+\.yaml', ' '.join(f.read_text() for f in OUT.rglob('*.py'))))
 missing = sorted(c for c in named if not (OUT / c).exists())
-if bad or missing:
-    print('\n'.join(bad)); print('configs named in code but not released:', missing)
+# every local import must resolve inside the release (dropping a file must not break the kept code)
+local = {f.stem for f in OUT.rglob('*.py')} | {'eval'}
+CODE_DIRS = ('.', 'eval', 'eval/baselines', 'figures', 'tools', 'data_split', 'export', 'sweeps')   # never walk outputs/
+known = {f.stem for d in CODE_DIRS for f in (SRC / d).glob('*.py')} | {d for d in CODE_DIRS if d != '.'}
+unresolved = []
+for f in OUT.rglob('*.py'):
+    for m in re.finditer(r'^\s*(?:from\s+([A-Za-z_][\w.]*)\s+import|import\s+([A-Za-z_][\w.]*(?:\s*,\s*[A-Za-z_][\w.]*)*))', f.read_text(), flags=re.M):
+        mods = [m.group(1)] if m.group(1) else [x.strip().split(' as ')[0] for x in m.group(2).split(',')]
+        for mod in mods:
+            top = mod.split('.')[0]; last = mod.split('.')[-1]
+            if top in known and top not in local and last not in local:
+                unresolved.append(f'{f.relative_to(OUT)}: {mod}')
+for f in OUT.rglob('*.py'):
+    for m in re.finditer(r"REPO\s*/\s*'([^']+)'(?:\s*/\s*'([^']+)')?(?:\s*/\s*'([^']+\.py)')?", f.read_text()):
+        rel = '/'.join(x for x in m.groups() if x)
+        if rel.endswith('.py') and not (OUT / rel).exists(): unresolved.append(f'{f.relative_to(OUT)}: {rel}')
+if bad or missing or unresolved:
+    print('\n'.join(bad)); print('configs named in code but not released:', missing); print('unresolved local imports:', unresolved)
     raise SystemExit('release check failed')
 
 # --- top-level files ---------------------------------------------------------------------------------
