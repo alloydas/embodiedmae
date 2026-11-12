@@ -544,7 +544,18 @@ scene.}
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_dataset.pdf}
+  % Large species labels + plant counts drawn over the graphic (the builder
+  % figures/make_dataset_fig.py runs on the cluster; its small headers are
+  % masked white and replaced here).
+  \begin{tikzpicture}
+    \node[anchor=south west, inner sep=0] (img) at (0,0) {\includegraphics[width=\linewidth]{Figures/fig_dataset.pdf}};
+    \begin{scope}[x={(img.south east)}, y={(img.north west)}]
+      \fill[white] (0.20,0.942) rectangle (0.36,0.972);
+      \fill[white] (0.67,0.942) rectangle (0.83,0.972);
+      \node[anchor=center, inner sep=0] at (0.28,0.956) {\sffamily\bfseries\fontsize{10.5}{12}\selectfont sorghum{\fontsize{8}{9.5}\selectfont\mdseries :\ 15{,}000 plants}};
+      \node[anchor=center, inner sep=0] at (0.75,0.956) {\sffamily\bfseries\fontsize{10.5}{12}\selectfont maize{\fontsize{8}{9.5}\selectfont\mdseries :\ 15{,}000 plants}};
+    \end{scope}
+  \end{tikzpicture}
   \caption{\upd{\textbf{\dataset{} at a glance.} (a) The four streams of one
   view per species: photograph, depth frame, camera-frame point cloud and the
   procedural recipe as text (a plant line, then one line per leaf; maize shows
