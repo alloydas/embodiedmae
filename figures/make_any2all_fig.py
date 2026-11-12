@@ -10,6 +10,9 @@ colours, column width (3.25 in). Cherry-picked, and the caption says so:
   python figures/make_any2all_fig.py --sheet
   python figures/make_any2all_fig.py --render --sorghum Sorghum_X_vv --maize plant_Y_vv
       -> paper/figs/fig_any2all_{sorghum,maize}.{pdf,png} (+ copies in paper/overleaf/Figures/)
+Four inputs (the paper's figures since 2026-11-12): --dump4 (CPU job, every candidate from each stream alone), --sheet4,
+  --render4 --sorghum NAME --maize NAME: a 2 x 2 grid of blocks, one per input stream; in each block the input tile,
+  a dashed divider, then the three generated streams side by side (text width, 9 pt).
 """
 import sys, pathlib; R = pathlib.Path(__file__).resolve().parents[1]; sys.path[:0] = [str(R), str(R / 'figures')]
 import argparse, csv, gzip, json, pickle, shutil
@@ -164,12 +167,130 @@ def sheet(D):
         plt.close(fig)
 
 
+
+# ====================================================================== four inputs (the paper's Figs. 11 and 12)
+OUT4 = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12/any2all4_dump.pkl')
+SRCS = ('rgb', 'depth', 'pc', 'text')
+NAME = {'rgb': 'Image', 'depth': 'Depth image', 'pc': 'Point cloud', 'text': 'Procedural parameters'}
+NAME2 = {'rgb': 'Image', 'depth': 'Depth\nimage', 'pc': 'Point\ncloud', 'text': 'Procedural\nparameters'}
+
+
+def dump4():
+    """the distilled generalist from each of the four streams alone, for every candidate of --dump"""
+    import torch, _plantviz as V
+    torch.set_num_threads(8)
+    D1 = pickle.load(open(OUT, 'rb')); D = {}
+    pack = lambda r: dict(height=float(r['height']), n=int(r['n']), leaves=[{k: float(v) for k, v in l.items()} for l in r['leaves']])
+    for sp in ('sorghum', 'maize'):
+        ds = V.dataset(sp, 'test'); m, cfg, ep = V.load_model(sp, 'generalist'); D[sp] = {}
+        for nm in D1[sp]['items']:
+            it = V.item_by_name(ds, nm, seed=0)
+            e = dict(rgb=V.tensor_rgb(it[0]).astype(np.float32), depth=it[1][0].numpy(), pc=it[2].numpy(),
+                     rec_true=pack(V.decode_recipe(sp, it[3].numpy(), it[4].numpy())), elev=elevation(sp, nm), out={})
+            for src in SRCS:
+                g = V.generate(m, it, [src], seed=0)
+                e['out'][src] = dict(rgb=np.asarray(g['rgb'], np.float32), depth=np.asarray(g['depth'], np.float32), pc=np.asarray(g['pc'], np.float32),
+                                     rec=pack(V.decode_recipe(sp, g['par'].numpy(), it[4].numpy(), predicted=True)), chamfer=V.chamfer(g['pc'], it[2]))
+            D[sp][nm] = e
+            print(sp, nm, {k: (round(v['chamfer'] * 1e3, 2), round(v['rec']['height'], 2), v['rec']['n']) for k, v in e['out'].items()},
+                  'true', round(e['rec_true']['height'], 2), e['rec_true']['n'], flush=True)
+    pickle.dump(D, open(str(OUT4) + '.tmp', 'wb')); pathlib.Path(str(OUT4) + '.tmp').replace(OUT4)
+
+
+def _cloud(ax, P, truth, fr, under=True, s=0.30):
+    r_, u_, d_ = _scene.view_basis(**VIEW)
+    if under: ax.scatter(truth @ r_, truth @ u_, s=s * 1.1, c=GREY, lw=0, rasterized=True)
+    h = (P @ u_ - (P @ u_).min()) / max(np.ptp(P @ u_), 1e-9); o = np.argsort(P @ d_)
+    ax.scatter((P @ r_)[o], (P @ u_)[o], s=s, c=_scene.PLANT_CMAP(0.15 + 0.85 * h[o]), lw=0, rasterized=True)
+    (cu, cv), hw = fr; ax.set_xlim(cu - hw, cu + hw); ax.set_ylim(cv - hw, cv + hw); ax.set_aspect('equal')
+
+
+def _glyph(ax, sp, rec, truth=None, color=C_OUT):
+    if truth is not None: K.glyph(ax, sp, truth, GREY, stem=GREY, lw_scale=0.75)
+    K.glyph(ax, sp, rec, color, stem='#4a3b2a' if truth is None else '#4a3b2a', lw_scale=0.42)
+    bb = ax.dataLim; w = max(abs(bb.x0), abs(bb.x1)); y0 = min(bb.y0, 0.0); st = max(2 * w, bb.y1 - y0) * 1.06
+    ax.set_xlim(-st / 2, st / 2); ax.set_ylim(y0 - 0.02 * st, y0 + 0.98 * st); ax.set_aspect('equal')
+
+
+def tile(fig, sp, e, stream, src, box, W, H):
+    """one tile: the input stream itself (src None) or the stream generated from src"""
+    ax = img_ax(fig, box, W, H); fg = e['depth'] > 0; fr = cloud_frame(e['pc'], **VIEW)
+    o = None if src is None else e['out'][src]
+    if stream == 'rgb': ax.imshow(crop_square(e['rgb'] if o is None else np.clip(o['rgb'], 0, 1), fg))
+    elif stream == 'depth':
+        ax.imshow(crop_square(K.depth_rgb(e['depth']) if o is None else depth_display(dict(depth=e['depth'], gen_depth=o['depth'])), fg))
+    elif stream == 'pc': _cloud(ax, e['pc'] if o is None else o['pc'], e['pc'], fr, under=o is not None)
+    else: _glyph(ax, sp, e['rec_true'] if o is None else o['rec'], None if o is None else e['rec_true'], color=INK if o is None else C_OUT)
+    for s_ in ax.spines.values(): s_.set_edgecolor(C_IN if o is None else C_OUT); s_.set_linewidth(1.6 if o is None else 0.9)
+    return ax
+
+
+def render4(sp, nm, out_stem, D):
+    e = D[sp][nm]
+    W = 6.875; t = 0.735; g = 0.045; gd = 0.20; gb = 0.26; tag = 0.19; ttl = 0.34; num = 0.20; gr = 0.12
+    block = t + gd + 3 * t + 2 * g
+    x0 = (W - (2 * block + gb)) / 2
+    rowh = ttl + t + num
+    H = tag + 2 * rowh + gr + 0.01
+    fig = plt.figure(figsize=(W, H))
+    ov = fig.add_axes([0, 0, 1, 1]); ov.set_xlim(0, W); ov.set_ylim(0, H); ov.set_axis_off(); ov.patch.set_alpha(0)
+    halo = [pe.withStroke(linewidth=2.4, foreground='white')]
+    for k, src in enumerate(SRCS):
+        r, c = divmod(k, 2)
+        bx = x0 + c * (block + gb); ytop = H - tag - r * (rowh + gr); ty = ytop - ttl - t
+        outs = [st for st in SRCS if st != src]
+        xs = [bx] + [bx + t + gd + j * (t + g) for j in range(3)]
+        if r == 0:
+            ov.text(bx + t / 2, H - tag / 2, 'INPUT', fontsize=FS, color=C_IN, fontweight='bold', ha='center', va='center')
+            ov.text(xs[1] + (3 * t + 2 * g) / 2, H - tag / 2, 'OUTPUT', fontsize=FS, color=C_OUT, fontweight='bold', ha='center', va='center')
+        for j, (st, x) in enumerate(zip([src] + outs, xs)):
+            ov.text(x + t / 2, ty + t + 0.04, NAME2[st], fontsize=FS, ha='center', va='bottom', color=C_IN if j == 0 else INK,
+                    fontweight='bold' if j == 0 else 'normal', linespacing=0.95)
+            tile(fig, sp, e, st, None if j == 0 else src, (x, ty, t, t), W, H)
+            if j and st == 'pc':
+                ov.text(x + t / 2, ty - 0.03, f"{e['out'][src]['chamfer'] * 1e3:.2f}", fontsize=FS, ha='center', va='top', color=INK)
+            if j and st == 'text':
+                rp = e['out'][src]['rec']
+                ov.text(x + t / 2, ty - 0.03, f"{rp['height']:.2f} m, {rp['n']}", fontsize=FS, ha='center', va='top', color=INK)
+        xd = bx + t + gd / 2
+        ov.plot([xd, xd], [ty - 0.02, ty + t + ttl - 0.02], color=INK, lw=1.1, ls=(0, (3.5, 2.5)))
+    out = R / 'paper/figs' / out_stem
+    fig.savefig(f'{out}.pdf', dpi=300); fig.savefig(f'{out}.png', dpi=220); plt.close(fig)
+    shutil.copy(f'{out}.pdf', R / 'paper/overleaf/Figures' / f'{out_stem}.pdf')
+    print('wrote', f'{out}.pdf', f'{W} x {H:.2f} in', flush=True)
+
+
+def sheet4(D):
+    for sp in ('sorghum', 'maize'):
+        names = list(D[sp]); n = len(names)
+        fig = plt.figure(figsize=(9.5, 1.15 * n)); W, H = 9.5, 1.15 * n; t = 0.95
+        for r, nm in enumerate(names):
+            e = D[sp][nm]; y = H - (r + 1) * 1.15 + 0.08
+            fig.text(0.02 / W, (y + t / 2) / H, f"{nm}\n{e['elev']:+.0f} deg\nh {e['rec_true']['height']:.2f} n {e['rec_true']['n']}", fontsize=6, va='center')
+            for k, src in enumerate(SRCS):
+                x = 1.0 + k * 2.1
+                tile(fig, sp, e, src, None, (x, y, t, t), W, H)
+                st = 'pc' if src != 'pc' else 'rgb'
+                ax = tile(fig, sp, e, st, src, (x + t + 0.05, y, t, t), W, H)
+                o = e['out'][src]; ax.set_title(f"{o['chamfer'] * 1e3:.2f} | {o['rec']['height']:.2f} {o['rec']['n']}", fontsize=6, pad=1)
+        fig.savefig(f'/tmp/claude-490224/-work-mech-ai-scratch-alloy-embodiedmae/08a82cbc-d3db-4182-8667-cb84feb249c4/scratchpad/any2all4_{sp}.png', dpi=80)
+        plt.close(fig)
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--dump', action='store_true'); ap.add_argument('--sheet', action='store_true'); ap.add_argument('--render', action='store_true')
     ap.add_argument('--n', type=int, default=15); ap.add_argument('--sorghum'); ap.add_argument('--maize')
+    ap.add_argument('--dump4', action='store_true'); ap.add_argument('--sheet4', action='store_true'); ap.add_argument('--render4', action='store_true')
     a = ap.parse_args()
     if a.dump: dump(a.n)
+    if a.dump4: dump4()
+    if a.sheet4 or a.render4:
+        D4 = pickle.load(open(OUT4, 'rb'))
+        if a.sheet4: sheet4(D4)
+        if a.render4:
+            for sp in ('sorghum', 'maize'):
+                if getattr(a, sp): render4(sp, getattr(a, sp), f'fig_any2all_{sp}', D4)
     if a.sheet or a.render:
         D = pickle.load(open(OUT, 'rb'))
         if a.sheet: sheet(D)

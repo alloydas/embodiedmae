@@ -650,19 +650,51 @@ Figure~\ref{fig:rowsex} shows qualitative reconstructions under row occlusion. W
 \subsection{Any-subset modality reconstruction and distillation}
 \label{sec:res-distill}\label{sec:exp-main}
 
+<<<<<<< Updated upstream
 \begin{figure}[t]
+=======
+\begin{table*}[t]
+  \centering\scriptsize
+  \setlength{\tabcolsep}{3.6pt}
+  \begin{tabular}{l cc cc c cc cc}
+    \toprule
+    & \multicolumn{4}{c}{Sorghum (Validation Set)} & & \multicolumn{4}{c}{Maize (Validation Set)} \\
+    \cmidrule(lr){2-5}\cmidrule(lr){7-10}
+    & \multicolumn{2}{c}{$\theta$ MAE $\downarrow$} & \multicolumn{2}{c}{Chamfer $\times10^{-3}\downarrow$} & & \multicolumn{2}{c}{$\theta$ MAE $\downarrow$} & \multicolumn{2}{c}{Chamfer $\times10^{-3}\downarrow$} \\
+    Input Modality & Before & After & Before & After & & Before & After & Before & After \\
+    \midrule
+    RGB Only & 0.058 & 0.014 & 2.27 & 0.88 & & 0.037 & 0.019 & 11.3 & 0.77 \\
+    Depth Only & 0.017 & \textbf{0.013} & 0.90 & 0.63 & & 0.024 & 0.019 & 1.26 & 0.58 \\
+    Point Cloud Only & 0.040 & 0.020 & 5.48 & 1.39 & & 0.020 & 0.018 & 6.43 & 0.83 \\
+    $\theta$ (Parameters Only) & -- & -- & 22.7 & 6.83 & & -- & -- & 80.7 & 12.8 \\
+    \midrule
+    \multicolumn{10}{l}{\emph{Two-Stream Input Pairs $\to$ Point Cloud Generation (Dedicated Student / Generalist)}} \\
+    $\mathrm{RGB}+\mathrm{D}$ & -- & -- & 2.91 & 0.60 / 0.59 & & -- & -- & 1.30 & 0.53 / 0.55 \\
+    $\mathrm{RGB}+\theta$ & -- & -- & 0.43 & 0.40 / 0.39 & & -- & -- & 0.47 & 0.44 / 0.41 \\
+    $\mathrm{D}+\theta$ & -- & -- & 0.50 & 0.37 / \textbf{0.36} & & -- & -- & 0.46 & 0.42 / \textbf{0.40} \\
+    \midrule
+    Mean Generation Loss & \multicolumn{4}{c}{$0.371 \to 0.259\ (-30.2\%)$} & & \multicolumn{4}{c}{$0.290 \to 0.164\ (-43.5\%)$} \\
+    \bottomrule
+  \end{tabular}
+  \caption{\textbf{Any-subset modality reconstruction before and after
+  cross-modal distillation (validation set).} Each row represents evaluation given only the specified source modality to generate remaining streams. Before: zero-shot pre-trained model warm-start; After: distilled generalist student model.}
+  \label{tab:anysubset}\label{tab:main}
+\end{table*}
+
+\begin{figure*}[t]
+>>>>>>> Stashed changes
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_any2all_maize.pdf}
-  \caption{\textbf{Any-to-all, maize: one image in, every stream out.} The distilled generalist is given only the image of a held-out test plant (left of the dashed line) and generates the point cloud, the depth image and the procedural parameters. Outputs are drawn over the ground truth in grey; the parameters as a stem-and-leaves schematic with height and leaf count (truth in brackets). Chamfer in $10^{-3}$ (test median 0.51). The plant is selected for clarity: among test plants seen within $25^\circ$ of the horizon, its Chamfer is among the lowest.}
+  \caption{\textbf{Any-to-all, maize: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.12\,m, 14 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 7.48 here, 12.8 on average in Table~\ref{tab:anysubset}).}
   \label{fig:any2any-maize}\label{fig:any2any}
-\end{figure}
+\end{figure*}
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
   \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum.pdf}
-  \caption{\textbf{Any-to-all, sorghum: one image in, every stream out.} The distilled generalist is given only the image of a held-out test plant (left of the dashed line) and generates the point cloud, the depth image and the procedural parameters. Outputs are drawn over the ground truth in grey; the parameters as a stem-and-leaves schematic with height and leaf count (truth in brackets). Chamfer in $10^{-3}$ (test median 0.77). The plant is selected for clarity: among test plants seen within $25^\circ$ of the horizon, its Chamfer is among the lowest.}
+  \caption{\textbf{Any-to-all, sorghum: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.43\,m, 24 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 3.62 here, 6.83 on average in Table~\ref{tab:anysubset}).}
   \label{fig:any2any-sorghum}
-\end{figure}
+\end{figure*}
 
 Table~\ref{tab:main} (Appendix~\ref{app:tables}) reports cross-modal generation performance before and after teacher--student feature distillation, and Figs.~\ref{fig:any2any-maize} and~\ref{fig:any2any-sorghum} show the generalist's outputs on one plant per species. Distillation from the full-modality teacher reduces mean cross-modal generation loss by 30.2\% in sorghum and 43.5\% in maize.
 
