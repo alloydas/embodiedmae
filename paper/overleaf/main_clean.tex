@@ -487,9 +487,12 @@ In sorghum, four core developmental traits have effective rank two due to genera
 
 \begin{table*}[t]
   \centering\scriptsize
-  \textbf{(a) Modality value-add (E2)}\\[3pt]
-  \setlength{\tabcolsep}{3.2pt}
-  \begin{tabular}{l c cccccc}
+  \begin{minipage}[t]{0.46\textwidth}
+    \centering
+    \textbf{(a) Modality value-add}\\[3pt]
+    \setlength{\tabcolsep}{3.2pt}
+    \resizebox{\linewidth}{!}{%
+    \begin{tabular}{l c cccccc}
     \toprule
     & Chamfer & \multicolumn{6}{c}{Frozen-Probe $R^2$ (Validation Set)} \\
     \cmidrule(lr){3-8}
@@ -516,27 +519,32 @@ In sorghum, four core developmental traits have effective rank two due to genera
     $\mathrm{PC}+\mathrm{RGB}+\theta$ & 1.21 & 0.509 & 0.881 & 0.780 & 0.912 & \textbf{0.371} & \textbf{0.763} \\
     $\mathrm{PC}+\mathrm{RGB}+\mathrm{D}+\theta$ & \textbf{0.99} & \textbf{0.635} & 0.908 & 0.781 & 0.919 & 0.304 & 0.743 \\
     \bottomrule
-  \end{tabular}\\[8pt]
-  \textbf{(b) Training dataset scale (E3) and encoder capacity (E4)}\\[3pt]
-  \setlength{\tabcolsep}{3.0pt}
-  \begin{tabular}{l r c ccc c c ccc}
+  \end{tabular}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.52\textwidth}
+    \centering
+    \textbf{(b) Training dataset scale and encoder capacity}\\[3pt]
+    \setlength{\tabcolsep}{3.0pt}
+    \resizebox{\linewidth}{!}{%
+    \begin{tabular}{l r c ccc c c ccc}
     \toprule
     & & \multicolumn{4}{c}{Sorghum} & & \multicolumn{4}{c}{Maize} \\
     \cmidrule(lr){3-6}\cmidrule(lr){8-11}
     Dataset / Capacity Variant & Epochs & Chamfer & Height & Roll & Leaf Len & & Chamfer & Height & Branch & Stem Rad \\
     \midrule
-    \multicolumn{11}{l}{\emph{Training Dataset Scale (E3, Base Model)}} \\
+    \multicolumn{11}{l}{\emph{Training Dataset Scale (Base Model)}} \\
     1{,}000 Plants & 6{,}169 & 3.13 & 0.952 & 0.716 & 0.249 & & 3.54 & 0.393 & 0.851 & 0.593 \\
     3{,}000 Plants & 2{,}100 & 2.86 & 0.932 & 0.679 & 0.213 & & 1.46 & 0.524 & 0.867 & 0.624 \\
     10{,}000 Plants & 631 & 2.48 & 0.962 & 0.749 & 0.245 & & 0.87 & 0.427 & 0.853 & 0.717 \\
     10{,}500 Plants & 600 & 2.53 & 0.962 & 0.760 & 0.249 & & 0.99 & 0.635 & 0.919 & 0.743 \\
     \midrule
-    \multicolumn{11}{l}{\emph{Encoder Capacity Scale (E4, Full Dataset)}} \\
+    \multicolumn{11}{l}{\emph{Encoder Capacity Scale (Full Dataset)}} \\
     ViT-Small (25\,M) & 600 & 2.86 & 0.964 & \textbf{0.817} & \textbf{0.277} & & 1.22 & 0.563 & 0.886 & 0.682 \\
     ViT-Base (114\,M) & 600 & \textbf{2.53} & 0.962 & 0.760 & 0.249 & & \textbf{0.99} & \textbf{0.635} & \textbf{0.919} & \textbf{0.743} \\
     ViT-Large (332\,M) & 600 & 2.68 & 0.948 & 0.711 & 0.246 & & 1.06 & 0.580 & 0.887 & 0.614 \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
+  \end{minipage}
   \caption{\textbf{Ablations at the shared step budget (197{,}400 optimizer steps).} \textbf{(a)}~Modality value-add: models differing only in active input token streams; $\theta$ is the parameter stream as an encoder input under the shared Dirichlet budget. \textbf{(b)}~Dataset scale and encoder capacity: at fixed step compute, larger encoders do not help and more data helps reconstruction more reliably than it helps the probes. Chamfer $\times 10^{-3}$ and linear-probe $R^2$ (validation).}
   \label{tab:e2}\label{tab:modality_value_add}\label{tab:scaling}\label{tab:scaling_ablations}
 \end{table*}
