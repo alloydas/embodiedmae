@@ -17,6 +17,11 @@
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{arrows.meta}
+% Contact-solver pseudocode (supplement, Dataset Generation Details)
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\algrenewcommand\algorithmiccomment[1]{\hfill{\footnotesize\textcolor{black!60}{$\triangleright$ #1}}}
+\newcommand{\Meets}{\textsc{Meets}}
 
 % Import additional packages in the preamble file, before hyperref
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -280,7 +285,7 @@ To train and evaluate \method{}, we construct \dataset{}, a synthetic benchmark 
     Row scenes $\times$ orientations & $15{,}000 \times 10$ & $15{,}000 \times 10$ \\
     Row camera & level rover, 1.0\,m & level rover, 2.5\,m \\
     Row cloud (input / target) & \multicolumn{2}{c}{24{,}576 / 8{,}192 pts} \\
-    Real-field split & 520 real plants $\times$ 2 row layouts & 30 scanned plants $\times$ 2 row layouts \\
+    Real-field split & 520 real plants, 2 layouts & 30 scanned plants, 2 layouts \\
     \bottomrule
   \end{tabular}
   \caption{\textbf{\dataset{} dataset configuration.} Parameter dimensions
@@ -1565,14 +1570,31 @@ Pixels $(u,v)$ with depth $z > 0$ back-project to 3D camera coordinates:
 \end{equation}
 
 \paragraph{Maize captures.} Ten camera directions per plant are sampled
-uniformly on the sphere at distance $1.05\,r / \sin 20^\circ$ ($r$ = bounding-box half-diagonal). A fourth directional light (1.5) is mounted to the camera. Outputs include RGB images, RGBA images with cleared backgrounds, depth maps, camera poses, parameter records, and 8{,}192-point clouds back-projected from view depth maps.
+uniformly on the sphere (normalized Gaussian vectors), at a distance fitted to the plant: with $r$ half the bounding-box diagonal,
+\begin{equation}
+  \mathrm{dist} = \frac{1.05\,r}{\sin 20^\circ},\quad
+  \begin{aligned}
+    n &= \max(0.001,\ \mathrm{dist} - 1.5\,r),\\
+    f &= \mathrm{dist} + 1.5\,r.
+  \end{aligned}
+  \label{eq:supp-maizecam}
+\end{equation}
+A fourth directional light (1.5) is mounted to the camera. Outputs include RGB images, RGBA images with cleared backgrounds, depth maps, camera poses, parameter records, and 8{,}192-point clouds back-projected from view depth maps.
+
+\paragraph{Maize leaf curvature.} The parameter record's per-leaf curvature is computed on the midrib B-spline rebuilt from the leaf's length, insertion angle, droopiness and spline point count (cubic, clamped, target elevation $\mathrm{angle} + \mathrm{droop}\cdot t^2$): over blade arc length $s \in [0.22, 1]$,
+\begin{equation}
+  \theta = \int_{0.22}^{1} \lvert \kappa(s) \rvert \, ds,
+  \qquad \bar\kappa = \theta / S,
+  \label{eq:supp-curvature}
+\end{equation}
+with $\theta$ the total bend angle, $S$ the blade length and $\bar\kappa$ the mean curvature, all integrated by 10-node Gauss--Legendre quadrature.
 
 \paragraph{Sorghum captures.} Ten camera directions form a fixed Fibonacci
-sphere rig at 2.5\,m distance ($y_i = 1 - 2(i+0.5)/10$, elevation angles $-64^\circ$ to $+64^\circ$). Outputs include RGB images, depth maps, camera poses, parameter records, and complete occlusion-free 8{,}192-point clouds expressed in the camera frame.
+sphere rig at 2.5\,m distance ($y_i = 1 - 2(i+0.5)/10$, $\phi_i = i(\sqrt5-1)\pi + \epsilon_i$ with a small fixed jitter $\epsilon_i$; elevation angles $-64^\circ$ to $+64^\circ$, five above and five below the horizon). Outputs include RGB images, depth maps, camera poses, parameter records, and complete occlusion-free 8{,}192-point clouds expressed in the camera frame.
 
 \subsection{Simulated crop row rendering}
 \paragraph{Row composition.} Within a split, row $i$ places target main
-plant $L_i$ between right neighbor $L_{i+1}$ and left neighbor $L_{i+2}$ at stem spacing $d = 0.15$\,m along the $x$-axis. Rows are rendered across ten orientation angles $\theta \in \{0^\circ, 10^\circ, \dots, 90^\circ\}$ with random neighbor offsets $\delta \sim U(-15^\circ, 15^\circ)$. Sorghum neighbors are rotated so their stem axes run parallel to the main stem.
+plant $L_i$ between right neighbor $L_{i+1}$ and left neighbor $L_{i+2}$ at stem spacing $d = 0.15$\,m along the $x$-axis. Rows are rendered across ten orientation angles $\theta \in \{0^\circ, 10^\circ, \dots, 90^\circ\}$ with random neighbor offsets $\delta \sim U(-15^\circ, 15^\circ)$. Sorghum neighbors are rotated so their stem axes run parallel to the main stem: each neighbor is turned about its stem base by the smallest rotation that makes its stem direction (the principal SVD axis of its stem vertices), after its own yaw, parallel to the main plant's stem direction after the main yaw. The main plant is never tilted, and maize is not tilted.
 
 \paragraph{Physical contact solver.} Inter-plant leaf collisions are
 resolved using an articulated contact solver. Leaf blades are modeled as chains of 8\,cm segments connected by joints that bend along circular arcs, up/down and sideways. Stems, sheaths (within 2.5\,cm of stem axes), and maize tassels remain rigid. Upon collision, joints rotate by the minimum clearing angle required to eliminate triangle--triangle intersection. Neighbors bend first; main plant leaves bend only when neighbors reach rotation limits (Tab.~\ref{tab:supp-stages}). When no valid layout exists under default limits, limits loosen in stages, and stem spacing widens in 5\,cm steps (refined to 1\,cm); the maximum spacing used in maize is 0.33\,m.
@@ -1594,23 +1616,115 @@ rotation limits applied across optimization stages to resolve inter-plant row le
 \label{tab:supp-stages}\label{tab:supp-solver_limits}
 \end{table}
 
+\paragraph{Contact detection (\Meets).} Whether a leaf \emph{meets} another plant is decided in two steps. (1)~\emph{Grid screen}: each plant marks a 1\,cm occupancy grid at surface samples that cover every surface point to within $\varepsilon_O = 2.8$\,mm, and the marked cells are grown by one cell in every direction; the tested leaf is sampled so that every point of it lies within $\varepsilon_M = 6.8$\,mm of a sample. Where two surfaces cross, some tested sample and some marked sample lie within $\varepsilon_M + \varepsilon_O < 1$\,cm of each other, so the tested sample falls in a grown cell: no tested sample in another plant's grown cells means no crossing. (2)~\emph{Exact test}: each triangle with a sample in a grown cell is tested exactly, triangle against triangle, against that plant as it currently stands. Only an actual intersection counts as a contact, so leaves may rest against each other with no margin. Rigid parts (stems, sheaths, the maize tassel) are tested by the same exact triangle tests; the tassel is kept out of the grids, since its thin branches can interleave with a neighbor's without crossing. Two surfaces \emph{cross} when a triangle of one plant intersects a triangle of another; they \emph{touch} when they meet without intersecting. Crossing is forbidden, touching is allowed.
+
+\paragraph{Bending a leaf clear.} Algorithm~\ref{alg:supp-bend} finds the smallest change of a leaf's shape that clears a set of obstacles. Candidate bends at a joint are up/down angles in $5^\circ$ steps and sideways angles in $10^\circ$ steps within the stage's limits (Tab.~\ref{tab:supp-stages}), ordered by magnitude, sideways bends last among equals, down before up; three halvings toward the joint's previous bend then find where the leaf just starts to clear, so it comes to rest on or under what it meets. The search runs within a budget of segment tests (12{,}000 per leaf; 50{,}000 in stage~2). For sorghum neighbors, a leaf with no clear bend may also \emph{roll} about its stem axis, as if it had grown at another azimuth: rolls of $\pm20^\circ, \pm40^\circ, \pm60^\circ, \pm80^\circ$ are tried nearest first, each followed by the same bending search. Rolled neighbor leaves are exempt from the own-plant rule (a leaf at a new azimuth may cross its own siblings, as a leaf of any sampled plant could); maize leaves do not roll, and main-plant leaves never roll.
+
+\paragraph{Settling (resting against).} The grid screen can leave a gap of up to about 2\,cm under a bent leaf. Once a layout is solved, every bent leaf eases back toward its grown shape: all its joint bends are scaled down together, and 12 halvings of the scale find the least bend (to $1/4096$ of the bend) that still clears every other plant by exact triangle tests on the positions as rendered. The leaf then rests against what it bent round, a fraction of a millimetre away; a leaf whose grown shape clears by then returns to it. Three passes are made, since a leaf that settled can make room for one settled before it.
+
+\paragraph{Solving a layout and choosing the spacing.} Algorithm~\ref{alg:supp-layout} resolves all contacts of one layout under one stage's limits: stems and sheaths never move (if they cross, the layout fails at once); the main plant bends first, but only against the neighbors' stems and sheaths, which cannot give way; the neighbors then give way to the main plant and to each other in rounds; and only if a neighbor leaf is boxed in do the main-plant leaves in its way bend round it. The main plant therefore keeps its grown, ground-truth shape wherever a neighbor can get out of its way. Algorithm~\ref{alg:supp-spacing} wraps the stages and the spacing search: the solver first tries $d = 0.15$\,m, raises the spacing in 5\,cm steps up to 1.5\,m until a stage succeeds, then refines in 1\,cm steps from the last failure toward that success. Whether bending succeeds is not monotone in $d$, so this finds the first working spacing along that search, not necessarily the smallest. The spacing used, the stage, the number of bent and rolled leaves per plant, the largest leaf turn and the solve time are recorded per orientation.
+
+\begin{algorithm}[t]
+\caption{\textsc{BendClear}: the smallest clear shape of one leaf}\label{alg:supp-bend}
+\footnotesize
+\begin{algorithmic}[1]
+\Require leaf $\ell$ with segments $0,\dots,n{-}1$ (collar first); obstacles $\mathcal O$; stage limits $(U,S_0,S,T)$
+\State $p \gets$ grown shape (every joint bend $(\alpha_j,\beta_j)=(0,0)$)
+\State $j \gets$ first segment of $\ell(p)$ that \Meets{} $\mathcal O$ \Comment{none: clear}
+\While{$j$ exists}
+  \If{too many steps or test budget spent} \Return \textsc{fail} \EndIf
+  \State $q^\star \gets$ none
+  \For{$k = j, j{-}1, \dots, \max(0,j{-}3)$} \Comment{joint before the contact first}
+    \ForAll{bends $(\alpha,\beta)$ of joint $k$, smallest first}
+      \State $q \gets p$ with joint $k$ set to $(\alpha,\beta)$, joints after $k$ straightened
+      \If{$\sum_i \|(\alpha_i,\beta_i)\| > T$ \textbf{or} segs.\ $k..j$ of $\ell(q)$ \Meets{} $\mathcal O$}
+        \State \textbf{continue}
+      \EndIf
+      \State $q \gets$ least bend between $p$ and $q$ at joint $k$ that clears (3 halvings)
+      \If{$\ell(q)$ enters own stem or crosses own plant more than as grown}
+        \State \textbf{continue}
+      \EndIf
+      \State $q^\star \gets q$; \textbf{break} both loops
+    \EndFor
+  \EndFor
+  \If{$q^\star$ is none} \Return \textsc{fail} \EndIf
+  \State $p \gets q^\star$; \quad $j \gets$ first segment $\ge k$ of $\ell(p)$ that \Meets{} $\mathcal O$
+\EndWhile
+\State \Return $p$
+\end{algorithmic}
+\noindent\footnotesize For a sorghum neighbor leaf, on \textsc{fail} the search is repeated from the grown shape rolled about the stem by $\pm20^\circ,\pm40^\circ,\dots$ up to $80^\circ$; the first roll that yields a clear shape is kept.
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{\textsc{SolveLayout}: contacts of one layout under one stage}\label{alg:supp-layout}
+\footnotesize
+\begin{algorithmic}[1]
+\Require main plant $P_0$, neighbors $P_1,P_2$ at spacing $d$, angles $\theta$; stage limits
+\If{stems or sheaths of any two plants cross} \Return \textsc{fail} \EndIf
+\ForAll{leaves $\ell$ of $P_0$ that \Meets{} the stems/sheaths of $P_1,P_2$}
+  \State $\ell \gets \textsc{BendClear}(\ell, \text{stems and sheaths of } P_1,P_2)$
+  \State \textbf{if} \textsc{fail} \Return \textsc{fail}
+\EndFor
+\For{round $=1,\dots,8$} \Comment{neighbors give way}
+  \For{$r = 1, 2$}
+    \ForAll{leaves $\ell$ of $P_r$ that \Meets{} the other two plants}
+      \State $\ell \gets \textsc{BendClear}(\ell, \text{other two plants})$; on \textsc{fail} mark $\ell$ stuck
+    \EndFor
+  \EndFor
+  \If{no leaf changed} \textbf{break} \EndIf
+\EndFor
+\For{$t = 1, 2$ \textbf{while} some neighbor leaf is stuck} \Comment{main gives way only where it must}
+  \State bend clear the $P_0$ leaves that \Meets{} a stuck leaf; rerun the neighbor rounds
+\EndFor
+\State \Return \textsc{ok} if no triangle of any plant crosses another plant (exact test), else \textsc{fail}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{\textsc{SolveOrientation}: spacing, stage and settling}\label{alg:supp-spacing}
+\footnotesize
+\begin{algorithmic}[1]
+\Require plants $P_0,P_1,P_2$; angles $\theta$; $d_0=0.15$\,m, $d_\text{max}=1.5$\,m
+\Function{Try}{$d$}
+  \For{stage $s=0,1,2$}
+    \State $r \gets \textsc{SolveLayout}(P_0,P_1,P_2,d,\theta,\text{limits}_s)$
+    \If{$r=\textsc{ok}$ \textbf{or} stems/sheaths cross} \Return $r$ \EndIf
+  \EndFor
+  \State \Return \textsc{fail}
+\EndFunction
+\If{\Call{Try}{$d_0$} $=\textsc{ok}$} $d \gets d_0$
+\Else
+  \State $d\gets$ first of $d_0{+}0.05, d_0{+}0.10,\dots,d_\text{max}$ with \Call{Try}{$d$} $=\textsc{ok}$
+  \State $d_\text{lo}\gets$ the last spacing tried before $d$ (a failure)
+  \State $d\gets$ first of $d_\text{lo}{+}0.01, d_\text{lo}{+}0.02,\dots < d$ with \Call{Try}{} $=\textsc{ok}$, else keep $d$
+\EndIf
+\State settle every bent leaf of the layout kept at $d$ (resting against)
+\State render the input (three plants) and the ground truth (main plant alone, same bent shape)
+\end{algorithmic}
+\end{algorithm}
+
 \paragraph{Independent mesh intersection validation.}
 Solved row layouts are verified by an independent validation suite that shares no code with the solver: it executes exact triangle--triangle intersection checks between adjacent plant meshes at their rendered positions, and a row passes only if no triangle of one plant intersects a triangle of another. The check found no inter-plant mesh intersections on the rows it was run on; which rows those were is not recorded, and the bent meshes are not stored with the renders, so it cannot be repeated on the released data. The solver's own record covers every row: across all 300{,}000 row orientations (15{,}000 rows $\times$ 10 yaws per species), none is marked failed, and the spacing had to be widened beyond 0.15\,m in 21{,}599 sorghum (14.4\,\%) and 34{,}388 maize (22.9\,\%) orientations.
 
 \begin{table}[h]
 \centering\scriptsize
 \setlength{\tabcolsep}{3pt}
-\begin{tabular}{lrrrr}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrrr}
 \toprule
-Split & Row views & At $d{=}0.15$\,m & Stage 0 / 1 / 2 & Max $d$ \\
+Split & Orient. & At $d{=}0.15$\,m & Stage 0 / 1 / 2 & Max / p99 $d$ & Bent & Rolled \\
 \midrule
-Maize train & 105{,}000 & 76.4\% & 81{,}679 / 16{,}138 / 7{,}183 & 0.33\,m \\
-Maize val & 22{,}500 & 78.3\% & 17{,}780 / 3{,}321 / 1{,}399 & 0.28\,m \\
-Maize test & 22{,}500 & 79.0\% & 17{,}824 / 3{,}284 / 1{,}392 & 0.30\,m \\
+Maize train & 105{,}000 & 76.4\% & 81{,}679 / 16{,}138 / 7{,}183 & 0.33 / 0.23\,m & 48.0\% & -- \\
+Maize val   & 22{,}500  & 78.3\% & 17{,}780 / 3{,}321 / 1{,}399 & 0.28 / 0.23\,m & 46.8\% & -- \\
+Maize test  & 22{,}500  & 79.0\% & 17{,}824 / 3{,}284 / 1{,}392 & 0.30 / 0.23\,m & 47.1\% & -- \\
+\midrule
+Sorghum train & 105{,}000 & 85.4\% & 42{,}272 / 25{,}120 / 37{,}608 & 0.39 / 0.21\,m & 98.3\% & 99.4\% \\
+Sorghum val   & 22{,}500  & 86.0\% & 9{,}395 / 5{,}335 / 7{,}770 & 0.63 / 0.21\,m & 97.8\% & 98.9\% \\
+Sorghum test  & 22{,}500  & 86.3\% & 9{,}511 / 5{,}416 / 7{,}573 & 0.46 / 0.21\,m & 97.3\% & 99.1\% \\
 \bottomrule
-\end{tabular}
-\caption{\textbf{Maize crop row solver statistics.} Solution convergence
-rates across solver stages and maximum required plant spacing across splits. On 10 sample sorghum rows (100 orientations), 85 were solved at 0.15\,m and the rest by 0.21\,m.}
+\end{tabular}}
+\caption{\textbf{Crop row solver statistics.} Solution convergence
+rates across solver stages and required plant spacing across splits. ``Bent'' counts orientations in which at least one main-plant leaf was bent, ``Rolled'' those in which at least one neighbor leaf was rolled. No orientation failed in either species. Sorghum rows are more crowded than maize rows: in nearly every sorghum orientation some main-plant leaves are bent and some neighbor leaves are rolled, and about a third need the stage-2 limits, but most are still solved at the base spacing.}
 \label{tab:supp-rowstats}\label{tab:supp-row_stats}
 \end{table}
 
