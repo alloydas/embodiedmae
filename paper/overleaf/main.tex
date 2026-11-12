@@ -566,6 +566,20 @@ scene.}
   \label{fig:dataset}
 \end{figure*}
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_maize.pdf}
+  \caption{\updtwo{\textbf{Any-to-all, maize: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.12\,m, 14 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 7.48 here, 12.8 on average in Table~\ref{tab:anysubset}).}}
+  \label{fig:any2any-maize}\label{fig:any2any}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{Figures/fig_rows_examples.pdf}
+  \caption{\updtwo{\textbf{Row occlusion reconstruction on held-out test plants.} Sorghum (left) and maize (right); $0^\circ$ is broadside, $90^\circ$ end-on. Columns: the row image the model reads (neighbors included), the center plant's true point cloud, and the point cloud written by the row-trained model (blue) over the truth in grey, with its Chamfer distance to the truth ($10^{-4}\,\mathrm{m}^2$). The plants were selected for clarity among those where the row-trained model is in its best 35\% and the isolated-trained control in its worst 40\% at both yaws; Figs.~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize} show ten more plants per species, spread over the whole error range.}}
+  \label{fig:rowsex}
+\end{figure*}
+
 \begin{table}[t]
   \centering\scriptsize
   \setlength{\tabcolsep}{3pt}
@@ -1260,12 +1274,6 @@ drops end-on ($\theta=90^\circ$).} \upd{In sorghum rows, plant headings are draw
 uniformly at random, so occlusion error remains constant across all yaw
 angles.}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_rows_examples.pdf}
-  \caption{\updtwo{\textbf{Row occlusion reconstruction on held-out test plants.} Sorghum (left) and maize (right); $0^\circ$ is broadside, $90^\circ$ end-on. Columns: the row image the model reads (neighbors included), the center plant's true point cloud, and the point cloud written by the row-trained model (blue) over the truth in grey, with its Chamfer distance to the truth ($10^{-4}\,\mathrm{m}^2$). The plants were selected for clarity among those where the row-trained model is in its best 35\% and the isolated-trained control in its worst 40\% at both yaws; Figs.~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize} show ten more plants per species, spread over the whole error range.}}
-  \label{fig:rowsex}
-\end{figure*}
 
 \begin{figure*}[t]
   \centering
@@ -1283,12 +1291,6 @@ angles.}
 \subsection{Any-subset modality reconstruction and distillation}
 \label{sec:res-distill}\label{sec:exp-main}
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2all_maize.pdf}
-  \caption{\updtwo{\textbf{Any-to-all, maize: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.12\,m, 14 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 7.48 here, 12.8 on average in Table~\ref{tab:anysubset}).}}
-  \label{fig:any2any-maize}\label{fig:any2any}
-\end{figure*}
 
 \begin{figure*}[t]
   \centering
