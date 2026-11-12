@@ -1,0 +1,251 @@
+<title>CropCode</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="CropCode: one masked autoencoder that recovers the procedural model of a crop plant from any field sensor, even when neighbours occlude it.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a single reading column; each task is a band with its controls above a grid of synced 3D panels. */
+  :root {
+    --bg: #f5f6f1; --fg: #1b211b; --muted: #5b6458; --rule: #d6dacf; --card: #ffffff; --panel: #ffffff;
+    --accent: #0072b2; --accent-ink: #ffffff; --input: #b06f00; --chip: #e8ece3;
+    --display: "Fraunces", Georgia, serif;
+    --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #121512; --fg: #e3e7df; --muted: #9da698; --rule: #2c332b; --card: #1a1e19; --panel: #161a16;
+    --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232922; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #121512; --fg: #e3e7df; --muted: #9da698; --rule: #2c332b; --card: #1a1e19; --panel: #161a16;
+    --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232922; color-scheme: dark }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px; display: grid; gap: 64px; }
+  h1 { font-family: var(--display); font-weight: 640; font-size: clamp(40px, 7vw, 68px); line-height: 1; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-family: var(--display); font-weight: 560; font-size: clamp(24px, 3.4vw, 32px); line-height: 1.15; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  .hero { display: grid; gap: 16px; max-width: 78ch; }
+  .hero .full { font-size: clamp(17px, 2.1vw, 21px); color: var(--muted); text-wrap: balance; }
+  .hero .claim { font-size: 17px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; font-weight: 600; font-size: 15px;
+         text-decoration: none; border: 1px solid var(--fg); color: var(--fg); background: transparent; }
+  .btn.primary { background: var(--fg); color: var(--bg); }
+  .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+  section.task { display: grid; gap: 18px; }
+  .task-head { display: grid; gap: 8px; max-width: 80ch; }
+  .eyebrow { font-family: var(--mono); font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .lede { color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; background: var(--card); border: 1px solid var(--rule);
+              border-radius: 10px; padding: 12px 14px; }
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .ctl > span { color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--fg); padding: 5px 12px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .seg button:focus-visible, select:focus-visible, input:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--rule); background: var(--bg); color: var(--fg); max-width: 100%; }
+  input[type=range] { width: 110px; accent-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .cell { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+  .cell header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 10px 6px; font-size: 14px; border-bottom: 1px solid var(--rule); }
+  .cell header b { font-weight: 600; }
+  .cell header .chip { font-family: var(--mono); font-size: 12.5px; background: var(--chip); border-radius: 6px; padding: 1px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cell.input header b { color: var(--input); }
+  .cell.output header b { color: var(--accent); }
+  .cell canvas, .cell img.view { display: block; width: 100%; aspect-ratio: 1 / 1; height: auto; cursor: grab; }
+  .cell img.view { object-fit: contain; background: #000; cursor: default; }
+  .cell canvas:active { cursor: grabbing; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; font-size: 13.5px; color: var(--muted); }
+  .bar { width: 160px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, #440154, #414487, #2a788e, #22a884, #7ad151, #fde725); }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 5px; }
+  .hint { font-size: 13.5px; color: var(--muted); }
+  .strip { display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: var(--panel); }
+  .strip img { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; border: 2px solid transparent; cursor: pointer; background: #fff; flex: none; }
+  .strip img[aria-current="true"] { border-color: var(--accent); }
+  .data-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  @media (max-width: 760px) { .data-grid { grid-template-columns: minmax(0, 1fr); } }
+  .note { font-size: 14px; color: var(--muted); }
+  .loading { opacity: .5; transition: opacity .15s; }
+  footer { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 18px; }
+  @media (prefers-reduced-motion: reduce) { .loading { transition: none; } }
+</style>
+
+<main>
+  <header class="hero">
+    <div class="eyebrow">CVPR 2027 submission</div>
+    <h1>CropCode</h1>
+    <p class="full">Inverse procedural modeling of occluded row crop geometry from sparse multimodal field observations</p>
+    <p class="claim">One masked autoencoder reads any field sensor (an image, a depth image or a point cloud) and writes the procedural model of the plant, even when its neighbours hide part of it. Every 3D view on this page is a held-out test plant; drag to rotate, scroll or pinch to zoom, double-click to reset.</p>
+    <div class="buttons">
+      <a class="btn" aria-disabled="true">Paper (coming soon)</a>
+      <a class="btn primary" href="https://github.com/alloydas/CropCode">Code</a>
+    </div>
+  </header>
+
+  <!-- ====================================================== datasets -->
+  <section class="task" id="data">
+    <div class="task-head">
+      <div class="eyebrow">Data</div>
+      <h2>Three kinds of plants</h2>
+      <p class="lede">Isolated synthetic plants (15,000 per species, ten cameras each), synthetic crop rows where two neighbours occlude the center plant, and rows built from real plant models (maize) and scans (sorghum).</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span>Species</span><div class="seg" id="d-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><span>Data</span><div class="seg" id="d-kind"><button type="button" data-v="isolated" aria-pressed="true">Isolated plant</button><button type="button" data-v="row" aria-pressed="false">Synthetic row</button><button type="button" data-v="real" aria-pressed="false">Real plants</button></div></div>
+      <div class="ctl"><label for="d-item">Example</label><select id="d-item"></select></div>
+    </div>
+    <div class="data-grid">
+      <div class="cell input"><header><b id="d-img-title">Image</b><span class="chip" id="d-img-chip"></span></header><div><img class="view" id="d-img" alt=""><div class="strip" id="d-strip" hidden></div></div></div>
+      <div class="cell"><header><b>Point cloud</b><span class="chip" id="d-pc-chip"></span></header><canvas id="d-pc" aria-label="3D point cloud of the selected example"></canvas></div>
+    </div>
+    <div class="legend" id="d-legend"><span><i class="sw" style="background:#5aa83e"></i>plant (center plant in rows)</span><span id="d-legend-nb"><i class="sw" style="background:#c9c2b0"></i>neighbouring plants</span></div>
+  </section>
+
+  <!-- ====================================================== crop rows -->
+  <section class="task" id="rows">
+    <div class="task-head">
+      <div class="eyebrow">Regime III · crop rows</div>
+      <h2>The center plant, written out from an occluded row</h2>
+      <p class="lede">The model reads the row (image, depth image and the scene point cloud; nothing marks the center plant) and writes the center plant alone. Compare the headline model without row training, a model fine-tuned on isolated plants, and the row fine-tune.</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span>Species</span><div class="seg" id="r-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><label for="r-plant">Plant</label><select id="r-plant"></select></div>
+      <div class="ctl"><span>Row seen</span><div class="seg" id="r-yaw"><button type="button" data-v="0" aria-pressed="true">Broadside</button><button type="button" data-v="90" aria-pressed="false">End-on</button></div></div>
+      <div class="ctl"><label for="r-src">Row fine-tune reads</label><select id="r-src"><option value="all">All three streams</option><option value="rgb">Image only</option><option value="depth">Depth image only</option><option value="pc">Point cloud only</option></select></div>
+      <div class="ctl"><span>Colour</span><div class="seg" id="r-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
+      <div class="ctl"><input type="checkbox" id="r-truth" checked><label for="r-truth">Truth in grey</label></div>
+      <div class="ctl"><label for="r-size">Point size</label><input type="range" id="r-size" min="0.5" max="2.5" step="0.1" value="1"></div>
+    </div>
+    <div class="grid" id="r-grid">
+      <div class="cell input"><header><b>Row image</b><span class="chip" id="r-occ"></span></header><img class="view" id="r-img" alt="The row image the model reads"></div>
+      <div class="cell input"><header><b>Row point cloud</b><span class="chip">input</span></header><canvas data-k="scene"></canvas></div>
+      <div class="cell"><header><b>Center plant (truth)</b><span class="chip" id="r-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
+      <div class="cell output"><header><b>Zero-shot</b><span class="chip" data-m="head:all"></span></header><canvas data-k="head:all"></canvas></div>
+      <div class="cell output"><header><b>Isolated-trained</b><span class="chip" data-m="iso:all"></span></header><canvas data-k="iso:all"></canvas></div>
+      <div class="cell output"><header><b>Row fine-tuned</b><span class="chip" data-m="ft"></span></header><canvas data-k="ft"></canvas></div>
+    </div>
+    <div class="legend">
+      <span>Chips: Chamfer to the true plant (×10⁻⁴ m²) · predicted height</span>
+      <span id="r-errleg" hidden>error 0 <span class="bar" style="display:inline-block;vertical-align:middle"></span> ≥ <span id="r-errmax">40</span> mm</span>
+      <span><i class="sw" style="background:#c9c2b0"></i>neighbours in the row cloud</span>
+    </div>
+    <p class="hint">“Fig. 9” marks the plants shown in the paper; the others sit at the 5th to 95th percentile of the row fine-tune’s error, so typical and hard cases are both here.</p>
+  </section>
+
+  <footer>Held-out test plants throughout. Clouds are subsampled to 4,096 points per plant (8,192 for row scenes) for the browser; metrics are computed on the full clouds.</footer>
+</main>
+
+<script src="assets/pcviewer.js"></script>
+<script>
+(function () {
+  'use strict';
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const panelBg = () => PCV.hex(css('--panel') || '#ffffff');
+  const truthGrey = () => (css('--panel') === '#ffffff' || !css('--panel')) ? '#cfd0cc' : '#4a514a';
+  function seg(id, on) {
+    const el = document.getElementById(id);
+    el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; set(b.dataset.v); on(b.dataset.v); });
+    function set(v) { el.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === v))); }
+    return { set, get: () => el.querySelector('[aria-pressed="true"]').dataset.v };
+  }
+  const fmt = (x, d) => (x == null ? '–' : Number(x).toFixed(d));
+
+  // ------------------------------------------------------------------ data section
+  const D = { g: PCV.group(), species: 'sorghum', kind: 'isolated', index: {}, item: null };
+  const dp = PCV.panel(document.getElementById('d-pc'), D.g);
+  const dSp = seg('d-species', v => { D.species = v; dFill(); });
+  const dKind = seg('d-kind', v => { D.kind = v; dFill(); });
+  const dSel = document.getElementById('d-item');
+  async function dIndex(sp) { if (!D.index[sp]) D.index[sp] = await (await fetch(`data/dataset/${sp}/index.json`)).json(); return D.index[sp]; }
+  async function dFill() {
+    const idx = await dIndex(D.species);
+    const items = idx.items.filter(i => i.kind === D.kind);
+    dSel.innerHTML = items.map(i => `<option value="${i.json}">${i.id.replace(/_y(\d+)$/, ' · yaw $1°').replace(/_/g, ' ')}</option>`).join('');
+    dShow(dSel.value);
+  }
+  dSel.addEventListener('change', () => dShow(dSel.value));
+  async function dShow(json) {
+    if (!json) return;
+    const it = await PCV.load(`data/dataset/${D.species}/${json}`); const m = it.meta;
+    const strip = document.getElementById('d-strip'), img = document.getElementById('d-img');
+    const sub = json.split('/')[0];
+    if (m.kind === 'isolated') {
+      strip.hidden = false;
+      strip.innerHTML = m.views.map((v, i) => `<img src="data/dataset/${D.species}/${sub}/${v}" alt="camera ${i}" data-i="${i}" aria-current="${i === 0}">`).join('');
+      img.src = `data/dataset/${D.species}/${sub}/${m.views[0]}`; img.style.background = '#fff';
+      strip.onclick = e => { const t = e.target.closest('img'); if (!t) return; strip.querySelectorAll('img').forEach(x => x.setAttribute('aria-current', String(x === t))); img.src = t.src; };
+      document.getElementById('d-img-title').textContent = 'Image, ten cameras';
+      document.getElementById('d-img-chip').textContent = `plant ${m.plant.split('_').pop()}`;
+      document.getElementById('d-pc-chip').textContent = m.note;
+      document.getElementById('d-legend-nb').hidden = true;
+      const c = it.clouds.plant; dp.bg = panelBg(); dp.set([{ pos: c.pos, col: PCV.plantColors(c.pos) }]); D.g.frame(PCV.bounds(c.pos));
+    } else {
+      strip.hidden = true; img.src = `data/dataset/${D.species}/${sub}/${m.img}`; img.style.background = '#000';
+      document.getElementById('d-img-title').textContent = m.kind === 'real' ? 'Camera image' : 'Row image';
+      document.getElementById('d-img-chip').textContent = m.kind === 'real' ? `${m.layout} row · true height ${fmt(m.height, 2)} m` : `yaw ${m.yaw}°`;
+      document.getElementById('d-pc-chip').textContent = 'center plant in green';
+      document.getElementById('d-legend-nb').hidden = false;
+      const c = it.clouds.scene; dp.bg = panelBg(); dp.set([{ pos: c.pos, col: PCV.markColors(c.pos, c.mark) }]); D.g.frame(PCV.bounds(c.pos));
+    }
+  }
+
+  // ------------------------------------------------------------------ rows section
+  const R = { g: PCV.group(), species: 'sorghum', yaw: '0', src: 'all', col: 'plant', truth: true, index: {}, item: null, cache: {} };
+  const panels = {};
+  document.querySelectorAll('#r-grid canvas').forEach(cv => { panels[cv.dataset.k] = PCV.panel(cv, R.g); });
+  const rSel = document.getElementById('r-plant');
+  seg('r-species', v => { R.species = v; rFill(); });
+  seg('r-yaw', v => { R.yaw = v; rShow(); });
+  seg('r-col', v => { R.col = v; document.getElementById('r-errleg').hidden = v !== 'err'; rDraw(); });
+  document.getElementById('r-src').addEventListener('change', e => { R.src = e.target.value; rDraw(); });
+  document.getElementById('r-truth').addEventListener('change', e => { R.truth = e.target.checked; rDraw(); });
+  document.getElementById('r-size').addEventListener('input', e => { R.g.size = +e.target.value; R.g.draw(); D.g.size = +e.target.value; D.g.draw(); });
+  rSel.addEventListener('change', rShow);
+  async function rFill() {
+    if (!R.index[R.species]) R.index[R.species] = await (await fetch(`data/rows/${R.species}/index.json`)).json();
+    const plants = [...new Map(R.index[R.species].items.map(i => [i.plant, i])).values()];
+    rSel.innerHTML = plants.map(i => `<option value="${i.plant}">${i.plant.split('_').pop()} · ${i.tag}</option>`).join('');
+    rShow();
+  }
+  async function rShow() {
+    const id = `${rSel.value}_y${R.yaw}`, url = `data/rows/${R.species}/${id}.json`;
+    document.getElementById('r-grid').classList.add('loading');
+    R.item = R.cache[url] || (R.cache[url] = await PCV.load(url));
+    document.getElementById('r-grid').classList.remove('loading');
+    const m = R.item.meta;
+    document.getElementById('r-img').src = `data/rows/${R.species}/${m.img}`;
+    document.getElementById('r-occ').textContent = `${Math.round(m.occ * 100)} % of the center plant hidden`;
+    document.getElementById('r-errmax').textContent = m.err_max_mm;
+    document.getElementById('r-truth-chip').textContent = `${fmt(m.truth.height, 2)} m · ${m.truth.leaves} leaves`;
+    R.g.frame(PCV.bounds(R.item.clouds.truth.pos), { phi: 0.08 });
+    rDraw(true);
+  }
+  function rDraw(framed) {
+    if (!R.item) return;
+    const C = R.item.clouds, m = R.item.meta, bg = panelBg(), grey = truthGrey();
+    const tr = C.truth;
+    for (const [k, p] of Object.entries(panels)) {
+      p.bg = bg;
+      if (k === 'scene') { p.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]); continue; }
+      if (k === 'truth') { p.set([{ pos: tr.pos, col: PCV.plantColors(tr.pos) }]); continue; }
+      const key = k === 'ft' ? `ft:${R.src}` : k, c = C[key];
+      const layers = [];
+      if (R.truth) layers.push({ pos: tr.pos, col: PCV.flat(tr.n, grey), size: 1.1 });
+      layers.push({ pos: c.pos, col: R.col === 'err' ? PCV.errorColors(c.err, m.err_max_mm) : PCV.plantColors(c.pos) });
+      p.set(layers);
+    }
+    document.querySelectorAll('#r-grid .chip[data-m]').forEach(ch => {
+      const key = ch.dataset.m === 'ft' ? `ft:${R.src}` : ch.dataset.m, x = m.metrics[key];
+      ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '');
+    });
+  }
+  // keep panels sharp and themed on resize / theme change
+  let raf = 0; window.addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { R.g.draw(); D.g.draw(); }); });
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { rDraw(); if (D.item) dShow(dSel.value); });
+  dFill().catch(e => console.error(e)); rFill().catch(e => console.error(e));
+})();
+</script>
