@@ -30,6 +30,10 @@ ap.add_argument('--models', nargs='+', default=None, help='run:ckpt ... (default
 ap.add_argument('--sources', nargs='+', default=['all', 'rgb', 'depth', 'pc'])
 ap.add_argument('--layouts', nargs='+', default=['parallel', 'perpendicular'])
 ap.add_argument('--rows', nargs='+', default=None); ap.add_argument('--stops', nargs='+', type=int, default=None)
+ap.add_argument('--source', default='rows3000', choices=('rows3000', 'rows2026'),
+                help='rows3000: the 3000-row upload of 2026-11-13 (the E10 data); rows2026: the first upload')
+ap.add_argument('--plants', nargs='+', default=None, help='rows3000: scan ids to score (e.g. the held-out test plants)')
+ap.add_argument('--plants-file', default=None, help='rows3000: CSV with plant,split columns; scores split == test')
 ap.add_argument('--batch-size', type=int, default=8); ap.add_argument('--num-workers', type=int, default=8)
 ap.add_argument('--seed', type=int, default=0)
 ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
@@ -55,8 +59,10 @@ for spec in a.models:
 
 gains = {M['gain'] for M in models}
 assert len(gains) == 1, f'models trained at different RGB gains {gains}: score them in separate runs'
+if a.plants_file:
+    a.plants = [r['plant'] for r in pd.read_csv(a.plants_file, dtype=str).to_dict('records') if r['split'] == 'test']
 ds = RealRowDataset(layouts=a.layouts, rows=a.rows, stops=set(a.stops) if a.stops else None, seed=a.seed,
-                    species=a.species, rgb_gain=gains.pop())
+                    species=a.species, rgb_gain=gains.pop(), source=a.source, plants=a.plants)
 loader = DataLoader(ds, batch_size=a.batch_size, shuffle=False, num_workers=a.num_workers, collate_fn=collate, persistent_workers=False)
 rows, t0 = [], time.time()
 for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
@@ -88,9 +94,10 @@ for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
         print(f'  {min((bi + 1) * a.batch_size, len(ds))}/{len(ds)} stops ({time.time() - t0:.0f} s)', flush=True)
 
 df = pd.DataFrame(rows); df.to_csv(f'{a.out}.csv', index=False)
-summary = {'n_stops': len(ds), 'rows': int(df[['layout', 'row']].drop_duplicates().shape[0]) if len(df) else 0, 'groups': []}
+summary = {'source': a.source, 'n_stops': len(ds), 'rows': int(df[['layout', 'row']].drop_duplicates().shape[0]) if len(df) else 0,
+           'plants': int(df['plant'].nunique()) if len(df) else 0, 'groups': []}
 for (model, src, layout), g in list(df.groupby(['model', 'source', 'layout'])) + [((m, s, 'both'), g) for (m, s), g in df.groupby(['model', 'source'])]:
-    per_plant = g.groupby('row')
+    per_plant = g.groupby('plant')                  # rows2026: one plant per row; rows3000: the scan
     e = dict(model=model, source=src, layout=layout, n_stops=len(g), n_plants=per_plant.ngroups)
     for col in ('chamfer_m2', 'miss_5mm'):
         mean, lo, hi = bootstrap_ci(per_plant[col].mean().values)

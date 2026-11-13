@@ -29,8 +29,11 @@ from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS
 # recipe gets no loss by default (--recipe-weight 0): cloud and depth only. Defaults: 3 validation plants.
 ap = argparse.ArgumentParser()
 ap.add_argument('--species', default='maize', choices=('maize', 'sorghum'))
+ap.add_argument('--source', default='rows3000', choices=('rows3000', 'rows2026'),
+                help='rows3000: the 3000-row upload of 2026-11-13 (split by scan: maize 520 plants, sorghum 52 scans '
+                     'with their four tilted copies on one side); rows2026: the first upload (split by row = plant)')
 ap.add_argument('--init', default=None, help='run:ckpt (default: the species row fine-tune at epoch 100)')
-ap.add_argument('--run', default=None, help='default <species>_real_ft')
+ap.add_argument('--run', default=None, help='default <species>_real_ft (rows2026) / <species>_real_ft_r3000 (rows3000)')
 ap.add_argument('--out-root', default='/work/mech-ai/alloydas/embodiedmae_outputs')
 ap.add_argument('--test-frac', type=float, default=0.25); ap.add_argument('--val-plants', type=int, default=None)
 ap.add_argument('--split-seed', type=int, default=0)
@@ -40,20 +43,26 @@ ap.add_argument('--batch-size', type=int, default=16); ap.add_argument('--num-wo
 ap.add_argument('--recipe-weight', type=float, default=None, help='maize 5.0 (= the row run spline_loss_weight); sorghum 0')
 ap.add_argument('--val-every', type=int, default=1)
 ap.add_argument('--smoke', type=int, default=0, help='>0: that many train/val plants, 2 epochs, CPU-friendly')
+ap.add_argument('--split-only', action='store_true', help='write the split (run dir + data_split/) and exit')
 ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
 a = ap.parse_args()
 SORG = a.species == 'sorghum'
 a.init = a.init or ('sorghum_row_ft:checkpoints/checkpoint_epoch_100.pth' if SORG else 'maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth')
-a.run = a.run or f'{a.species}_real_ft'
-a.val_plants = a.val_plants if a.val_plants is not None else (3 if SORG else 39)
+R3 = a.source == 'rows3000'
+a.run = a.run or f"{a.species}_real_ft{'_r3000' if R3 else ''}"     # never the first upload's run dirs
+a.val_plants = a.val_plants if a.val_plants is not None else ((5 if R3 else 3) if SORG else 39)
 a.recipe_weight = a.recipe_weight if a.recipe_weight is not None else (0.0 if SORG else 5.0)
 LAY = SPECIES[a.species]['layouts']
 dev = torch.device(a.device)
 H_IDX, N_IDX = PLANT_FIELDS_V2.index('height'), PLANT_FIELDS_V2.index('leafCount')
 
 # ---- split by plant --------------------------------------------------------------------------------
-plants = sorted({row_id(d) for d in LAY['parallel'].glob('row_*_seed1')} &
-                {row_id(d) for d in LAY['perpendicular'].glob('row_*_seed1')})
+if R3:                                         # scans; a scan's rows may also hold other splits' plants as neighbours
+    from real_rows import load_index_3000, scan_id
+    plants = sorted({scan_id(m['plant_id']) for m in load_index_3000(a.species)})
+else:
+    plants = sorted({row_id(d) for d in LAY['parallel'].glob('row_*_seed1')} &
+                    {row_id(d) for d in LAY['perpendicular'].glob('row_*_seed1')})
 rng = np.random.default_rng(a.split_seed); perm = list(rng.permutation(plants))
 n_test = int(round(a.test_frac * len(plants)))
 test, rest = sorted(perm[:n_test]), perm[n_test:]
@@ -73,7 +82,10 @@ if not run_dir.exists():
 (run_dir / 'checkpoints').mkdir(parents=True, exist_ok=True)
 split.to_csv(run_dir / 'split.csv', index=False)
 if not a.smoke:
-    split.to_csv('data_split/e10_real_split.csv' if not SORG else 'data_split/e10_real_split_sorghum.csv', index=False)
+    split.to_csv(f"data_split/e10_real_split{'_sorghum' if SORG else ''}{'_rows3000' if R3 else ''}.csv", index=False)
+
+if a.split_only:
+    print('split written to', run_dir / 'split.csv'); sys.exit(0)
 
 init_run, init_ckpt = a.init.split(':', 1)
 model, cfg, init_ep = build_model(pathlib.Path('outputs') / init_run, init_ckpt, dev, a.species)
@@ -82,12 +94,13 @@ model.pc_sinkhorn_weight = float(cfg.get('pc_sinkhorn_weight', 0.0))      # buil
 model.pc_sinkhorn_points = int(cfg.get('pc_sinkhorn_points', 1024)); model.pc_sinkhorn_blur = float(cfg.get('pc_sinkhorn_blur', 0.02))
 mask = float(cfg.get('mask_ratio', 0.8)); pc_w = float(cfg.get('pc_loss_weight', 1.0))
 run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_seed=a.split_seed, n_train=len(train), n_val=len(val),
-                                       n_test=len(test), epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
+                                       n_test=len(test), source=a.source, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
                                        supervised=['pc', 'depth'] + (['height', 'leafCount'] if a.recipe_weight > 0 else []), source_mask_ratio=mask))
 (run_dir / 'config.json').write_text(json.dumps(run_cfg, indent=1, default=str))
 
-train_ds = RealRowDataset(rows=train, with_targets=True, seed=1, species=a.species, rgb_gain=gain)
-val_ds = RealRowDataset(rows=val, seed=0, species=a.species, rgb_gain=gain)
+sel = (lambda ps: dict(source='rows3000', plants=ps)) if R3 else (lambda ps: dict(rows=ps))
+train_ds = RealRowDataset(with_targets=True, seed=1, species=a.species, rgb_gain=gain, **sel(train))
+val_ds = RealRowDataset(seed=0, species=a.species, rgb_gain=gain, **sel(val))
 mk = lambda ds, sh: DataLoader(ds, batch_size=a.batch_size, shuffle=sh, num_workers=a.num_workers, collate_fn=collate,
                                persistent_workers=False, drop_last=sh)
 opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.weight_decay)
