@@ -6,6 +6,7 @@
  *   g.frame(bounds)                               // fit the camera to [[minx,miny,minz],[maxx,maxy,maxz]]
  *   const item = await PCV.load(url)             // manifest + binary: {meta, clouds: {name: {pos, err, mark, n}}}
  *   PCV.missed(truthPos, predPos, tau)            // true points with no prediction within tau: {pos, n}
+ *   PCV.procedural(recipe, species)               // a 3D plant built from a decoded recipe (metres, y up)
  * Coordinates: camera frame of the capture (x right, y up, z toward the camera). Mouse / one finger: orbit;
  * wheel / pinch: zoom; double click: reset.
  */
@@ -170,6 +171,40 @@
     return c;
   }
 
+  // ---------------------------------------------------------------- the procedural model: a plant built from its recipe
+  // rec = {h, n, f: [leaf field names], L: [[values per leaf]]} (the decoded recipe, generator units: metres, degrees).
+  // The geometry of the paper's stem-and-leaves schematic (figures/_fig12_kit.glyph), in 3D: each leaf a ribbon along a
+  // quadratic Bezier in its own vertical plane, turned about the stem by its azimuth (maize: 180 deg x leaf index +
+  // jitter; sorghum: the roll angle). Returns points in metres, y up, stem base at the origin.
+  function procedural(rec, species) {
+    const out = [], col = name => rec.f.indexOf(name), rad = d => d * Math.PI / 180;
+    const H = rec.h, sr = species === 'maize' ? 0.011 : 0.009;
+    for (let y = 0; y <= H; y += 0.003) for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; out.push(sr * Math.cos(a), y, sr * Math.sin(a)); }
+    let y = 0;
+    rec.L.forEach((l, i) => {
+      let y0, len, w, az, phi0, phi1;
+      if (species === 'maize') {
+        y += l[col('distance')]; y0 = y; len = l[col('leafLength')]; w = l[col('leafWidth')];
+        az = rad(180 * i + l[col('azJitterDeg')]); phi0 = rad(35 + l[col('leafAngle')]); phi1 = phi0 - rad(l[col('droopiness')]);
+      } else {
+        y0 = l[col('starting_point')] * H; len = l[col('length')]; w = l[col('width')];
+        az = rad(l[col('roll_angle')]); phi0 = rad(l[col('branching_angle')]); phi1 = phi0 + rad(75);
+      }
+      if (!(len > 0)) return;
+      const d = [Math.cos(az), Math.sin(az)], e = [-Math.sin(az), Math.cos(az)];
+      const p1 = [0.5 * len * Math.sin(phi0), y0 + 0.5 * len * Math.cos(phi0)];
+      const p2 = [p1[0] + 0.5 * len * Math.sin(phi1), p1[1] + 0.5 * len * Math.cos(phi1)];
+      const steps = Math.max(24, Math.round(len / 0.004));
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
+        const hz = b * p1[0] + c * p2[0], vy = a * y0 + b * p1[1] + c * p2[1];
+        const hw = 0.5 * w * Math.pow(Math.sin(Math.PI * Math.min(1, 0.15 + 0.85 * t)), 0.6);
+        for (let k = -3; k <= 3; k++) { const o = hw * k / 3; out.push(hz * d[0] + o * e[0], vy, hz * d[1] + o * e[1]); }
+      }
+    });
+    return new Float32Array(out);
+  }
+
   // ---------------------------------------------------------------- missed points
   // the true points with no predicted point within tau (same units as the clouds): a uniform grid of cell tau over the
   // prediction, each true point checks its 27 neighbouring cells. Returns the missed points' positions and their count.
@@ -191,5 +226,5 @@
     }
     return { pos: new Float32Array(out), n: out.length / 3 };
   }
-  window.PCV = { group, panel, load, bounds, plantColors, errorColors, flat, markColors, missed, VIRIDIS, hex };
+  window.PCV = { group, panel, load, bounds, plantColors, errorColors, flat, markColors, missed, procedural, VIRIDIS, hex };
 })();

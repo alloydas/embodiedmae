@@ -124,7 +124,7 @@ def export_rows(sp):
         sc = sub(scene, 2 * a.points, seed); it.add('scene', sc, mark=nn_dist(sc, gt) < 0.012)
         gts = sub(gt, a.points, seed + 1); it.add('truth', gts)
         rec_t = V.decode_recipe(sp, params.numpy(), valid.numpy())
-        metrics = {}
+        metrics = {}; recipes = {'truth': full_recipe(rec_t)}
         for key, srcs in (('head', ('all',)), ('iso', ('all',)), ('ft', ('all', 'rgb', 'depth', 'pc'))):
             m, mcfg, _ = M[key]
             for src in srcs:
@@ -134,13 +134,14 @@ def export_rows(sp):
                 it.add(f'{key}:{src}', Ps, err_mm=nn_dist(Ps, gt) * scale * 1000)
                 n_par = m.param_embed.proj.in_features if hasattr(m, 'param_embed') else None
                 rec = V.decode_recipe(sp, ppar[0].clamp(0, 1).float().numpy(), valid.numpy(), predicted=True) if n_par == params.shape[-1] else None
+                if rec is not None: recipes[f'{key}:{src}'] = full_recipe(rec)
                 metrics[f'{key}:{src}'] = dict(chamfer=round(chamfer(P, gt) * scale ** 2 * 1e4, 2),
                                                height=None if rec is None else round(float(rec['height']), 3),
                                                leaves=None if rec is None else int(rec['n']))
         img = save_jpg(rgba_over_black(folder / 'rgba.png', gain), OUT / 'rows' / sp / f'{plant}_y{theta}.jpg')
         meta, nb = it.write(OUT / 'rows' / sp / f'{plant}_y{theta}', dict(
             task='rows', species=sp, plant=plant, yaw=theta, tag=tag[plant], img=img, occ=round(float(inf['occ_frac']), 3),
-            truth=dict(height=round(float(rec_t['height']), 3), leaves=int(rec_t['n'])), metrics=metrics))
+            truth=dict(height=round(float(rec_t['height']), 3), leaves=int(rec_t['n'])), metrics=metrics, recipes=recipes))
         total += nb
         index.append(dict(id=f'{plant}_y{theta}', plant=plant, yaw=theta, tag=tag[plant], json=f'{plant}_y{theta}.json',
                           ft=metrics['ft:all']['chamfer']))
@@ -210,6 +211,13 @@ def export_dataset(sp):
 
 
 # ====================================================================== shared helpers for single plants
+def full_recipe(rec):
+    """the decoded recipe for the page's procedural model: height, leaf count, one row of the species' leaf fields per leaf"""
+    if rec is None: return None
+    f = list(rec['leaves'][0].keys()) if rec['leaves'] else []
+    return dict(h=round(float(rec['height']), 4), n=int(rec['n']), f=f, L=[[round(float(l[k]), 4) for k in f] for l in rec['leaves']])
+
+
 def recipe_of(V, sp, par, tv, predicted):
     r = V.decode_recipe(sp, np.asarray(par), np.asarray(tv), predicted=predicted)
     return dict(height=round(float(r['height']), 3), leaves=int(r['n']))
@@ -279,6 +287,8 @@ def export_single(sp):
                      rgb_rec=save_jpg(rec_rgb, out / f'{name}_rgb_rec.jpg', 300), depth_rec=save_jpg(V.depth_rgb(zd), out / f'{name}_depth_rec.jpg', 300),
                      params=glyph_png(sp, V.decode_recipe(sp, par[0].numpy(), tv[0].numpy()), out / f'{name}_params.png'))
         metrics = {'recon': dict(chamfer=round(V.chamfer(P, truth) * 1e3, 3))}
+        recipes = {'truth': full_recipe(V.decode_recipe(sp, par[0].numpy(), tv[0].numpy())),
+                   'recon': full_recipe(V.decode_recipe(sp, ppar[0].clamp(0, 1).float().numpy(), tv[0].numpy(), predicted=True))}
         # --- any input -> every stream (Stage 2): the headline model (before) and the distilled generalist (after)
         for src in SOURCES:
             key = '+'.join(src)
@@ -287,9 +297,10 @@ def export_single(sp):
                 Pg = np.asarray(g['pc'], np.float32); Pgs = sub(Pg, a.points, 3)
                 it.add(f'{key}:{tag2}', Pgs, err_mm=nn_dist(Pgs, truth) * s_m * 1000)
                 r_ = recipe_of(V, sp, g['par'], tv[0].numpy(), True) if 'text' not in src else None
+                if 'text' not in src: recipes[f'{key}:{tag2}'] = full_recipe(V.decode_recipe(sp, np.asarray(g['par']), tv[0].numpy(), predicted=True))
                 metrics[f'{key}:{tag2}'] = dict(chamfer=round(V.chamfer(Pg, truth) * 1e3, 3), **(r_ or {}))
         meta, nb = it.write(out / name, dict(task='single', species=sp, plant=name, tag=tag, files=files, visible=visible,
-                                             truth=recipe_of(V, sp, par[0].numpy(), tv[0].numpy(), False), metrics=metrics))
+                                             truth=recipe_of(V, sp, par[0].numpy(), tv[0].numpy(), False), metrics=metrics, recipes=recipes))
         index.append(dict(id=name, tag=tag, json=f'{name}.json'))
         print(sp, 'single', name, tag, {k: v['chamfer'] for k, v in metrics.items()}, f'{nb / 1e3:.0f} kB', flush=True)
     (out / 'index.json').write_text(json.dumps(dict(task='single', species=sp, items=index), indent=0))
@@ -407,7 +418,8 @@ def export_real(sp):
         scale = float(info['scale']); it = Item(scale, ERR_MAX[sp] * (1 if sp == 'maize' else 3))
         sc = sub(pin.numpy(), 2 * a.points, i); gt = pgt.numpy()
         it.add('scene', sc, mark=nn_dist(sc, gt) < 0.012); it.add('truth', sub(gt, a.points, i + 1))
-        metrics = {}
+        metrics = {}; recipes = {}
+        import _plantviz as V
         for k, (m, mcfg, _) in M.items():
             with torch.no_grad():
                 pp, ppar = predict(m, 'all', rgb[None], dep[None], pin[None], par[None], float(mcfg.get('mask_ratio', 0.8)), 1000003 * i)
@@ -417,12 +429,14 @@ def export_real(sp):
             if sp == 'maize':
                 p0 = ppar[0, 0].clamp(0, 1).float().numpy(); h = round(float(p0[H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]), 3)
             metrics[k] = dict(chamfer=round(chamfer(P, gt) * scale ** 2 * 1e4, 2), height=h)
+            if m.param_embed.proj.in_features == par.shape[-1]:
+                recipes[k] = full_recipe(V.decode_recipe(sp, ppar[0].clamp(0, 1).float().numpy(), valid.numpy(), predicted=True))
         d = next(pathlib.Path(x) for x in RSP[sp]['layouts'][lay].glob(f'row_{rid}_seed1'))
         fr = list(csv.DictReader(open(d / f'row_{rid}_seed1_frames.csv')))[stop - 1]
         img = save_jpg(np.asarray(Image.open(d / fr['photo']).convert('RGB')), out / f'{lay}_{rid}_{stop}.jpg', side=420)
         sid = f'{lay}_{rid}_{stop}'
         meta, nb = it.write(out / sid, dict(task='real', species=sp, layout=lay, row=rid, stop=stop, tag=tag, img=img,
-                                            truth=dict(height=round(float(info['height']), 3)), occ=round(float(info['occ_frac']), 3), metrics=metrics))
+                                            truth=dict(height=round(float(info['height']), 3)), occ=round(float(info['occ_frac']), 3), metrics=metrics, recipes=recipes))
         index.append(dict(id=sid, tag=tag, layout=lay, json=f'{sid}.json'))
         print(sp, 'real', sid, tag, {k: v['chamfer'] for k, v in metrics.items()}, f'{nb / 1e3:.0f} kB', flush=True)
     (out / 'index.json').write_text(json.dumps(dict(task='real', species=sp, items=index), indent=0))

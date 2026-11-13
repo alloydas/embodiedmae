@@ -215,6 +215,7 @@
     <div class="controls">
       <div class="ctl"><span>Species</span><div class="seg" id="p-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="p-plant">Plant</label><select id="p-plant"></select></div>
+      <div class="ctl"><span>Show</span><div class="seg" id="p-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="p-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="p-truth" checked><label for="p-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
     </div>
@@ -240,6 +241,7 @@
       <div class="ctl"><span>Species</span><div class="seg" id="a-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="a-plant">Plant</label><select id="a-plant"></select></div>
       <div class="ctl"><label for="a-src">Input</label><select id="a-src"><option value="rgb">Image</option><option value="depth">Depth image</option><option value="pc">Point cloud</option><option value="text">Procedural parameters</option><option value="rgb+depth">Image + depth image</option><option value="rgb+text">Image + parameters</option><option value="depth+text">Depth image + parameters</option></select></div>
+      <div class="ctl"><span>Show</span><div class="seg" id="a-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="a-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="a-truth" checked><label for="a-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
     </div>
@@ -291,6 +293,7 @@
       <div class="ctl"><label for="r-plant">Plant</label><select id="r-plant"></select></div>
       <div class="ctl"><span>Row seen</span><div class="seg" id="r-yaw"><button type="button" data-v="0" aria-pressed="true">Broadside</button><button type="button" data-v="90" aria-pressed="false">End-on</button></div></div>
       <div class="ctl"><label for="r-src">Row fine-tune reads</label><select id="r-src"><option value="all">All three streams</option><option value="rgb">Image only</option><option value="depth">Depth image only</option><option value="pc">Point cloud only</option></select></div>
+      <div class="ctl"><span>Show</span><div class="seg" id="r-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="r-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="r-truth" checked><label for="r-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
       <div class="ctl"><label for="r-size">Point size</label><input type="range" id="r-size" min="0.5" max="2.5" step="0.1" value="1"></div>
@@ -321,6 +324,7 @@
     <div class="controls">
       <div class="ctl"><span>Species</span><div class="seg" id="e-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="e-stop">Plant</label><select id="e-stop"></select></div>
+      <div class="ctl"><span>Show</span><div class="seg" id="e-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="e-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="e-truth" checked><label for="e-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
     </div>
@@ -397,12 +401,13 @@
   }
 
   // ------------------------------------------------------------------ rows section
-  const R = { g: PCV.group(), species: 'maize', yaw: '0', src: 'all', col: 'plant', truth: true, index: {}, item: null, cache: {} };
+  const R = { g: PCV.group(), species: 'maize', yaw: '0', src: 'all', col: 'plant', truth: true, show: 'cloud', index: {}, item: null, cache: {} };
   const panels = {};
   document.querySelectorAll('#r-grid canvas').forEach(cv => { panels[cv.dataset.k] = PCV.panel(cv, R.g); });
   const rSel = document.getElementById('r-plant');
   seg('r-species', v => { R.species = v; rFill(); });
   seg('r-yaw', v => { R.yaw = v; rShow(); });
+  seg('r-show', v => { R.show = v; R._pf = null; if (v === 'cloud' && R.item) R.g.frame(PCV.bounds(R.item.clouds.truth.pos), { phi: 0.08 }); rDraw(); });
   seg('r-col', v => { R.col = v; document.getElementById('r-errleg').hidden = v !== 'err'; rDraw(); });
   document.getElementById('r-src').addEventListener('change', e => { R.src = e.target.value; rDraw(); });
   document.getElementById('r-truth').addEventListener('change', e => { R.truth = e.target.checked; rDraw(); });
@@ -431,11 +436,13 @@
     if (!R.item) return;
     const C = R.item.clouds, m = R.item.meta, bg = panelBg(), grey = truthGrey();
     const tr = C.truth;
+    if (R.show === 'proc') procFrame(R.g, m, tr, R);
     for (const [k, p] of Object.entries(panels)) {
       p.bg = bg;
       if (k === 'scene') { p.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]); continue; }
-      if (k === 'truth') { p.set([{ pos: tr.pos, col: PCV.plantColors(tr.pos) }]); continue; }
+      if (k === 'truth') { const tp = R.show === 'proc' ? procPos(m, 'truth', tr) : null; p.set([{ pos: tp || tr.pos, col: PCV.plantColors(tp || tr.pos) }]); continue; }
       const key = k === 'ft' ? `ft:${R.src}` : k, c = C[key];
+      if (R.show === 'proc') { const L = procLayers(m, key, tr, R.truth); if (L) { p.set(L); continue; } }
       const layers = [];
       if (R.truth) layers.push({ pos: tr.pos, col: PCV.flat(tr.n, grey), size: 1.1 });
       layers.push({ pos: c.pos, col: R.col === 'err' ? PCV.errorColors(c.err, m.err_max_mm) : PCV.plantColors(c.pos) });
@@ -458,7 +465,37 @@
     const m = c._miss[tau] || (c._miss[tau] = PCV.missed(truth.pos, c.pos, tau));
     return { pos: m.pos, col: PCV.flat(m.n, MISS_RED), size: 1.25 };
   }
-  function predLayers(c, truth, col, showTruth, errMax, meta) {
+  // the procedural model: the plant built from a decoded recipe (PCV.procedural, metres, y up), placed in the item's
+  // frame (metres -> units by scale_m) at the true cloud's centre; the true recipe's plant (grey) and the written one share
+  // one placement, so they overlay as the two clouds do
+  const centroid = a => { const c = [0, 0, 0], n = a.length / 3; for (let i = 0; i < a.length; i += 3) { c[0] += a[i]; c[1] += a[i + 1]; c[2] += a[i + 2]; } return c.map(v => v / Math.max(1, n)); };
+  function procPos(meta, key, truthCloud) {
+    const R_ = meta.recipes; if (!R_ || !R_[key]) return null;
+    meta._proc = meta._proc || {};
+    if (!meta._proc[key]) {
+      const sp = meta.species, ref = R_.truth || R_[key];
+      if (!meta._procRef) { const r = PCV.procedural(R_.truth || ref, sp); meta._procRef = { c: centroid(r), at: truthCloud ? centroid(truthCloud.pos) : [0, 0, 0] }; }
+      const P = PCV.procedural(R_[key], sp), s_ = 1 / (meta.scale_m || 1), { c, at } = meta._procRef;
+      for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) P[i + k] = (P[i + k] - c[k]) * s_ + at[k];
+      meta._proc[key] = P;
+    }
+    return meta._proc[key];
+  }
+  function procLayers(meta, key, truthCloud, showTruth) {
+    const P = procPos(meta, key, truthCloud); if (!P) return null;
+    const L = [], T = meta.recipes.truth && key !== 'truth' ? procPos(meta, 'truth', truthCloud) : null;
+    if (showTruth && T) L.push({ pos: T, col: PCV.flat(T.length / 3, truthGrey()), size: 1.5 });
+    L.push({ pos: P, col: PCV.plantColors(P), size: 1.3 });
+    return L;
+  }
+  // frame a section on its procedural plants (the true recipe's, else the first written one) once per item
+  function procFrame(g, meta, truthCloud, holder) {
+    if (holder._pf === meta) return; holder._pf = meta;
+    const R_ = meta.recipes || {}, keys = R_.truth ? ['truth'] : Object.keys(R_); if (!keys.length) return;
+    g.frame(PCV.bounds(...keys.map(k => procPos(meta, k, truthCloud))), { phi: 0.08 });
+  }
+  function predLayers(c, truth, col, showTruth, errMax, meta, key, show) {
+    if (show === 'proc' && key) { const L = procLayers(meta, key, truth, showTruth); if (L) return L; }
     const L = [];
     if (showTruth && truth) L.push({ pos: truth.pos, col: PCV.flat(truth.n, truthGrey()), size: 1.1 });
     L.push({ pos: c.pos, col: col === 'err' && c.err ? PCV.errorColors(c.err, errMax) : PCV.plantColors(c.pos) });
@@ -468,11 +505,12 @@
   function errLegend(sec, on, max) { sec.querySelectorAll('.errleg').forEach(e => { e.hidden = !on; }); sec.querySelectorAll('.errmax').forEach(e => { e.textContent = max; }); }
   function task(o) {
     // o: {sec, prefix, dir, select, label(item), draw(state, item)}
-    const sec = document.getElementById(o.sec), st = { g: PCV.group(), species: 'maize', col: 'plant', truth: true, item: null, panels: {} };
+    const sec = document.getElementById(o.sec), st = { g: PCV.group(), species: 'maize', col: 'plant', truth: true, show: 'cloud', item: null, panels: {} };
     sec.querySelectorAll('canvas[data-k]').forEach(cv => { st.panels[cv.dataset.k] = PCV.panel(cv, st.g); });
     const sel = document.getElementById(`${o.prefix}-${o.select || 'plant'}`);
     seg(`${o.prefix}-species`, v => { st.species = v; fill(); });
     seg(`${o.prefix}-col`, v => { st.col = v; redraw(); });
+    if (document.getElementById(`${o.prefix}-show`)) seg(`${o.prefix}-show`, v => { st.show = v; st._pf = null; if (v === 'cloud' && st.item) o.frame(st); redraw(); });
     const tb = document.getElementById(`${o.prefix}-truth`); if (tb) tb.addEventListener('change', e => { st.truth = e.target.checked; redraw(); });
     sel.addEventListener('change', show);
     async function fill() {
@@ -490,6 +528,7 @@
       if (!st.item) return;
       Object.values(st.panels).forEach(p => { p.bg = panelBg(); });
       errLegend(sec, st.col === 'err', st.item.meta.err_max_mm);
+      if (st.show === 'proc') procFrame(st.g, st.item.meta, st.item.clouds.truth, st);
       o.draw(st);
     }
     st.redraw = redraw; st.fill = fill; ALL.push(st);
@@ -510,7 +549,7 @@
       document.getElementById('p-vis-pc').textContent = `${m.visible.pc} of 196 groups`;
       document.getElementById('p-rec-chip').textContent = fmt(m.metrics.recon.chamfer, 2);
       st.panels.masked.set([{ pos: C.masked.pos, col: PCV.markColors(C.masked.pos, C.masked.mark) }]);
-      st.panels.recon.set(predLayers(C.recon, C.truth, st.col, st.truth, m.err_max_mm, m));
+      st.panels.recon.set(predLayers(C.recon, C.truth, st.col, st.truth, m.err_max_mm, m, 'recon', st.show));
     } }).fill();
 
   // Stage 2: any input -> every stream
@@ -529,8 +568,9 @@
         else { const d = document.createElement('div'); d.className = 'pair'; parts.forEach(p => { const im = new Image(); im.src = st.base + imgOf(p); im.alt = p; if (p === 'rgb') im.style.background = '#000'; d.append(im); }); box.prepend(d); }
       }
       document.getElementById('a-in-chip').textContent = { rgb: 'image', depth: 'depth image', pc: 'point cloud', text: 'parameters' }[parts[0]] + (parts[1] ? ` + ${{ depth: 'depth', text: 'parameters' }[parts[1]]}` : '');
-      for (const k of ['before', 'after']) st.panels[k].set(predLayers(C[`${src}:${k}`], C.truth, st.col, st.truth, m.err_max_mm, m));
-      st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
+      for (const k of ['before', 'after']) st.panels[k].set(predLayers(C[`${src}:${k}`], C.truth, st.col, st.truth, m.err_max_mm, m, `${src}:${k}`, st.show));
+      const tp = st.show === 'proc' ? procPos(m, 'truth', C.truth) : null;
+      st.panels.truth.set([{ pos: tp || C.truth.pos, col: PCV.plantColors(tp || C.truth.pos) }]);
       document.getElementById('a-truth-chip').textContent = `${fmt(m.truth.height, 2)} m · ${m.truth.leaves} leaves`;
       document.querySelectorAll('#a-grid .chip[data-m]').forEach(ch => {
         const x = m.metrics[`${src}:${ch.dataset.m}`];
@@ -565,7 +605,7 @@
       document.getElementById('e-truth-chip').textContent = `height ${fmt(m.truth.height, 2)} m`;
       st.panels.scene.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]);
       st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
-      for (const k of ['head', 'row', 'real']) st.panels[k].set(predLayers(C[k], C.truth, st.col, st.truth, m.err_max_mm, m));
+      for (const k of ['head', 'row', 'real']) st.panels[k].set(predLayers(C[k], C.truth, st.col, st.truth, m.err_max_mm, m, k, st.show));
       document.querySelectorAll('#e-grid .chip[data-m]').forEach(ch => {
         const x = m.metrics[ch.dataset.m]; ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '');
       });
