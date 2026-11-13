@@ -168,8 +168,8 @@
     <p>One masked autoencoder reads <b>any field sensor (an image, a depth image or a point cloud)</b> and writes the procedural model of the plant, even when its neighbours hide part of it.</p>
   </div>
   <div class="teaser">
-    <div class="hero-stage"><canvas id="hero-pc" aria-label="A held-out sorghum test plant rebuilt from one photograph, rotating"></canvas></div>
-    <div class="hero-credit" id="hero-credit">Held-out sorghum plant 7712, rebuilt from one photograph · drag to rotate, scroll to zoom</div>
+    <div class="hero-stage"><canvas id="hero-pc" aria-label="A held-out maize test plant rebuilt from one photograph, rotating"></canvas></div>
+    <div class="hero-credit" id="hero-credit">Held-out maize plant 1875, rebuilt from one photograph · drag to rotate, scroll to zoom</div>
   </div>
 </div></header>
 
@@ -194,7 +194,7 @@
       <p class="lede">Isolated synthetic plants (15,000 per species, ten cameras each), synthetic crop rows where two neighbours occlude the center plant, and rows built from real plant models (maize) and scans (sorghum).</p>
     </div>
     <div class="controls">
-      <div class="ctl"><span>Species</span><div class="seg" id="d-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><span>Species</span><div class="seg" id="d-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><span>Data</span><div class="seg" id="d-kind"><button type="button" data-v="isolated" aria-pressed="true">Isolated plant</button><button type="button" data-v="row" aria-pressed="false">Synthetic row</button><button type="button" data-v="real" aria-pressed="false">Real plants</button></div></div>
       <div class="ctl"><label for="d-item">Example</label><select id="d-item"></select></div>
     </div>
@@ -213,7 +213,7 @@
       <p class="lede">The headline model sees a fifth of the tokens, split across the streams by a Dirichlet draw, and reconstructs the rest. Top row: what it sees (hidden image patches in grey, hidden point groups in tan). Bottom row: what it writes.</p>
     </div>
     <div class="controls">
-      <div class="ctl"><span>Species</span><div class="seg" id="p-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><span>Species</span><div class="seg" id="p-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="p-plant">Plant</label><select id="p-plant"></select></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="p-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="p-truth" checked><label for="p-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
@@ -237,7 +237,7 @@
       <p class="lede">Give the model one stream (or a pair) and it writes the point cloud. Before: the pretrained model. After: the distilled generalist, trained against a frozen teacher that reads all four streams.</p>
     </div>
     <div class="controls">
-      <div class="ctl"><span>Species</span><div class="seg" id="a-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><span>Species</span><div class="seg" id="a-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="a-plant">Plant</label><select id="a-plant"></select></div>
       <div class="ctl"><label for="a-src">Input</label><select id="a-src"><option value="rgb">Image</option><option value="depth">Depth image</option><option value="pc">Point cloud</option><option value="text">Procedural parameters</option><option value="rgb+depth">Image + depth image</option><option value="rgb+text">Image + parameters</option><option value="depth+text">Depth image + parameters</option></select></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="a-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
@@ -260,7 +260,7 @@
       <p class="lede">The headline model gets the image and depth image of camera 00 and a point cloud from one camera, three cameras, or the full plant, and reconstructs the plant. Sorghum: the points of the complete plant that each camera sees; its model trained on complete plants, so more cameras help. Maize: the clouds of the cameras fused (full = all ten); its model trained on single-camera clouds, so one camera is its home ground and fused clouds are new to it, as in the paper's table.</p>
     </div>
     <div class="controls">
-      <div class="ctl"><span>Species</span><div class="seg" id="v-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><span>Species</span><div class="seg" id="v-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="v-plant">Plant</label><select id="v-plant"></select></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="v-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="v-truth" checked><label for="v-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
@@ -287,7 +287,7 @@
       <p class="lede">The model reads the row (image, depth image and the scene point cloud; nothing marks the center plant) and writes the center plant alone. Compare the headline model without row training, a model fine-tuned on isolated plants, and the row fine-tune.</p>
     </div>
     <div class="controls">
-      <div class="ctl"><span>Species</span><div class="seg" id="r-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><span>Species</span><div class="seg" id="r-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="r-plant">Plant</label><select id="r-plant"></select></div>
       <div class="ctl"><span>Row seen</span><div class="seg" id="r-yaw"><button type="button" data-v="0" aria-pressed="true">Broadside</button><button type="button" data-v="90" aria-pressed="false">End-on</button></div></div>
       <div class="ctl"><label for="r-src">Row fine-tune reads</label><select id="r-src"><option value="all">All three streams</option><option value="rgb">Image only</option><option value="depth">Depth image only</option><option value="pc">Point cloud only</option></select></div>
@@ -319,7 +319,7 @@
       <p class="lede">Rows of real maize plant models and scanned sorghum plants, seen by a rover camera. The model trained on synthetic rows is fine-tuned on 75 % of the real plants; every plant here is from the other 25 %.</p>
     </div>
     <div class="controls">
-      <div class="ctl"><span>Species</span><div class="seg" id="e-species"><button type="button" data-v="sorghum" aria-pressed="true">Sorghum</button><button type="button" data-v="maize" aria-pressed="false">Maize</button></div></div>
+      <div class="ctl"><span>Species</span><div class="seg" id="e-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="e-stop">Plant</label><select id="e-stop"></select></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="e-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="e-truth" checked><label for="e-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
@@ -358,7 +358,7 @@
   const fmt = (x, d) => (x == null ? '–' : Number(x).toFixed(d));
 
   // ------------------------------------------------------------------ data section
-  const D = { g: PCV.group(), species: 'sorghum', kind: 'isolated', index: {}, item: null };
+  const D = { g: PCV.group(), species: 'maize', kind: 'isolated', index: {}, item: null };
   const dp = PCV.panel(document.getElementById('d-pc'), D.g);
   const dSp = seg('d-species', v => { D.species = v; dFill(); });
   const dKind = seg('d-kind', v => { D.kind = v; dFill(); });
@@ -397,7 +397,7 @@
   }
 
   // ------------------------------------------------------------------ rows section
-  const R = { g: PCV.group(), species: 'sorghum', yaw: '0', src: 'all', col: 'plant', truth: true, index: {}, item: null, cache: {} };
+  const R = { g: PCV.group(), species: 'maize', yaw: '0', src: 'all', col: 'plant', truth: true, index: {}, item: null, cache: {} };
   const panels = {};
   document.querySelectorAll('#r-grid canvas').forEach(cv => { panels[cv.dataset.k] = PCV.panel(cv, R.g); });
   const rSel = document.getElementById('r-plant');
@@ -468,7 +468,7 @@
   function errLegend(sec, on, max) { sec.querySelectorAll('.errleg').forEach(e => { e.hidden = !on; }); sec.querySelectorAll('.errmax').forEach(e => { e.textContent = max; }); }
   function task(o) {
     // o: {sec, prefix, dir, select, label(item), draw(state, item)}
-    const sec = document.getElementById(o.sec), st = { g: PCV.group(), species: 'sorghum', col: 'plant', truth: true, item: null, panels: {} };
+    const sec = document.getElementById(o.sec), st = { g: PCV.group(), species: 'maize', col: 'plant', truth: true, item: null, panels: {} };
     sec.querySelectorAll('canvas[data-k]').forEach(cv => { st.panels[cv.dataset.k] = PCV.panel(cv, st.g); });
     const sel = document.getElementById(`${o.prefix}-${o.select || 'plant'}`);
     seg(`${o.prefix}-species`, v => { st.species = v; fill(); });
@@ -580,7 +580,7 @@
   (async function hero() {
     const cv = document.getElementById('hero-pc'); if (!cv) return;
     const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [1, 1, 1]; g.size = 1.25;
-    const it = await PCV.load('data/single/sorghum/Sorghum_7712_05.json');
+    const it = await PCV.load('data/single/maize/plant_1875_09.json');
     const c = it.clouds['rgb:after'];
     p.set([{ pos: c.pos, col: PCV.plantColors(c.pos) }]); g.frame(PCV.bounds(c.pos), { phi: 0.1 });
     const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
