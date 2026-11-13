@@ -402,7 +402,7 @@ We formulate the inverse problem (Sec.~\ref{sec:method-form}), build
 the \dataset{} data engine (Sec.~\ref{sec:method-data}), pretrain a
 four-stream masked autoencoder (Sec.~\ref{sec:method-pretrain}), distill it
 into single-sensor students (Sec.~\ref{sec:method-distill}) and define the
-evaluation protocols (Sec.~\ref{sec:field}); Fig.~\ref{fig:arch} gives the
+evaluation protocols; Fig.~\ref{fig:arch} gives the
 overview.
 
 \begin{figure*}[t]
@@ -649,8 +649,7 @@ where $\mathcal{J}_{\neg s}$ are the decoder positions of the
 unobserved non-source streams ($\lambda_F = 1.0$, $\lambda_c = 0.5$). At
 deployment each sensor is evaluated alone.
 
-\subsection{Field evaluation and transfer protocols}
-\label{sec:field}
+\noindent\textbf{Field evaluation and transfer protocols.}
 
 We evaluate in three regimes. \textbf{(1) Trait probing}: ridge
 probes on frozen \texttt{[CLS]} tokens, fit on the training plants and
@@ -713,7 +712,7 @@ non-padding leaf tokens, reported as trait \emph{skill} where informative,
   \label{eq:trait-skill}
 \end{equation}
 so that 1 is perfect recovery and 0 matches predicting the dataset
-mean. Representation quality is the probe of Sec.~\ref{sec:field}, $R^2$
+mean. Representation quality is the probe protocol of Sec.~\ref{sec:method}, $R^2$
 with 95\% paired-bootstrap intervals on 2{,}250 validation and 2{,}250 test
 plants. Sorghum's four named developmental traits have effective rank two
 (height and leaf count couple at $r = 0.994$), so sorghum probing adds the
@@ -995,7 +994,7 @@ stay unchanged; reading the center plant takes 10.6\,ms per stop.
 
 \noindent\textbf{Comparison against published encoders.}
 Table~\ref{tab:baselines} applies the trait probe of
-Sec.~\ref{sec:field} to every encoder with mean-pooled features and only the
+Sec.~\ref{sec:method} to every encoder with mean-pooled features and only the
 streams each encoder was built for; Appendix~\ref{app:probe} gives the full
 protocol, whose extreme-enriched splits make the $R^2$ values comparable
 within the table but not with other work. Three-stream \method{}
@@ -1565,7 +1564,7 @@ The result figures referenced from the main text, in the order of their sections
 \label{app:probe}
 
 \noindent\textbf{Probe protocol for the encoder comparison.}
-Table~\ref{tab:baselines} applies the trait probe of Sec.~\ref{sec:field} to every encoder in the same way, with two changes that let the published encoders take part. First, each plant is represented by the mean of the encoder's output tokens, the one readout that every encoder supports; our models leave their \texttt{[CLS]} token out of this mean. Second, each encoder receives only the streams it was built for, all taken from view 00 of the plant: DINOv2 the photograph, MultiMAE the photograph and depth frame, Point-MAE the point cloud, EmbodiedMAE all three, and each \method{} encoder the sensor streams it was pretrained on. The procedural parameters are never an input. For each encoder and trait, the features of the 10{,}500 training plants are standardized with training statistics only. A ridge regression is then fitted, with its regularization strength chosen from $\{0.1, 1, 10, 10^2, 10^3, 10^4\}$ by five-fold cross-validation on the training plants. The table reports $R^2$ on the 2{,}250 validation plants. The network trained from scratch on the labels goes through the same probe on its frozen features; its own regression head is not used. The traits are the generator's ground truth for each plant. In sorghum they are stem length, leaf count, mean leaf branching angle, mean leaf roll and mean leaf length. In maize they are summed stem internode length, mean leaf angle, mean leaf curvature and stem radius. The validation and test splits are enriched with extreme plants, with about 1.8 times the training variance in sorghum and 1.5 to 2.6 times in maize. The $R^2$ values therefore rank the encoders within the table, but they are not comparable with values reported in other work. Test $R^2$ stays close to validation; for the maize headline model, height reaches $0.747$ on validation and $0.759$ on test.
+Table~\ref{tab:baselines} applies the trait probe of Sec.~\ref{sec:method} to every encoder in the same way, with two changes that let the published encoders take part. First, each plant is represented by the mean of the encoder's output tokens, the one readout that every encoder supports; our models leave their \texttt{[CLS]} token out of this mean. Second, each encoder receives only the streams it was built for, all taken from view 00 of the plant: DINOv2 the photograph, MultiMAE the photograph and depth frame, Point-MAE the point cloud, EmbodiedMAE all three, and each \method{} encoder the sensor streams it was pretrained on. The procedural parameters are never an input. For each encoder and trait, the features of the 10{,}500 training plants are standardized with training statistics only. A ridge regression is then fitted, with its regularization strength chosen from $\{0.1, 1, 10, 10^2, 10^3, 10^4\}$ by five-fold cross-validation on the training plants. The table reports $R^2$ on the 2{,}250 validation plants. The network trained from scratch on the labels goes through the same probe on its frozen features; its own regression head is not used. The traits are the generator's ground truth for each plant. In sorghum they are stem length, leaf count, mean leaf branching angle, mean leaf roll and mean leaf length. In maize they are summed stem internode length, mean leaf angle, mean leaf curvature and stem radius. The validation and test splits are enriched with extreme plants, with about 1.8 times the training variance in sorghum and 1.5 to 2.6 times in maize. The $R^2$ values therefore rank the encoders within the table, but they are not comparable with values reported in other work. Test $R^2$ stays close to validation; for the maize headline model, height reaches $0.747$ on validation and $0.759$ on test.
 
 \noindent\textbf{Camera pose artifact analysis.}
 Evaluating Point-MAE with full camera pose matrices yields strong maize
