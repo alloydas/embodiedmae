@@ -2486,15 +2486,15 @@ Figures~\ref{fig:supp-e10-maize} and~\ref{fig:supp-e10-sorghum} extend the real-
 
 \begin{figure*}[p]
   \centering
-  \includegraphics[width=0.92\textwidth]{Figures/fig_e10_gallery_maize.png}
-  \caption{\textbf{Real maize rows, held-out plants (E10).} Left column: parallel rows; right column: perpendicular rows; from top to bottom the 10th, 30th, 50th, 70th, 90th and 98th percentile of the real-row fine-tune's Chamfer. In each tile: the image the model reads, the true center plant, and the center plant from the row fine-tune (synthetic rows) and from the real-row fine-tune (75\% of the real plants), with Chamfer ($10^{-4}$\,m$^2$) and height.}
+  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_maize_ugg.pdf}
+  \caption{\textbf{Real maize rows, held-out plants (E10).} Left: parallel rows; right: perpendicular rows; from top to bottom the 10th, 30th, 50th, 70th, 90th and 98th percentile of the real-row fine-tune's Chamfer. Columns: the image the model reads, the ground-truth center plant with its height, and the center plant from the row fine-tune (synthetic rows) and from the real-row fine-tune (75\% of the real plants), each with CD, its Chamfer distance to the ground truth ($10^{-4}$\,m$^2$), and its height.}
   \label{fig:supp-e10-maize}
 \end{figure*}
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_sorghum.png}
-  \caption{\textbf{Real sorghum rows, all eight held-out plants (E10).} The middle camera stop of each plant, layouts alternating; columns as in Fig.~\ref{fig:supp-e10-maize}. The image is the camera photograph, a tall strip framed to the whole plant. Sorghum has no height truth comparable to the recipe, so only Chamfer ($10^{-4}$\,m$^2$) is given.}
+  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_sorghum_ugg.pdf}
+  \caption{\textbf{Real sorghum rows, all eight held-out plants (E10).} The middle camera stop of each plant, layouts alternating; columns as in Fig.~\ref{fig:supp-e10-maize}. The image is the camera photograph, a tall strip framed to the whole plant. Sorghum has no height truth comparable to the recipe, so each prediction gives only CD, its Chamfer distance to the ground truth ($10^{-4}$\,m$^2$); the true plant height is given under each plant.}
   \label{fig:supp-e10-sorghum}
 \end{figure*}
 
