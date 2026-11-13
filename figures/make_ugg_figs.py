@@ -100,6 +100,9 @@ def render4_ugg(sp, nm, D):
 
 
 # ====================================================================== Fig. 9
+NUM_PREFIX = ''                                          # Fig. 5 in the paper: 'CD = ' (user: "show CD=number")
+
+
 def draw_tiles_ugg(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncols=3):
     gt = it['gt']; lim = np.abs(gt[:, :2]).max() * 1.12; m = 0.03
     cx = (gt[:, 0].max() + gt[:, 0].min()) / 2; cy = (gt[:, 1].max() + gt[:, 1].min()) / 2
@@ -116,7 +119,7 @@ def draw_tiles_ugg(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncols
     axs[2].scatter(gt[:, 0], gt[:, 1], s=ps * 1.2, c=TRUTH, lw=0, rasterized=True)
     axs[2].scatter(p[:, 0], p[:, 1], s=ps, c=PRED, lw=0, rasterized=True)
     if numbers:
-        axs[2].text(0.96, 0.04, f'{cd:.1f}' if cd < 100 else f'{cd:.0f}', transform=axs[2].transAxes, fontsize=RG.FS, color=INK_C['pc'],
+        axs[2].text(0.96, 0.04, NUM_PREFIX + (f'{cd:.1f}' if cd < 100 else f'{cd:.0f}'), transform=axs[2].transAxes, fontsize=RG.FS, color=INK_C['pc'],
                     ha='right', va='bottom', path_effects=[pe.withStroke(linewidth=2.2, foreground=FILL['pc'])])
     for ax in axs[1:]:
         ax.set_xlim(cx - lim, cx + lim); ax.set_ylim(cy - lim, cy + lim); ax.set_aspect('equal')
@@ -334,8 +337,41 @@ def figure2_ugg2():
     return S
 
 
+# ====================================================================== Fig. 5 (crop-row examples), paper version (2026-11-13)
+def render_rows_main_ugg(D, picks):
+    """make_row_gallery_v2.render_main with the UGG tiles (draw_tiles_ugg) and, per the user ("for fig 5 no degree,
+    and what is the number? ... truth will be ground truth"): row labels without the yaw, 'Ground truth' for 'Truth',
+    and the prediction column says what its number is (Chamfer to the ground truth, 1e-4 m^2)."""
+    W = 6.875; s_, g, gy = 0.90, 0.05, 0.07; lab = 0.62; nc = 3
+    half = lab + nc * s_ + (nc - 1) * g
+    global NUM_PREFIX
+    NUM_PREFIX = 'CD = '                                 # the number named in the tile: Chamfer distance (caption: 1e-4 m^2)
+    hdr = 0.48; n = max(len(v) for v in picks.values())
+    H = hdr + n * s_ + (n - 1) * gy + 0.02
+    head = ['Row image', 'Ground truth', 'Row-trained']
+    fig = plt.figure(figsize=(W, H)); FS_ = RG.FS
+    for c, sp in enumerate(('sorghum', 'maize')):
+        x0 = c * (W - half - 0.08)                     # UGG boxes need room at the right edge
+        fig.text((x0 + lab + (nc * s_ + (nc - 1) * g) / 2) / W, (H - 0.01) / H, sp.capitalize(), fontsize=FS_, fontweight='bold', ha='center', va='top')
+        for k in range(nc):
+            xc = (x0 + lab + k * (s_ + g) + s_ / 2) / W
+            fig.text(xc, (H - 0.20) / H, head[k], fontsize=FS_, ha='center', va='top', color=RG.HEAD_C[k])
+        y = H - hdr
+        for pl, th in picks[sp]:
+            y -= s_
+            RG.draw_tiles(fig, x0 + lab, y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
+            fig.text((x0 + lab - 0.06) / W, (y + s_ / 2) / H, f"plant\n{pl.split('_')[-1]}", fontsize=FS_, ha='right', va='center', linespacing=1.1)
+            y -= gy
+    return fig
+
+
 if __name__ == '__main__':
     OUT.mkdir(parents=True, exist_ok=True)
+    if '--fig5' in sys.argv:                     # Fig. 5 for the paper: no yaw, 'Ground truth', the number named
+        D = pickle.load(open(RG.OUT, 'rb'))
+        picks = {'sorghum': [('Sorghum_10756', 90), ('Sorghum_14816', 0), ('Sorghum_4815', 0)],
+                 'maize': [('plant_0320', 90), ('plant_6665', 0), ('plant_4604', 0)]}
+        save(render_rows_main_ugg(D, picks), f'fig_rows_examples{SUF}5'); sys.exit(0)
     if '--fig2' in sys.argv:                     # only the full-UGG Fig. 2: preview + TikZ twin for the paper
         S = figure2_ugg2(); S.render(OUT / f'fig2_stages{SUF}2')
         S.render_tikz(R / 'paper/overleaf/Figures/fig2_stages_tikz_ugg.tex', R / 'paper/overleaf/Figures/fig2_ugg', 'Figures/fig2_ugg')
