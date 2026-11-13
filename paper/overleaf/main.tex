@@ -1447,8 +1447,8 @@ The result figures referenced from the main text, in the order of their sections
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum.pdf}
-  \caption{\textbf{Any-to-all, sorghum: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.43\,m, 24 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 3.62 here, 6.83 on average in Table~\ref{tab:anysubset}).}
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum_ugg.pdf}
+  \caption{\textbf{Any-to-all, sorghum: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. \updtwo{Each block gives it one stream (dashed box, left of the grey arrow) and shows the three streams it generates (solid boxes); the box color marks the stream: image blue, depth yellow, point cloud pink, procedural parameters purple. }Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.43\,m, 24 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 3.62 here, 6.83 on average in Table~\ref{tab:anysubset}).}
   \label{fig:any2any-sorghum}
 \end{figure*}
 
