@@ -699,25 +699,13 @@ headline model trains for 1{,}000 epochs on all ten views at global batch
 Sec.~\ref{sec:exp-main}. Results are on the validation split unless stated
 otherwise.
 
-\noindent\textbf{Evaluation metrics.}
-Geometry is symmetric squared Chamfer in the unit-sphere frame
-($\times 10^{-3}$; 1.0 corresponds to $\approx 33$\,mm RMS on the median
-sorghum plant and $\approx 19$\,mm on the median maize plant, with metric
-scales measured per plant), evaluated in the masked regime of pretraining
-for pretrained models and with unmasked inputs for distilled students.
-Parameter accuracy is MAE over normalized $[0,1]$ fields of hidden,
-non-padding leaf tokens, reported as trait \emph{skill} where informative,
-\begin{equation}
-  \mathrm{Skill} = 1 - \frac{\mathrm{MAE}}{\mathrm{MAE}_{\text{mean}}},
-  \label{eq:trait-skill}
-\end{equation}
-so that 1 is perfect recovery and 0 matches predicting the dataset
-mean. Representation quality is the probe protocol of Sec.~\ref{sec:method}, $R^2$
-with 95\% paired-bootstrap intervals on 2{,}250 validation and 2{,}250 test
-plants. Sorghum's four named developmental traits have effective rank two
-(height and leaf count couple at $r = 0.994$), so sorghum probing adds the
-generator's independent axes (leaf roll, blade length); maize's eleven
-traits are largely independent.
+\noindent\textbf{Evaluation metrics.} Chamfer is the symmetric squared
+distance in the unit-sphere frame ($\times 10^{-3}$), trait \emph{skill} is
+1 for perfect recovery and 0 for predicting the dataset mean, and
+representation quality is the frozen-probe $R^2$ with the paired-bootstrap
+win criterion of Sec.~\ref{sec:method}; Appendix~\ref{app:metrics} gives
+the full definitions, the per-plant millimetre conversion and each
+species' trait set.
 
 \begin{table*}[t]
   \caption{\textbf{Comparison against published pre-trained encoders (E8).}
@@ -1559,6 +1547,28 @@ The result figures referenced from the main text, in the order of their sections
   colored by plant leaf count and mean leaf roll.}
   \label{fig:tsne}\label{fig:latent_tsne}
 \end{figure}
+
+\section{Evaluation Metrics}
+\label{app:metrics}
+
+Geometry is symmetric squared Chamfer in the unit-sphere frame
+($\times 10^{-3}$; 1.0 corresponds to $\approx 33$\,mm RMS on the median
+sorghum plant and $\approx 19$\,mm on the median maize plant, with metric
+scales measured per plant), evaluated in the masked regime of pretraining
+for pretrained models and with unmasked inputs for distilled students.
+Parameter accuracy is MAE over normalized $[0,1]$ fields of hidden,
+non-padding leaf tokens, reported as trait \emph{skill} where informative,
+\begin{equation}
+  \mathrm{Skill} = 1 - \frac{\mathrm{MAE}}{\mathrm{MAE}_{\text{mean}}},
+  \label{eq:trait-skill}
+\end{equation}
+so that 1 is perfect recovery and 0 matches predicting the dataset
+mean. Representation quality is the probe protocol of Sec.~\ref{sec:method}, $R^2$
+with 95\% paired-bootstrap intervals on 2{,}250 validation and 2{,}250 test
+plants. Sorghum's four named developmental traits have effective rank two
+(height and leaf count couple at $r = 0.994$), so sorghum probing adds the
+generator's independent axes (leaf roll, blade length); maize's eleven
+traits are largely independent.
 
 \section{Encoder-Comparison Probe Protocol}
 \label{app:probe}
