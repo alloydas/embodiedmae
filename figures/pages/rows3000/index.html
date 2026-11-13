@@ -1,0 +1,219 @@
+<title>Rows 3000 Upload</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a field-notebook column: species tabs, a strip of counts, sample stops (photo beside its 3D cloud),
+     then distributions with the synthetic training range shaded. Greens from the plants, a warm grey ground. */
+  :root {
+    --bg: #fbfbf8; --surface: #f2f3ee; --line: #dfe1d8; --fg: #1b1f1a; --muted: #5d655b;
+    --accent: #2f6b3a; --accent-soft: #e3eedf; --train: #c9d9e9; --train-line: #5b7fa6; --bar: #4c8a4f; --warn: #a2421f;
+    --panel: #ffffff;
+    --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #121512; --surface: #1a1e1a; --line: #2c322c; --fg: #e7ebe4; --muted: #a2ab9f;
+    --accent: #8cc58f; --accent-soft: #1f2d20; --train: #24364a; --train-line: #8fb0d6; --bar: #77b17a; --warn: #e68a63;
+    --panel: #ffffff; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #121512; --surface: #1a1e1a; --line: #2c322c; --fg: #e7ebe4; --muted: #a2ab9f;
+    --accent: #8cc58f; --accent-soft: #1f2d20; --train: #24364a; --train-line: #8fb0d6; --bar: #77b17a; --warn: #e68a63;
+    --panel: #ffffff; color-scheme: dark }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 1180px; margin: 0 auto; padding-block: 40px 72px; display: grid; gap: 44px; }
+  h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.08; }
+  h2 { font-size: clamp(21px, 2.4vw, 26px); }
+  h3 { font-size: 16px; font-weight: 600; }
+  p { margin: 0; max-width: 72ch; }
+  .muted { color: var(--muted); }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  header { display: grid; gap: 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+         background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; padding: 3px; background: var(--surface); }
+  .seg button { font-family: var(--mono); font-size: 13px; padding: 7px 16px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  section { display: grid; gap: 16px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .fact { background: var(--surface); padding: 12px 14px; display: grid; gap: 2px; }
+  .fact b { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
+  .fact span { font-size: 13px; color: var(--muted); }
+  .stops { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; }
+  .stop { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 12px; display: grid; gap: 10px; min-width: 0; }
+  .pair { display: grid; grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr); gap: 10px; }
+  .photo { background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 340px; }
+  .photo img { max-height: 100%; width: auto; max-width: 100%; display: block; }
+  .view { position: relative; height: 340px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+  .view canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  .view .hint { position: absolute; left: 8px; bottom: 6px; font-family: var(--mono); font-size: 11px; color: #5d655b; background: rgba(255,255,255,.85); padding: 1px 6px; border-radius: 4px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meta b { color: var(--fg); font-weight: 500; }
+  details { font-size: 13px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+  .tbl { overflow-x: auto; margin-top: 8px; }
+  table { border-collapse: collapse; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; width: 100%; }
+  th, td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; }
+  .chart { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 12px 12px 6px; display: grid; gap: 4px; min-width: 0; }
+  .chart svg { width: 100%; height: auto; display: block; }
+  .chart .note { font-size: 13px; color: var(--muted); }
+  .note b.warn { color: var(--warn); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); align-items: center; }
+  .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .notes { border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; background: var(--surface); display: grid; gap: 8px; }
+  .notes ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
+  .err { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">CropCode · E10 data · uploaded 2026-11-12/13</div>
+    <h1>Rows 3000 Upload</h1>
+    <p class="muted">Synthetic crop rows built from real plants: 520 scanned maize plants and 52 sorghum scans, 20 plants per row, 3,000 rows per species and 18 camera stops per row. Every stop has a photograph centred on the middle plant and an 80,000-point cloud labelled by plant. These are the "full height" sets now used for E10.</p>
+  </header>
+
+  <div class="bar">
+    <div class="seg" id="species" role="group" aria-label="Species">
+      <button type="button" data-v="maize" aria-pressed="true">Maize</button>
+      <button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button>
+    </div>
+    <span class="muted" id="species-note" style="font-size:14px"></span>
+  </div>
+
+  <section aria-labelledby="h-counts">
+    <h2 id="h-counts">What is in it</h2>
+    <div class="facts" id="facts"></div>
+  </section>
+
+  <section aria-labelledby="h-stops">
+    <h2 id="h-stops">Four camera stops</h2>
+    <p class="muted">Chosen across the middle-plant heights, from short to tall. Left: the photograph as delivered. Right: the stop's point cloud; the middle plant in greens, its neighbours in grey. Drag to rotate, scroll or pinch to zoom, double-click to reset.</p>
+    <div class="stops" id="stops"></div>
+  </section>
+
+  <section aria-labelledby="h-dist">
+    <h2 id="h-dist">How these plants compare with the training plants</h2>
+    <div class="legend"><span><i class="sw" style="background:var(--bar)"></i>this upload</span><span><i class="sw" style="background:var(--train);border:1px solid var(--train-line)"></i>synthetic training plants (5th to 95th percentile)</span></div>
+    <div class="charts" id="charts"></div>
+  </section>
+
+  <section class="notes" aria-labelledby="h-notes">
+    <h2 id="h-notes">Notes for E10</h2>
+    <ul id="notes"></ul>
+  </section>
+</main>
+
+<script src="assets/pcviewer.js"></script>
+<script>
+(function () {
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = (x, d) => Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  let S = null, sp = 'maize';
+  const viewers = [];
+
+  const FACTS = {
+    maize: s => [[fmt(s.rows, 0), 'rows of 20 plants'], [fmt(s.stops, 0), 'camera stops (18 per row)'], [fmt(s.plants, 0), 'scanned plants'],
+      [`${s.middle_per_plant[0]}–${s.middle_per_plant[1]}`, 'times each plant is the middle one'], [`${fmt(s.img_h[1], 0)} px`, 'median photo height (640 px wide)'],
+      [`${s.split.train} / ${s.split.val} / ${s.split.test}`, 'plants for train / val / test'], ['yes', 'per-leaf parameters per photo']],
+    sorghum: s => [[fmt(s.rows, 0), 'rows of 20 plants'], [fmt(s.stops, 0), 'camera stops (18 per row)'], [`${s.scans} × 4`, 'scans × tilted copies'],
+      [`${s.middle_per_plant[0]}–${s.middle_per_plant[1]}`, 'times each copy is the middle one'], [`${fmt(s.img_h[1], 0)} px`, 'median photo height (640 px wide)'],
+      [`${s.split.train} / ${s.split.val} / ${s.split.test}`, 'scans for train / val / test'], ['none', 'leaf parameters']]
+  };
+  const NOTES = {
+    maize: s => [
+      `Each photograph targets the middle plant; its leaves are listed in a CSV with length, width, zenith angle, azimuth, internode distance, twist, curvature and stem diameter. E10 fine-tunes on four of them (length, width, internode, curvature) plus the leaf count.`,
+      `The point clouds include points hidden behind other leaves, so they are not what a camera sees. The E10 loader keeps only the points visible from the camera, as for the training rows.`,
+      `No depth images are delivered; the loader renders depth from the visible points.`,
+      `Plants are taller and leaves larger than the synthetic training plants (charts above). The leaf-width and leaf-length outputs were widened for the real-row fine-tune.`,
+      `Split by plant: a held-out plant can still appear as a neighbour in a training row, but never as the middle plant.`],
+    sorghum: s => [
+      `52 scans, each stood upright and copied with four small tilts (1° to 2.5°); a scan's four copies always fall on the same side of the train/test split.`,
+      `No leaf parameters, so E10 scores sorghum on its point cloud and height only.`,
+      `The plants are 2.8–5.0 m tall (5th–95th percentile) against 0.2–1.7 m in training, and the camera stands about 1.1 m away, so the photographs are very tall strips (median ${fmt(s.img_h[1], 0)} px).`,
+      `Loading these tall photographs makes sorghum training about three times slower per epoch than maize.`]
+  };
+
+  function facts() {
+    document.getElementById('facts').innerHTML = FACTS[sp](S[sp]).map(([b, t]) => `<div class="fact"><b>${b}</b><span>${t}</span></div>`).join('');
+    document.getElementById('notes').innerHTML = NOTES[sp](S[sp]).map(t => `<li>${t}</li>`).join('');
+    document.getElementById('species-note').textContent = sp === 'maize' ? '520 plants, leaf data included' : '52 scans, no leaf data';
+  }
+
+  function leafTable(rows) {
+    const cols = [['leaf', 'leaf', 0], ['leaf_length_m', 'length m', 3], ['leaf_width_m', 'width m', 3], ['zenith_deg', 'zenith °', 1],
+      ['internode_dist_m', 'internode m', 3], ['curvature_1pm', 'curv 1/m', 2], ['leaf_fraction_in_photo', 'in photo', 2]];
+    return `<details><summary>Leaf parameters of the middle plant (${rows.length} leaves)</summary><div class="tbl"><table><thead><tr>${cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>` +
+      rows.map(r => `<tr>${cols.map(c => `<td>${fmt(r[c[0]], c[2])}</td>`).join('')}</tr>`).join('') + `</tbody></table></div></details>`;
+  }
+
+  async function stops() {
+    viewers.length = 0;
+    const box = document.getElementById('stops');
+    box.innerHTML = S[sp].show.map((e, i) => `<article class="stop">
+      <h3>Row ${e.row}, stop ${e.stop} · plant ${e.plant}</h3>
+      <div class="pair"><div class="photo"><img src="img/${e.name}.jpg" alt="Photograph of row ${e.row}, stop ${e.stop}, centred on plant ${e.plant}"></div>
+      <div class="view"><canvas id="cv-${i}" aria-label="3D point cloud of the stop, middle plant in green"></canvas><span class="hint">drag · zoom</span></div></div>
+      <div class="meta"><span>middle plant <b>${fmt(e.height, 2)} m</b> tall</span><span>camera at <b>${fmt(e.cam_h, 2)} m</b></span><span>photo <b>${e.image_px}</b></span><span><b>${e.plants_in_view}</b> plants in view</span></div>
+      ${e.leaves ? leafTable(e.leaves) : ''}</article>`).join('');
+    for (const [i, e] of S[sp].show.entries()) {
+      const g = PCV.group(), p = PCV.panel(document.getElementById(`cv-${i}`), g); p.bg = [1, 1, 1]; g.size = 1.1;
+      try {
+        const it = await PCV.load(`data/${e.name}.json`), c = it.clouds.scene;
+        p.set([{ pos: c.pos, col: PCV.markColors(c.pos, c.mark, '#c4c8c0') }]);
+        const tpos = c.pos.filter((_, k) => c.mark[Math.floor(k / 3)]);
+        g.frame(PCV.bounds(tpos), { phi: 0.1 }); viewers.push(g);
+      } catch (err) { document.getElementById(`cv-${i}`).replaceWith(Object.assign(document.createElement('p'), { className: 'err', textContent: 'The point cloud did not load.' })); }
+    }
+  }
+
+  // histogram with the training range shaded; every label is a value on the axis
+  function hist(values, band, title, unit, bins = 24) {
+    const W = 340, H = 170, L = 34, R = 10, T = 10, B = 34;
+    const lo0 = Math.min(...values, band ? band[0] : Infinity), hi0 = Math.max(...values, band ? band[1] : -Infinity);
+    const pad = (hi0 - lo0) * 0.04, lo = lo0 - pad, hi = hi0 + pad, bw = (hi - lo) / bins;
+    const cnt = new Array(bins).fill(0); values.forEach(v => { cnt[Math.min(bins - 1, Math.max(0, Math.floor((v - lo) / bw)))]++; });
+    const cmax = Math.max(...cnt), x = v => L + (v - lo) / (hi - lo) * (W - L - R), y = c => H - B - c / cmax * (H - B - T);
+    const step = (() => { const r = (hi - lo) / 4, p = Math.pow(10, Math.floor(Math.log10(r))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= r); })();
+    const ticks = []; for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) ticks.push(+t.toFixed(6));
+    const dec = step < 0.01 ? 3 : step < 0.1 ? 2 : step < 1 ? 1 : 0;
+    const out = band ? values.filter(v => v < band[0] || v > band[1]).length / values.length : null;
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}">`;
+    if (band) s += `<rect x="${x(band[0])}" y="${T}" width="${x(band[1]) - x(band[0])}" height="${H - B - T}" fill="${css('--train')}" stroke="${css('--train-line')}" stroke-width="1"/>`;
+    cnt.forEach((c, i) => { if (c) s += `<rect x="${x(lo + i * bw) + 0.5}" y="${y(c)}" width="${Math.max(0.5, x(lo + (i + 1) * bw) - x(lo + i * bw) - 1)}" height="${H - B - y(c)}" fill="${css('--bar')}"/>`; });
+    s += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="${css('--muted')}" stroke-width="1"/>`;
+    ticks.forEach(t => { s += `<line x1="${x(t)}" x2="${x(t)}" y1="${H - B}" y2="${H - B + 4}" stroke="${css('--muted')}"/><text x="${x(t)}" y="${H - B + 16}" font-size="11" text-anchor="middle" fill="${css('--muted')}" font-family="IBM Plex Mono, monospace">${fmt(t, dec)}</text>`; });
+    s += `<text x="${(L + W - R) / 2}" y="${H - 4}" font-size="11.5" text-anchor="middle" fill="${css('--fg')}" font-family="IBM Plex Sans, sans-serif">${title}${unit ? ' (' + unit + ')' : ''}</text></svg>`;
+    return { svg: s, out };
+  }
+
+  function charts() {
+    const s = S[sp], items = [];
+    const h = hist(s.height, s.synthetic.height, 'middle-plant height', 'm');
+    items.push([h.svg, `${fmt(s.height.length, 0)} random stops. <b class="warn">${fmt(100 * h.out, 0)} %</b> outside the training plants' range.`]);
+    if (sp === 'maize') {
+      const lv = hist(s.leaves, null, 'leaves per plant', '', 12); items.push([lv.svg, `All ${fmt(s.leaves.length, 0)} plants.`]);
+      for (const [k, t] of Object.entries(s.traits)) {
+        const r = hist(t.values, s.synthetic[k] || null, t.label.replace(/ \(.*\)/, ''), (t.label.match(/\((.*)\)/) || [])[1] || '');
+        items.push([r.svg, `${fmt(t.values.length, 0)} leaves.` + (r.out != null ? ` <b class="warn">${fmt(100 * r.out, 0)} %</b> outside the training range.` : ' The generator’s leaf angle is a different angle, so no range is shown.')]);
+      }
+    }
+    document.getElementById('charts').innerHTML = items.map(([svg, note]) => `<figure class="chart" style="margin:0">${svg}<figcaption class="note">${note}</figcaption></figure>`).join('');
+  }
+
+  function render() { facts(); stops(); charts(); }
+  document.getElementById('species').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.v === sp) return;
+    sp = b.dataset.v; document.querySelectorAll('#species button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); render();
+  });
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => S && charts());
+  fetch('stats.json').then(r => r.json()).then(d => { S = d; render(); })
+    .catch(() => { document.getElementById('facts').innerHTML = '<p class="err">The data file did not load. Reload the page.</p>'; });
+})();
+</script>
