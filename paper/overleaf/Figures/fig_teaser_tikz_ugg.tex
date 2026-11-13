@@ -1,0 +1,71 @@
+% UGG-idea variant of fig_teaser_tikz.tex (2026-11-13; user: "for previous diagrams the font was good so keep
+% that and get idea from the UGG paper"). Same layout, images, numbers and font (\sffamily = Helvetica under the
+% cvpr/times package). From UGG (Unified Generative Geometry Model, arXiv:2611.14440): one pastel colour per stream
+% (image blue, point cloud pink, parameters purple), each item in a rounded pastel box with the content inset,
+% the input dashed and the outputs solid, a neutral model block, grey block arrows. Not used by main.tex.
+% Base: hand-written TikZ teaser, v3 (2026-11-12, meeting request): simplified to
+% cluttered scene + target box -> CropCode -> procedural fit + traits; the
+% depth, input-cloud and recipe-table tiles of the drawio export are removed.
+% Supersedes the output of figures/teaser_drawio_to_tikz.py -- rerunning that
+% script would overwrite this file with the old six-column layout.
+% Include with \resizebox{\textwidth}{!}{\input{Figures/fig_teaser_tikz}} (needs \usetikzlibrary{arrows.meta}).
+\definecolor{rgbhex1d221c}{HTML}{1D221C}
+\definecolor{rgbhex2a9d8f}{HTML}{2A9D8F}
+\definecolor{rgbhex2b3a67}{HTML}{2B3A67}
+\definecolor{rgbhex30638e}{HTML}{30638E}
+\definecolor{rgbhex5f685c}{HTML}{5F685C}
+\definecolor{rgbhexc0392b}{HTML}{C0392B}
+\definecolor{rgbhexeef1f7}{HTML}{EEF1F7}
+\definecolor{uRgbE}{HTML}{809EC2}\definecolor{uRgbF}{HTML}{E6ECF3}\definecolor{uRgbI}{HTML}{3F5F8F}
+\definecolor{uPcE}{HTML}{D091A7}\definecolor{uPcF}{HTML}{F6E9ED}\definecolor{uPcI}{HTML}{A8456E}
+\definecolor{uTxE}{HTML}{9D8CC4}\definecolor{uTxF}{HTML}{EAE7F2}\definecolor{uTxI}{HTML}{5E4A96}
+\definecolor{uArrow}{HTML}{8C8C8C}\definecolor{uModE}{HTML}{9A9A9A}\definecolor{uModF}{HTML}{F4F4F5}
+\begin{tikzpicture}[x=0.005in, y=-0.005in]
+\useasboundingbox (0,0) rectangle (1110,650);
+% ---- CropCode block (spans both rows) ----
+\draw[draw=uModE, line width=1.0pt, rounded corners=8.6pt, fill=uModF] (380.0,114.0) rectangle (556.0,626.0);
+\node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{8.0}{10.0}\selectfont\sffamily\bfseries}] at (468.0,330.0) {CropCode};
+\node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{5.0}{6.3}\selectfont\sffamily}] at (468.0,430.0) {any-to-any\\autoencoder over\\photographs, depth,\\clouds and recipes;\\pretrained on single\\plants, then\\fine-tuned on crop\\rows to write the\\center plant};
+% ---- column headers ----
+\node[anchor=west, inner sep=0, align=left, text={rgbhex1d221c}, font={\fontsize{7.5}{9.4}\selectfont\sffamily\bfseries}] at (60.0,28.0) {Occluded crop row (rover view)};
+\node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{7.5}{9.4}\selectfont\sffamily\bfseries}] at (468.0,28.0) {One model};
+\node[anchor=west, inner sep=0, align=left, text={rgbhex1d221c}, font={\fontsize{7.5}{9.4}\selectfont\sffamily\bfseries}] at (600.0,28.0) {The center plant, written out};
+\node[anchor=center, inner sep=0, align=center, text=uRgbI, font={\fontsize{6.2}{7.7}\selectfont\sffamily\bfseries}] at (170.0,72.0) {Image (input)};
+\node[anchor=center, inner sep=0, align=center, text=uPcI, font={\fontsize{6.2}{7.7}\selectfont\sffamily\bfseries}] at (710.0,72.0) {Procedural fit};
+\node[anchor=center, inner sep=0, align=center, text=uTxI, font={\fontsize{6.2}{7.7}\selectfont\sffamily\bfseries}] at (955.0,72.0) {Procedural traits};
+% ================= sorghum row =================
+\draw[draw=uRgbE, line width=1.0pt, rounded corners=6.5pt, fill=uRgbF, dash pattern=on 3pt off 2pt] (54.0,114.0) rectangle (286.0,346.0);
+\node[anchor=north west, inner sep=0] at (60.0,120.0) {\includegraphics[width=1.1000in, height=1.1000in]{Figures/teaser/s_rgb.png}};
+
+% target-plant box (reader aid; the model gets no marking)
+\draw[draw=white, densely dashed, line width=0.80pt] (138.0,134.0) rectangle (202.0,330.0);
+\node[anchor=north west, inner sep=1.5pt, text=white, font={\fontsize{4.6}{5.8}\selectfont\sffamily\bfseries}] at (138.0,134.0) {target plant};
+\node[anchor=north west, inner sep=0, align=left, text={rgbhex5f685c}, font={\fontsize{4.6}{5.8}\selectfont\sffamily}] at (54.0,354.0) {25\,\% of the target plant is hidden by its neighbors};
+\draw[color=uArrow, line width=2.6pt, -{Triangle[length=5pt,width=7.5pt]}] (296.0,230.0) -- (372.0,230.0);
+\draw[draw=uPcE, line width=1.0pt, rounded corners=6.5pt, fill=uPcF] (594.0,114.0) rectangle (826.0,346.0);
+\node[anchor=north west, inner sep=0] at (600.0,120.0) {\includegraphics[width=1.1000in, height=1.1000in]{Figures/teaser/s_gen.png}};
+
+\draw[color=uArrow, line width=2.6pt, -{Triangle[length=5pt,width=7.5pt]}] (560.0,230.0) -- (590.0,230.0);
+\node[anchor=north, inner sep=0, align=center, text={rgbhex5f685c}, font={\fontsize{4.6}{5.8}\selectfont\sffamily}] at (710.0,354.0) {19.6e-4\,m\textsuperscript{2} from the true plant};
+\draw[draw=uTxE, line width=1.0pt, rounded corners=6.5pt, fill=uTxF] (850.0,114.0) rectangle (1066.0,346.0);
+\draw[color=uArrow, line width=2.6pt, -{Triangle[length=5pt,width=7.5pt]}] (830.0,230.0) -- (847.0,230.0);
+\node[anchor=north west, inner sep=0, align=left, text={rgbhex1d221c}, font={\fontsize{5.2}{6.8}\selectfont\sffamily}] at (864.0,132.0) {height\\~~1.12\,m (true 1.10\,m)\\leaves\\~~22 (true 21)\\leaf length\\~~0.75\,m (true 0.75\,m)\\leaf width\\~~9.9\,cm (true 10.4\,cm)};
+\node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{7.0}{8.7}\selectfont\sffamily\bfseries}, rotate=90] at (30.0,230.0) {sorghum};
+% ================= maize row =================
+\draw[draw=uRgbE, line width=1.0pt, rounded corners=6.5pt, fill=uRgbF, dash pattern=on 3pt off 2pt] (54.0,394.0) rectangle (286.0,626.0);
+\node[anchor=north west, inner sep=0] at (60.0,400.0) {\includegraphics[width=1.1000in, height=1.1000in]{Figures/teaser/m_rgb.png}};
+
+\draw[draw=white, densely dashed, line width=0.80pt] (140.0,410.0) rectangle (216.0,616.0);
+\node[anchor=north west, inner sep=1.5pt, text=white, font={\fontsize{4.6}{5.8}\selectfont\sffamily\bfseries}] at (140.0,410.0) {target plant};
+\node[anchor=north west, inner sep=0, align=left, text={rgbhex5f685c}, font={\fontsize{4.6}{5.8}\selectfont\sffamily}] at (54.0,634.0) {22\,\% of the target plant is hidden by its neighbors};
+\draw[color=uArrow, line width=2.6pt, -{Triangle[length=5pt,width=7.5pt]}] (296.0,510.0) -- (372.0,510.0);
+\draw[draw=uPcE, line width=1.0pt, rounded corners=6.5pt, fill=uPcF] (594.0,394.0) rectangle (826.0,626.0);
+\node[anchor=north west, inner sep=0] at (600.0,400.0) {\includegraphics[width=1.1000in, height=1.1000in]{Figures/teaser/m_gen.png}};
+
+\draw[color=uArrow, line width=2.6pt, -{Triangle[length=5pt,width=7.5pt]}] (560.0,510.0) -- (590.0,510.0);
+\node[anchor=north, inner sep=0, align=center, text={rgbhex5f685c}, font={\fontsize{4.6}{5.8}\selectfont\sffamily}] at (710.0,634.0) {2.6e-4\,m\textsuperscript{2} from the true plant};
+\draw[draw=uTxE, line width=1.0pt, rounded corners=6.5pt, fill=uTxF] (850.0,394.0) rectangle (1066.0,626.0);
+\draw[color=uArrow, line width=2.6pt, -{Triangle[length=5pt,width=7.5pt]}] (830.0,510.0) -- (847.0,510.0);
+\node[anchor=north west, inner sep=0, align=left, text={rgbhex1d221c}, font={\fontsize{5.2}{6.8}\selectfont\sffamily}] at (864.0,412.0) {height\\~~1.07\,m (true 1.06\,m)\\leaves\\~~13 (true 13)\\leaf length\\~~0.36\,m (true 0.37\,m)\\leaf angle\\~~13$^\circ$ (true 13$^\circ$)};
+\node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{7.0}{8.7}\selectfont\sffamily\bfseries}, rotate=90] at (30.0,510.0) {maize};
+\end{tikzpicture}
