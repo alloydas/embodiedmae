@@ -17,9 +17,13 @@ import _plantviz as V
 ap = argparse.ArgumentParser()
 ap.add_argument('--sorghum', default='Sorghum_10001'); ap.add_argument('--maize', default='plant_0003')
 ap.add_argument('--row-sorghum', default='Sorghum_10007'); ap.add_argument('--row-maize', default='plant_0004')
+ap.add_argument('--ugg', action='store_true', help='UGG-style PREVIEW only (figures/ugg_grids.py): writes '
+                'paper/figs/ugg_preview/fig_dataset_ugg.{pdf,png}, never the paper copy')
 a = ap.parse_args()
 PL = {'sorghum': a.sorghum, 'maize': a.maize}; RP = {'sorghum': a.row_sorghum, 'maize': a.row_maize}
 elev_tab = pd.read_csv('data_split/maize_view_elevation.csv.gz')
+if a.ugg:                                             # preview variant; the paper figure below is untouched
+    import ugg_grids; ugg_grids.render_dataset(a, elev_tab); sys.exit(0)
 
 fig = plt.figure(figsize=(7.1, 5.9))
 L, R = 0.03, 0.995

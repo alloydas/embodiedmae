@@ -18,6 +18,9 @@ from maize_dataset_4m import MaizeDataset4M
 ap = argparse.ArgumentParser()
 ap.add_argument('--sorghum-plant', default='Sorghum_10001'); ap.add_argument('--maize-plant', default='plant_0003')
 ap.add_argument('--device', default='cpu'); ap.add_argument('--seed', type=int, default=0)
+ap.add_argument('--ugg', action='store_true', help='UGG-style PREVIEW only (figures/ugg_grids.py): writes '
+                'paper/figs/ugg_preview/fig_qual_ugg.{pdf,png}, never the paper copy; the generated clouds are cached')
+ap.add_argument('--refresh', action='store_true', help='with --ugg: regenerate the cached clouds')
 a = ap.parse_args()
 O = pathlib.Path('outputs')
 SPEC = {
@@ -65,6 +68,39 @@ def scat(ax, P, col, title, lim):
     ax.set_xlim(c[0] - h, c[0] + h); ax.set_ylim(c[2] - h, c[2] + h); ax.set_zlim(c[1] - h, c[1] + h)
     ax.set_box_aspect((1, 1, 1)); ax.set_axis_off()
 
+
+if a.ugg:                                             # preview variant; the paper figure below is untouched
+    import pickle
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent)); import ugg_grids
+    dump = ugg_grids.DUMPS / 'fig_qual_dump.pkl'
+    D = pickle.load(open(dump, 'rb')) if dump.exists() and not a.refresh else None
+    if D is None or D['plants'] != {sp: s['plant'] for sp, s in SPEC.items()} or D['seed'] != a.seed:
+        MEAN, STD = np.array([0.485, 0.456, 0.406]), np.array([0.229, 0.224, 0.225])
+        D = dict(plants={sp: s['plant'] for sp, s in SPEC.items()}, seed=a.seed, species={})
+        for sp, s in SPEC.items():                    # the same steps, in the same order, as the paper figure
+            cfg = run_cfg(s['after'])
+            if sp == 'sorghum':
+                ds = SorghumDataset4M(s['root'], split='val', num_points=s['pts'], rgb_file=cfg.get('rgb_file', 'rgb_nobg.png'),
+                                      rgb_gain=cfg.get('rgb_brighten_gain'))
+            else:
+                ds = MaizeDataset4M(s['root'], split='val', num_points=s['pts'], rgb_file='rgba.png', param_schema='v2')
+            idx = next(i for i, f in enumerate(ds.samples) if f.name == f"{s['plant']}_00")
+            np.random.seed(a.seed)
+            it = ds[idx]
+            gt, par, tv = it[2], it[3], it[4]
+            mb, eb = load(s, s['before']); ma, ea = load(s, s['after'])
+            pb, _ = gen(mb, it); pa, para = gen(ma, it)
+            n = int(tv[1:].sum())
+            pl, pal = par[1:1 + n, s['len_idx']], para[1:1 + n, s['len_idx']].clamp(0, 1)
+            D['species'][sp] = dict(plant=s['plant'], img=np.clip(it[0].permute(1, 2, 0).numpy() * STD + MEAN, 0, 1),
+                                    pb=pb.numpy(), pa=pa.numpy(), gt=gt.numpy(), ch_b=cham(pb, gt), ch_a=cham(pa, gt),
+                                    par_len=pl.numpy(), para_len=pal.numpy(), mae=float((pal - pl).abs().mean()), epochs=(eb, ea))
+            print(sp, s['plant'], 'before', round(D['species'][sp]['ch_b'] * 1e3, 2), 'after', round(D['species'][sp]['ch_a'] * 1e3, 2),
+                  'leaf-length MAE', round(D['species'][sp]['mae'], 3), 'epochs', eb, ea, flush=True)
+        dump.parent.mkdir(parents=True, exist_ok=True)
+        pickle.dump(D, open(dump.with_suffix('.tmp'), 'wb')); dump.with_suffix('.tmp').replace(dump)
+    ugg_grids.render_qual(D)
+    sys.exit(0)
 
 fig = plt.figure(figsize=(11, 4.6))
 MEAN, STD = np.array([0.485, 0.456, 0.406]), np.array([0.229, 0.224, 0.225])

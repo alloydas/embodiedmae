@@ -2,11 +2,18 @@
 training-view band; filled markers = views the arm trained on.
 Reads reports/probe_pr_e5_v<k>_<job>.csv (eval/linear_probe.py --probe-view k).
 Writes paper/figs/fig_e5_views.{pdf,png} and the Overleaf copy.
-usage: python figures/make_e5_view_fig.py"""
+usage: python figures/make_e5_view_fig.py
+`--ugg`: the UGG-style preview (figures/ugg_style.py: the all-view reference arm in grey, the bands in SERIES order,
+one-row legend above the panels, no top/right spines, light horizontal grid; filled = trained view as before; same
+data, fonts and figure size), written ONLY to paper/figs/ugg_preview/fig_e5_views_ugg.{pdf,png}."""
 import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import glob, re, shutil
 import pandas as pd, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
+UGG = '--ugg' in sys.argv
+if UGG:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent)); import ugg_style as U
+    from matplotlib.lines import Line2D
 
 rows = []
 for f in sorted(glob.glob('reports/probe_pr_e5_v*_*.csv')):
@@ -16,16 +23,26 @@ ARMS = [('e2_pcrgbdt_d2', 'all ten views', '#2a6f97', list(range(10))),
         ('e5_topdown_d2', 'top-down (0-1)', '#c46b2d', [0, 1]),
         ('e5_single_d2', 'single (0)', '#7a5195', [0]),
         ('e5_horizon_d2', 'horizon (4-5)', '#3a8d55', [4, 5])]
+if UGG:   # reference arm grey, the three bands in SERIES order
+    ARMS = [(r, n, c, tr) for (r, n, _, tr), c in zip(ARMS, [U.GREYS[0], U.SERIES[0], U.SERIES[1], U.SERIES[2]])]
 fig, axs = plt.subplots(1, 2, figsize=(7.0, 2.4))
 for ax, (t, lab) in zip(axs, [('leaf_angle_roll', 'roll'), ('height', 'height')]):
     p = d[d.target == t].pivot_table(index='view', columns='run', values='test_r2')
     for r, name, c, tr in ARMS:
-        y = p[r]; ax.plot(y.index, y.values, color=c, lw=1.6, label=name)
+        y = p[r]; ax.plot(y.index, y.values, color=c, lw=1.4 if UGG else 1.6, label=name)
         for v, val in y.items():
             ax.plot(v, val, 'o', ms=4.5, mec=c, mfc=c if v in tr else 'white', mew=1.4)
     ax.set_xticks(range(10)); ax.set_xlabel('probe view (0 = 64° down, 4-5 horizon, 9 = 64° up)', fontsize=7)
     ax.set_ylabel(f'test $R^2$ ({lab})', fontsize=8); ax.tick_params(labelsize=7); ax.grid(alpha=.3, lw=.5)
     ax.set_xlim(-0.4, 9.4)
+    if UGG: ax.grid(False); U.style_axes(ax, grid='y')
+if UGG:
+    hs = [Line2D([], [], color=c, lw=1.4, marker='o', ms=4.5, mec=c, mfc='white', mew=1.4) for _, _, c, _ in ARMS]
+    U.top_legend(fig, hs, [n for _, n, _, _ in ARMS], fontsize=6.5, y=0.92, borderpad=0.2)
+    fig.tight_layout(rect=(0, 0, 1, 0.935))
+    out = pathlib.Path('paper/figs/ugg_preview'); out.mkdir(parents=True, exist_ok=True)
+    for ext in ('pdf', 'png'): fig.savefig(out / f'fig_e5_views_ugg.{ext}', dpi=200)
+    print('wrote', out / 'fig_e5_views_ugg.pdf'); sys.exit(0)
 axs[0].legend(fontsize=6.5, frameon=False, loc='lower left')
 fig.tight_layout()
 out = pathlib.Path('paper/figs'); out.mkdir(exist_ok=True)

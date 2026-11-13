@@ -48,78 +48,192 @@
   .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; border: 1.5px solid; }
   .notes { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: grid; gap: 12px; }
   .notes ul { margin: 0 auto; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; color: var(--dim); }
+  .group { border-top: 1px solid var(--line); padding-top: 28px; margin-top: 8px; }
+  .group .k { font-size: 13px; }
 </style>
 
 <main>
   <header>
-    <div class="k">CropCode · paper figures</div>
+    <div class="k">CropCode · paper figures · previews</div>
     <h1>Our figures with ideas from the UGG paper</h1>
-    <p>Ideas taken from the figures of <i>UGG: Unified Generative Geometry Model</i> (NeurIPS 2026): one soft colour per stream, each item in a rounded box, inputs dashed and outputs solid, grey arrows. The type stays the font of our earlier figures (Liberation Sans, Arial metrics). The data, plants and numbers are the paper's. Nothing has been swapped into the paper yet.</p>
+    <p>Every main-body figure, current paper version beside a version that borrows the figure conventions of <i>UGG: Unified Generative Geometry Model</i> (ugg-paper.pdf). Fonts, sizes, data, plants and numbers are unchanged. Nothing has been swapped into the paper yet.</p>
     <div class="legend" aria-label="Stream colours">
       <span><i class="sw" style="background:#e6ecf3;border-color:#809ec2"></i>Image</span>
       <span><i class="sw" style="background:#faf2d4;border-color:#e0b020"></i>Depth image</span>
       <span><i class="sw" style="background:#f6e9ed;border-color:#d091a7"></i>Point cloud</span>
       <span><i class="sw" style="background:#eae7f2;border-color:#9d8cc4"></i>Procedural parameters</span>
+      <span><i class="sw" style="background:#6a2fd6;border-color:#6a2fd6"></i>Ours (highlight)</span>
     </div>
   </header>
-
   <div class="bar"><div class="seg" id="mode" role="group" aria-label="Which version to show">
     <button type="button" data-v="both" aria-pressed="true">Side by side</button>
     <button type="button" data-v="paper" aria-pressed="false">Current paper</button>
     <button type="button" data-v="ugg" aria-pressed="false">UGG ideas</button>
   </div></div>
-
-  <section aria-labelledby="h-f1">
-    <h2 id="h-f1">Fig. 1 · Teaser (the paper's TikZ figure)</h2>
-    <p>Same layout, images, numbers and Helvetica text. The photograph sits in a dashed blue input box, the procedural fit in a solid pink box and the traits in a solid purple box. CropCode becomes a neutral grey block, and the arrows are grey block arrows. The "target plant" label now sits inside its dashed box instead of on the frame edge. Both versions are compiled from the TikZ source with Times and Helvetica.</p>
+  <div class="group" id="diagrams"><div class="k">Diagrams</div></div>
+  <section aria-labelledby="h-fig-teaser">
+    <h2 id="h-fig-teaser">Fig. 1 · Teaser</h2>
+    <p>Observation in, complete plant out. UGG's Fig. 1: one dashed input box per observation, a model block with a soft gradient through the four stream colours and a dashed rule, and one grey frame around everything the model writes. Same images, numbers and Helvetica text.</p>
     <div class="pair">
-      <figure class="paper"><div class="figbox"><img src="img/fig1_teaser_paper.png" alt="Fig. 1 teaser as in the paper"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig1_teaser_ugg.png" alt="Fig. 1 teaser with UGG-style boxes and arrows"></div><figcaption>UGG ideas, our font</figcaption></figure>
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_teaser_cur.png" alt="Fig. 1 · Teaser, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_teaser_ugg.png" alt="Fig. 1 · Teaser, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
-
-  <section aria-labelledby="h-f2">
-    <h2 id="h-f2">Fig. 2 · Three training stages</h2>
-    <p>UGG stream colours; layout and font unchanged.</p>
+  <section aria-labelledby="h-fig2-stages">
+    <h2 id="h-fig2-stages">Fig. 2 · Three training stages</h2>
+    <p>UGG's Figs. 2–3: hidden tokens hatched, visible ones plain, with a legend; dashed inputs and solid outputs; neutral stage panels (a coloured panel would read as a stream); gradient encoder and decoder; grey block arrows; our trained model ('Student', 'after') in UGG's violet. Losses stay red.</p>
     <div class="pair">
-      <figure class="paper"><div class="figbox"><img src="img/fig2_stages_paper.png" alt="Fig. 2, current colours"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig2_stages_ugg.png" alt="Fig. 2 with the UGG stream colours and serif text"></div><figcaption>UGG ideas, our font</figcaption></figure>
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig2_stages_cur.png" alt="Fig. 2 · Three training stages, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig2_stages_ugg.png" alt="Fig. 2 · Three training stages, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
-
-  <section aria-labelledby="h-f9">
-    <h2 id="h-f9">Fig. 9 · Crop rows</h2>
-    <p>Input photo in a dashed image box, the true center plant in a grey box, the row-trained reconstruction in a solid point-cloud box with its Chamfer distance (×10⁻⁴ m²).</p>
+  <div class="group" id="qualitative-grids"><div class="k">Qualitative grids</div></div>
+  <section aria-labelledby="h-fig-dataset">
+    <h2 id="h-fig-dataset">Fig. 3 · The data</h2>
+    <p>Bold headers and row labels; stream tiles in their colours.</p>
     <div class="pair">
-      <figure class="paper"><div class="figbox"><img src="img/fig_rows_examples_paper.png" alt="Fig. 9, current style"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig_rows_examples_ugg.png" alt="Fig. 9 in the UGG style"></div><figcaption>UGG ideas, our font</figcaption></figure>
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_dataset_cur.png" alt="Fig. 3 · The data, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_dataset_ugg.png" alt="Fig. 3 · The data, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
-
-  <section aria-labelledby="h-f11">
-    <h2 id="h-f11">Fig. 11 · Any input to all, maize</h2>
-    <p>Each block: one input stream (dashed), a grey arrow, the three streams generated from it (solid).</p>
+  <section aria-labelledby="h-fig-any2all-maize">
+    <h2 id="h-fig-any2all-maize">Any input to all · maize</h2>
+    <p>One dashed input, grey arrow, three solid outputs, each in its stream colour.</p>
     <div class="pair">
-      <figure class="paper"><div class="figbox"><img src="img/fig_any2all_maize_paper.png" alt="Fig. 11, current style"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig_any2all_maize_ugg.png" alt="Fig. 11 in the UGG style"></div><figcaption>UGG ideas, our font</figcaption></figure>
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_any2all_maize_cur.png" alt="Any input to all · maize, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_any2all_maize_ugg.png" alt="Any input to all · maize, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
-
-  <section aria-labelledby="h-f12">
-    <h2 id="h-f12">Fig. 12 · Any input to all, sorghum</h2>
-    <p>Plant 7712, view 05, the same layout as Fig. 11.</p>
+  <section aria-labelledby="h-fig-rows-examples">
+    <h2 id="h-fig-rows-examples">Crop-row examples</h2>
+    <p>Photo in a dashed image box, truth in grey, row-trained prediction in a solid point-cloud box.</p>
     <div class="pair">
-      <figure class="paper"><div class="figbox"><img src="img/fig_any2all_sorghum_paper.png" alt="Fig. 12, current style"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig_any2all_sorghum_ugg.png" alt="Fig. 12 in the UGG style"></div><figcaption>UGG ideas, our font</figcaption></figure>
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_rows_examples_cur.png" alt="Crop-row examples, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_rows_examples_ugg.png" alt="Crop-row examples, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
-
+  <section aria-labelledby="h-fig-qual">
+    <h2 id="h-fig-qual">Photograph to plant</h2>
+    <p>Bold headers, the distilled model as 'Ours' in violet, stream boxes.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_qual_cur.png" alt="Photograph to plant, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_qual_ugg.png" alt="Photograph to plant, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-any2all-sorghum">
+    <h2 id="h-fig-any2all-sorghum">Any input to all · sorghum</h2>
+    <p>As the maize version.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_any2all_sorghum_cur.png" alt="Any input to all · sorghum, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_any2all_sorghum_ugg.png" alt="Any input to all · sorghum, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-e10-real">
+    <h2 id="h-fig-e10-real">E10 · real maize rows</h2>
+    <p>Bold headers, the real-row fine-tune highlighted as ours.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_e10_real_cur.png" alt="E10 · real maize rows, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_e10_real_ugg.png" alt="E10 · real maize rows, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-e10-real-sorghum">
+    <h2 id="h-fig-e10-real-sorghum">E10 · real sorghum rows</h2>
+    <p>As the maize version.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_e10_real_sorghum_cur.png" alt="E10 · real sorghum rows, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_e10_real_sorghum_ugg.png" alt="E10 · real sorghum rows, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <div class="group" id="plots"><div class="k">Plots</div></div>
+  <section aria-labelledby="h-fig-e5-views">
+    <h2 id="h-fig-e5-views">E5 · view regimes</h2>
+    <p>Hollow markers, legend on top, light grid.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_e5_views_cur.png" alt="E5 · view regimes, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_e5_views_ugg.png" alt="E5 · view regimes, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-partial-clouds">
+    <h2 id="h-fig-partial-clouds">Partial clouds</h2>
+    <p>Arms in the stream colours; refit solid, transferred probe dashed.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_partial_clouds_cur.png" alt="Partial clouds, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_partial_clouds_ugg.png" alt="Partial clouds, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-leafcount">
+    <h2 id="h-fig-leafcount">Leaf count</h2>
+    <p>Before in grey, the distilled model after in violet.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_leafcount_cur.png" alt="Leaf count, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_leafcount_ugg.png" alt="Leaf count, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-rows">
+    <h2 id="h-fig-rows">Crop rows · Chamfer</h2>
+    <p>Row-trained model in violet, baselines in greys, legend on top.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_rows_cur.png" alt="Crop rows · Chamfer, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_rows_ugg.png" alt="Crop rows · Chamfer, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-e2-streams">
+    <h2 id="h-fig-e2-streams">E2 · what each stream adds</h2>
+    <p>Each stream set takes the colour of the stream it adds: PC pink, +RGB blue, +D gold, +recipe purple.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_e2_streams_cur.png" alt="E2 · what each stream adds, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_e2_streams_ugg.png" alt="E2 · what each stream adds, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-param-controls">
+    <h2 id="h-fig-param-controls">Recipe-stream controls</h2>
+    <p>Flat bars, one-row legend on top.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_param_controls_cur.png" alt="Recipe-stream controls, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_param_controls_ugg.png" alt="Recipe-stream controls, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-metrics">
+    <h2 id="h-fig-metrics">Chamfer vs probe</h2>
+    <p>UGG plot conventions; same points.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_metrics_cur.png" alt="Chamfer vs probe, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_metrics_ugg.png" alt="Chamfer vs probe, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-fscore">
+    <h2 id="h-fig-fscore">Point-cloud F1</h2>
+    <p>E1 in violet with its first and last values in bold on the axis; P = R as a dashed reference.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_fscore_cur.png" alt="Point-cloud F1, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_fscore_ugg.png" alt="Point-cloud F1, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-e10-height">
+    <h2 id="h-fig-e10-height">E10 · plant height</h2>
+    <p>Reference lines dashed grey; the real-row fine-tune in violet.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_e10_height_cur.png" alt="E10 · plant height, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_e10_height_ugg.png" alt="E10 · plant height, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
+  <section aria-labelledby="h-fig-scaling">
+    <h2 id="h-fig-scaling">Data and model scaling</h2>
+    <p>Hollow markers, legend on top, minimal axes.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig_scaling_cur.png" alt="Data and model scaling, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig_scaling_ugg.png" alt="Data and model scaling, UGG-style version"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
   <section class="notes" aria-labelledby="h-notes">
-    <h2 id="h-notes">What changes, what stays</h2>
+    <h2 id="h-notes">What was taken from UGG</h2>
     <ul>
-      <li>Same plants, numbers, font (Liberation Sans) and 9 pt text as the paper's figures.</li>
-      <li>Stream colours follow UGG: image blue, depth yellow, point cloud pink, parameters purple. Predicted points use Okabe-Ito reddish purple, which stays distinct from the grey truth for colour-blind readers.</li>
-      <li>Swapping into the paper is one command per figure; captions need a word on the box colours.</li>
+      <li>One soft colour per stream, shared by boxes, token squares and plot series: image blue, depth yellow, point cloud pink, parameters purple. Stream sets take the colour of the stream they add.</li>
+      <li>Inputs in dashed boxes, outputs in solid boxes, grey block arrows between them.</li>
+      <li>Hidden tokens hatched, visible tokens plain, with a legend; the model block filled with a soft gradient through the stream colours.</li>
+      <li>Our model highlighted in violet; baselines and references in greys; dashed grey reference lines.</li>
+      <li>Plots: hollow markers, one frameless legend row above the panels, light horizontal grid, no top or right spines.</li>
+      <li>Not taken: UGG's serif type (our figures keep their own font), and its table shading (a separate decision for the tables).</li>
     </ul>
   </section>
 </main>

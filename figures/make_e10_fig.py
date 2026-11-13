@@ -29,6 +29,9 @@ ap.add_argument('--species', default='maize', choices=('maize', 'sorghum'))
 ap.add_argument('--per-layout', type=int, default=None, help='stops per layout (maize 2, sorghum 1)')
 ap.add_argument('--seed', type=int, default=0)
 ap.add_argument('--out', default=None)
+ap.add_argument('--ugg', action='store_true', help='UGG-style PREVIEW only (figures/ugg_grids.py): writes '
+                'paper/figs/ugg_preview/<name>_ugg.{pdf,png}, never the paper copy; the panels are cached')
+ap.add_argument('--refresh', action='store_true', help='with --ugg: regenerate the cached panels')
 a = ap.parse_args()
 torch.set_num_threads(8)
 SORG = a.species == 'sorghum'
@@ -39,6 +42,14 @@ CFG = {'maize': dict(report='reports/e10_real_ft_test_17383192.csv', real='maize
                        row='sorghum_row_ft:checkpoints/checkpoint_epoch_100.pth',
                        head='4m_pretrain_15k_d2_sink:checkpoints/checkpoint_epoch_1000.pth', out='paper/figs/fig_e10_real_sorghum')}[a.species]
 per_layout = a.per_layout or (1 if SORG else 2)
+if a.ugg:                                             # preview variant; the paper figure below is untouched
+    import pickle
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent)); import ugg_grids
+    UGG_DUMP = ugg_grids.DUMPS / f"{pathlib.Path(CFG['out']).name}_dump.pkl"
+    if UGG_DUMP.exists() and not a.refresh:
+        D = pickle.load(open(UGG_DUMP, 'rb'))
+        if D['args'] == (per_layout, a.seed):
+            ugg_grids.render_e10(D, f"{pathlib.Path(CFG['out']).name}_ugg"); sys.exit(0)
 
 df = pd.read_csv(CFG['report'], dtype={'row': str})
 sel = df[(df.model == CFG['real'].split(':')[0]) & (df.source == 'all')]
@@ -90,6 +101,37 @@ cols = (['Image', 'Depth\nimage', 'Point\ncloud\n(scene)', 'Center\nplant\n(trut
          'Real-row FT\n(75 % of\nreal plants)'] if SORG else
         ['Image', 'Depth image', 'Point cloud\n(scene)', 'Center plant\n(truth)'] + [m[0] for m in models])
 tw, th = (0.85, 2.35) if SORG else (1.75, 1.85)
+if a.ugg:                                             # the same panels, in the same order, as the figure below
+    rows_ = []
+    for i, (layout, row, stop) in enumerate(picks):
+        ds = RealRowDataset(layouts=(layout,), rows=[row], stops={stop}, seed=a.seed, species=a.species, rgb_gain=gain)
+        rgb, dep, pin, par, valid, pgt, info = ds[0]
+        B = lambda t: t[None].to(dev)
+        d = dep[0].numpy().copy(); d[d == 0] = np.nan
+        if SORG:
+            cs = np.where(np.isfinite(d).any(0))[0]; c0, c1 = max(0, cs.min() - 3), min(d.shape[1], cs.max() + 4)
+            img, d = photo(layout, row, stop), d[:, c0:c1]
+        else:
+            img = (rgb.permute(1, 2, 0).numpy() * STD + MEAN).clip(0, 1)
+        preds = []
+        for j, (label, m, mr, _) in enumerate(models):
+            with torch.no_grad():
+                pp, ppar = predict(m, 'all', B(rgb), B(dep), B(pin), B(par), mr, a.seed + 1000003 * i)
+            P = pp[0].float()
+            d2 = torch.cdist(P[None], pgt[None])[0]
+            ch = float(d2.min(1).values.pow(2).mean() + d2.min(0).values.pow(2).mean()) * info['scale'] ** 2
+            txt = f'Chamfer\n{1e4 * ch:.0f}e-4 m$^2$' if SORG else f'Chamfer {1e4 * ch:.0f}e-4 m$^2$'
+            if not SORG:
+                p0 = ppar[0, 0].clamp(0, 1).float().numpy()
+                txt += f'\nheight {p0[H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]:.2f} m'
+            preds.append((P.numpy(), txt)); print(layout, row, stop, label.replace('\n', ' '), txt.replace('\n', ' '), flush=True)
+        rows_.append(dict(label=f'{layout}\nplant {row}\nstop {stop}', img=img, depth=d, pin=pin.numpy(), pgt=pgt.numpy(),
+                          truth_txt=f'height\n{info["height"]:.2f} m' if SORG else f'height {info["height"]:.2f} m', preds=preds))
+    D = dict(species=a.species, args=(per_layout, a.seed), cols=cols, figsize=(tw * len(cols), th * len(picks)), rows=rows_,
+             lims=((-0.37, 0.37), (-1.02, 1.02)) if SORG else ((-1.02, 1.02), (-1.02, 1.02)))
+    UGG_DUMP.parent.mkdir(parents=True, exist_ok=True)
+    pickle.dump(D, open(UGG_DUMP.with_suffix('.tmp'), 'wb')); UGG_DUMP.with_suffix('.tmp').replace(UGG_DUMP)
+    ugg_grids.render_e10(D, f"{pathlib.Path(CFG['out']).name}_ugg"); sys.exit(0)
 fig, axes = plt.subplots(len(picks), len(cols), figsize=(tw * len(cols), th * len(picks)), squeeze=False)
 for i, (layout, row, stop) in enumerate(picks):
     ds = RealRowDataset(layouts=(layout,), rows=[row], stops={stop}, seed=a.seed, species=a.species, rgb_gain=gain)

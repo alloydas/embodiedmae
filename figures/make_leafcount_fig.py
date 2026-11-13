@@ -4,12 +4,18 @@ reports/quant_{teacher_undistilled,generalist_rgb}_d2_test.json (sorghum) and
 reports/quant_maize_{e1,generalist_rgb}_d2_test.json (maize); leaf counts from Sorghum_15K/features.csv
 and Maize_1/plant_scores.csv. Writes paper/figs/fig_leafcount.{pdf,png} + Overleaf copy and prints
 Spearman rho of error vs leaf count.
+`--ugg`: the UGG-style preview (figures/ugg_style.py: before in grey, the distilled generalist in OURS violet, hollow
+markers, one-row legend above the panels, no top/right spines, light horizontal grid; same data, fonts and figure
+size), written ONLY to paper/figs/ugg_preview/fig_leafcount_ugg.{pdf,png}.
 """
 import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import json, re, shutil, os
 import numpy as np, pandas as pd, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
 from scipy.stats import spearmanr
+UGG = '--ugg' in sys.argv
+if UGG:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent)); import ugg_style as U
 
 R = pathlib.Path('reports')
 sf = pd.read_csv('/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K/features.csv').set_index('plant')['n_leaves']
@@ -24,15 +30,29 @@ for ax, (sp, (files, leaves)) in zip(axs, SP.items()):
         df = pd.DataFrame({'n': [leaves(p) for p in j['plants']], 'ch': np.asarray(j['per_sample']['model']) * 1e3}).dropna()
         df['dec'] = pd.qcut(df.n.rank(method='first'), 10, labels=False)
         g = df.groupby('dec').agg(n=('n', 'mean'), med=('ch', 'median'), lo=('ch', lambda x: x.quantile(.25)), hi=('ch', lambda x: x.quantile(.75)))
-        ax.plot(g.n, g.med, marker=mk, ms=3.5, lw=1.4, color=c, label=lab)
-        ax.fill_between(g.n, g.lo, g.hi, color=c, alpha=0.15, lw=0)
+        if UGG:
+            c = U.GREYS[1] if 'before' in lab else U.OURS
+            U.line(ax, g.n, g.med, c, label=lab, ms=3.5, lw=1.4, zorder=3)
+            ax.fill_between(g.n, g.lo, g.hi, color=c, alpha=0.12, lw=0, zorder=1)
+        else:
+            ax.plot(g.n, g.med, marker=mk, ms=3.5, lw=1.4, color=c, label=lab)
+            ax.fill_between(g.n, g.lo, g.hi, color=c, alpha=0.15, lw=0)
         rho = spearmanr(df.n, df.ch).correlation
         print(f'{sp:8s} {lab:30s} median {df.ch.median():.2f}e-3  spearman(leaves, chamfer) {rho:+.3f}  n={len(df)}')
     ax.set_yscale('log'); ax.set_title(sp, fontsize=9)
     from matplotlib.ticker import FuncFormatter, LogLocator
     ax.yaxis.set_major_locator(LogLocator(subs=(1, 2, 5))); ax.yaxis.set_minor_formatter(FuncFormatter(lambda v, _: ''))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:g}')); ax.set_xlabel('leaf count (decile mean)', fontsize=8)
-    ax.tick_params(labelsize=7); ax.grid(alpha=.3, lw=.5)
+    ax.tick_params(labelsize=7)
+    if UGG: U.style_axes(ax, grid='y')
+    else: ax.grid(alpha=.3, lw=.5)
+if UGG:
+    axs[0].set_ylabel('Chamfer from the photograph\n($\\times10^{-3}$, median and IQR)', fontsize=8)
+    U.top_legend(fig, *axs[0].get_legend_handles_labels(), fontsize=6.5, y=0.925, borderpad=0.2)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    out = pathlib.Path('paper/figs/ugg_preview'); out.mkdir(parents=True, exist_ok=True)
+    for ext in ('pdf', 'png'): fig.savefig(out / f'fig_leafcount_ugg.{ext}', dpi=220)
+    print('wrote', out / 'fig_leafcount_ugg.pdf'); sys.exit(0)
 axs[0].set_ylabel('Chamfer from the photograph\n($\\times10^{-3}$, median and IQR)', fontsize=8); axs[0].legend(fontsize=6.5, frameon=False)
 fig.tight_layout()
 out = pathlib.Path('paper/figs')
