@@ -75,6 +75,10 @@
                 box-shadow: 0 18px 40px -30px rgba(0,0,0,.35); }
   .hero-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
   .hero-stage canvas:active { cursor: grabbing; }
+  .hero-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; width: 100%; }
+  .hero-pair .hero-stage { margin: 0; aspect-ratio: 4 / 5; }
+  .hero-pair figcaption { position: absolute; left: 12px; top: 10px; font-size: 13.5px; color: #3b4339; background: rgba(255,255,255,.85); padding: 2px 8px; border-radius: 6px; pointer-events: none; }
+  @media (max-width: 520px) { .hero-pair { gap: 8px; } .hero-pair figcaption { font-size: 12px; left: 8px; top: 6px; } }
   .hero-credit { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
   /* task chooser */
@@ -174,8 +178,11 @@
     <p>One masked autoencoder reads <b>any field sensor (an image, a depth image or a point cloud)</b> and writes the procedural model of the plant, even when its neighbours hide part of it.</p>
   </div>
   <div class="teaser">
-    <div class="hero-stage"><canvas id="hero-pc" aria-label="Procedural models of a held-out maize plant and a held-out sorghum plant, each built from the parameters written from one photograph, rotating"></canvas></div>
-    <div class="hero-credit" id="hero-credit">Procedural models written from one photograph: maize plant 1875 (left) and sorghum plant 7712 (right), both held out · drag to rotate, scroll to zoom</div>
+    <div class="hero-pair">
+      <figure class="hero-stage"><canvas id="hero-maize" aria-label="Procedural model of held-out maize plant 1875, written from one photograph, rotating"></canvas><figcaption><b>Maize</b> · plant 1875</figcaption></figure>
+      <figure class="hero-stage"><canvas id="hero-sorghum" aria-label="Procedural model of held-out sorghum plant 7712, written from one photograph, rotating"></canvas><figcaption><b>Sorghum</b> · plant 7712</figcaption></figure>
+    </div>
+    <div class="hero-credit" id="hero-credit">Procedural models written from one photograph of each held-out plant · drag to rotate, scroll to zoom</div>
   </div>
 </div></header>
 
@@ -635,34 +642,29 @@
 
   // ------------------------------------------------------------------ hero: one plant rebuilt from a photograph, turning slowly
   (async function hero() {
-    const cv = document.getElementById('hero-pc'); if (!cv) return;
-    const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [1, 1, 1]; g.size = 1.25;
-    // the procedural models (plants built from the parameters the distilled model writes from one photograph) of a
-    // maize and a sorghum held-out plant, side by side on one stage, each spinning about its own stem
-    const its = await Promise.all(['data/single/maize/plant_1875_09.json', 'data/single/sorghum/Sorghum_7712_05.json'].map(u => PCV.load(u)));
-    const plants = its.map(it => { const P = PCV.procedural(it.meta.recipes['rgb:after'], it.meta.species); return { P, col: PCV.plantColors(P) }; });
-    const GAP = 0.85, X = [-GAP, GAP];
-    let spinA = 0;
-    function place() {
-      const layers = plants.map((pl, k) => {
-        const Q = new Float32Array(pl.P.length), c = Math.cos(spinA), s_ = Math.sin(spinA);
-        for (let i = 0; i < Q.length; i += 3) { const x = pl.P[i], z = pl.P[i + 2]; Q[i] = c * x + s_ * z + X[k]; Q[i + 1] = pl.P[i + 1]; Q[i + 2] = -s_ * x + c * z; }
-        return { pos: Q, col: pl.col, size: 1.15 };
-      });
-      p.set(layers); return layers;
-    }
-    const L0 = place(), b0 = PCV.bounds(...L0.map(l => l.pos)), mid = [0, 1, 2].map(i => (b0[0][i] + b0[1][i]) / 2);
-    g.frame([0, 1].map(j => b0[j].map((v, i) => mid[i] + (v - mid[i]) * 0.72)), { phi: 0.06 });   // frame tighter: the plants fill the stage
+    // two windows: the procedural model (the plant built from the parameters the distilled model writes from one
+    // photograph) of a held-out maize and a held-out sorghum plant, each with its own camera, turning slowly
     const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let idle = 0, seen = true, last = 0;
-    cv.addEventListener('pointerdown', () => { idle = performance.now() + 4000; });
-    cv.addEventListener('wheel', () => { idle = performance.now() + 4000; }, { passive: true });
-    if ('IntersectionObserver' in window) new IntersectionObserver(e => { seen = e[0].isIntersecting; }).observe(cv);
-    function spin(t) {
-      if (!still && seen && t > idle && document.visibilityState === 'visible') { spinA += Math.min(50, t - (last || t)) * 0.0004; place(); g.draw(); }
-      last = t; requestAnimationFrame(spin);
+    const views = [];
+    for (const [id, url] of [['hero-maize', 'data/single/maize/plant_1875_09.json'], ['hero-sorghum', 'data/single/sorghum/Sorghum_7712_05.json']]) {
+      const cv = document.getElementById(id); if (!cv) continue;
+      const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [1, 1, 1]; g.size = 1.25;
+      const it = await PCV.load(url), P = PCV.procedural(it.meta.recipes['rgb:after'], it.meta.species);
+      p.set([{ pos: P, col: PCV.plantColors(P), size: 1.15 }]);
+      const b = PCV.bounds(P), mid = [0, 1, 2].map(i => (b[0][i] + b[1][i]) / 2);
+      g.frame([0, 1].map(j => b[j].map((v, i) => mid[i] + (v - mid[i]) * 0.96)), { phi: 0.06 });
+      const v = { g, idle: 0, seen: true }; views.push(v);
+      cv.addEventListener('pointerdown', () => { v.idle = performance.now() + 4000; });
+      cv.addEventListener('wheel', () => { v.idle = performance.now() + 4000; }, { passive: true });
+      if ('IntersectionObserver' in window) new IntersectionObserver(e => { v.seen = e[0].isIntersecting; }).observe(cv);
     }
-    window.addEventListener('resize', () => g.draw());
+    let last = 0;
+    function spin(t) {
+      const dt = Math.min(50, t - (last || t)); last = t;
+      if (document.visibilityState === 'visible') views.forEach(v => { if (v.seen && t > v.idle) { v.g.theta += dt * 0.00025; v.g.draw(); } });
+      requestAnimationFrame(spin);
+    }
+    window.addEventListener('resize', () => views.forEach(v => v.g.draw()));
     if (!still) requestAnimationFrame(spin);
   })().catch(e => console.error(e));
   dFill().catch(e => console.error(e)); rFill().catch(e => console.error(e));
