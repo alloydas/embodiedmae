@@ -83,10 +83,19 @@ for sp in ('maize', 'sorghum'):
         s = 520 / im.height; im.resize((max(1, round(im.width * s)), 520), Image.LANCZOS).save(OUT / 'img' / f'{name}.jpg', quality=86)
         P = read_pcd(ROWS3000 / sp / 'pcd' / f"{m['name']}.pcd"); X = np.stack([P['x'], -P['y'], -P['z']], 1).astype(np.float32)
         tgt = P['label'] == int(m['middle_plant'])
+        zoom = None
+        if sp == 'sorghum':                               # tall strips: a maize-shaped crop (3:1) centred on the middle plant's leaves
+            Wp, Hp = im.size; fx = (Wp / 2) / np.tan(np.radians(float(m['hfov_deg']) / 2))
+            lf = tgt & (P['part'] == 2) if 'part' in P.dtype.names else tgt
+            v = (Hp - 1) / 2 + fx * P['y'][lf] / P['z'][lf]
+            ch = min(Hp, 3 * Wp); c = float(np.median(v)); y0 = int(np.clip(c - ch / 2, 0, Hp - ch))
+            crop = im.crop((0, y0, Wp, y0 + ch)); zs = 1040 / ch
+            crop.resize((max(1, round(Wp * zs)), 1040), Image.LANCZOS).save(OUT / 'img' / f'{name}_zoom.jpg', quality=88)
+            zoom = [y0 / Hp, (y0 + ch) / Hp]
         sel = rng.choice(len(X), min(N_PTS, len(X)), replace=False); X, tgt = X[sel], tgt[sel]
         X = X - X[tgt].mean(0)
         e = dict(name=name, file=m['name'], row=int(m['row']), stop=int(m['stop']), plant=str(m['plant_id']), height=float(hs[ix]),
-                 cam_h=float(m['camera_height_m']), image_px=m['image_px'], plants_in_view=int(len(np.unique(P['label']))))
+                 cam_h=float(m['camera_height_m']), image_px=m['image_px'], plants_in_view=int(len(np.unique(P['label']))), zoom=zoom)
         if sp == 'maize':
             e['leaves'] = list(csvm.DictReader(open(ROWS3000 / sp / 'csv' / f"{m['name']}.csv")))
         pack(name, X, tgt, dict(item=e['file']))

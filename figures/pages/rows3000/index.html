@@ -49,6 +49,12 @@
   .pair { display: grid; grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr); gap: 10px; }
   .photo { background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 340px; }
   .photo img { max-height: 100%; width: auto; max-width: 100%; display: block; }
+  .photo.zoomed { background: transparent; gap: 6px; justify-content: center; }
+  .strip { position: relative; height: 100%; background: #000; border-radius: 6px; overflow: hidden; flex: none; }
+  .strip img { height: 100%; width: auto; max-width: none; }
+  .strip i { position: absolute; left: 0; right: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px #000; border-radius: 2px; }
+  .crop { height: 100%; background: #000; border-radius: 6px; overflow: hidden; }
+  .crop img { height: 100%; width: auto; }
   .view { position: relative; height: 340px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
   .view canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
   .view .hint { position: absolute; left: 8px; bottom: 6px; font-family: var(--mono); font-size: 11px; color: #5d655b; background: rgba(255,255,255,.85); padding: 1px 6px; border-radius: 4px; }
@@ -94,7 +100,7 @@
 
   <section aria-labelledby="h-stops">
     <h2 id="h-stops">Four camera stops</h2>
-    <p class="muted">Chosen across the middle-plant heights, from short to tall. Left: the photograph as delivered. Right: the stop's point cloud; the middle plant in greens, its neighbours in grey. Drag to rotate, scroll or pinch to zoom, double-click to reset.</p>
+    <p class="muted">Chosen across the middle-plant heights, from short to tall. Left: the photograph as delivered (sorghum: the whole tall strip, with the white box zoomed beside it, a crop of maize proportions centred on the middle plant's leaves). Right: the stop's point cloud; the middle plant in greens, its neighbours in grey. Drag to rotate, scroll or pinch to zoom, double-click to reset.</p>
     <div class="stops" id="stops"></div>
   </section>
 
@@ -158,7 +164,7 @@
     const box = document.getElementById('stops');
     box.innerHTML = S[sp].show.map((e, i) => `<article class="stop">
       <h3>Row ${e.row}, stop ${e.stop} · plant ${e.plant}</h3>
-      <div class="pair"><div class="photo"><img src="img/${e.name}.jpg" alt="Photograph of row ${e.row}, stop ${e.stop}, centred on plant ${e.plant}"></div>
+      <div class="pair">${e.zoom ? `<div class="photo zoomed"><div class="strip"><img src="img/${e.name}.jpg" alt="The whole photograph of row ${e.row}, stop ${e.stop}"><i style="top:${(100 * e.zoom[0]).toFixed(1)}%;height:${(100 * (e.zoom[1] - e.zoom[0])).toFixed(1)}%"></i></div><div class="crop"><img src="img/${e.name}_zoom.jpg" alt="Zoom into the middle plant's leaves, row ${e.row}, stop ${e.stop}"></div></div>` : `<div class="photo"><img src="img/${e.name}.jpg" alt="Photograph of row ${e.row}, stop ${e.stop}, centred on plant ${e.plant}"></div>`}
       <div class="view"><canvas id="cv-${i}" aria-label="3D point cloud of the stop, middle plant in green"></canvas><span class="hint">drag · zoom</span></div></div>
       <div class="meta"><span>middle plant <b>${fmt(e.height, 2)} m</b> tall</span><span>camera at <b>${fmt(e.cam_h, 2)} m</b></span><span>photo <b>${e.image_px}</b></span><span><b>${e.plants_in_view}</b> plants in view</span></div>
       ${e.leaves ? leafTable(e.leaves) : ''}</article>`).join('');
