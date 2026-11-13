@@ -53,14 +53,27 @@
     return g;
   }
 
-  // ---------------------------------------------------------------- a panel
-  function panel(canvas, g) {
-    const gl = canvas.getContext('webgl', { antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: true });
-    const p = { canvas, gl, layers: [], bg: [1, 1, 1] };
-    if (!gl) { p.set = () => {}; p.draw = () => {}; canvas.replaceWith(Object.assign(document.createElement('p'), { textContent: 'WebGL is not available in this browser.' })); return p; }
+  // ---------------------------------------------------------------- one shared WebGL context
+  // Browsers keep only ~16 live WebGL contexts per page and silently drop the oldest, which blanked panels on a page
+  // with 25 of them. Every panel therefore renders through ONE hidden WebGL canvas and copies the frame into its own 2D canvas.
+  let SH = null;
+  function shared() {
+    if (SH) return SH;
+    const cv = document.createElement('canvas');
+    const gl = cv.getContext('webgl', { antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: true });
+    if (!gl) return (SH = { gl: null });
     const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); return o; };
     const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
     const loc = { p: gl.getAttribLocation(prog, 'p'), c: gl.getAttribLocation(prog, 'c'), m: gl.getUniformLocation(prog, 'm'), s: gl.getUniformLocation(prog, 's') };
+    return (SH = { cv, gl, prog, loc });
+  }
+
+  // ---------------------------------------------------------------- a panel
+  function panel(canvas, g) {
+    const S = shared(), gl = S.gl, ctx = canvas.getContext('2d');
+    const p = { canvas, layers: [], bg: [1, 1, 1] };
+    if (!gl || !ctx) { p.set = () => {}; p.draw = () => {}; canvas.replaceWith(Object.assign(document.createElement('p'), { textContent: 'WebGL is not available in this browser.' })); return p; }
+    const { prog, loc } = S;
     p.set = function (layers) {
       p.layers.forEach(l => { gl.deleteBuffer(l.bp); gl.deleteBuffer(l.bc); });
       p.layers = layers.map(l => {
@@ -72,7 +85,9 @@
     };
     p.draw = function () {
       const dpr = window.devicePixelRatio || 1, w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+      if (!canvas.clientWidth) return;                                   // hidden panel: nothing to draw
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      if (S.cv.width !== w || S.cv.height !== h) { S.cv.width = w; S.cv.height = h; }
       gl.viewport(0, 0, w, h); gl.clearColor(p.bg[0], p.bg[1], p.bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST); gl.useProgram(prog);
       const m = mul(persp(g.fov, w / h, g.dist / 50, g.dist * 4), lookAt(g.eye(), g.target, [0, 1, 0]));
@@ -84,6 +99,7 @@
         gl.bindBuffer(gl.ARRAY_BUFFER, l.bc); gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.POINTS, 0, l.n);
       });
+      ctx.drawImage(S.cv, 0, 0);
     };
     // pointer: orbit with one pointer, pinch-zoom with two, wheel zoom, double-click reset
     const pts = new Map(); let pinch = null;
