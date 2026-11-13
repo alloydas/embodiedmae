@@ -686,7 +686,7 @@ divergences between geometric metrics and downstream trait probes
 (Sec.~\ref{sec:exp-real}), and analyze scaling, cross-species transfer, and
 latent space structure (Sec.~\ref{sec:exp-repr}).
 
-\subsection{Experimental setup}
+\noindent\textbf{Experimental setup.}
 \label{sec:setup}\label{sec:exp-setup}
 
 \noindent\textbf{Models and compute budgets.}
@@ -805,7 +805,7 @@ species' trait set.
   
 \end{table*}
 
-\subsection{Regime I: single-view reconstruction of isolated plants}
+\noindent\textbf{Regime I: single-view reconstruction of isolated plants.}
 \label{sec:regime1}\label{sec:exp-regime1}
 
 Table~\ref{tab:regime1} (Appendix~\ref{app:tables}) covers
@@ -833,7 +833,7 @@ reconstructions: the distilled generalist resolves individual leaf blades
 where the undistilled model generates diffuse clouds, and the procedural
 output can be edited and re-rendered.
 
-\subsection{Regime II: viewpoint elevation, self-occlusion, and complexity}
+\noindent\textbf{Regime II: viewpoint elevation, self-occlusion, and complexity.}
 \label{sec:regime2}\label{sec:exp-regime2}
 
 \noindent\textbf{Viewpoint elevation.}
@@ -870,7 +870,7 @@ After distillation, reconstruction error is flat across leaf-count
 deciles (Spearman $\rho = -0.07$ in sorghum, $+0.04$ in maize;
 Fig.~\ref{fig:leafcount}).
 
-\subsection{Regime III: neighbor occlusion in realistic crop rows}
+\noindent\textbf{Regime III: neighbor occlusion in realistic crop rows.}
 \label{sec:regime3}\label{sec:exp-occlusion}
 
 Table~\ref{tab:regime_3} (Appendix~\ref{app:tables}) compares
@@ -885,7 +885,7 @@ and falls end-on in maize, whose leaf planes align with the row, and is
 yaw-independent in sorghum, whose headings are random
 (Fig.~\ref{fig:row_reconstruction_quant}, Appendix~\ref{app:figures}).
 
-\subsection{Any-subset modality reconstruction and distillation}
+\noindent\textbf{Any-subset modality reconstruction and distillation.}
 \label{sec:res-distill}\label{sec:exp-main}
 
 Table~\ref{tab:main} (Appendix~\ref{app:tables}) reports
@@ -900,7 +900,7 @@ in sorghum and 43.5\% in maize: photograph-to-cloud Chamfer falls 61\%
 pairs matches the dedicated two-stream students within $0.03$ in both
 species.
 
-\subsection{Influence of procedural parameter stream placement}
+\noindent\textbf{Influence of procedural parameter stream placement.}
 \label{sec:param-stream}\label{sec:exp-params}
 
 Tables~\ref{tab:modality_value_add} and~\ref{tab:token_budget}
@@ -921,7 +921,7 @@ generator's parameter structure (rank two in sorghum, eleven independent
 dimensions in maize); Figs.~\ref{fig:stream_contributions}
 and~\ref{fig:controls} (Appendix~\ref{app:figures}) plot both ablations.
 
-\subsection{Divergence between Chamfer distance and probing metrics}
+\noindent\textbf{Divergence between Chamfer distance and probing metrics.}
 \label{sec:res-metrics}\label{sec:exp-metrics}
 
 Across twelve model variants the two metrics correlate overall
@@ -939,7 +939,7 @@ headline loss, best at both thresholds. We therefore read the probe for
 modality decisions and train with the distribution-matching term
 (Eq.~\ref{eq:point-loss-sinkhorn}).
 
-\subsection{Real-world field validation}
+\noindent\textbf{Real-world field validation.}
 \label{sec:res-field}\label{sec:exp-real}
 
 We test the row models on crop rows assembled from real plants:
@@ -977,7 +977,7 @@ real maize plants, or 19 real sorghum plants, suffice to close most of the
 generator-to-real gap while the representation and the procedural output
 stay unchanged; reading the center plant takes 10.6\,ms per stop.
 
-\subsection{Representation quality, scaling, and transfer}
+\noindent\textbf{Representation quality, scaling, and transfer.}
 \label{sec:res-repr}\label{sec:exp-repr}
 
 \noindent\textbf{Comparison against published encoders.}
