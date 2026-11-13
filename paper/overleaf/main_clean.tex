@@ -443,39 +443,20 @@ To train and evaluate \method{}, we construct \dataset{}, a synthetic
 benchmark pairing exact procedural ground-truth parameters with multimodal
 field observations under realistic row neighbor occlusion
 (Tab.~\ref{tab:fieldproc}). Figure~\ref{fig:dataset} shows, for each
-species, the four streams of one view, the ten cameras of one plant and a row
+species, sample plants, the four streams of one view, cameras of one plant and a row
 scene.
 
 \begin{figure*}[t]
   \centering
-  % Large species labels + plant counts drawn over the graphic (the builder
-  % figures/make_dataset_fig.py runs on the cluster; its small headers are
-  % masked white and replaced here).
-  \begin{tikzpicture}
-    \node[anchor=south west, inner sep=0] (img) at (0,0) {\includegraphics[width=\linewidth]{Figures/fig_dataset.pdf}};
-    \begin{scope}[x={(img.south east)}, y={(img.north west)}]
-      \fill[white] (0.20,0.942) rectangle (0.36,0.972);
-      \fill[white] (0.67,0.942) rectangle (0.83,0.972);
-      \node[anchor=center, inner sep=0] at (0.28,0.956) {\sffamily\bfseries\fontsize{10.5}{12}\selectfont sorghum{\fontsize{8}{9.5}\selectfont\mdseries :\ 15{,}000 plants}};
-      \node[anchor=center, inner sep=0] at (0.75,0.956) {\sffamily\bfseries\fontsize{10.5}{12}\selectfont maize{\fontsize{8}{9.5}\selectfont\mdseries :\ 15{,}000 plants}};
-    \end{scope}
-  \end{tikzpicture}
-  \caption{\textbf{\dataset{} at a glance.} (a) The four streams of one
-  view per species: photograph, depth frame, camera-frame point cloud and the
-  procedural recipe as text (a plant line, then one line per leaf; maize shows
-  five of its seven leaf fields). (b) The ten cameras of one plant, labelled by
-  elevation above the plant: sorghum on a fixed ladder from $+64^\circ$ to
-  $-64^\circ$, maize at random elevations and azimuths (sorted here). (c) Row
-  scenes at yaw $0^\circ$ and $90^\circ$: neighbor pixels in red, target pixels
-  hidden behind a neighbor in orange, the target plant alone from the same
-  camera, and the scene cloud with neighbor points in grey.}
+  \resizebox{\linewidth}{!}{\input{Figures/fig_dataset_tikz}}
+  \caption{\textbf{\dataset{} at a glance.} (a) Six of the 15{,}000 plants of each species (validation split, side view). (b) One view of the boxed plant as its four streams: image, depth image, camera-frame point cloud and the procedural parameters, drawn as a stem with each leaf at its insertion height, length, width and side. (c) Five of the ten cameras of that plant, labelled by elevation above the plant: sorghum on a fixed ladder from $+64^\circ$ to $-64^\circ$, maize at random elevations and azimuths (sorted here). (d) One row scene per species at yaw $0^\circ$: the row image with neighbor pixels in red and target pixels hidden behind a neighbor in orange, and the scene point cloud with the target plant's points in green and the neighbors' points in grey.}
   \label{fig:dataset}
 \end{figure*}
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2all_maize.pdf}
-  \caption{\textbf{Any-to-all, maize: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (orange, left of the dashed line) and shows the three streams it generates (blue). Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.12\,m, 14 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 7.48 here, 12.8 on average in Table~\ref{tab:anysubset}).}
+  \includegraphics[width=\linewidth]{Figures/fig_any2all_maize_ugg.pdf}
+  \caption{\textbf{Any-to-all, maize: each stream alone in, the other three out.} The distilled generalist on one held-out test plant. Each block gives it one stream (dashed box, left of the grey arrow) and shows the three streams it generates (solid boxes); the box color marks the stream: image blue, depth yellow, point cloud pink, procedural parameters purple. Generated point clouds and procedural parameters are drawn over the ground truth in grey, the parameters as a stem-and-leaves schematic. Under each generated point cloud: its Chamfer distance ($10^{-3}$); under each generated parameter set: height and leaf count (truth 1.12\,m, 14 leaves). The plant is selected for clarity among the test plants with the lowest image-to-cloud Chamfer, seen within $25^\circ$ of the horizon. The parameters alone give only a coarse plant (Chamfer 7.48 here, 12.8 on average in Table~\ref{tab:anysubset}).}
   \label{fig:any2any-maize}\label{fig:any2any}
 \end{figure*}
 
