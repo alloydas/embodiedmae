@@ -22,7 +22,8 @@ import numpy as np, pandas as pd, torch, torch.nn.functional as F
 from torch.utils.data import DataLoader
 from eval_row import build_model, predict, score_cloud
 from real_rows import RealRowDataset, collate, SPECIES, row_id
-from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2
+from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2, _LEAF_SCALE_V2, _LEAF_SHIFT_V2, LEAF_FIELDS_V2
+from real_rows import LEAF_TRUTH_FIELDS
 
 # Sorghum (--species sorghum): the 30 scanned plants. Their truth is the plant height, which the sorghum recipe does
 # not hold (its plant token carries the stem length) and which is 2.2-5.3 m against 0.2-1.7 m in training, so the
@@ -41,6 +42,13 @@ ap.add_argument('--epochs', type=int, default=15); ap.add_argument('--warmup-epo
 ap.add_argument('--lr', type=float, default=2e-5); ap.add_argument('--weight-decay', type=float, default=0.05)
 ap.add_argument('--batch-size', type=int, default=16); ap.add_argument('--num-workers', type=int, default=14)
 ap.add_argument('--recipe-weight', type=float, default=None, help='maize 5.0 (= the row run spline_loss_weight); sorghum 0')
+ap.add_argument('--leaf-weight', type=float, default=None,
+                help='maize rows3000: weight of the per-leaf recipe loss (leaf tokens: distance, leafLength, leafWidth, '
+                     'avgCurvature) and of the plant internode sum; default = --recipe-weight; 0 = off')
+ap.add_argument('--leaf-ranges', default='length=0.05:1.25,width=0:0.40',
+                help='maize leaf fields whose decoding range is widened for the real plants (the synthetic head spans '
+                     'leafLength 0.05-0.90 m and leafWidth 0-0.15 m; 63 %% of the scanned leaves are wider, 7 %% longer). '
+                     'Recorded in config.json real_finetune.leaf_scale / leaf_shift; eval_real_rows decodes with them. "" = off')
 ap.add_argument('--val-every', type=int, default=1)
 ap.add_argument('--smoke', type=int, default=0, help='>0: that many train/val plants, 2 epochs, CPU-friendly')
 ap.add_argument('--split-only', action='store_true', help='write the split (run dir + data_split/) and exit')
@@ -52,9 +60,19 @@ R3 = a.source == 'rows3000'
 a.run = a.run or f"{a.species}_real_ft{'_r3000' if R3 else ''}"     # never the first upload's run dirs
 a.val_plants = a.val_plants if a.val_plants is not None else ((5 if R3 else 3) if SORG else 39)
 a.recipe_weight = a.recipe_weight if a.recipe_weight is not None else (0.0 if SORG else 5.0)
+a.leaf_weight = a.leaf_weight if a.leaf_weight is not None else (a.recipe_weight if (R3 and not SORG) else 0.0)
 LAY = SPECIES[a.species]['layouts']
 dev = torch.device(a.device)
 H_IDX, N_IDX = PLANT_FIELDS_V2.index('height'), PLANT_FIELDS_V2.index('leafCount')
+S_IDX = PLANT_FIELDS_V2.index('stemInternodeSum')
+L_IDX = [LEAF_FIELDS_V2.index(f) for f in LEAF_TRUTH_FIELDS]                # leaf-token slots with real truth
+MAXL = 28
+LEAF_SC, LEAF_SH = _LEAF_SCALE_V2.copy(), _LEAF_SHIFT_V2.copy()
+if a.leaf_weight > 0 and a.leaf_ranges:
+    for item in a.leaf_ranges.split(','):
+        k, rng_ = item.split('='); lo, hi = (float(x) for x in rng_.split(':'))
+        j = LEAF_FIELDS_V2.index({'length': 'leafLength', 'width': 'leafWidth'}[k.strip()])
+        LEAF_SC[j], LEAF_SH[j] = hi - lo, -lo                     # norm = (raw + shift) / scale
 
 # ---- split by plant --------------------------------------------------------------------------------
 if R3:                                         # scans; a scan's rows may also hold other splits' plants as neighbours
@@ -95,7 +113,10 @@ model.pc_sinkhorn_points = int(cfg.get('pc_sinkhorn_points', 1024)); model.pc_si
 mask = float(cfg.get('mask_ratio', 0.8)); pc_w = float(cfg.get('pc_loss_weight', 1.0))
 run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_seed=a.split_seed, n_train=len(train), n_val=len(val),
                                        n_test=len(test), source=a.source, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
-                                       supervised=['pc', 'depth'] + (['height', 'leafCount'] if a.recipe_weight > 0 else []), source_mask_ratio=mask))
+                                       leaf_weight=a.leaf_weight, leaf_scale=LEAF_SC.tolist(), leaf_shift=LEAF_SH.tolist(),
+                                       supervised=['pc', 'depth'] + (['height', 'leafCount'] if a.recipe_weight > 0 else [])
+                                       + (['stemInternodeSum'] + [f'leaf.{f}' for f in LEAF_TRUTH_FIELDS] if a.leaf_weight > 0 else []),
+                                       source_mask_ratio=mask))
 (run_dir / 'config.json').write_text(json.dumps(run_cfg, indent=1, default=str))
 
 sel = (lambda ps: dict(source='rows3000', plants=ps)) if R3 else (lambda ps: dict(rows=ps))
@@ -114,9 +135,34 @@ def recipe_target(info):
     return torch.stack([(n + _PLANT_SHIFT_V2[N_IDX]) / _PLANT_SCALE_V2[N_IDX], (h + _PLANT_SHIFT_V2[H_IDX]) / _PLANT_SCALE_V2[H_IDX]], 1)
 
 
+def leaf_target(info):
+    """(B, MAXL, 4) normalised per-leaf truth (clipped to [0, 1] as the synthetic recipes), (B, MAXL) validity,
+    (B,) normalised internode sum (NaN-free; validity in the mask's any())."""
+    B = len(info); t = np.zeros((B, MAXL, len(L_IDX)), np.float32); v = np.zeros((B, MAXL), np.float32); isum = np.zeros(B, np.float32)
+    sc, sh = LEAF_SC[L_IDX], LEAF_SH[L_IDX]
+    for b, i in enumerate(info):
+        r = i.get('leaf_raw')
+        if r is None or len(r) == 0:
+            continue
+        n = min(len(r), MAXL); t[b, :n] = np.clip((r[:n] + sh) / sc, 0, 1); v[b, :n] = 1
+        isum[b] = np.clip((r[:, 0].sum() + _PLANT_SHIFT_V2[S_IDX]) / _PLANT_SCALE_V2[S_IDX], 0, 1)
+    return torch.from_numpy(t), torch.from_numpy(v), torch.from_numpy(isum)
+
+
+def leaf_loss(ppar, info):
+    t, v, isum = (x.to(ppar.device) for x in leaf_target(info))
+    if v.sum() == 0:
+        return ppar.new_zeros(())
+    pred = ppar[:, 1:1 + MAXL][:, :, L_IDX]
+    per = F.smooth_l1_loss(pred, t, beta=0.1, reduction='none').mean(-1)
+    has = v.any(1)
+    l_isum = F.smooth_l1_loss(ppar[has, 0, S_IDX], isum[has], beta=0.1)
+    return (per * v).sum() / v.sum() + l_isum
+
+
 @torch.no_grad()
 def validate():
-    model.eval(); ch, hs, ns = [], [], []
+    model.eval(); ch, hs, ns, ls = [], [], [], []
     for bi, (rgb, dep, pin, par, valid, pgt, info) in enumerate(mk(val_ds, False)):
         rgb, dep, pin, par, pgt = (x.to(dev) for x in (rgb, dep, pin, par, pgt))
         pp, ppar = predict(model, 'all', rgb, dep, pin, par, mask, 1000003 * bi)
@@ -131,31 +177,37 @@ def validate():
             n = np.rint(p0[:, N_IDX] * _PLANT_SCALE_V2[N_IDX] - _PLANT_SHIFT_V2[N_IDX])
         hs += list(np.abs(h - np.array([i['height'] for i in info])) / np.array([i['height'] for i in info]))
         ns += list(np.abs(n - np.array([i['leaves'] for i in info])) <= 1)
+        if a.leaf_weight > 0:
+            ls.append(float(leaf_loss(ppar.float(), info)))
     model.train()
-    return dict(val_chamfer_m2=float(np.mean(ch)), val_height_rel_err=float(np.median(hs)), val_leaves_pm1=float(np.mean(ns)))
+    out = dict(val_chamfer_m2=float(np.mean(ch)), val_height_rel_err=float(np.median(hs)), val_leaves_pm1=float(np.mean(ns)))
+    if ls:
+        out['val_leaf_loss'] = float(np.mean(ls))
+    return out
 
 
-hist = dict(epoch=[], train_loss=[], train_pc=[], train_depth=[], train_recipe=[], val=[])
+hist = dict(epoch=[], train_loss=[], train_pc=[], train_depth=[], train_recipe=[], train_leaf=[], val=[])
 hist['val'].append(dict(epoch=0, **validate())); print('epoch 0 (init)', hist['val'][-1], flush=True)
 best = hist['val'][-1]['val_chamfer_m2']
 model.train(); step = 0
 for ep in range(1, a.epochs + 1):
     train_ds.seed = 1 + ep                                                  # a fresh point subsample per epoch
-    t0, sums, nb = time.time(), np.zeros(4), 0
+    t0, sums, nb = time.time(), np.zeros(5), 0
     for rgb, dep, pin, par, valid, pgt, g_dep, info in mk(train_ds, True):
         rgb, dep, pin, par, valid, pgt, g_dep = (x.to(dev) for x in (rgb, dep, pin, par, valid, pgt, g_dep))
         _, (_, ld, lp, _), (_, _, _, ppar), _ = model(rgb, dep, pin, torch.zeros_like(par), valid, visible={'rgb', 'depth', 'pc'},
                                                       source_mask_ratio=mask, targets=(rgb, g_dep, pgt))
         lr_ = (F.smooth_l1_loss(ppar[:, 0, [N_IDX, H_IDX]], recipe_target(info).to(dev), beta=0.1) if a.recipe_weight > 0
                else ppar.new_zeros(()))
-        loss = pc_w * lp + ld + a.recipe_weight * lr_
+        ll = leaf_loss(ppar, info) if a.leaf_weight > 0 else ppar.new_zeros(())
+        loss = pc_w * lp + ld + a.recipe_weight * lr_ + a.leaf_weight * ll
         opt.zero_grad(set_to_none=True); loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step(); sched.step(); step += 1
-        sums += [loss.item(), lp.item(), ld.item(), lr_.item()]; nb += 1
+        sums += [loss.item(), lp.item(), ld.item(), lr_.item(), ll.item()]; nb += 1
         if nb % 100 == 0:
             print(f'  ep {ep} step {nb}/{steps_per_ep} loss {sums[0] / nb:.4f} pc {sums[1] / nb:.4f} depth {sums[2] / nb:.4f} '
-                  f'recipe {sums[3] / nb:.4f} ({time.time() - t0:.0f} s)', flush=True)
-    for k, v in zip(('train_loss', 'train_pc', 'train_depth', 'train_recipe'), sums / max(1, nb)):
+                  f'recipe {sums[3] / nb:.4f} leaf {sums[4] / nb:.4f} ({time.time() - t0:.0f} s)', flush=True)
+    for k, v in zip(('train_loss', 'train_pc', 'train_depth', 'train_recipe', 'train_leaf'), sums / max(1, nb)):
         hist[k].append(float(v))
     hist['epoch'].append(ep)
     ck = dict(model_state_dict=model.state_dict(), epoch=ep)

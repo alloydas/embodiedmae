@@ -40,6 +40,13 @@ from the first upload, all handled here:
            maize 0055 1.199 m vs 1.201 m in the first upload's table, sorghum d1_195039 4.19 vs 4.19 m);
            maize leaf count = lines of the stop's leaf CSV (per-leaf length, width, zenith, azimuth, internode,
            twist, curvature, stem diameter are in it too); sorghum has no leaf data.
+  leaves   maize only: info['leaf_raw'] = (n_leaves, 4) per-leaf truth from the stop's CSV, ordered by leaf number
+           (1 = lowest = recipe leaf token 1), columns LEAF_TRUTH_FIELDS = the recipe's v2 leaf fields with the same
+           meaning (distance <- internode_dist_m, leafLength <- leaf_length_m, leafWidth <- leaf_width_m,
+           avgCurvature <- curvature_1pm); info['leaf_zenith'] = zenith_deg, scored only as an exploratory
+           correlation with leafAngle (the generator's leafAngle spans -50..104 deg, so it is not the same angle).
+           Not usable: azimuth (real leaves drift round the stalk instead of alternating 180 deg +- 15, and it
+           includes the row rotation), droopiness (no CSV column), twist and stem diameter (no v2 field).
   plant    info['plant'] = the scan (plant_id without a `_t<k>` tilt suffix), the unit of the train/test split and of
            the bootstrap (a plant appears in many rows, as the middle plant and as a neighbour).
 """
@@ -74,6 +81,15 @@ SPECIES = {
 
 
 ROWS3000 = ROOT / 'e10_rows_3000'
+LEAF_TRUTH_COLS = ('internode_dist_m', 'leaf_length_m', 'leaf_width_m', 'curvature_1pm')
+LEAF_TRUTH_FIELDS = ('distance', 'leafLength', 'leafWidth', 'avgCurvature')     # maize v2 leaf fields, same order
+
+
+def read_leaf_csv(path):
+    """-> (n, 4) truth in LEAF_TRUTH_FIELDS order, (n,) zenith; rows sorted by leaf number."""
+    rows = sorted(csv.DictReader(open(path)), key=lambda r: int(r['leaf']))
+    return (np.array([[float(r[c]) for c in LEAF_TRUTH_COLS] for r in rows], np.float32).reshape(-1, len(LEAF_TRUTH_COLS)),
+            np.array([float(r['zenith_deg']) for r in rows], np.float32))
 _META_KEYS = ('row', 'stop', 'plant_id', 'middle_plant', 'camera_height_m', 'hfov_deg', 'image_px')
 
 
@@ -195,6 +211,8 @@ class RealRowDataset(torch.utils.data.Dataset):
             fx = fy = (W_ / 2) / np.tan(np.radians(float(m['hfov_deg']) / 2)); cx, cy = (W_ - 1) / 2, (H_ - 1) / 2
             f = dict(photo=f"png/{m['name']}.png", pcd=f"pcd/{m['name']}.pcd", height_px=H_, camera_height_m=m['camera_height_m'])
             target, plant, leaves, white_bg = int(m['middle_plant']), scan_id(m['plant_id']), int(m['leaves']), False
+            c = pathlib.Path(d) / 'csv' / f"{m['name']}.csv"
+            leaf_raw, leaf_zen = read_leaf_csv(c) if c.exists() else (None, None)
         else:
             frames, plants = self._table(d, rid)
             f = frames[stop - 1]
@@ -202,6 +220,7 @@ class RealRowDataset(torch.utils.data.Dataset):
             xs = np.array([float(p['x_m']) for p in plants])
             tp = plants[int(np.argmin(np.abs(xs - float(f['camera_x_m']))))]  # the plant on the optical axis
             target, plant, leaves, white_bg = int(tp['plant_number']), rid, int(tp.get('leaves') or -1), True
+            leaf_raw = leaf_zen = None
         if self.sp['window'] == 'fov40':
             half = np.tan(np.radians(FOV_DEG / 2)) * fx                  # window half-width in image pixels
         else:
@@ -269,7 +288,8 @@ class RealRowDataset(torch.utils.data.Dataset):
 
         info = dict(layout=layout, row=rid, stop=stop, plant=plant, target=target, height=height, leaves=leaves,
                     occ_frac=occ, scale=scale, n_scene_visible=int(vis_scene.sum()), n_target_visible=int(vis_target.sum()),
-                    plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']))
+                    plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']),
+                    leaf_raw=leaf_raw, leaf_zenith=leaf_zen)
         out = (rgb, torch.from_numpy(dep)[None], torch.from_numpy(pin.astype(np.float32)),
                torch.zeros(self.sp['tokens'], self.sp['params']), torch.zeros(self.sp['tokens']), torch.from_numpy(pgt.astype(np.float32)))
         if self.with_targets:

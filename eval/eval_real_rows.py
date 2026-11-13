@@ -13,7 +13,10 @@ import numpy as np, pandas as pd, torch
 from torch.utils.data import DataLoader
 from eval_row import build_model, predict, score_cloud, recipe_scored, bootstrap_ci
 from real_rows import RealRowDataset, collate
-from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2
+from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2, _LEAF_SCALE_V2, _LEAF_SHIFT_V2, LEAF_FIELDS_V2
+from real_rows import LEAF_TRUTH_FIELDS
+L_IDX = [LEAF_FIELDS_V2.index(f) for f in LEAF_TRUTH_FIELDS]; A_IDX = LEAF_FIELDS_V2.index('leafAngle')
+LSHORT = {'distance': 'internode', 'leafLength': 'leaf_len', 'leafWidth': 'leaf_width', 'avgCurvature': 'curvature'}
 import embodied_mae_4m as S4
 
 DEFAULT_MODELS = {'maize': ['maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth',
@@ -54,7 +57,10 @@ for spec in a.models:
     m, cfg, ep = build_model(pathlib.Path('outputs') / run, ckpt, dev, a.species)
     models.append(dict(run=run, ckpt=ckpt, epoch=ep, model=m, mask=float(cfg.get('mask_ratio', 0.8)),
                        recipe=recipe_scored(cfg, a.species, m),
-                       gain=float(cfg.get('rgb_brighten_gain', 1.0)) if a.species == 'sorghum' else None))
+                       gain=float(cfg.get('rgb_brighten_gain', 1.0)) if a.species == 'sorghum' else None,
+                       # real-row fine-tunes may widen the leaf decoding ranges (train_real_rows.py --leaf-ranges)
+                       leaf_sc=np.array(cfg.get('real_finetune', {}).get('leaf_scale', _LEAF_SCALE_V2), np.float32),
+                       leaf_sh=np.array(cfg.get('real_finetune', {}).get('leaf_shift', _LEAF_SHIFT_V2), np.float32)))
     print(f'{run} @ {ckpt} (epoch {ep}): mask ratio {models[-1]["mask"]}, recipe scored {models[-1]["recipe"]}', flush=True)
 
 gains = {M['gain'] for M in models}
@@ -83,16 +89,33 @@ for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
                 h = p0[:, H_IDX] * PSCALE[H_IDX] - PSHIFT[H_IDX]
                 n = (np.rint(p0[:, N_IDX] * PSCALE[N_IDX] - PSHIFT[N_IDX]) if N_IDX is not None
                      else np.full(len(info), -1))
+                if a.species == 'maize':                     # per-leaf recipe, raw units (leaf tokens 1..28)
+                    pl = pred_par[:, 1:29].clamp(0, 1).float().cpu().numpy() * M['leaf_sc'] - M['leaf_sh']
+                    isum_pred = p0[:, PLANT_FIELDS_V2.index('stemInternodeSum')] * _PLANT_SCALE_V2[PLANT_FIELDS_V2.index('stemInternodeSum')]
             for k, inf in enumerate(info):
                 r = dict(model=M['run'], epoch=M['epoch'], source=src, **inf, chamfer=float(cd[k]), chamfer_m2=float(cd_m2[k]),
                          miss_0p01=float(miss[k]), miss_5mm=float(miss5[k]), ms_per_stop=ms)
                 if M['recipe']:
                     r.update(height_pred=float(h[k]), leaves_pred=int(n[k]), height_rel_err=abs(float(h[k]) - inf['height']) / inf['height'],
                              leaves_abs_err=(abs(int(n[k]) - inf['leaves']) if inf['leaves'] >= 0 and n[k] >= 0 else np.nan))
+                if M['recipe'] and a.species == 'maize' and inf.get('leaf_raw') is not None and len(inf['leaf_raw']):
+                    tr = inf['leaf_raw']; k_ = min(len(tr), 28)            # leaves matched by index from the base
+                    for j, f in enumerate(LEAF_TRUTH_FIELDS):
+                        r[f'{LSHORT[f]}_mae'] = float(np.abs(pl[k, :k_, L_IDX[j]] - tr[:k_, j]).mean())
+                        r[f'{LSHORT[f]}_true_mean'] = float(tr[:, j].mean()); r[f'{LSHORT[f]}_pred_mean'] = float(pl[k, :k_, L_IDX[j]].mean())
+                    r['internode_sum_true'] = float(tr[:, 0].sum()); r['internode_sum_pred'] = float(isum_pred[k])
+                    r['internode_sum_rel_err'] = abs(r['internode_sum_pred'] - r['internode_sum_true']) / max(1e-6, r['internode_sum_true'])
+                    r['_angle_pairs'] = (pl[k, :k_, A_IDX].tolist(), inf['leaf_zenith'][:k_].tolist())
                 rows.append(r)
     if bi % 20 == 0:
         print(f'  {min((bi + 1) * a.batch_size, len(ds))}/{len(ds)} stops ({time.time() - t0:.0f} s)', flush=True)
 
+for r in rows:                                       # info arrays and angle pairs stay out of the CSV
+    r.pop('leaf_raw', None); r.pop('leaf_zenith', None)
+angle_pairs = {}
+for r in rows:
+    if '_angle_pairs' in r:
+        p_, z_ = r.pop('_angle_pairs'); angle_pairs.setdefault((r['model'], r['source']), []).extend(zip(p_, z_))
 df = pd.DataFrame(rows); df.to_csv(f'{a.out}.csv', index=False)
 summary = {'source': a.source, 'n_stops': len(ds), 'rows': int(df[['layout', 'row']].drop_duplicates().shape[0]) if len(df) else 0,
            'plants': int(df['plant'].nunique()) if len(df) else 0, 'groups': []}
@@ -109,6 +132,16 @@ for (model, src, layout), g in list(df.groupby(['model', 'source', 'layout'])) +
             e['leaves_acc_pm1'] = float((g['leaves_abs_err'] <= 1).mean())
             e['leaves_acc_exact'] = float((g['leaves_abs_err'] == 0).mean())
             e['leaves_mae'] = float(g['leaves_abs_err'].mean())
+    for f in LSHORT.values():                        # maize rows3000: per-leaf recipe vs the scanned leaves
+        if f'{f}_mae' in g and g[f'{f}_mae'].notna().any():
+            e[f'{f}_mae'] = float(g[f'{f}_mae'].mean()); e[f'{f}_true_mean'] = float(g[f'{f}_true_mean'].mean())
+            e[f'{f}_pred_mean'] = float(g[f'{f}_pred_mean'].mean())
+            e[f'{f}_mae_ci'] = bootstrap_ci(per_plant[f'{f}_mae'].mean().dropna().values)
+    if 'internode_sum_rel_err' in g and g['internode_sum_rel_err'].notna().any():
+        e['internode_sum_rel_err_median'] = float(g['internode_sum_rel_err'].median())
+    if layout == 'both' and (model, src) in angle_pairs and len(angle_pairs[(model, src)]) > 2:
+        pa = np.array(angle_pairs[(model, src)])
+        e['leafAngle_vs_zenith_pearson_r'] = float(np.corrcoef(pa[:, 0], pa[:, 1])[0, 1])    # exploratory: not one quantity
     e['occ_frac_mean'] = float(g['occ_frac'].mean()); e['ms_per_stop'] = float(g['ms_per_stop'].mean())
     summary['groups'].append(e)
 json.dump(summary, open(f'{a.out}.json', 'w'), indent=1)
@@ -117,4 +150,5 @@ for e in summary['groups']:
     if e['layout'] == 'both':
         print(f"{e['model']:26s} {e['source']:5s} chamfer {e['chamfer_m2']['mean'] * 1e4:6.1f}e-4 m2 [{e['chamfer_m2']['lo'] * 1e4:.1f}, {e['chamfer_m2']['hi'] * 1e4:.1f}]"
               f"  miss5mm {e['miss_5mm']['mean']:.2f}" + (f"  height err {e['height_rel_err_median'] * 100:.1f} %  leaves +-1 {e['leaves_acc_pm1']:.2f}" if 'leaves_acc_pm1' in e else '')
+              + (f"  leaf MAE len {e['leaf_len_mae'] * 100:.1f} cm width {e['leaf_width_mae'] * 100:.1f} cm internode {e['internode_mae'] * 100:.1f} cm curv {e['curvature_mae']:.2f}/m" if 'leaf_len_mae' in e else '')
               + f"  {e['ms_per_stop']:.1f} ms/stop")
