@@ -19,13 +19,18 @@
 \definecolor{uRgbE}{HTML}{809EC2}\definecolor{uRgbF}{HTML}{E6ECF3}\definecolor{uRgbI}{HTML}{3F5F8F}
 \definecolor{uPcE}{HTML}{D091A7}\definecolor{uPcF}{HTML}{F6E9ED}\definecolor{uPcI}{HTML}{A8456E}
 \definecolor{uTxE}{HTML}{9D8CC4}\definecolor{uTxF}{HTML}{EAE7F2}\definecolor{uTxI}{HTML}{5E4A96}
-\definecolor{uArrow}{HTML}{8C8C8C}\definecolor{uModE}{HTML}{9A9A9A}\definecolor{uModF}{HTML}{F4F4F5}
+\definecolor{uDepF}{HTML}{FAF2D4}\definecolor{uOutE}{HTML}{B4B4B8}\definecolor{uArrow}{HTML}{8C8C8C}\definecolor{uModE}{HTML}{9A9A9A}\definecolor{uModF}{HTML}{F4F4F5}
+% UGG Fig. 1: the model block carries a soft gradient through the stream colours
+\pgfdeclarehorizontalshading{uggband}{100bp}{color(0bp)=(uRgbF); color(30bp)=(uRgbF); color(45bp)=(uDepF); color(60bp)=(uPcF); color(75bp)=(uTxF); color(100bp)=(uTxF)}
 \begin{tikzpicture}[x=0.005in, y=-0.005in]
-\useasboundingbox (0,0) rectangle (1110,650);
+\useasboundingbox (0,0) rectangle (1110,662);
 % ---- CropCode block (spans both rows) ----
-\draw[draw=uModE, line width=1.0pt, rounded corners=8.6pt, fill=uModF] (380.0,114.0) rectangle (556.0,626.0);
-\node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{8.0}{10.0}\selectfont\sffamily\bfseries}] at (468.0,330.0) {CropCode};
+\draw[draw=uModE, line width=1.0pt, rounded corners=8.6pt, shading=uggband, shading angle=0] (380.0,114.0) rectangle (556.0,626.0);
+\draw[draw=uModE, line width=0.6pt, dash pattern=on 2.2pt off 1.6pt] (410.0,318.0) -- (526.0,318.0);
+\node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{8.0}{10.0}\selectfont\sffamily\bfseries}] at (468.0,294.0) {CropCode};
 \node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{5.0}{6.3}\selectfont\sffamily}] at (468.0,430.0) {any-to-any\\autoencoder over\\photographs, depth,\\clouds and recipes;\\pretrained on single\\plants, then\\fine-tuned on crop\\rows to write the\\center plant};
+% ---- output frame ----
+\draw[draw=uOutE, line width=0.9pt, rounded corners=8.6pt] (580.0,48.0) rectangle (1078.0,656.0);
 % ---- column headers ----
 \node[anchor=west, inner sep=0, align=left, text={rgbhex1d221c}, font={\fontsize{7.5}{9.4}\selectfont\sffamily\bfseries}] at (60.0,28.0) {Occluded crop row (rover view)};
 \node[anchor=center, inner sep=0, align=center, text={rgbhex1d221c}, font={\fontsize{7.5}{9.4}\selectfont\sffamily\bfseries}] at (468.0,28.0) {One model};

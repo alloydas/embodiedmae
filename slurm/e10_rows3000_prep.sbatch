@@ -15,7 +15,7 @@ cd /work/mech-ai-scratch/alloy/embodiedmae
 source /work/mech-ai/alloy/miniconda3/etc/profile.d/conda.sh
 conda activate /work/mech-ai/alloy/.conda/envs/det
 export PYTHONUNBUFFERED=1
-for sp in maize sorghum; do
+for sp in ${SPECIES_LIST:-maize sorghum}; do
   python -c "import sys; sys.path[:0]=['.','eval']; import real_rows as r, csv; p=r.build_index_3000('$sp', 16); m=list(csv.DictReader(open(p))); print(p, len(m), 'stops,', sum(int(x['png_ok']) for x in m), 'with photo,', len({r.scan_id(x['plant_id']) for x in m}), 'plants')"
   python train_real_rows.py --species $sp --source rows3000 --split-only --device cpu
 done
