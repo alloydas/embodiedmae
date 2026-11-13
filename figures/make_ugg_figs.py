@@ -4,14 +4,15 @@ That style: white ground, Times-like serif text, one pastel colour per modality 
 purple), each item in a rounded box filled with its modality's pastel and edged with its colour, inputs dashed and outputs
 solid, grey block arrows from inputs to outputs. Our four streams map onto it: image = blue, depth image = yellow,
 point cloud = pink (Okabe-Ito reddish purple for the predicted points), procedural parameters = purple.
-Same data, plants and numbers as the paper's figures; 9 pt text (Fig. 2 keeps its own sizes); Liberation Serif
-(metric-compatible with Times, SIL OFL) stands in for the paper's Times.
+Same data, plants and numbers as the paper's figures; 9 pt text (Fig. 2 keeps its own sizes). The type is the
+paper figures' own Liberation Sans (set by _scene; user, 2026-11-13: "for previous diagrams the font was good so keep
+that"): only UGG's layout ideas are taken. `--serif` gives the earlier Liberation Serif variant (*_ugg_serif).
   Fig. 2      figures/make_fig12_saga.py figure2()   colours and serif only
   Fig. 9      figures/make_row_gallery_v2.py         dump row_gallery_dump.pkl
   Figs. 11/12 figures/make_any2all_fig.py            dump any2all4_dump.pkl
 Output: paper/figs/ugg_preview/. CPU only:
   sbatch --wait --partition=nova --account=mech-ai --qos=normal --cpus-per-task=4 --mem=24G --output=logs/%x_%j.out \
-         --wrap "python figures/make_ugg_figs.py"
+         --wrap "python figures/make_ugg_figs.py [--serif]"
 """
 import sys, pathlib, pickle
 R = pathlib.Path(__file__).resolve().parents[1]; sys.path[:0] = [str(R), str(R / 'figures'), str(R / 'eval')]
@@ -27,10 +28,13 @@ import make_any2all_fig as A
 import make_fig12_saga as SAGA
 
 OUT = R / 'paper/figs/ugg_preview'
-for f in sorted((R / 'figures/fonts').glob('LiberationSerif*.ttf')): font_manager.fontManager.addfont(str(f))
-SERIF = ['Liberation Serif', 'DejaVu Serif']
-_scene.SANS[:] = SERIF                                   # every module that imported the list sees serif
-matplotlib.rcParams.update({'font.family': SERIF, 'mathtext.fontset': 'stix'})
+USE_SERIF = '--serif' in sys.argv
+SUF = '_ugg_serif' if USE_SERIF else '_ugg'
+if USE_SERIF:
+    for f in sorted((R / 'figures/fonts').glob('LiberationSerif*.ttf')): font_manager.fontManager.addfont(str(f))
+    SERIF = ['Liberation Serif', 'DejaVu Serif']
+    _scene.SANS[:] = SERIF                               # every module that imported the list sees serif
+    matplotlib.rcParams.update({'font.family': SERIF, 'mathtext.fontset': 'stix'})
 
 # ---- UGG palette (sampled from its Fig. 2), mapped onto our streams
 EDGE = {'rgb': '#809ec2', 'depth': '#e0b020', 'pc': '#d091a7', 'text': '#9d8cc4'}
@@ -134,13 +138,20 @@ def figure2_ugg():
     return SAGA.figure2()
 
 
+def figure1_ugg():
+    for d in (SAGA.CS, K.CS): d.update({k: INK_C[k] for k in INK_C})
+    K.CS_FILL.update(FILL)
+    return SAGA.figure1()
+
+
 if __name__ == '__main__':
     OUT.mkdir(parents=True, exist_ok=True)
     D4 = pickle.load(open(A.OUT4, 'rb'))
     for sp, nm in (('maize', 'plant_1875_09'), ('sorghum', 'Sorghum_7712_05')):
-        save(render4_ugg(sp, nm, D4), f'fig_any2all_{sp}_ugg')
+        save(render4_ugg(sp, nm, D4), f'fig_any2all_{sp}{SUF}')
     D = pickle.load(open(RG.OUT, 'rb'))
     picks = {'sorghum': [('Sorghum_10756', 90), ('Sorghum_14816', 0), ('Sorghum_4815', 0)],
              'maize': [('plant_0320', 90), ('plant_6665', 0), ('plant_4604', 0)]}
-    save(RG.render_main(D, picks), 'fig_rows_examples_ugg')
-    S = figure2_ugg(); S.render(OUT / 'fig2_stages_ugg'); print('wrote', OUT / 'fig2_stages_ugg.pdf', flush=True)
+    save(RG.render_main(D, picks), f'fig_rows_examples{SUF}')
+    S = figure1_ugg(); S.render(OUT / f'fig1_overview{SUF}'); print('wrote', OUT / f'fig1_overview{SUF}.pdf', flush=True)
+    S = figure2_ugg(); S.render(OUT / f'fig2_stages{SUF}'); print('wrote', OUT / f'fig2_stages{SUF}.pdf', flush=True)

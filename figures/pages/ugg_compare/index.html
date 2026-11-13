@@ -53,8 +53,8 @@
 <main>
   <header>
     <div class="k">CropCode · paper figures</div>
-    <h1>Our figures in the UGG paper style</h1>
-    <p>Restyled after the figures of <i>UGG: Unified Generative Geometry Model</i> (NeurIPS 2026): serif type, one soft colour per stream, each item in a rounded box, inputs dashed and outputs solid, grey arrows. The data, plants and numbers are the paper's. Nothing has been swapped into the paper yet.</p>
+    <h1>Our figures with ideas from the UGG paper</h1>
+    <p>Ideas taken from the figures of <i>UGG: Unified Generative Geometry Model</i> (NeurIPS 2026): one soft colour per stream, each item in a rounded box, inputs dashed and outputs solid, grey arrows. The type stays the font of our earlier figures (Liberation Sans, Arial metrics). The data, plants and numbers are the paper's. Nothing has been swapped into the paper yet.</p>
     <div class="legend" aria-label="Stream colours">
       <span><i class="sw" style="background:#e6ecf3;border-color:#809ec2"></i>Image</span>
       <span><i class="sw" style="background:#faf2d4;border-color:#e0b020"></i>Depth image</span>
@@ -66,15 +66,24 @@
   <div class="bar"><div class="seg" id="mode" role="group" aria-label="Which version to show">
     <button type="button" data-v="both" aria-pressed="true">Side by side</button>
     <button type="button" data-v="paper" aria-pressed="false">Current paper</button>
-    <button type="button" data-v="ugg" aria-pressed="false">UGG style</button>
+    <button type="button" data-v="ugg" aria-pressed="false">UGG ideas</button>
   </div></div>
+
+  <section aria-labelledby="h-f1">
+    <h2 id="h-f1">Fig. 1 · Overview</h2>
+    <p>UGG stream colours on the overview diagram; layout and font unchanged.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img src="img/fig1_overview_paper.png" alt="Fig. 1, current colours"></div><figcaption>Current draft</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img src="img/fig1_overview_ugg.png" alt="Fig. 1 with the UGG stream colours"></div><figcaption>UGG ideas, our font</figcaption></figure>
+    </div>
+  </section>
 
   <section aria-labelledby="h-f2">
     <h2 id="h-f2">Fig. 2 · Three training stages</h2>
-    <p>Stream colours and serif text only; the layout is unchanged. In the paper this figure is TikZ, so its text is already the paper's Times.</p>
+    <p>UGG stream colours; layout and font unchanged.</p>
     <div class="pair">
       <figure class="paper"><div class="figbox"><img src="img/fig2_stages_paper.png" alt="Fig. 2, current colours"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig2_stages_ugg.png" alt="Fig. 2 with the UGG stream colours and serif text"></div><figcaption>UGG style</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img src="img/fig2_stages_ugg.png" alt="Fig. 2 with the UGG stream colours and serif text"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
 
@@ -83,7 +92,7 @@
     <p>Input photo in a dashed image box, the true center plant in a grey box, the row-trained reconstruction in a solid point-cloud box with its Chamfer distance (×10⁻⁴ m²).</p>
     <div class="pair">
       <figure class="paper"><div class="figbox"><img src="img/fig_rows_examples_paper.png" alt="Fig. 9, current style"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig_rows_examples_ugg.png" alt="Fig. 9 in the UGG style"></div><figcaption>UGG style</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img src="img/fig_rows_examples_ugg.png" alt="Fig. 9 in the UGG style"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
 
@@ -92,7 +101,7 @@
     <p>Each block: one input stream (dashed), a grey arrow, the three streams generated from it (solid).</p>
     <div class="pair">
       <figure class="paper"><div class="figbox"><img src="img/fig_any2all_maize_paper.png" alt="Fig. 11, current style"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig_any2all_maize_ugg.png" alt="Fig. 11 in the UGG style"></div><figcaption>UGG style</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img src="img/fig_any2all_maize_ugg.png" alt="Fig. 11 in the UGG style"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
 
@@ -101,14 +110,14 @@
     <p>Plant 7712, view 05, the same layout as Fig. 11.</p>
     <div class="pair">
       <figure class="paper"><div class="figbox"><img src="img/fig_any2all_sorghum_paper.png" alt="Fig. 12, current style"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img src="img/fig_any2all_sorghum_ugg.png" alt="Fig. 12 in the UGG style"></div><figcaption>UGG style</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img src="img/fig_any2all_sorghum_ugg.png" alt="Fig. 12 in the UGG style"></div><figcaption>UGG ideas, our font</figcaption></figure>
     </div>
   </section>
 
   <section class="notes" aria-labelledby="h-notes">
     <h2 id="h-notes">What changes, what stays</h2>
     <ul>
-      <li>Same plants, numbers and 9 pt text as the paper's figures.</li>
+      <li>Same plants, numbers, font (Liberation Sans) and 9 pt text as the paper's figures.</li>
       <li>Stream colours follow UGG: image blue, depth yellow, point cloud pink, parameters purple. Predicted points use Okabe-Ito reddish purple, which stays distinct from the grey truth for colour-blind readers.</li>
       <li>Swapping into the paper is one command per figure; captions need a word on the box colours.</li>
     </ul>
