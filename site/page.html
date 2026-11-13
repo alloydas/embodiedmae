@@ -2,57 +2,111 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="CropCode: one masked autoencoder that recovers the procedural model of a crop plant from any field sensor, even when neighbours occlude it.">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  /* Layout: a single reading column; each task is a band with its controls above a grid of synced 3D panels. */
+  /* Athletic editorial look: black full-bleed bands, condensed all-caps display type, square edges, 3D panels on black.
+     Data colours stay colour-blind safe (green plant ramp, viridis errors, Okabe-Ito input / output labels). */
   :root {
-    --bg: #f5f6f1; --fg: #1b211b; --muted: #5b6458; --rule: #d6dacf; --card: #ffffff; --panel: #ffffff;
-    --accent: #0072b2; --accent-ink: #ffffff; --input: #b06f00; --chip: #e8ece3;
-    --display: "Fraunces", Georgia, serif;
-    --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --bg: #ffffff; --fg: #111111; --muted: #5c5c5c; --rule: #e2e2e2; --card: #f3f3f3; --panel: #0e0e0e;
+    --accent: #0072b2; --accent-ink: #ffffff; --input: #b06f00; --chip: #e6e6e6;
+    --display: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
+    --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --gutter: max(16px, env(safe-area-inset-left, 0px));
   }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-    --bg: #121512; --fg: #e3e7df; --muted: #9da698; --rule: #2c332b; --card: #1a1e19; --panel: #161a16;
-    --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232922; color-scheme: dark } }
+    --bg: #0a0a0a; --fg: #f4f4f4; --muted: #a3a3a3; --rule: #262626; --card: #161616; --panel: #0e0e0e;
+    --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232323; color-scheme: dark } }
   :root[data-theme="dark"] {
-    --bg: #121512; --fg: #e3e7df; --muted: #9da698; --rule: #2c332b; --card: #1a1e19; --panel: #161a16;
-    --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232922; color-scheme: dark }
+    --bg: #0a0a0a; --fg: #f4f4f4; --muted: #a3a3a3; --rule: #262626; --card: #161616; --panel: #0e0e0e;
+    --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232323; color-scheme: dark }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55;
-         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-  main { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px; display: grid; gap: 64px; }
-  h1 { font-family: var(--display); font-weight: 640; font-size: clamp(40px, 7vw, 68px); line-height: 1; margin: 0; letter-spacing: -0.01em; }
-  h2 { font-family: var(--display); font-weight: 560; font-size: clamp(24px, 3.4vw, 32px); line-height: 1.15; margin: 0; text-wrap: balance; }
+  html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 64px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+  .wrap { max-width: 1212px; margin: 0 auto; padding-inline: var(--gutter); }
+  main { max-width: 1212px; margin: 0 auto; padding: 72px var(--gutter) 96px; display: grid; gap: 88px; }
+  h1, h2, h3 { font-family: var(--display); text-transform: uppercase; margin: 0; text-wrap: balance; }
+  h1 { font-weight: 800; font-size: clamp(48px, 8.4vw, 104px); line-height: .9; letter-spacing: -0.005em; }
+  h2 { font-weight: 800; font-size: clamp(32px, 4.6vw, 52px); line-height: .95; }
   p { margin: 0; }
-  .hero { display: grid; gap: 16px; max-width: 78ch; }
-  .hero .full { font-size: clamp(17px, 2.1vw, 21px); color: var(--muted); text-wrap: balance; }
-  .hero .claim { font-size: 17px; }
+
+  /* top bar */
+  .topbar { position: sticky; top: 0; z-index: 10; background: #000; color: #fff; }
+  .topbar .wrap { display: flex; align-items: center; gap: 24px; height: 56px; }
+  .wordmark { font-family: var(--display); font-weight: 800; font-size: 26px; letter-spacing: .02em; text-transform: uppercase; color: #fff; text-decoration: none; }
+  .topbar nav { display: flex; gap: 22px; overflow-x: auto; scrollbar-width: none; flex: 1; }
+  .topbar nav::-webkit-scrollbar { display: none; }
+  .topbar nav a { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: #d9d9d9; text-decoration: none; white-space: nowrap; padding-block: 4px; border-bottom: 2px solid transparent; }
+  .topbar nav a:hover, .topbar nav a:focus-visible { color: #fff; border-bottom-color: #fff; outline: none; }
+  @media (max-width: 720px) { .topbar .wrap { gap: 16px; } .wordmark { font-size: 22px; } }
+
+  /* hero */
+  .hero { background: #000; color: #fff; position: relative; overflow: hidden; }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: center; min-height: clamp(560px, 82vh, 780px); gap: 24px; }
+  .hero-copy { display: grid; gap: 20px; padding-block: 56px; position: relative; z-index: 1; }
+  .kicker { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #bdbdbd; }
+  .hero .full { font-size: clamp(17px, 1.9vw, 20px); color: #e6e6e6; max-width: 52ch; }
+  .hero .claim { font-size: 16px; color: #a8a8a8; max-width: 56ch; }
+  .hero-stage { position: relative; align-self: stretch; min-height: 420px; }
+  .hero-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  .hero-stage canvas:active { cursor: grabbing; }
+  .hero-credit { position: absolute; right: 0; bottom: 18px; font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #8f8f8f; pointer-events: none; text-align: right; }
+  @media (max-width: 860px) {
+    .hero .wrap { grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 0; }
+    .hero-copy { padding-block: 40px 8px; }
+    .hero-stage { min-height: 0; aspect-ratio: 1 / 1; }
+  }
   .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
-  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; font-weight: 600; font-size: 15px;
-         text-decoration: none; border: 1px solid var(--fg); color: var(--fg); background: transparent; }
-  .btn.primary { background: var(--fg); color: var(--bg); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 0; font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: .08em; text-transform: uppercase;
+         text-decoration: none; border: 2px solid currentColor; color: inherit; background: transparent; cursor: pointer; }
+  .btn.light { background: #fff; color: #000; border-color: #fff; }
+  .btn.light:hover { background: #d9d9d9; border-color: #d9d9d9; }
+  .btn.ghost:hover { background: #fff; color: #000; border-color: #fff; }
   .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
-  section.task { display: grid; gap: 18px; }
-  .task-head { display: grid; gap: 8px; max-width: 80ch; }
-  .eyebrow { font-family: var(--mono); font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  .lede { color: var(--muted); }
-  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; background: var(--card); border: 1px solid var(--rule);
-              border-radius: 10px; padding: 12px 14px; }
+  .btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+  /* task tiles */
+  .tiles-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+  @media (max-width: 860px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .tile { position: relative; display: block; color: #fff; text-decoration: none; background: #000; aspect-ratio: 4 / 5; overflow: hidden; }
+  .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .5s ease; }
+  .tile.contain img { object-fit: contain; }
+  .tile::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,.82) 100%); }
+  .tile .cap { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 1; display: grid; gap: 4px; }
+  .tile .num { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .14em; color: #cfcfcf; }
+  .tile b { font-family: var(--display); font-weight: 800; font-size: clamp(20px, 2.4vw, 28px); line-height: .95; text-transform: uppercase; }
+  .tile .go { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; text-decoration: underline; text-underline-offset: 4px; }
+  .tile:hover img, .tile:focus-visible img { transform: scale(1.04); }
+  .tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .tile img { transition: none; } }
+
+  /* task sections */
+  main { counter-reset: sec; }
+  section.task { display: grid; gap: 22px; counter-increment: sec; }
+  .task-head { display: grid; gap: 12px; max-width: 84ch; }
+  .eyebrow { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  section.task .eyebrow::before { content: counter(sec, decimal-leading-zero) "  /  "; color: var(--fg); white-space: pre; }
+  .lede { color: var(--muted); font-size: 17px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; background: var(--card); border: 0; border-left: 4px solid var(--fg);
+              border-radius: 0; padding: 12px 16px; }
   .ctl { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-  .ctl > span { color: var(--muted); }
-  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; }
-  .seg button { font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--fg); padding: 5px 12px; cursor: pointer; }
-  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
-  .seg button:focus-visible, select:focus-visible, input:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--rule); background: var(--bg); color: var(--fg); max-width: 100%; }
-  input[type=range] { width: 110px; accent-color: var(--accent); }
-  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .ctl > span, .ctl > label:first-child { font-family: var(--display); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: inline-flex; border: 2px solid var(--fg); border-radius: 0; overflow: hidden; }
+  .seg button { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; border: 0; background: transparent; color: var(--fg); padding: 5px 12px; cursor: pointer; }
+  .seg button + button { border-left: 2px solid var(--fg); }
+  .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+  .seg button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: 0; border: 2px solid var(--fg); background: var(--bg); color: var(--fg); max-width: 100%; }
+  input[type=range] { width: 110px; accent-color: var(--fg); }
+  input[type=checkbox] { accent-color: var(--fg); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   @media (max-width: 860px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .cell { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; min-width: 0; }
-  .cell header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 10px 6px; font-size: 14px; border-bottom: 1px solid var(--rule); }
-  .cell header b { font-weight: 600; }
-  .cell header .chip { font-family: var(--mono); font-size: 12.5px; background: var(--chip); border-radius: 6px; padding: 1px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cell { background: var(--panel); border: 0; border-radius: 0; overflow: hidden; display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+  .cell header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 10px 7px; font-size: 14px; background: var(--card); }
+  .cell header b { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; }
+  .cell header .chip { font-family: var(--mono); font-size: 12.5px; background: var(--chip); border-radius: 0; padding: 1px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .cell.input header b { color: var(--input); }
   .cell.output header b { color: var(--accent); }
   .cell canvas, .cell img.view { display: block; width: 100%; aspect-ratio: 1 / 1; height: auto; cursor: grab; }
@@ -71,27 +125,58 @@
   .sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 5px; }
   .hint { font-size: 13.5px; color: var(--muted); }
   .strip { display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: var(--panel); }
-  .strip img { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; border: 2px solid transparent; cursor: pointer; background: #fff; flex: none; }
+  .strip img { width: 64px; height: 64px; object-fit: contain; border-radius: 0; border: 2px solid transparent; cursor: pointer; background: #fff; flex: none; }
   .strip img[aria-current="true"] { border-color: var(--accent); }
   .data-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
   @media (max-width: 760px) { .data-grid { grid-template-columns: minmax(0, 1fr); } }
   .note { font-size: 14px; color: var(--muted); }
   .loading { opacity: .5; transition: opacity .15s; }
-  footer { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 18px; }
   @media (prefers-reduced-motion: reduce) { .loading { transition: none; } }
+  .site-foot { background: #000; color: #a8a8a8; font-size: 14px; }
+  .site-foot .wrap { display: grid; gap: 14px; padding-block: 40px 48px; }
+  .site-foot .wordmark { font-size: 34px; }
+  .site-foot a { color: #fff; }
 </style>
 
-<main>
-  <header class="hero">
-    <div class="eyebrow">CVPR 2027 submission</div>
-    <h1>CropCode</h1>
-    <p class="full">Inverse procedural modeling of occluded row crop geometry from sparse multimodal field observations</p>
-    <p class="claim">One masked autoencoder reads any field sensor (an image, a depth image or a point cloud) and writes the procedural model of the plant, even when its neighbours hide part of it. Every 3D view on this page is a held-out test plant; drag to rotate, scroll or pinch to zoom, double-click to reset.</p>
+<div class="topbar"><div class="wrap">
+  <a class="wordmark" href="#top">CropCode</a>
+  <nav aria-label="Sections">
+    <a href="#data">Data</a><a href="#pretrain">Pretraining</a><a href="#any">Any input</a><a href="#partial">Partial clouds</a><a href="#rows">Crop rows</a><a href="#real">Real plants</a><a href="https://github.com/alloydas/CropCode">Code</a>
+  </nav>
+</div></div>
+
+<header class="hero" id="top"><div class="wrap">
+  <div class="hero-copy">
+    <div class="kicker">CVPR 2027 submission &nbsp;·&nbsp; Sorghum + Maize</div>
+    <h1>Any sensor in.<br>The whole plant out.</h1>
+    <p class="full">Inverse procedural modeling of occluded row crop geometry from sparse multimodal field observations.</p>
+    <p class="claim">One masked autoencoder reads any field sensor (an image, a depth image or a point cloud) and writes the procedural model of the plant, even when its neighbours hide part of it. Every 3D view on this page is a held-out test plant: drag to rotate, scroll or pinch to zoom, double-click to reset.</p>
     <div class="buttons">
-      <a class="btn" aria-disabled="true">Paper (coming soon)</a>
-      <a class="btn primary" href="https://github.com/alloydas/CropCode">Code</a>
+      <a class="btn light" href="#explore">Explore the results</a>
+      <a class="btn ghost" href="https://github.com/alloydas/CropCode">Get the code</a>
+      <a class="btn ghost" aria-disabled="true">Paper soon</a>
     </div>
-  </header>
+  </div>
+  <div class="hero-stage">
+    <canvas id="hero-pc" aria-label="A held-out sorghum test plant rebuilt from one photograph, rotating"></canvas>
+    <div class="hero-credit" id="hero-credit">Sorghum 7712 &nbsp;·&nbsp; rebuilt from one photograph</div>
+  </div>
+</div></header>
+
+<main>
+  <section id="explore" aria-labelledby="explore-h">
+    <div class="tiles-head">
+      <div class="task-head"><div class="eyebrow">Six viewers, two species</div><h2 id="explore-h">Explore by task</h2></div>
+    </div>
+    <div class="tiles">
+      <a class="tile" href="#data"><img src="data/tiles/data.jpg" alt="" loading="lazy"><span class="cap"><span class="num">01</span><b>Three kinds of plants</b><span class="go">See the data</span></span></a>
+      <a class="tile" href="#pretrain"><img src="data/tiles/pretrain.jpg" alt="" loading="lazy"><span class="cap"><span class="num">02</span><b>80 % hidden, all rebuilt</b><span class="go">Masked pretraining</span></span></a>
+      <a class="tile" href="#any"><img src="data/tiles/any.jpg" alt="" loading="lazy"><span class="cap"><span class="num">03</span><b>Any sensor in</b><span class="go">Before vs after distillation</span></span></a>
+      <a class="tile" href="#partial"><img src="data/tiles/partial.jpg" alt="" loading="lazy"><span class="cap"><span class="num">04</span><b>One camera or ten</b><span class="go">Partial clouds</span></span></a>
+      <a class="tile" href="#rows"><img src="data/tiles/rows.jpg" alt="" loading="lazy"><span class="cap"><span class="num">05</span><b>Hidden by neighbours</b><span class="go">Crop rows</span></span></a>
+      <a class="tile" href="#real"><img src="data/tiles/real.jpg" alt="" loading="lazy"><span class="cap"><span class="num">06</span><b>Real plants</b><span class="go">From synthetic to real</span></span></a>
+    </div>
+  </section>
 
   <!-- ====================================================== datasets -->
   <section class="task" id="data">
@@ -242,8 +327,12 @@
     <div class="legend"><span>Chips: Chamfer to the true plant (×10⁻⁴ m²) · predicted height (maize)</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span><span><i class="sw" style="background:#c9c2b0"></i>neighbours in the row cloud</span></div>
   </section>
 
-  <footer>Held-out test plants throughout. Clouds are subsampled to 4,096 points per plant (8,192 for row scenes) for the browser; metrics are computed on the full clouds.</footer>
 </main>
+<footer class="site-foot"><div class="wrap">
+  <a class="wordmark" href="#top">CropCode</a>
+  <p>Held-out test plants throughout. Clouds are subsampled to 4,096 points per plant (8,192 for row scenes) for the browser; metrics are computed on the full clouds.</p>
+  <p><a href="https://github.com/alloydas/CropCode">Training and testing code on GitHub</a></p>
+</div></footer>
 
 <script src="assets/pcviewer.js"></script>
 <script>
@@ -470,6 +559,26 @@
   let raf = 0; window.addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => ALL.forEach(s => s.g.draw())); });
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { rDraw(); if (D.item) dShow(dSel.value); ALL.forEach(s => s.redraw && s.redraw()); });
   document.getElementById('r-size').addEventListener('input', e => ALL.forEach(s => { s.g.size = +e.target.value; s.g.draw(); }));
+
+  // ------------------------------------------------------------------ hero: one plant rebuilt from a photograph, turning slowly
+  (async function hero() {
+    const cv = document.getElementById('hero-pc'); if (!cv) return;
+    const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [0, 0, 0]; g.size = 1.25;
+    const it = await PCV.load('data/single/sorghum/Sorghum_7712_05.json');
+    const c = it.clouds['rgb:after'];
+    p.set([{ pos: c.pos, col: PCV.plantColors(c.pos) }]); g.frame(PCV.bounds(c.pos), { phi: 0.1 });
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let idle = 0, seen = true, last = 0;
+    cv.addEventListener('pointerdown', () => { idle = performance.now() + 4000; });
+    cv.addEventListener('wheel', () => { idle = performance.now() + 4000; }, { passive: true });
+    if ('IntersectionObserver' in window) new IntersectionObserver(e => { seen = e[0].isIntersecting; }).observe(cv);
+    function spin(t) {
+      if (!still && seen && t > idle && document.visibilityState === 'visible') { g.theta += Math.min(50, t - (last || t)) * 0.00025; g.draw(); }
+      last = t; requestAnimationFrame(spin);
+    }
+    window.addEventListener('resize', () => g.draw());
+    if (!still) requestAnimationFrame(spin);
+  })().catch(e => console.error(e));
   dFill().catch(e => console.error(e)); rFill().catch(e => console.error(e));
 })();
 </script>
