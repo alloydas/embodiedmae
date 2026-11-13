@@ -155,7 +155,7 @@ def subsample(pts, k, rng):
 
 class RealRowDataset(torch.utils.data.Dataset):
     def __init__(self, layouts=('parallel', 'perpendicular'), rows=None, stops=None, seed=0, with_targets=False,
-                 species='maize', rgb_gain=None, source='rows2026', plants=None):
+                 species='maize', rgb_gain=None, source='rows2026', plants=None, sorghum_window='zoom', zoom_aug=False):
         # with_targets: also return the centre plant's own depth image (all its points, splatted alone), the
         # depth target of the real-row fine-tune (train_real_rows.py). Off = the E10 evaluation's items, unchanged.
         # rgb_gain: multiply the colour channels by this (sorghum: the run's rgb_brighten_gain); None = as on disk.
@@ -163,6 +163,14 @@ class RealRowDataset(torch.utils.data.Dataset):
         self.species, self.sp, self.rgb_gain = species, SPECIES[species], rgb_gain
         rows = None if rows is None else {(f'{int(r):04d}' if str(r).isdigit() else str(r)) for r in rows}
         self.source = source
+        # rows3000 sorghum: 'zoom' = a square window of side min(H, 3 W) centred on the middle plant's leaves (the zoom of the
+        # review page, maize-like proportions; user, 2026-11-13: "use this zoomed data for finetuning and zeroshot");
+        # 'full' = the whole strip as a square (the first-upload convention).
+        self.sorghum_window = sorghum_window if (source == 'rows3000' and species == 'sorghum') else None
+        # training augmentation (user: "also augment by zoomed cropped part"): a random zoomed crop per item and epoch,
+        # side x U(0.75, 1.25) of the zoom window, centre anywhere between the 10th and 90th percentile of the middle
+        # plant's leaves (image rows), +-10 % of the photo width sideways. The rng is the item's (seed changes per epoch).
+        self.zoom_aug = bool(zoom_aug) and self.sorghum_window == 'zoom'
         if source == 'rows3000':                    # plants = scan ids (scan_id) to keep; rows = row numbers
             plants = None if plants is None else {str(p) for p in plants}
             for m in load_index_3000(species):
@@ -234,12 +242,25 @@ class RealRowDataset(torch.utils.data.Dataset):
         else:
             height = float(tp['height_m'])
         z = X[:, 2]; u = cx + fx * X[:, 0] / z; v = cy + fy * X[:, 1] / z
-        win = (z > 0) & (np.abs(u - cx) <= half) & (np.abs(v - cy) <= half)
+        wx, wy = cx, cy                                                   # the window's centre in the image
+        if self.sorghum_window == 'zoom':
+            Wp, Hp = (int(q) for q in self.items[idx][4]['image_px'].split('x'))
+            half = min(Hp, 3 * Wp) / 2
+            leaf = (lab == target) & (z > 0) & ((P['part'] == 2) if 'part' in P.dtype.names else True)
+            vm = float(np.median(v[leaf])) if leaf.any() else cy
+            if self.zoom_aug:
+                zr = np.random.default_rng(self.seed * 7919 + idx * 104729 + 17)       # its own stream: the cloud subsample is unchanged
+                half = min(Hp / 2, half * zr.uniform(0.75, 1.25))
+                if leaf.any():
+                    q10, q90 = np.percentile(v[leaf], [10, 90]); vm = float(zr.uniform(q10, q90))
+                wx = cx + zr.uniform(-0.1, 0.1) * Wp
+            wy = float(np.clip(vm, half - 0.5, Hp - 0.5 - half))
+        win = (z > 0) & (np.abs(u - wx) <= half) & (np.abs(v - wy) <= half)
 
         def visible(mask, res):
             idx_ = np.flatnonzero(mask)
-            ui = np.clip(((u[idx_] - (cx - half)) / (2 * half) * res).astype(np.int64), 0, res - 1)
-            vi = np.clip(((v[idx_] - (cy - half)) / (2 * half) * res).astype(np.int64), 0, res - 1)
+            ui = np.clip(((u[idx_] - (wx - half)) / (2 * half) * res).astype(np.int64), 0, res - 1)
+            vi = np.clip(((v[idx_] - (wy - half)) / (2 * half) * res).astype(np.int64), 0, res - 1)
             zb = np.full((res, res), np.inf); np.minimum.at(zb, (vi, ui), z[idx_])
             vis = np.zeros(len(z), bool); vis[idx_] = z[idx_] <= zb[vi, ui] + VIS_TOL
             return vis
@@ -258,7 +279,7 @@ class RealRowDataset(torch.utils.data.Dataset):
         # depth: the visible points splatted at 224^2 with a 2 x 2 footprint (near leaves are sampled more coarsely
         # than one pixel), then one-pixel holes filled from the 3 x 3 neighbourhood minimum
         def splat(sel):
-            uf = (u[sel] - (cx - half)) / (2 * half) * IMG; vf = (v[sel] - (cy - half)) / (2 * half) * IMG
+            uf = (u[sel] - (wx - half)) / (2 * half) * IMG; vf = (v[sel] - (wy - half)) / (2 * half) * IMG
             zb = np.full((IMG, IMG), np.inf)
             for du in (0.0, 1.0):
                 for dv in (0.0, 1.0):
@@ -276,7 +297,7 @@ class RealRowDataset(torch.utils.data.Dataset):
 
         # photograph: the 40 deg window, padded with background, white background -> black
         im = np.asarray(Image.open(pathlib.Path(d) / f['photo']).convert('RGB'))
-        H, W = im.shape[:2]; r0, c0 = int(round(cy - half)), int(round(cx - half)); n = int(round(2 * half))
+        H, W = im.shape[:2]; r0, c0 = int(round(wy - half)), int(round(wx - half)); n = int(round(2 * half))
         canvas = np.full((n, n, 3), 255 if white_bg else 0, np.uint8)
         ys, xs_ = slice(max(0, r0), min(H, r0 + n)), slice(max(0, c0), min(W, c0 + n))
         canvas[ys.start - r0:ys.stop - r0, xs_.start - c0:xs_.stop - c0] = im[ys, xs_]
@@ -288,7 +309,7 @@ class RealRowDataset(torch.utils.data.Dataset):
 
         info = dict(layout=layout, row=rid, stop=stop, plant=plant, target=target, height=height, leaves=leaves,
                     occ_frac=occ, scale=scale, n_scene_visible=int(vis_scene.sum()), n_target_visible=int(vis_target.sum()),
-                    plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']),
+                    plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']), window=self.sorghum_window or self.sp['window'],
                     leaf_raw=leaf_raw, leaf_zenith=leaf_zen)
         out = (rgb, torch.from_numpy(dep)[None], torch.from_numpy(pin.astype(np.float32)),
                torch.zeros(self.sp['tokens'], self.sp['params']), torch.zeros(self.sp['tokens']), torch.from_numpy(pgt.astype(np.float32)))

@@ -36,6 +36,9 @@ ap.add_argument('--rows', nargs='+', default=None); ap.add_argument('--stops', n
 ap.add_argument('--source', default='rows3000', choices=('rows3000', 'rows2026'),
                 help='rows3000: the 3000-row upload of 2026-11-13 (the E10 data); rows2026: the first upload')
 ap.add_argument('--plants', nargs='+', default=None, help='rows3000: scan ids to score (e.g. the held-out test plants)')
+ap.add_argument('--sorghum-window', default='auto', choices=('auto', 'zoom', 'full'),
+                help='rows3000 sorghum input window. auto: a real-row fine-tune uses the window it was trained on (its config.json '
+                     'real_finetune.window; runs from before 2026-11-13 14:00 have none and trained on the full strip); otherwise zoom')
 ap.add_argument('--plants-file', default=None, help='rows3000: CSV with plant,split columns; scores split == test')
 ap.add_argument('--batch-size', type=int, default=8); ap.add_argument('--num-workers', type=int, default=8)
 ap.add_argument('--seed', type=int, default=0)
@@ -58,6 +61,7 @@ for spec in a.models:
     models.append(dict(run=run, ckpt=ckpt, epoch=ep, model=m, mask=float(cfg.get('mask_ratio', 0.8)),
                        recipe=recipe_scored(cfg, a.species, m),
                        gain=float(cfg.get('rgb_brighten_gain', 1.0)) if a.species == 'sorghum' else None,
+                       window=(cfg['real_finetune'].get('window', 'full') if 'real_finetune' in cfg else None),
                        # real-row fine-tunes may widen the leaf decoding ranges (train_real_rows.py --leaf-ranges)
                        leaf_sc=np.array(cfg.get('real_finetune', {}).get('leaf_scale', _LEAF_SCALE_V2), np.float32),
                        leaf_sh=np.array(cfg.get('real_finetune', {}).get('leaf_shift', _LEAF_SHIFT_V2), np.float32)))
@@ -67,8 +71,14 @@ gains = {M['gain'] for M in models}
 assert len(gains) == 1, f'models trained at different RGB gains {gains}: score them in separate runs'
 if a.plants_file:
     a.plants = [r['plant'] for r in pd.read_csv(a.plants_file, dtype=str).to_dict('records') if r['split'] == 'test']
+win = a.sorghum_window
+if win == 'auto':
+    trained = {M['window'] for M in models if M['window']}
+    assert len(trained) <= 1, f'models fine-tuned on different windows {trained}: score them in separate runs'
+    win = trained.pop() if trained else 'zoom'
+print('sorghum window:', win if a.species == 'sorghum' and a.source == 'rows3000' else 'n/a', flush=True)
 ds = RealRowDataset(layouts=a.layouts, rows=a.rows, stops=set(a.stops) if a.stops else None, seed=a.seed,
-                    species=a.species, rgb_gain=gains.pop(), source=a.source, plants=a.plants)
+                    species=a.species, rgb_gain=gains.pop(), source=a.source, plants=a.plants, sorghum_window=win)
 loader = DataLoader(ds, batch_size=a.batch_size, shuffle=False, num_workers=a.num_workers, collate_fn=collate, persistent_workers=False)
 rows, t0 = [], time.time()
 for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
@@ -117,7 +127,7 @@ for r in rows:
     if '_angle_pairs' in r:
         p_, z_ = r.pop('_angle_pairs'); angle_pairs.setdefault((r['model'], r['source']), []).extend(zip(p_, z_))
 df = pd.DataFrame(rows); df.to_csv(f'{a.out}.csv', index=False)
-summary = {'source': a.source, 'n_stops': len(ds), 'rows': int(df[['layout', 'row']].drop_duplicates().shape[0]) if len(df) else 0,
+summary = {'source': a.source, 'sorghum_window': win, 'n_stops': len(ds), 'rows': int(df[['layout', 'row']].drop_duplicates().shape[0]) if len(df) else 0,
            'plants': int(df['plant'].nunique()) if len(df) else 0, 'groups': []}
 for (model, src, layout), g in list(df.groupby(['model', 'source', 'layout'])) + [((m, s, 'both'), g) for (m, s), g in df.groupby(['model', 'source'])]:
     per_plant = g.groupby('plant')                  # rows2026: one plant per row; rows3000: the scan

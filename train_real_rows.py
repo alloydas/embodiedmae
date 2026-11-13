@@ -51,12 +51,14 @@ ap.add_argument('--leaf-ranges', default='length=0.05:1.25,width=0:0.40',
                      'Recorded in config.json real_finetune.leaf_scale / leaf_shift; eval_real_rows decodes with them. "" = off')
 ap.add_argument('--val-every', type=int, default=1)
 ap.add_argument('--smoke', type=int, default=0, help='>0: that many train/val plants, 2 epochs, CPU-friendly')
+ap.add_argument('--zoom-aug', type=int, default=None, help='rows3000 sorghum: random zoomed crops for training (default 1 there, else 0)')
 ap.add_argument('--split-only', action='store_true', help='write the split (run dir + data_split/) and exit')
 ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
 a = ap.parse_args()
 SORG = a.species == 'sorghum'
 a.init = a.init or ('sorghum_row_ft:checkpoints/checkpoint_epoch_100.pth' if SORG else 'maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth')
 R3 = a.source == 'rows3000'
+a.zoom_aug = bool(a.zoom_aug if a.zoom_aug is not None else (R3 and a.species == 'sorghum'))
 a.run = a.run or f"{a.species}_real_ft{'_r3000' if R3 else ''}"     # never the first upload's run dirs
 a.val_plants = a.val_plants if a.val_plants is not None else ((5 if R3 else 3) if SORG else 39)
 a.recipe_weight = a.recipe_weight if a.recipe_weight is not None else (0.0 if SORG else 5.0)
@@ -112,7 +114,7 @@ model.pc_sinkhorn_weight = float(cfg.get('pc_sinkhorn_weight', 0.0))      # buil
 model.pc_sinkhorn_points = int(cfg.get('pc_sinkhorn_points', 1024)); model.pc_sinkhorn_blur = float(cfg.get('pc_sinkhorn_blur', 0.02))
 mask = float(cfg.get('mask_ratio', 0.8)); pc_w = float(cfg.get('pc_loss_weight', 1.0))
 run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_seed=a.split_seed, n_train=len(train), n_val=len(val),
-                                       n_test=len(test), source=a.source, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
+                                       n_test=len(test), source=a.source, window=('zoom' if (R3 and SORG) else SPECIES[a.species]['window']), zoom_aug=a.zoom_aug, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
                                        leaf_weight=a.leaf_weight, leaf_scale=LEAF_SC.tolist(), leaf_shift=LEAF_SH.tolist(),
                                        supervised=['pc', 'depth'] + (['height', 'leafCount'] if a.recipe_weight > 0 else [])
                                        + (['stemInternodeSum'] + [f'leaf.{f}' for f in LEAF_TRUTH_FIELDS] if a.leaf_weight > 0 else []),
@@ -120,7 +122,7 @@ run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_se
 (run_dir / 'config.json').write_text(json.dumps(run_cfg, indent=1, default=str))
 
 sel = (lambda ps: dict(source='rows3000', plants=ps)) if R3 else (lambda ps: dict(rows=ps))
-train_ds = RealRowDataset(with_targets=True, seed=1, species=a.species, rgb_gain=gain, **sel(train))
+train_ds = RealRowDataset(with_targets=True, seed=1, species=a.species, rgb_gain=gain, zoom_aug=a.zoom_aug, **sel(train))
 val_ds = RealRowDataset(seed=0, species=a.species, rgb_gain=gain, **sel(val))
 mk = lambda ds, sh: DataLoader(ds, batch_size=a.batch_size, shuffle=sh, num_workers=a.num_workers, collate_fn=collate,
                                persistent_workers=False, drop_last=sh)
