@@ -8,8 +8,8 @@ What it takes from them:
   Slice-100K Fig. 2    one sample laid out as its data formats side by side, each named underneath;
   UGG (ugg_style.py)   one pastel colour per stream (image blue, depth yellow, point cloud pink, parameters purple)
                        in rounded boxes; the parameters drawn as the stem-and-leaf schematic of the any-to-all figure.
-Panels: (a) the plants (12 per species, val split, side view, ordered by height); (b) one view of the highlighted
-plant as its four streams; (c) the ten cameras of that plant; (d) one crop-row scene per species (the photograph with
+Panels: (a) the plants (6 per species, val split, side view, ordered by height); (b) one view of the highlighted
+plant as its four streams; (c) five of the ten cameras of that plant; (d) one crop-row scene per species (the photograph with
 neighbour pixels red and hidden target pixels orange, and the scene cloud with the target's points in green).
 Same plants as figures/make_dataset_fig.py (Sorghum_10001 / plant_0003; rows Sorghum_10007 / plant_0004); the font is
 matplotlib's default, as in that figure. Output: paper/figs/ugg_preview/fig_dataset_v2.{pdf,png}. CPU, ~2 min:
@@ -31,9 +31,9 @@ import ugg_style as U
 OUT = R / 'paper/figs/ugg_preview'
 PL = {'sorghum': 'Sorghum_10001', 'maize': 'plant_0003'}
 RP = {'sorghum': 'Sorghum_10007', 'maize': 'plant_0004'}
-N_GAL, SEED = 12, 3
+N_GAL, SEED, GCOLS = 6, 3, 3                          # user: fewer samples in (a) and (c)
 FS, FL = 6.2, 9.0                                    # make_dataset_fig.py's sizes: labels 6.2 pt, panel letters 9 pt
-W, H = 6.875, 3.78
+W, H = 6.875, 3.86
 A.C_OUT = U.STREAM_INK['text']
 elev_tab = pd.read_csv(R / 'data_split/maize_view_elevation.csv.gz')
 
@@ -83,14 +83,15 @@ def letter(x, y, k, title):
 
 
 # ------------------------------------------------------------------ layout (inches, y up)
-GT, GG = 0.39, 0.035                                  # gallery tile, gap
-GX0 = 0.30; GW = 6 * GT + 5 * GG
-ST, SG = 0.74, 0.10                                   # stream tile, gap
-SX0 = GX0 + GW + 0.55
-ROW_Y = {'sorghum': 2.43, 'maize': 1.39}             # bottom of each species band (top tier)
+GT, GG = 0.44, 0.035                                  # gallery tile, gap
+GX0 = 0.30; GW = GCOLS * GT + (GCOLS - 1) * GG
+ST = 0.84
+SX0 = GX0 + GW + 0.75
+SG = (W - 0.07 - SX0 - 0.07 - 4 * ST) / 3                # stream gap: (b) spans to the right margin
+ROW_Y = {'sorghum': 2.47, 'maize': 1.37}             # bottom of each species band (top tier)
 BAND_H = 2 * GT + GG
-letter(0.02, 3.64, 'a', f'The plants: 15,000 per species ({N_GAL} shown)')
-letter(SX0 - 0.06, 3.64, 'b', 'One view of the boxed plant as its four streams')
+letter(0.02, 3.72, 'a', f'The plants: 15,000 per species ({N_GAL} shown)')
+letter(SX0 - 0.06, 3.72, 'b', 'One view of the boxed plant as its four streams')
 
 for sp in ('sorghum', 'maize'):
     y0 = ROW_Y[sp]
@@ -99,7 +100,7 @@ for sp in ('sorghum', 'maize'):
     ov.text(GX0 - 0.15, y0 + BAND_H / 2, sp, rotation=90, ha='center', va='center', fontsize=FS + 0.8, fontweight='bold')
     names = gallery_plants(sp); hl = None
     for i, n in enumerate(names):
-        r_, c_ = divmod(i, 6)
+        r_, c_ = divmod(i, GCOLS)
         x = GX0 + c_ * (GT + GG); y = y0 + (1 - r_) * (GT + GG)
         ax = ax_at(x, y, GT, GT); ax.imshow(crop_alpha(V.folder(sp, 'val', n, side_view(sp, n)) / V.RGB_FILE[sp]), zorder=1)
         if n == PL[sp]:
@@ -133,40 +134,41 @@ for sp in ('sorghum', 'maize'):
             ov.text(x + ST / 2, by1 + 0.05, nm, fontsize=FS, ha='center', va='bottom', color=U.STREAM_INK[st], fontweight='bold')
 
 # ------------------------------------------------------------------ bottom tier: (c) cameras, (d) rows
-letter(0.02, 1.13, 'c', 'Ten cameras per plant, by elevation above the plant')
-CT, CG = 0.262, 0.022
+letter(0.02, 1.13, 'c', 'Ten cameras per plant (five shown), by elevation')
+CT, CG = 0.34, 0.035
 for r_, sp in enumerate(('sorghum', 'maize')):
     if sp == 'sorghum':
         order, el = list(range(10)), V.SORGHUM_ELEV
     else:
         t = elev_tab[(elev_tab.split == 'val') & (elev_tab.plant == PL[sp])].sort_values('elev_deg', ascending=False)
         order, el = t['view'].tolist(), t.elev_deg.values
-    y = 0.58 - r_ * 0.50
-    U.pastel_box(ov, GX0 - 0.04, y - 0.04, 10 * CT + 9 * CG + 0.08, CT + 0.08, 'rgb', r=0.04)
+    order, el = list(order)[::2], list(el)[::2]          # every other camera, top to bottom
+    y = 0.60 - r_ * 0.53
+    U.pastel_box(ov, GX0 - 0.04, y - 0.04, 5 * CT + 4 * CG + 0.08, CT + 0.08, 'rgb', r=0.04)
     ov.text(GX0 - 0.15, y + CT / 2, sp, rotation=90, ha='center', va='center', fontsize=FS - 0.4, fontweight='bold')
     for k, (v, e) in enumerate(zip(order, el)):
         x = GX0 + k * (CT + CG)
         ax_at(x, y, CT, CT).imshow(crop_alpha(V.folder(sp, 'val', PL[sp], v) / V.RGB_FILE[sp], pad=0.08))
         ov.text(x + CT / 2, y + CT + 0.05, f'{e:+.0f}°', fontsize=FS - 0.8, ha='center', va='bottom', color='#444444')
 
-XD = 3.66; RT = 0.66; RG = 0.07
+XD = 3.02; RT = 0.70; RG = 0.08
 letter(XD - 0.18, 1.13, 'd', 'Crop rows: the target plant between neighbors')
-ov.text(XD - 0.02, 1.00, 'red: neighbor pixels    orange: target pixels a neighbor hides (% hidden)    green: target points', fontsize=FS - 0.8, color='#555555', va='baseline')
+ov.text(XD - 0.02, 1.025, 'red: neighbor pixels    orange: target pixels a neighbor hides (% hidden)    green: target points', fontsize=FS - 0.8, color='#555555', va='baseline')
 for j, sp in enumerate(('sorghum', 'maize')):
     d = V.row_shot_dir(sp, 'test', RP[sp], 0)
     img, st = V.row_overlay(sp, d)
     scene = V.read_cloud(d / 'pointcloud_cam.ply'); tgt = V.read_cloud(d / 'gt_pointcloud_cam.ply')
     is_t = cKDTree(tgt).query(scene, workers=1)[0] < 3e-3
-    x = XD + j * (2 * RT + RG + 0.16)
-    ov.text(x + RT + RG / 2, 0.86, sp, fontsize=FS, ha='center', va='bottom', fontweight='bold')
-    U.pastel_box(ov, x - 0.03, 0.12, RT + 0.06, RT + 0.06, 'rgb', r=0.05, z=1)
-    ax = ax_at(x, 0.15, RT, RT); ax.imshow(img)
-    ov.text(x + RT / 2, 0.07, f'{st["occ"] * 100:.0f} % hidden', fontsize=FS - 0.6, ha='center', va='top')
-    U.pastel_box(ov, x + RT + RG - 0.03, 0.12, RT + 0.06, RT + 0.06, 'pc', r=0.05, z=1)
-    ax = ax_at(x + RT + RG, 0.15, RT, RT, projection='3d')
+    x = XD + j * (2 * RT + RG + 0.30)
+    ov.text(x + RT + RG / 2, 0.915, sp, fontsize=FS, ha='center', va='bottom', fontweight='bold')
+    U.pastel_box(ov, x - 0.03, 0.13, RT + 0.06, RT + 0.06, 'rgb', r=0.05, z=1)
+    ax = ax_at(x, 0.16, RT, RT); ax.imshow(img)
+    ov.text(x + RT / 2, 0.10, f'{st["occ"] * 100:.0f} % hidden', fontsize=FS - 0.6, ha='center', va='top')
+    U.pastel_box(ov, x + RT + RG - 0.03, 0.13, RT + 0.06, RT + 0.06, 'pc', r=0.05, z=1)
+    ax = ax_at(x + RT + RG, 0.16, RT, RT, projection='3d')
     col = np.where(is_t[:, None], np.array([[0.18, 0.42, 0.16]]), np.array([[0.70, 0.70, 0.70]]))
     V.scatter_cloud(ax, scene, c=col, s=0.3, elev=10, azim=-30)
-    ov.text(x + RT + RG + RT / 2, 0.07, f'{100 * (~is_t).mean():.0f} % neighbors', fontsize=FS - 0.6, ha='center', va='top')
+    ov.text(x + RT + RG + RT / 2, 0.10, f'{100 * (~is_t).mean():.0f} % neighbors', fontsize=FS - 0.6, ha='center', va='top')
 
 OUT.mkdir(parents=True, exist_ok=True)
 for ext in ('pdf', 'png'):
