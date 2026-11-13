@@ -276,10 +276,10 @@
       <div class="cell input"><header><b>1 camera</b><span class="chip" data-c="1view"></span></header><canvas data-k="1view:input"></canvas></div>
       <div class="cell input"><header><b>3 cameras</b><span class="chip" data-c="3view"></span></header><canvas data-k="3view:input"></canvas></div>
       <div class="cell input"><header><b>Full</b><span class="chip" data-c="full"></span></header><canvas data-k="full:input"></canvas></div>
-      <div class="cell"><header><b>Truth</b></header><canvas data-k="truth"></canvas></div>
-      <div class="cell output"><header><b>From 1 camera</b><span class="chip" data-m="1view"></span></header><canvas data-k="1view:recon"></canvas></div>
-      <div class="cell output"><header><b>From 3 cameras</b><span class="chip" data-m="3view"></span></header><canvas data-k="3view:recon"></canvas></div>
-      <div class="cell output"><header><b>From the full cloud</b><span class="chip" data-m="full"></span></header><canvas data-k="full:recon"></canvas></div>
+      <div class="cell wide"><header><b>Truth</b></header><div class="dual"><figure><canvas data-k="truth"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="truth:proc" data-proc="truth"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>From 1 camera</b><span class="chip" data-m="1view"></span></header><div class="dual"><figure><canvas data-k="1view:recon"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="1view:recon:proc" data-proc="1view:recon"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>From 3 cameras</b><span class="chip" data-m="3view"></span></header><div class="dual"><figure><canvas data-k="3view:recon"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="3view:recon:proc" data-proc="3view:recon"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>From the full cloud</b><span class="chip" data-m="full"></span></header><div class="dual"><figure><canvas data-k="full:recon"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="full:recon:proc" data-proc="full:recon"></canvas><figcaption>procedural model</figcaption></figure></div></div>
     </div>
     <div class="legend"><span>Input chips: share of the full cloud within 5 mm. Output chips: Chamfer (×10⁻³).</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span></div>
     <p class="hint">Eight evenly spaced test plants, not selected.</p>
@@ -598,7 +598,7 @@
   A.fill();
 
   // Regime II: partial clouds
-  task({ sec: 'partial', prefix: 'v', dir: 'partial', label: i => plantNo(i.id),
+  task({ sec: 'partial', prefix: 'v', dir: 'partial', label: i => plantNo(i.id), rk: (st, b) => b,
     frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.12 }),
     draw: st => {
       const it = st.item, m = it.meta, C = it.clouds;

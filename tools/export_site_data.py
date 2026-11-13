@@ -360,6 +360,8 @@ def export_partial(sp, n_plants=8):
         it.add('truth', sub(truth, a.points, 1))
         metrics, tree = {}, cKDTree(gt_raw)
         params = torch.zeros(1, n_text, n_par)
+        it_true = base[folders.index(folder)]                          # the plant's item (view sampling indexes plants); its recipe only
+        tv = it_true[4].numpy(); recipes = {'truth': full_recipe(V.decode_recipe(sp, it_true[3].numpy(), tv))}
         for ci, (c, _) in enumerate(conds.items()):
             x = sel[c][take(np.random.default_rng([0, pid, ci]), len(sel[c]))]
             cc = x.mean(0); sc = float(np.linalg.norm(x - cc, axis=1).max())
@@ -367,7 +369,8 @@ def export_partial(sp, n_plants=8):
             torch.manual_seed(1)
             with torch.no_grad():
                 enc = model.forward_encoder_select(rgb, depth, pc_in, params, visible=visible, source_mask_ratio=mr_)
-                pred = model.forward_decoder(enc[0], *enc[5:9], *enc[9:13])[2][0].float().numpy()
+                dec = model.forward_decoder(enc[0], *enc[5:9], *enc[9:13]); pred = dec[2][0].float().numpy()
+            recipes[f'{c}:recon'] = full_recipe(V.decode_recipe(sp, dec[3][0].clamp(0, 1).float().numpy(), tv, predicted=True))
             pred_full = (pred * sc + cc - cf) / sf
             it.add(f'{c}:input', sub((x - cf) / sf, a.points, 4))
             Ps = sub(pred_full, a.points, 5); it.add(f'{c}:recon', Ps, err_mm=nn_dist(Ps, truth) * sf * 1000)
@@ -375,7 +378,7 @@ def export_partial(sp, n_plants=8):
             cov = float((cKDTree(sel[c]).query(gt_raw)[0] <= 0.005).mean())
             metrics[c] = dict(chamfer=round(chamfer(pred, gt_c) * 1e3, 3), coverage=round(cov, 3))
         img = save_jpg(V.tensor_rgb(rgb[0]), out / f'{folder.name}.jpg', 300)
-        meta, nb = it.write(out / folder.name, dict(task='partial', species=sp, plant=folder.name, img=img, metrics=metrics))
+        meta, nb = it.write(out / folder.name, dict(task='partial', species=sp, plant=folder.name, img=img, metrics=metrics, recipes=recipes))
         index.append(dict(id=folder.name, json=f'{folder.name}.json'))
         print(sp, 'partial', folder.name, metrics, f'{nb / 1e3:.0f} kB', flush=True)
     (out / 'index.json').write_text(json.dumps(dict(task='partial', species=sp, items=index), indent=0))
