@@ -7,7 +7,7 @@
   /* Athletic editorial look: black full-bleed bands, condensed all-caps display type, square edges, 3D panels on black.
      Data colours stay colour-blind safe (green plant ramp, viridis errors, Okabe-Ito input / output labels). */
   :root {
-    --bg: #ffffff; --fg: #111111; --muted: #5c5c5c; --rule: #e2e2e2; --card: #f3f3f3; --panel: #0e0e0e;
+    --bg: #ffffff; --fg: #111111; --muted: #5c5c5c; --rule: #e2e2e2; --card: #f3f3f3; --panel: #ffffff;
     --accent: #0072b2; --accent-ink: #ffffff; --input: #b06f00; --chip: #e6e6e6;
     --display: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
     --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -15,10 +15,10 @@
     --gutter: max(16px, env(safe-area-inset-left, 0px));
   }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-    --bg: #0a0a0a; --fg: #f4f4f4; --muted: #a3a3a3; --rule: #262626; --card: #161616; --panel: #0e0e0e;
+    --bg: #0a0a0a; --fg: #f4f4f4; --muted: #a3a3a3; --rule: #262626; --card: #161616; --panel: #ffffff;
     --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232323; color-scheme: dark } }
   :root[data-theme="dark"] {
-    --bg: #0a0a0a; --fg: #f4f4f4; --muted: #a3a3a3; --rule: #262626; --card: #161616; --panel: #0e0e0e;
+    --bg: #0a0a0a; --fg: #f4f4f4; --muted: #a3a3a3; --rule: #262626; --card: #161616; --panel: #ffffff;
     --accent: #6cb4ea; --accent-ink: #0b1218; --input: #e8b04a; --chip: #232323; color-scheme: dark }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -43,16 +43,16 @@
   @media (max-width: 720px) { .topbar .wrap { gap: 16px; } .wordmark { font-size: 22px; } }
 
   /* hero */
-  .hero { background: #000; color: #fff; position: relative; overflow: hidden; }
+  .hero { background: var(--bg); color: var(--fg); position: relative; overflow: hidden; border-bottom: 1px solid var(--rule); }
   .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: center; min-height: clamp(560px, 82vh, 780px); gap: 24px; }
   .hero-copy { display: grid; gap: 20px; padding-block: 56px; position: relative; z-index: 1; }
-  .kicker { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #bdbdbd; }
-  .hero .full { font-size: clamp(17px, 1.9vw, 20px); color: #e6e6e6; max-width: 52ch; }
-  .hero .claim { font-size: 16px; color: #a8a8a8; max-width: 56ch; }
-  .hero-stage { position: relative; align-self: stretch; min-height: 420px; }
+  .kicker { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .hero .full { font-size: clamp(17px, 1.9vw, 20px); color: var(--fg); max-width: 52ch; }
+  .hero .claim { font-size: 16px; color: var(--muted); max-width: 56ch; }
+  .hero-stage { position: relative; align-self: stretch; min-height: 420px; margin-block: 32px; background: #ffffff; }
   .hero-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
   .hero-stage canvas:active { cursor: grabbing; }
-  .hero-credit { position: absolute; right: 0; bottom: 18px; font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #8f8f8f; pointer-events: none; text-align: right; }
+  .hero-credit { position: absolute; right: 0; bottom: 18px; font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #6b6b6b; pointer-events: none; text-align: right; padding-right: 14px; }
   @media (max-width: 860px) {
     .hero .wrap { grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 0; }
     .hero-copy { padding-block: 40px 8px; }
@@ -61,22 +61,22 @@
   .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
   .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 0; font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: .08em; text-transform: uppercase;
          text-decoration: none; border: 2px solid currentColor; color: inherit; background: transparent; cursor: pointer; }
-  .btn.light { background: #fff; color: #000; border-color: #fff; }
-  .btn.light:hover { background: #d9d9d9; border-color: #d9d9d9; }
-  .btn.ghost:hover { background: #fff; color: #000; border-color: #fff; }
+  .btn.light { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .btn.light:hover { opacity: .85; }
+  .btn.ghost:hover { background: var(--fg); color: var(--bg); border-color: var(--fg); }
   .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
-  .btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
   /* task tiles */
   .tiles-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; }
   .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
   @media (max-width: 860px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .tile { position: relative; display: block; color: #fff; text-decoration: none; background: #000; aspect-ratio: 4 / 5; overflow: hidden; }
-  .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .5s ease; }
+  .tile { display: grid; gap: 10px; align-content: start; color: var(--fg); text-decoration: none; }
+  .tile .pic { display: block; aspect-ratio: 4 / 5; max-width: 100%; overflow: hidden; background: #ffffff; border: 1px solid var(--rule); }
+  .tile img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .5s ease; }
   .tile.contain img { object-fit: contain; }
-  .tile::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,.82) 100%); }
-  .tile .cap { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 1; display: grid; gap: 4px; }
-  .tile .num { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .14em; color: #cfcfcf; }
+  .tile .cap { display: grid; gap: 4px; }
+  .tile .num { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .14em; color: var(--muted); }
   .tile b { font-family: var(--display); font-weight: 800; font-size: clamp(20px, 2.4vw, 28px); line-height: .95; text-transform: uppercase; }
   .tile .go { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; text-decoration: underline; text-underline-offset: 4px; }
   .tile:hover img, .tile:focus-visible img { transform: scale(1.04); }
@@ -170,12 +170,12 @@
       <div class="task-head"><div class="eyebrow">Six viewers, two species</div><h2 id="explore-h">Explore by task</h2></div>
     </div>
     <div class="tiles">
-      <a class="tile" href="#data"><img src="data/tiles/data.jpg" alt="" loading="lazy"><span class="cap"><span class="num">01</span><b>Three kinds of plants</b><span class="go">See the data</span></span></a>
-      <a class="tile" href="#pretrain"><img src="data/tiles/pretrain.jpg" alt="" loading="lazy"><span class="cap"><span class="num">02</span><b>80 % hidden, all rebuilt</b><span class="go">Masked pretraining</span></span></a>
-      <a class="tile" href="#any"><img src="data/tiles/any.jpg" alt="" loading="lazy"><span class="cap"><span class="num">03</span><b>Any sensor in</b><span class="go">Before vs after distillation</span></span></a>
-      <a class="tile" href="#partial"><img src="data/tiles/partial.jpg" alt="" loading="lazy"><span class="cap"><span class="num">04</span><b>One camera or ten</b><span class="go">Partial clouds</span></span></a>
-      <a class="tile" href="#rows"><img src="data/tiles/rows.jpg" alt="" loading="lazy"><span class="cap"><span class="num">05</span><b>Hidden by neighbours</b><span class="go">Crop rows</span></span></a>
-      <a class="tile" href="#real"><img src="data/tiles/real.jpg" alt="" loading="lazy"><span class="cap"><span class="num">06</span><b>Real plants</b><span class="go">From synthetic to real</span></span></a>
+      <a class="tile" href="#data"><span class="pic"><img src="data/tiles/data.jpg" alt="" loading="lazy"></span><span class="cap"><span class="num">01</span><b>Three kinds of plants</b><span class="go">See the data</span></span></a>
+      <a class="tile" href="#pretrain"><span class="pic"><img src="data/tiles/pretrain.jpg" alt="" loading="lazy"></span><span class="cap"><span class="num">02</span><b>80 % hidden, all rebuilt</b><span class="go">Masked pretraining</span></span></a>
+      <a class="tile" href="#any"><span class="pic"><img src="data/tiles/any.jpg" alt="" loading="lazy"></span><span class="cap"><span class="num">03</span><b>Any sensor in</b><span class="go">Before vs after distillation</span></span></a>
+      <a class="tile" href="#partial"><span class="pic"><img src="data/tiles/partial.jpg" alt="" loading="lazy"></span><span class="cap"><span class="num">04</span><b>One camera or ten</b><span class="go">Partial clouds</span></span></a>
+      <a class="tile" href="#rows"><span class="pic"><img src="data/tiles/rows.jpg" alt="" loading="lazy"></span><span class="cap"><span class="num">05</span><b>Hidden by neighbours</b><span class="go">Crop rows</span></span></a>
+      <a class="tile" href="#real"><span class="pic"><img src="data/tiles/real.jpg" alt="" loading="lazy"></span><span class="cap"><span class="num">06</span><b>Real plants</b><span class="go">From synthetic to real</span></span></a>
     </div>
   </section>
 
@@ -564,7 +564,7 @@
   // ------------------------------------------------------------------ hero: one plant rebuilt from a photograph, turning slowly
   (async function hero() {
     const cv = document.getElementById('hero-pc'); if (!cv) return;
-    const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [0, 0, 0]; g.size = 1.25;
+    const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [1, 1, 1]; g.size = 1.25;
     const it = await PCV.load('data/single/sorghum/Sorghum_7712_05.json');
     const c = it.clouds['rgb:after'];
     p.set([{ pos: c.pos, col: PCV.plantColors(c.pos) }]); g.frame(PCV.bounds(c.pos), { phi: 0.1 });
