@@ -498,7 +498,7 @@ scene.
 \end{table}
 
 \noindent\textbf{Generation in brief.}
-Each species' generator draws 15{,}000 plants: maize 0.62--1.44\,m
+Each species' generator~\cite{vazquez_phenoframe_2026,ostermann_sorghum_2024} draws 15{,}000 plants: maize 0.62--1.44\,m
 tall with 3--22 leaves, its traits coupled through four latent factors so
 that height and leaf count stay weakly correlated ($r = 0.20$); sorghum
 (EvoEngine) with stems of 0.19--1.74\,m and 4--35 leaves, stem length tied
@@ -2535,7 +2535,7 @@ center) in OpenGL camera coordinates ($+y$ up, camera looking along $-z$).
 
 \subsection{Procedural crop generation}
 \noindent\textbf{Maize procedural generation.} Each plant $i$ of $15{,}000$ is
-generated from seed $i$ using a procedural maize generator. Morphological
+generated from seed $i$ using a procedural maize generator~\cite{vazquez_phenoframe_2026}. Morphological
 traits are sampled from Gaussian distributions: plant height
 $0.832 \pm 0.104$\,m, leaf count $12.35 \pm 2.57$, base leaf length
 $0.448 \pm 0.057$\,m, base leaf width $0.066 \pm 0.010$\,m, and base leaf
@@ -2550,7 +2550,7 @@ B-splines and integrating bending curvature along leaf blades using
 10-node Gauss--Legendre quadrature.
 
 \noindent\textbf{Sorghum procedural generation.} Each plant $i$ of $15{,}000$ is
-generated from seed $i$ using the EvoEngine sorghum generator. Heading
+generated from seed $i$ using the EvoEngine sorghum generator~\cite{ostermann_sorghum_2024}. Heading
 angle is sampled uniformly in $[0^\circ, 360^\circ)$, stem tilt
 $0^\circ \pm 1.5^\circ$, leaf count $20 \pm 2$ (clamped to $[2, 128]$), and
 internode spacing $0.04 \pm 0.03$\,m. Stem length is evaluated as
