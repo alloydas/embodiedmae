@@ -1,0 +1,115 @@
+% Fig. 3 (the dataset) as native TikZ, written by figures/make_dataset_fig_v2.py (do not edit by hand: re-run it).
+% Tiles in Figures/fig3/; boxes, leader lines and text are TikZ, text in \sffamily (Helvetica under cvpr/times).
+% Natural size 6.875 x 3.86 in; include with \resizebox{\textwidth}{!}{\input{Figures/fig_dataset_tikz}}.
+\definecolor{c111111}{HTML}{111111}%
+\definecolor{c333333}{HTML}{333333}%
+\definecolor{c3F5F8F}{HTML}{3F5F8F}%
+\definecolor{c444444}{HTML}{444444}%
+\definecolor{c555555}{HTML}{555555}%
+\definecolor{c5E4A96}{HTML}{5E4A96}%
+\definecolor{c809EC2}{HTML}{809EC2}%
+\definecolor{c9A9A9A}{HTML}{9A9A9A}%
+\definecolor{c9D8CC4}{HTML}{9D8CC4}%
+\definecolor{cA07800}{HTML}{A07800}%
+\definecolor{cA8456E}{HTML}{A8456E}%
+\definecolor{cD091A7}{HTML}{D091A7}%
+\definecolor{cE0B020}{HTML}{E0B020}%
+\definecolor{cE6ECF3}{HTML}{E6ECF3}%
+\definecolor{cEAE7F2}{HTML}{EAE7F2}%
+\definecolor{cF4F4F5}{HTML}{F4F4F5}%
+\definecolor{cF6E9ED}{HTML}{F6E9ED}%
+\definecolor{cFAF2D4}{HTML}{FAF2D4}%
+\begin{tikzpicture}[x=1in, y=1in]
+\useasboundingbox (0,0) rectangle (6.875,3.86);
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{9.0}{10.8}\selectfont\sffamily\bfseries}] at (0.0200,3.7200) {a};
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily}] at (0.1800,3.7200) {The plants: 15,000 per species (6 shown)};
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{9.0}{10.8}\selectfont\sffamily\bfseries}] at (2.3800,3.7200) {b};
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily}] at (2.5400,3.7200) {One view of the boxed plant as its four streams};
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=4.32pt, fill=cE6ECF3] (0.2400,2.4100) rectangle (1.7500,3.4450);
+\node[anchor=center, inner sep=0, text=c111111, rotate=90, font={\fontsize{7.0}{8.4}\selectfont\sffamily\bfseries}] at (0.1500,2.9275) {sorghum};
+\node[anchor=south west, inner sep=0] at (0.3000,2.9450) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/sorghum_gallery_0.png}};
+\node[anchor=south west, inner sep=0] at (0.7750,2.9450) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/sorghum_gallery_1.png}};
+\node[anchor=south west, inner sep=0] at (1.2500,2.9450) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/sorghum_gallery_2.png}};
+\node[anchor=south west, inner sep=0] at (0.3000,2.4700) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/sorghum_gallery_3.png}};
+\node[anchor=south west, inner sep=0] at (0.7750,2.4700) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/sorghum_gallery_4.png}};
+\node[anchor=south west, inner sep=0] at (1.2500,2.4700) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/sorghum_gallery_5.png}};
+\draw[draw=c333333, line width=1.00pt, rounded corners=2.16pt] (1.2350,2.4550) rectangle (1.7050,2.9250);
+\draw[draw=c9A9A9A, line width=0.60pt] (1.7050,2.9250) -- (2.3700,3.4175);
+\draw[draw=c9A9A9A, line width=0.60pt] (1.7050,2.4550) -- (2.3700,2.4375);
+\draw[draw=c9A9A9A, line width=1.00pt, rounded corners=4.32pt, fill=cF4F4F5] (2.3700,2.4375) rectangle (6.8050,3.4175);
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=3.60pt, fill=cE6ECF3] (2.4100,2.4775) rectangle (3.3100,3.3775);
+\node[anchor=south west, inner sep=0] at (2.4400,2.5075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/sorghum_rgb.png}};
+\node[anchor=base, inner sep=0, text=c3F5F8F, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily\bfseries}] at (2.8600,3.4925) {Image};
+\draw[draw=cE0B020, line width=1.00pt, rounded corners=3.60pt, fill=cFAF2D4] (3.5617,2.4775) rectangle (4.4617,3.3775);
+\node[anchor=south west, inner sep=0] at (3.5917,2.5075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/sorghum_depth.png}};
+\node[anchor=base, inner sep=0, text=cA07800, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily\bfseries}] at (4.0117,3.4925) {Depth image};
+\draw[draw=cD091A7, line width=1.00pt, rounded corners=3.60pt, fill=cF6E9ED] (4.7133,2.4775) rectangle (5.6133,3.3775);
+\node[anchor=south west, inner sep=0] at (4.7433,2.5075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/sorghum_pc.png}};
+\node[anchor=base, inner sep=0, text=cA8456E, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily\bfseries}] at (5.1633,3.4925) {Point cloud};
+\draw[draw=c9D8CC4, line width=1.00pt, rounded corners=3.60pt, fill=cEAE7F2] (5.8650,2.4775) rectangle (6.7650,3.3775);
+\node[anchor=south west, inner sep=0] at (5.8950,2.5075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/sorghum_text.png}};
+\node[anchor=base, inner sep=0, text=c5E4A96, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily\bfseries}] at (6.3150,3.4925) {Procedural parameters};
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=4.32pt, fill=cE6ECF3] (0.2400,1.3100) rectangle (1.7500,2.3450);
+\node[anchor=center, inner sep=0, text=c111111, rotate=90, font={\fontsize{7.0}{8.4}\selectfont\sffamily\bfseries}] at (0.1500,1.8275) {maize};
+\node[anchor=south west, inner sep=0] at (0.3000,1.8450) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/maize_gallery_0.png}};
+\node[anchor=south west, inner sep=0] at (0.7750,1.8450) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/maize_gallery_1.png}};
+\node[anchor=south west, inner sep=0] at (1.2500,1.8450) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/maize_gallery_2.png}};
+\node[anchor=south west, inner sep=0] at (0.3000,1.3700) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/maize_gallery_3.png}};
+\node[anchor=south west, inner sep=0] at (0.7750,1.3700) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/maize_gallery_4.png}};
+\node[anchor=south west, inner sep=0] at (1.2500,1.3700) {\includegraphics[width=0.4400in, height=0.4400in]{Figures/fig3/maize_gallery_5.png}};
+\draw[draw=c333333, line width=1.00pt, rounded corners=2.16pt] (1.2350,1.3550) rectangle (1.7050,1.8250);
+\draw[draw=c9A9A9A, line width=0.60pt] (1.7050,1.8250) -- (2.3700,2.3175);
+\draw[draw=c9A9A9A, line width=0.60pt] (1.7050,1.3550) -- (2.3700,1.3375);
+\draw[draw=c9A9A9A, line width=1.00pt, rounded corners=4.32pt, fill=cF4F4F5] (2.3700,1.3375) rectangle (6.8050,2.3175);
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=3.60pt, fill=cE6ECF3] (2.4100,1.3775) rectangle (3.3100,2.2775);
+\node[anchor=south west, inner sep=0] at (2.4400,1.4075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/maize_rgb.png}};
+\draw[draw=cE0B020, line width=1.00pt, rounded corners=3.60pt, fill=cFAF2D4] (3.5617,1.3775) rectangle (4.4617,2.2775);
+\node[anchor=south west, inner sep=0] at (3.5917,1.4075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/maize_depth.png}};
+\draw[draw=cD091A7, line width=1.00pt, rounded corners=3.60pt, fill=cF6E9ED] (4.7133,1.3775) rectangle (5.6133,2.2775);
+\node[anchor=south west, inner sep=0] at (4.7433,1.4075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/maize_pc.png}};
+\draw[draw=c9D8CC4, line width=1.00pt, rounded corners=3.60pt, fill=cEAE7F2] (5.8650,1.3775) rectangle (6.7650,2.2775);
+\node[anchor=south west, inner sep=0] at (5.8950,1.4075) {\includegraphics[width=0.8400in, height=0.8400in]{Figures/fig3/maize_text.png}};
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{9.0}{10.8}\selectfont\sffamily\bfseries}] at (0.0200,1.1300) {c};
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily}] at (0.1800,1.1300) {Ten cameras per plant (five shown), by elevation};
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=2.88pt, fill=cE6ECF3] (0.2600,0.5600) rectangle (2.1800,0.9800);
+\node[anchor=center, inner sep=0, text=c111111, rotate=90, font={\fontsize{5.8}{7.0}\selectfont\sffamily\bfseries}] at (0.1500,0.7700) {sorghum};
+\node[anchor=south west, inner sep=0] at (0.3000,0.6000) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/sorghum_camera_0.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (0.4700,0.9900) {+64$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (0.6750,0.6000) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/sorghum_camera_1.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (0.8450,0.9900) {+30$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (1.0500,0.6000) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/sorghum_camera_2.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (1.2200,0.9900) {+6$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (1.4250,0.6000) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/sorghum_camera_3.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (1.5950,0.9900) {$-$17$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (1.8000,0.6000) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/sorghum_camera_4.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (1.9700,0.9900) {$-$44$^{\circ}$};
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=2.88pt, fill=cE6ECF3] (0.2600,0.0300) rectangle (2.1800,0.4500);
+\node[anchor=center, inner sep=0, text=c111111, rotate=90, font={\fontsize{5.8}{7.0}\selectfont\sffamily\bfseries}] at (0.1500,0.2400) {maize};
+\node[anchor=south west, inner sep=0] at (0.3000,0.0700) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/maize_camera_0.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (0.4700,0.4600) {+39$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (0.6750,0.0700) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/maize_camera_1.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (0.8450,0.4600) {+30$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (1.0500,0.0700) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/maize_camera_2.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (1.2200,0.4600) {+10$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (1.4250,0.0700) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/maize_camera_3.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (1.5950,0.4600) {$-$13$^{\circ}$};
+\node[anchor=south west, inner sep=0] at (1.8000,0.0700) {\includegraphics[width=0.3400in, height=0.3400in]{Figures/fig3/maize_camera_4.png}};
+\node[anchor=south, inner sep=0, text=c444444, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (1.9700,0.4600) {$-$36$^{\circ}$};
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{9.0}{10.8}\selectfont\sffamily\bfseries}] at (2.8400,1.1300) {d};
+\node[anchor=base west, inner sep=0, text=c111111, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily}] at (3.0000,1.1300) {Crop rows: the target plant between neighbors};
+\node[anchor=base west, inner sep=0, text=c555555, rotate=0, font={\fontsize{5.4}{6.5}\selectfont\sffamily}] at (3.0000,1.0250) {red: neighbor pixels;  orange: target pixels a neighbor hides (\% hidden);  green: target points};
+\node[anchor=base, inner sep=0, text=c111111, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily\bfseries}] at (3.7600,0.9350) {sorghum};
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=3.60pt, fill=cE6ECF3] (2.9900,0.1300) rectangle (3.7500,0.8900);
+\node[anchor=south west, inner sep=0] at (3.0200,0.1600) {\includegraphics[width=0.7000in, height=0.7000in]{Figures/fig3/sorghum_row_image.png}};
+\node[anchor=north, inner sep=0, text=c111111, rotate=0, font={\fontsize{5.6}{6.7}\selectfont\sffamily}] at (3.3700,0.1000) {16 \% hidden};
+\draw[draw=cD091A7, line width=1.00pt, rounded corners=3.60pt, fill=cF6E9ED] (3.7700,0.1300) rectangle (4.5300,0.8900);
+\node[anchor=south west, inner sep=0] at (3.8000,0.1600) {\includegraphics[width=0.7000in, height=0.7000in]{Figures/fig3/sorghum_row_cloud.png}};
+\node[anchor=north, inner sep=0, text=c111111, rotate=0, font={\fontsize{5.6}{6.7}\selectfont\sffamily}] at (4.1500,0.1000) {89 \% neighbors};
+\node[anchor=base, inner sep=0, text=c111111, rotate=0, font={\fontsize{6.2}{7.4}\selectfont\sffamily\bfseries}] at (5.5400,0.9350) {maize};
+\draw[draw=c809EC2, line width=1.00pt, rounded corners=3.60pt, fill=cE6ECF3] (4.7700,0.1300) rectangle (5.5300,0.8900);
+\node[anchor=south west, inner sep=0] at (4.8000,0.1600) {\includegraphics[width=0.7000in, height=0.7000in]{Figures/fig3/maize_row_image.png}};
+\node[anchor=north, inner sep=0, text=c111111, rotate=0, font={\fontsize{5.6}{6.7}\selectfont\sffamily}] at (5.1500,0.1000) {15 \% hidden};
+\draw[draw=cD091A7, line width=1.00pt, rounded corners=3.60pt, fill=cF6E9ED] (5.5500,0.1300) rectangle (6.3100,0.8900);
+\node[anchor=south west, inner sep=0] at (5.5800,0.1600) {\includegraphics[width=0.7000in, height=0.7000in]{Figures/fig3/maize_row_cloud.png}};
+\node[anchor=north, inner sep=0, text=c111111, rotate=0, font={\fontsize{5.6}{6.7}\selectfont\sffamily}] at (5.9300,0.1000) {75 \% neighbors};
+\end{tikzpicture}
