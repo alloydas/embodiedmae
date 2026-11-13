@@ -174,8 +174,8 @@
     <p>One masked autoencoder reads <b>any field sensor (an image, a depth image or a point cloud)</b> and writes the procedural model of the plant, even when its neighbours hide part of it.</p>
   </div>
   <div class="teaser">
-    <div class="hero-stage"><canvas id="hero-pc" aria-label="A held-out maize test plant rebuilt from one photograph, rotating"></canvas></div>
-    <div class="hero-credit" id="hero-credit">Held-out maize plant 1875, rebuilt from one photograph · drag to rotate, scroll to zoom</div>
+    <div class="hero-stage"><canvas id="hero-pc" aria-label="Procedural models of a held-out maize plant and a held-out sorghum plant, each built from the parameters written from one photograph, rotating"></canvas></div>
+    <div class="hero-credit" id="hero-credit">Procedural models written from one photograph: maize plant 1875 (left) and sorghum plant 7712 (right), both held out · drag to rotate, scroll to zoom</div>
   </div>
 </div></header>
 
@@ -637,16 +637,29 @@
   (async function hero() {
     const cv = document.getElementById('hero-pc'); if (!cv) return;
     const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [1, 1, 1]; g.size = 1.25;
-    const it = await PCV.load('data/single/maize/plant_1875_09.json');
-    const c = it.clouds['rgb:after'];
-    p.set([{ pos: c.pos, col: PCV.plantColors(c.pos) }]); g.frame(PCV.bounds(c.pos), { phi: 0.1 });
+    // the procedural models (plants built from the parameters the distilled model writes from one photograph) of a
+    // maize and a sorghum held-out plant, side by side on one stage, each spinning about its own stem
+    const its = await Promise.all(['data/single/maize/plant_1875_09.json', 'data/single/sorghum/Sorghum_7712_05.json'].map(u => PCV.load(u)));
+    const plants = its.map(it => { const P = PCV.procedural(it.meta.recipes['rgb:after'], it.meta.species); return { P, col: PCV.plantColors(P) }; });
+    const GAP = 0.85, X = [-GAP, GAP];
+    let spinA = 0;
+    function place() {
+      const layers = plants.map((pl, k) => {
+        const Q = new Float32Array(pl.P.length), c = Math.cos(spinA), s_ = Math.sin(spinA);
+        for (let i = 0; i < Q.length; i += 3) { const x = pl.P[i], z = pl.P[i + 2]; Q[i] = c * x + s_ * z + X[k]; Q[i + 1] = pl.P[i + 1]; Q[i + 2] = -s_ * x + c * z; }
+        return { pos: Q, col: pl.col, size: 1.15 };
+      });
+      p.set(layers); return layers;
+    }
+    const L0 = place(), b0 = PCV.bounds(...L0.map(l => l.pos)), mid = [0, 1, 2].map(i => (b0[0][i] + b0[1][i]) / 2);
+    g.frame([0, 1].map(j => b0[j].map((v, i) => mid[i] + (v - mid[i]) * 0.72)), { phi: 0.06 });   // frame tighter: the plants fill the stage
     const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let idle = 0, seen = true, last = 0;
     cv.addEventListener('pointerdown', () => { idle = performance.now() + 4000; });
     cv.addEventListener('wheel', () => { idle = performance.now() + 4000; }, { passive: true });
     if ('IntersectionObserver' in window) new IntersectionObserver(e => { seen = e[0].isIntersecting; }).observe(cv);
     function spin(t) {
-      if (!still && seen && t > idle && document.visibilityState === 'visible') { g.theta += Math.min(50, t - (last || t)) * 0.00025; g.draw(); }
+      if (!still && seen && t > idle && document.visibilityState === 'visible') { spinA += Math.min(50, t - (last || t)) * 0.0004; place(); g.draw(); }
       last = t; requestAnimationFrame(spin);
     }
     window.addEventListener('resize', () => g.draw());
