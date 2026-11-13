@@ -365,13 +365,42 @@ def render_rows_main_ugg(D, picks):
     return fig
 
 
+def render_rows_more_ugg(D, sp):
+    """make_row_gallery_v2.render_more (supplement: ten plants of one species) with the Fig. 5 changes: UGG tiles,
+    'Ground truth', 'CD = <Chamfer>' in each prediction tile, block headers without degrees."""
+    global NUM_PREFIX
+    NUM_PREFIX = 'CD = '
+    W = 6.875; s_, g, gy, gg = 0.73, 0.04, 0.05, 0.30; lab = 0.50; nc = 3
+    block = nc * s_ + (nc - 1) * g
+    hdr = 0.50; H = hdr + 10 * s_ + 9 * gy + 0.04
+    x0 = (W - (lab + 2 * block + gg)) / 2
+    head = ['Row image', 'Ground truth', 'Row-trained']
+    fig = plt.figure(figsize=(W, H)); FS_ = RG.FS
+    for b, th in enumerate(RG.THETAS):
+        xb = x0 + lab + b * (block + gg)
+        fig.text((xb + block / 2) / W, (H - 0.01) / H, 'Broadside' if th == 0 else 'End-on', fontsize=FS_, fontweight='bold', ha='center', va='top')
+        for k in range(nc):
+            fig.text((xb + k * (s_ + g) + s_ / 2) / W, (H - 0.22) / H, head[k], fontsize=FS_, ha='center', va='top', color=RG.HEAD_C[k])
+    y = H - hdr
+    for pl, q in D[sp]['more']:
+        y -= s_
+        for b, th in enumerate(RG.THETAS):
+            RG.draw_tiles(fig, x0 + lab + b * (block + gg), y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
+        fig.text((x0 + lab - 0.06) / W, (y + s_ / 2) / H, f"{pl.split('_')[-1]}\n{q:.0f}th", fontsize=FS_, ha='right', va='center', linespacing=1.05)
+        y -= gy
+    return fig
+
+
 if __name__ == '__main__':
     OUT.mkdir(parents=True, exist_ok=True)
     if '--fig5' in sys.argv:                     # Fig. 5 for the paper: no yaw, 'Ground truth', the number named
         D = pickle.load(open(RG.OUT, 'rb'))
         picks = {'sorghum': [('Sorghum_10756', 90), ('Sorghum_14816', 0), ('Sorghum_4815', 0)],
                  'maize': [('plant_0320', 90), ('plant_6665', 0), ('plant_4604', 0)]}
-        save(render_rows_main_ugg(D, picks), f'fig_rows_examples{SUF}5'); sys.exit(0)
+        save(render_rows_main_ugg(D, picks), f'fig_rows_examples{SUF}5')
+        for sp in ('sorghum', 'maize'):            # the supplement's ten-plant galleries, same changes
+            save(render_rows_more_ugg(D, sp), f'fig_rows_more_{sp}{SUF}')
+        sys.exit(0)
     if '--fig2' in sys.argv:                     # only the full-UGG Fig. 2: preview + TikZ twin for the paper
         S = figure2_ugg2(); S.render(OUT / f'fig2_stages{SUF}2')
         S.render_tikz(R / 'paper/overleaf/Figures/fig2_stages_tikz_ugg.tex', R / 'paper/overleaf/Figures/fig2_ugg', 'Figures/fig2_ugg')
