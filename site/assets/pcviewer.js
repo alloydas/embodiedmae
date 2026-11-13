@@ -5,6 +5,7 @@
  *   p.set([{pos: Float32Array, col: Float32Array, size: 1}])   // layers drawn in order
  *   g.frame(bounds)                               // fit the camera to [[minx,miny,minz],[maxx,maxy,maxz]]
  *   const item = await PCV.load(url)             // manifest + binary: {meta, clouds: {name: {pos, err, mark, n}}}
+ *   PCV.missed(truthPos, predPos, tau)            // true points with no prediction within tau: {pos, n}
  * Coordinates: camera frame of the capture (x right, y up, z toward the camera). Mouse / one finger: orbit;
  * wheel / pinch: zoom; double click: reset.
  */
@@ -168,5 +169,27 @@
     for (let i = 0; i < mark.length; i++) if (!mark[i]) c.set(o, 3 * i);
     return c;
   }
-  window.PCV = { group, panel, load, bounds, plantColors, errorColors, flat, markColors, VIRIDIS, hex };
+
+  // ---------------------------------------------------------------- missed points
+  // the true points with no predicted point within tau (same units as the clouds): a uniform grid of cell tau over the
+  // prediction, each true point checks its 27 neighbouring cells. Returns the missed points' positions and their count.
+  function missed(T, P, tau) {
+    const inv = 1 / tau, grid = new Map(), key = (a, b, c) => a + ',' + b + ',' + c, t2 = tau * tau;
+    for (let i = 0; i < P.length; i += 3) {
+      const k = key(Math.floor(P[i] * inv), Math.floor(P[i + 1] * inv), Math.floor(P[i + 2] * inv));
+      let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(i);
+    }
+    const out = [];
+    for (let i = 0; i < T.length; i += 3) {
+      const x = T[i], y = T[i + 1], z = T[i + 2], cx = Math.floor(x * inv), cy = Math.floor(y * inv), cz = Math.floor(z * inv);
+      let hit = false;
+      for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) for (let dz = -1; dz <= 1 && !hit; dz++) {
+        const a = grid.get(key(cx + dx, cy + dy, cz + dz)); if (!a) continue;
+        for (const j of a) { const ex = P[j] - x, ey = P[j + 1] - y, ez = P[j + 2] - z; if (ex * ex + ey * ey + ez * ez <= t2) { hit = true; break; } }
+      }
+      if (!hit) out.push(x, y, z);
+    }
+    return { pos: new Float32Array(out), n: out.length / 3 };
+  }
+  window.PCV = { group, panel, load, bounds, plantColors, errorColors, flat, markColors, missed, VIRIDIS, hex };
 })();
