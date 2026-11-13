@@ -119,6 +119,12 @@
   .cell.input header b { color: var(--input); }
   .cell.output header b { color: var(--accent); }
   .cell canvas, .cell img.view { display: block; width: 100%; aspect-ratio: 1 / 1; height: auto; cursor: grab; }
+  .grid { grid-auto-flow: row dense; }
+  .cell.wide { grid-column: span 2; }
+  .dual { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: var(--rule); }
+  .dual figure { margin: 0; background: var(--panel); display: grid; min-width: 0; position: relative; }
+  .dual figcaption { position: absolute; left: 8px; bottom: 6px; font-family: var(--mono); font-size: 11px; color: #5d655b; background: rgba(255,255,255,.85); padding: 0 5px; border-radius: 4px; pointer-events: none; }
+  @media (max-width: 560px) { .cell.wide { grid-column: 1 / -1; } }
   .cell img.view { object-fit: contain; background: #000; cursor: default; }
   .cell canvas:active { cursor: grabbing; }
   .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -215,7 +221,6 @@
     <div class="controls">
       <div class="ctl"><span>Species</span><div class="seg" id="p-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="p-plant">Plant</label><select id="p-plant"></select></div>
-      <div class="ctl"><span>Show</span><div class="seg" id="p-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="p-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="p-truth" checked><label for="p-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
     </div>
@@ -225,7 +230,7 @@
       <div class="cell input"><header><b>Point cloud, as seen</b><span class="chip" id="p-vis-pc"></span></header><canvas data-k="masked"></canvas></div>
       <div class="cell output"><header><b>Image, rebuilt</b></header><img class="view" id="p-rgb-r" alt="The reconstructed image"></div>
       <div class="cell output"><header><b>Depth image, rebuilt</b></header><img class="view white" id="p-depth-r" alt="The reconstructed depth image"></div>
-      <div class="cell output"><header><b>Point cloud, rebuilt</b><span class="chip" id="p-rec-chip"></span></header><canvas data-k="recon"></canvas></div>
+      <div class="cell wide output"><header><b>Point cloud, rebuilt</b><span class="chip" id="p-rec-chip"></span></header><div class="dual"><figure><canvas data-k="recon"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="recon:proc" data-proc="recon"></canvas><figcaption>procedural model</figcaption></figure></div></div>
     </div>
     <div class="legend"><span>Chip: Chamfer to the true cloud (×10⁻³, unit sphere)</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span><span><i class="sw" style="background:#c9c2b0"></i>hidden point groups</span></div>
   </section>
@@ -241,15 +246,14 @@
       <div class="ctl"><span>Species</span><div class="seg" id="a-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="a-plant">Plant</label><select id="a-plant"></select></div>
       <div class="ctl"><label for="a-src">Input</label><select id="a-src"><option value="rgb">Image</option><option value="depth">Depth image</option><option value="pc">Point cloud</option><option value="text">Procedural parameters</option><option value="rgb+depth">Image + depth image</option><option value="rgb+text">Image + parameters</option><option value="depth+text">Depth image + parameters</option></select></div>
-      <div class="ctl"><span>Show</span><div class="seg" id="a-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="a-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="a-truth" checked><label for="a-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
     </div>
     <div class="grid four" id="a-grid">
       <div class="cell input"><header><b>Input</b><span class="chip" id="a-in-chip"></span></header><div class="inbox" id="a-in"><canvas data-k="input"></canvas></div></div>
-      <div class="cell output"><header><b>Before distillation</b><span class="chip" data-m="before"></span></header><canvas data-k="before"></canvas></div>
-      <div class="cell output"><header><b>After distillation</b><span class="chip" data-m="after"></span></header><canvas data-k="after"></canvas></div>
-      <div class="cell"><header><b>Truth</b><span class="chip" id="a-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
+      <div class="cell wide output"><header><b>Before distillation</b><span class="chip" data-m="before"></span></header><div class="dual"><figure><canvas data-k="before"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="before:proc" data-proc="before"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>After distillation</b><span class="chip" data-m="after"></span></header><div class="dual"><figure><canvas data-k="after"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="after:proc" data-proc="after"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide"><header><b>Truth</b><span class="chip" id="a-truth-chip"></span></header><div class="dual"><figure><canvas data-k="truth"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="truth:proc" data-proc="truth"></canvas><figcaption>procedural model</figcaption></figure></div></div>
     </div>
     <div class="legend"><span>Chips: Chamfer to the true cloud (×10⁻³) · height · leaves</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span></div>
   </section>
@@ -293,7 +297,6 @@
       <div class="ctl"><label for="r-plant">Plant</label><select id="r-plant"></select></div>
       <div class="ctl"><span>Row seen</span><div class="seg" id="r-yaw"><button type="button" data-v="0" aria-pressed="true">Broadside</button><button type="button" data-v="90" aria-pressed="false">End-on</button></div></div>
       <div class="ctl"><label for="r-src">Row fine-tune reads</label><select id="r-src"><option value="all">All three streams</option><option value="rgb">Image only</option><option value="depth">Depth image only</option><option value="pc">Point cloud only</option></select></div>
-      <div class="ctl"><span>Show</span><div class="seg" id="r-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="r-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="r-truth" checked><label for="r-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
       <div class="ctl"><label for="r-size">Point size</label><input type="range" id="r-size" min="0.5" max="2.5" step="0.1" value="1"></div>
@@ -301,10 +304,10 @@
     <div class="grid" id="r-grid">
       <div class="cell input"><header><b>Row image</b><span class="chip" id="r-occ"></span></header><img class="view" id="r-img" alt="The row image the model reads"></div>
       <div class="cell input"><header><b>Row point cloud</b><span class="chip">input</span></header><canvas data-k="scene"></canvas></div>
-      <div class="cell"><header><b>Center plant (truth)</b><span class="chip" id="r-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
-      <div class="cell output"><header><b>Zero-shot</b><span class="chip" data-m="head:all"></span></header><canvas data-k="head:all"></canvas></div>
-      <div class="cell output"><header><b>Isolated-trained</b><span class="chip" data-m="iso:all"></span></header><canvas data-k="iso:all"></canvas></div>
-      <div class="cell output"><header><b>Row fine-tuned</b><span class="chip" data-m="ft"></span></header><canvas data-k="ft"></canvas></div>
+      <div class="cell wide"><header><b>Center plant (truth)</b><span class="chip" id="r-truth-chip"></span></header><div class="dual"><figure><canvas data-k="truth"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="truth:proc" data-proc="truth"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>Zero-shot</b><span class="chip" data-m="head:all"></span></header><div class="dual"><figure><canvas data-k="head:all"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="head:all:proc" data-proc="head:all"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>Isolated-trained</b><span class="chip" data-m="iso:all"></span></header><div class="dual"><figure><canvas data-k="iso:all"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="iso:all:proc" data-proc="iso:all"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>Row fine-tuned</b><span class="chip" data-m="ft"></span></header><div class="dual"><figure><canvas data-k="ft"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="ft:proc" data-proc="ft"></canvas><figcaption>procedural model</figcaption></figure></div></div>
     </div>
     <div class="legend">
       <span>Chips: Chamfer to the true plant (×10⁻⁴ m²) · predicted height</span>
@@ -324,7 +327,6 @@
     <div class="controls">
       <div class="ctl"><span>Species</span><div class="seg" id="e-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
       <div class="ctl"><label for="e-stop">Plant</label><select id="e-stop"></select></div>
-      <div class="ctl"><span>Show</span><div class="seg" id="e-show"><button type="button" data-v="cloud" aria-pressed="true">Point cloud</button><button type="button" data-v="proc" aria-pressed="false" title="The plant built from the procedural parameters the model writes; the true recipe in grey">Procedural model</button></div></div>
       <div class="ctl"><span>Colour</span><div class="seg" id="e-col"><button type="button" data-v="plant" aria-pressed="true">Plant</button><button type="button" data-v="err" aria-pressed="false">Error</button></div></div>
       <div class="ctl"><input type="checkbox" id="e-truth" checked><label for="e-truth">Truth in grey, missed in <span style="color:#e0282e;font-weight:600">red</span></label></div>
     </div>
@@ -332,9 +334,9 @@
       <div class="cell input"><header><b>Camera image</b><span class="chip" id="e-occ"></span></header><img class="view" id="e-img" alt="The camera image of the real-plant row"></div>
       <div class="cell input"><header><b>Row point cloud</b><span class="chip">input</span></header><canvas data-k="scene"></canvas></div>
       <div class="cell"><header><b>Center plant (truth)</b><span class="chip" id="e-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
-      <div class="cell output"><header><b>No row training</b><span class="chip" data-m="head"></span></header><canvas data-k="head"></canvas></div>
-      <div class="cell output"><header><b>Synthetic-row fine-tune</b><span class="chip" data-m="row"></span></header><canvas data-k="row"></canvas></div>
-      <div class="cell output"><header><b>Real-row fine-tune</b><span class="chip" data-m="real"></span></header><canvas data-k="real"></canvas></div>
+      <div class="cell wide output"><header><b>No row training</b><span class="chip" data-m="head"></span></header><div class="dual"><figure><canvas data-k="head"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="head:proc" data-proc="head"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>Synthetic-row fine-tune</b><span class="chip" data-m="row"></span></header><div class="dual"><figure><canvas data-k="row"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="row:proc" data-proc="row"></canvas><figcaption>procedural model</figcaption></figure></div></div>
+      <div class="cell wide output"><header><b>Real-row fine-tune</b><span class="chip" data-m="real"></span></header><div class="dual"><figure><canvas data-k="real"></canvas><figcaption>point cloud</figcaption></figure><figure><canvas data-k="real:proc" data-proc="real"></canvas><figcaption>procedural model</figcaption></figure></div></div>
     </div>
     <div class="legend"><span>Chips: Chamfer to the true plant (×10⁻⁴ m²) · predicted height (maize)</span><span class="errleg" hidden>error 0 <span class="bar"></span> ≥ <span class="errmax"></span> mm</span><span><i class="sw" style="background:#c9c2b0"></i>neighbours in the row cloud</span></div>
   </section>
@@ -401,13 +403,13 @@
   }
 
   // ------------------------------------------------------------------ rows section
-  const R = { g: PCV.group(), species: 'maize', yaw: '0', src: 'all', col: 'plant', truth: true, show: 'cloud', index: {}, item: null, cache: {} };
+  const R = { g: PCV.group(), gp: PCV.group(), species: 'maize', yaw: '0', src: 'all', col: 'plant', truth: true, index: {}, item: null, cache: {} };
+  linkTurn(R.g, R.gp);
   const panels = {};
-  document.querySelectorAll('#r-grid canvas').forEach(cv => { panels[cv.dataset.k] = PCV.panel(cv, R.g); });
+  document.querySelectorAll('#r-grid canvas').forEach(cv => { panels[cv.dataset.k] = PCV.panel(cv, cv.dataset.proc ? R.gp : R.g); });
   const rSel = document.getElementById('r-plant');
   seg('r-species', v => { R.species = v; rFill(); });
   seg('r-yaw', v => { R.yaw = v; rShow(); });
-  seg('r-show', v => { R.show = v; R._pf = null; if (v === 'cloud' && R.item) R.g.frame(PCV.bounds(R.item.clouds.truth.pos), { phi: 0.08 }); rDraw(); });
   seg('r-col', v => { R.col = v; document.getElementById('r-errleg').hidden = v !== 'err'; rDraw(); });
   document.getElementById('r-src').addEventListener('change', e => { R.src = e.target.value; rDraw(); });
   document.getElementById('r-truth').addEventListener('change', e => { R.truth = e.target.checked; rDraw(); });
@@ -436,19 +438,19 @@
     if (!R.item) return;
     const C = R.item.clouds, m = R.item.meta, bg = panelBg(), grey = truthGrey();
     const tr = C.truth;
-    if (R.show === 'proc') procFrame(R.g, m, tr, R);
     for (const [k, p] of Object.entries(panels)) {
       p.bg = bg;
       if (k === 'scene') { p.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]); continue; }
-      if (k === 'truth') { const tp = R.show === 'proc' ? procPos(m, 'truth', tr) : null; p.set([{ pos: tp || tr.pos, col: PCV.plantColors(tp || tr.pos) }]); continue; }
+      if (k.endsWith(':proc')) continue;
+      if (k === 'truth') { p.set([{ pos: tr.pos, col: PCV.plantColors(tr.pos) }]); continue; }
       const key = k === 'ft' ? `ft:${R.src}` : k, c = C[key];
-      if (R.show === 'proc') { const L = procLayers(m, key, tr, R.truth); if (L) { p.set(L); continue; } }
       const layers = [];
       if (R.truth) layers.push({ pos: tr.pos, col: PCV.flat(tr.n, grey), size: 1.1 });
       layers.push({ pos: c.pos, col: R.col === 'err' ? PCV.errorColors(c.err, m.err_max_mm) : PCV.plantColors(c.pos) });
       if (R.truth) layers.push(missLayer(c, tr, m));
       p.set(layers);
     }
+    drawProc(panels, m, tr, R.truth, b => b === 'ft' ? `ft:${R.src}` : b, R.gp, R);
     document.querySelectorAll('#r-grid .chip[data-m]').forEach(ch => {
       const key = ch.dataset.m === 'ft' ? `ft:${R.src}` : ch.dataset.m, x = m.metrics[key];
       ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '');
@@ -489,13 +491,29 @@
     return L;
   }
   // frame a section on its procedural plants (the true recipe's, else the first written one) once per item
+  // the procedural panels have their own camera (framed on the procedural plants), turned together with the clouds'
+  function linkTurn(a, b) {
+    const da = a.draw, db = b.draw; let busy = false;
+    a.draw = function () { da.call(a); if (!busy) { busy = true; b.theta = a.theta; b.phi = a.phi; b.size = a.size; db.call(b); busy = false; } };
+    b.draw = function () { db.call(b); if (!busy) { busy = true; a.theta = b.theta; a.phi = b.phi; a.size = b.size; da.call(a); busy = false; } };
+  }
+  // draw every procedural panel of a section: key -> recipe key via rk(base); the true recipe's plant alone in a truth
+  // panel, else the written plant over the true recipe's in grey; empty where the model wrote no recipe
+  function drawProc(panels, meta, truthCloud, showTruth, rk, gp, holder) {
+    const ks = Object.keys(panels).filter(k => k.endsWith(':proc')); if (!ks.length) return;
+    procFrame(gp, meta, truthCloud, holder);
+    for (const k of ks) {
+      const base = k.slice(0, -5), key = rk(base), p = panels[k]; p.bg = panelBg();
+      if (base === 'truth') { const T = procPos(meta, 'truth', truthCloud); p.set(T ? [{ pos: T, col: PCV.plantColors(T) }] : []); continue; }
+      p.set(procLayers(meta, key, truthCloud, showTruth) || []);
+    }
+  }
   function procFrame(g, meta, truthCloud, holder) {
     if (holder._pf === meta) return; holder._pf = meta;
     const R_ = meta.recipes || {}, keys = R_.truth ? ['truth'] : Object.keys(R_); if (!keys.length) return;
     g.frame(PCV.bounds(...keys.map(k => procPos(meta, k, truthCloud))), { phi: 0.08 });
   }
-  function predLayers(c, truth, col, showTruth, errMax, meta, key, show) {
-    if (show === 'proc' && key) { const L = procLayers(meta, key, truth, showTruth); if (L) return L; }
+  function predLayers(c, truth, col, showTruth, errMax, meta) {
     const L = [];
     if (showTruth && truth) L.push({ pos: truth.pos, col: PCV.flat(truth.n, truthGrey()), size: 1.1 });
     L.push({ pos: c.pos, col: col === 'err' && c.err ? PCV.errorColors(c.err, errMax) : PCV.plantColors(c.pos) });
@@ -505,12 +523,12 @@
   function errLegend(sec, on, max) { sec.querySelectorAll('.errleg').forEach(e => { e.hidden = !on; }); sec.querySelectorAll('.errmax').forEach(e => { e.textContent = max; }); }
   function task(o) {
     // o: {sec, prefix, dir, select, label(item), draw(state, item)}
-    const sec = document.getElementById(o.sec), st = { g: PCV.group(), species: 'maize', col: 'plant', truth: true, show: 'cloud', item: null, panels: {} };
-    sec.querySelectorAll('canvas[data-k]').forEach(cv => { st.panels[cv.dataset.k] = PCV.panel(cv, st.g); });
+    const sec = document.getElementById(o.sec), st = { g: PCV.group(), gp: PCV.group(), species: 'maize', col: 'plant', truth: true, item: null, panels: {} };
+    linkTurn(st.g, st.gp);
+    sec.querySelectorAll('canvas[data-k]').forEach(cv => { st.panels[cv.dataset.k] = PCV.panel(cv, cv.dataset.proc ? st.gp : st.g); });
     const sel = document.getElementById(`${o.prefix}-${o.select || 'plant'}`);
     seg(`${o.prefix}-species`, v => { st.species = v; fill(); });
     seg(`${o.prefix}-col`, v => { st.col = v; redraw(); });
-    if (document.getElementById(`${o.prefix}-show`)) seg(`${o.prefix}-show`, v => { st.show = v; st._pf = null; if (v === 'cloud' && st.item) o.frame(st); redraw(); });
     const tb = document.getElementById(`${o.prefix}-truth`); if (tb) tb.addEventListener('change', e => { st.truth = e.target.checked; redraw(); });
     sel.addEventListener('change', show);
     async function fill() {
@@ -528,8 +546,8 @@
       if (!st.item) return;
       Object.values(st.panels).forEach(p => { p.bg = panelBg(); });
       errLegend(sec, st.col === 'err', st.item.meta.err_max_mm);
-      if (st.show === 'proc') procFrame(st.g, st.item.meta, st.item.clouds.truth, st);
       o.draw(st);
+      if (o.rk) drawProc(st.panels, st.item.meta, st.item.clouds.truth, st.truth, b => o.rk(st, b), st.gp, st);
     }
     st.redraw = redraw; st.fill = fill; ALL.push(st);
     return st;
@@ -538,7 +556,7 @@
   const plantNo = s => s.replace(/^(Sorghum_|plant_)/, '').replace(/_(\d+)$/, ' · view $1');
 
   // Stage 1: masked pretraining
-  task({ sec: 'pretrain', prefix: 'p', dir: 'single', label: i => `${plantNo(i.id)} · ${i.tag}`,
+  task({ sec: 'pretrain', prefix: 'p', dir: 'single', label: i => `${plantNo(i.id)} · ${i.tag}`, rk: (st, b) => b,
     frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.12 }),
     draw: st => {
       const it = st.item, m = it.meta, C = it.clouds;
@@ -549,11 +567,11 @@
       document.getElementById('p-vis-pc').textContent = `${m.visible.pc} of 196 groups`;
       document.getElementById('p-rec-chip').textContent = fmt(m.metrics.recon.chamfer, 2);
       st.panels.masked.set([{ pos: C.masked.pos, col: PCV.markColors(C.masked.pos, C.masked.mark) }]);
-      st.panels.recon.set(predLayers(C.recon, C.truth, st.col, st.truth, m.err_max_mm, m, 'recon', st.show));
+      st.panels.recon.set(predLayers(C.recon, C.truth, st.col, st.truth, m.err_max_mm, m));
     } }).fill();
 
   // Stage 2: any input -> every stream
-  const A = task({ sec: 'any', prefix: 'a', dir: 'single', label: i => `${plantNo(i.id)} · ${i.tag}`,
+  const A = task({ sec: 'any', prefix: 'a', dir: 'single', label: i => `${plantNo(i.id)} · ${i.tag}`, rk: (st, b) => `${document.getElementById('a-src').value}:${b}`,
     frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.12 }),
     draw: st => {
       const it = st.item, m = it.meta, C = it.clouds, src = document.getElementById('a-src').value;
@@ -568,9 +586,8 @@
         else { const d = document.createElement('div'); d.className = 'pair'; parts.forEach(p => { const im = new Image(); im.src = st.base + imgOf(p); im.alt = p; if (p === 'rgb') im.style.background = '#000'; d.append(im); }); box.prepend(d); }
       }
       document.getElementById('a-in-chip').textContent = { rgb: 'image', depth: 'depth image', pc: 'point cloud', text: 'parameters' }[parts[0]] + (parts[1] ? ` + ${{ depth: 'depth', text: 'parameters' }[parts[1]]}` : '');
-      for (const k of ['before', 'after']) st.panels[k].set(predLayers(C[`${src}:${k}`], C.truth, st.col, st.truth, m.err_max_mm, m, `${src}:${k}`, st.show));
-      const tp = st.show === 'proc' ? procPos(m, 'truth', C.truth) : null;
-      st.panels.truth.set([{ pos: tp || C.truth.pos, col: PCV.plantColors(tp || C.truth.pos) }]);
+      for (const k of ['before', 'after']) st.panels[k].set(predLayers(C[`${src}:${k}`], C.truth, st.col, st.truth, m.err_max_mm, m));
+      st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
       document.getElementById('a-truth-chip').textContent = `${fmt(m.truth.height, 2)} m · ${m.truth.leaves} leaves`;
       document.querySelectorAll('#a-grid .chip[data-m]').forEach(ch => {
         const x = m.metrics[`${src}:${ch.dataset.m}`];
@@ -596,7 +613,7 @@
     } }).fill();
 
   // real plants (E10)
-  task({ sec: 'real', prefix: 'e', dir: 'real', select: 'stop', label: i => `${i.id.split('_').slice(1, -1).join('_')} · ${i.layout} · ${i.tag}`,
+  task({ sec: 'real', prefix: 'e', dir: 'real', select: 'stop', rk: (st, b) => b, label: i => `${i.id.split('_').slice(1, -1).join('_')} · ${i.layout} · ${i.tag}`,
     frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.08 }),
     draw: st => {
       const it = st.item, m = it.meta, C = it.clouds;
@@ -605,7 +622,7 @@
       document.getElementById('e-truth-chip').textContent = `height ${fmt(m.truth.height, 2)} m`;
       st.panels.scene.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]);
       st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
-      for (const k of ['head', 'row', 'real']) st.panels[k].set(predLayers(C[k], C.truth, st.col, st.truth, m.err_max_mm, m, k, st.show));
+      for (const k of ['head', 'row', 'real']) st.panels[k].set(predLayers(C[k], C.truth, st.col, st.truth, m.err_max_mm, m));
       document.querySelectorAll('#e-grid .chip[data-m]').forEach(ch => {
         const x = m.metrics[ch.dataset.m]; ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '');
       });
