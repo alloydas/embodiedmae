@@ -191,9 +191,9 @@ The model is pretrained on 15{,}000 procedurally generated plants per
 species (maize and sorghum), fine-tuned on rows in which simulated neighbors
 occlude the target, and distilled from a full-modality teacher into
 single-sensor students.
-Distillation lowers the cross-modal generation loss by 30\% in sorghum
-and 44\% in maize, and halves the sorghum parameter error from a point cloud
-alone.
+Distillation halves the sorghum parameter error from a point cloud alone
+and lowers the cross-modal generation loss by 30\% in sorghum and 44\% in
+maize.
 Training on rows removes 92\% (maize) and 85\% (sorghum) of the error
 that neighbors add for a model trained on isolated plants.
 Controlled ablations in both species show that exposing most of the
@@ -279,8 +279,8 @@ fine-tune it on simulated rows whose neighboring leaves bend on contact,
 and distill a full-modality teacher~\citep{hinton2015distillation} into
 single-sensor students; random modality subsets are masked in pretraining,
 so one model completes any subset at inference. Distillation lowers the
-cross-modal generation loss by 30\% in sorghum and 44\% in maize and halves
-the sorghum parameter error from a point cloud alone; row fine-tuning
+sorghum parameter error from a point cloud alone in half and lowers the
+cross-modal generation loss by 30\% in sorghum and 44\% in maize; row fine-tuning
 removes 92\% (maize) and 85\% (sorghum) of the error the neighbors add. We
 also answer a design question that arises for any model with access to
 generative structure: a parameter stream largely visible to the encoder
@@ -793,23 +793,24 @@ species' trait set.
 Table~\ref{tab:regime1} (Appendix~\ref{app:tables}) covers
 deployment on an isolated plant: one photograph, one depth frame or one
 point cloud in, the recipe and the other streams out in a single forward
-pass. Depth is the best single input for the cloud in both species (Chamfer
+pass. The procedural model is the primary output, and it is recovered from
+any single sensor: leaf count within one leaf for $91$--$100\%$ of plants,
+height within $2$--$5\%$, and mean leaf-parameter skill $0.66$--$0.68$ in
+sorghum and $0.57$--$0.59$ in maize, high on the leaf's stem position and
+angle, moderate on length, and lowest on sorghum blade width, whose
+between-plant spread is small. Averaging the recipes of three views
+improves every recipe column, while reading the recipe from a generated
+cloud loses almost all of it, so the recipe is read from the sensor
+directly (Tab.~\ref{tab:regime1}). The supporting geometry tells the same
+story: depth is the best single input for the generated cloud (Chamfer
 $0.93$ in sorghum and $0.64 \times 10^{-3}$ in maize, a median of $30$ and
-$12$\,mm RMS per plant, $F_1$ $0.44$ and $0.53$), with the photograph
-within a factor of 1.5 of it; on the full test split, photograph-to-cloud
-Chamfer corresponds to a skill of $0.98$--$0.99$ against the distance
-between two random plants (Sec.~\ref{sec:res-distill}). The recipe is
-recovered from any single sensor: leaf count within one leaf for
-$91$--$100\%$ of plants, height within $2$--$5\%$, and mean leaf-parameter
-skill $0.66$--$0.68$ in sorghum and $0.57$--$0.59$ in maize, high on the
-leaf's stem position and angle, moderate on length, and lowest on sorghum
-blade width, whose between-plant spread is small. The headline model given
-all three streams is no better than the generalist given one, because it
-was never trained to read every token of its input; the first release's
-three unrecoverable waviness fields are absent from the final generator.
-Averaging the recipes of three views improves every recipe column, while
-reading the recipe from a generated cloud loses almost all of it, so the
-recipe is read from the sensor directly (Tab.~\ref{tab:regime1}).
+$12$\,mm RMS per plant, $F_1$ $0.44$ and $0.53$), the photograph within a
+factor of 1.5 of it, a test-split skill of $0.98$--$0.99$ against the
+distance between two random plants (Sec.~\ref{sec:res-distill}). The
+headline model given all three streams is no better than the generalist
+given one, because it was never trained to read every token of its input;
+the first release's three unrecoverable waviness fields are absent from the
+final generator.
 Figure~\ref{fig:qual} (Appendix~\ref{app:figures}) shows single-photograph
 reconstructions: the distilled generalist resolves individual leaf blades
 where the undistilled model generates diffuse clouds, and the procedural
@@ -862,7 +863,10 @@ plants fail under row occlusion, with Chamfer rising sixteenfold on maize
 ($13.1 \to 133.8$); the echo test shows they reconstruct neighboring foliage
 as the target. Row fine-tuning removes 92\% of the neighbor-induced error in
 maize ($29.0 \to 4.0$) and 85\% in sorghum ($133.8 \to 30.7$), isolating the
-target behind its neighbors (Fig.~\ref{fig:rowsex}). Error peaks broadside
+target behind its neighbors (Fig.~\ref{fig:rowsex}). The recipe follows the
+geometry: on rows, the fine-tuned model reads the target's leaf parameters
+at an MAE of 0.052 (maize) and 0.061 (sorghum), against 0.093 and 0.096 for
+the isolated-trained control (Tab.~\ref{tab:regime_3}). Error peaks broadside
 and falls end-on in maize, whose leaf planes align with the row, and is
 yaw-independent in sorghum, whose headings are random
 (Fig.~\ref{fig:row_reconstruction_quant}, Appendix~\ref{app:figures}).
@@ -874,10 +878,9 @@ Table~\ref{tab:main} (Appendix~\ref{app:tables}) reports
 cross-modal generation before and after distillation, and
 Figs.~\ref{fig:any2any-maize} and~\ref{fig:any2any-sorghum} show the
 generalist's outputs. Distillation cuts the mean generation loss by 30.2\%
-in sorghum and 43.5\% in maize: photograph-to-cloud Chamfer falls 61\%
-($2.27 \to 0.88 \times 10^{-3}$), photograph parameter MAE 76\%
-($0.058 \to 0.014$), and point-cloud parameter MAE halves
-($0.040 \to 0.020$). Sensor-plus-recipe pairs reach the lowest cloud errors
+in sorghum and 43.5\% in maize: the photograph's parameter MAE falls 76\%
+($0.058 \to 0.014$), the point cloud's halves ($0.040 \to 0.020$), and
+photograph-to-cloud Chamfer falls 61\% ($2.27 \to 0.88 \times 10^{-3}$). Sensor-plus-recipe pairs reach the lowest cloud errors
 ($0.36$--$0.44 \times 10^{-3}$), and one student trained on all three input
 pairs matches the dedicated two-stream students within $0.03$ in both
 species.
@@ -946,10 +949,10 @@ model transfers zero-shot.
 Fine-tuning the row model on 75\% of the real plants of each
 species (split by plant; the real files supervise the center plant's cloud,
 depth and, for maize, height and leaf count) for 15 epochs on one GPU
-closes most of the gap on the held-out 25\%: maize Chamfer falls from 59.5
-to $19.7 \times 10^{-4}$\,m$^2$, median height error from 36\% to 1.6\%,
-leaf count within $\pm 1$ rises from 45\% to 70\%, and sorghum Chamfer
-falls from 2{,}113 to 79 (eight test plants, indicative). The gain holds
+closes most of the gap on the held-out 25\%: maize median height error
+falls from 36\% to 1.6\%, leaf count within $\pm 1$ rises from 45\% to
+70\%, Chamfer falls from 59.5 to $19.7 \times 10^{-4}$\,m$^2$, and
+sorghum Chamfer falls from 2{,}113 to 79 (eight test plants, indicative). The gain holds
 across inputs, layouts and occlusion quartiles
 (Tab.~\ref{tab:e10_detail}, Appendix~\ref{app:tables};
 Figs.~\ref{fig:e10_real}, \ref{fig:e10_real_sorghum}
