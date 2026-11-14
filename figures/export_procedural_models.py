@@ -148,6 +148,15 @@ if __name__ == '__main__':
             emit('fig3_dataset', sp, pl, 'gallery' + ('_highlighted' if pl == PL3[sp] else f'_{i + 1}'), {}, true_recipe(sp, pl), fit)
         emit('fig3_dataset', sp, RP3[sp], 'row_scene', {}, true_recipe(sp, RP3[sp]), fit)
         shutil.copy(ROWROOT[sp] / RP3[sp] / 'row.json', OUT / 'fig3_dataset' / sp / f'{RP3[sp]}_row_scene' / 'row.json')
+    # Fig. 4 (any input to all; maize in the paper, sorghum in the supplement): the distilled generalist from each stream alone
+    import make_any2all_fig as A
+    D4 = pickle.load(open(A.OUT4, 'rb'))
+    desc = {'rgb': 'distilled generalist from the photograph alone', 'depth': 'distilled generalist from the depth image alone',
+            'pc': 'distilled generalist from the point cloud alone',
+            'text': 'distilled generalist given the true parameters as its only input (its reproduction of them)'}
+    for sp, nm, fig in (('maize', 'plant_1875_09', 'fig4_any2all_maize'), ('sorghum', 'Sorghum_7712_05', 'supp_any2all_sorghum')):
+        e = D4[sp][nm]; pl, view = nm.rsplit('_', 1)
+        emit(fig, sp, pl, f'view{view}', {f'from_{ {"pc": "cloud", "text": "parameters"}.get(k, k) }': (e['out'][k]['rec'], desc[k]) for k in ('rgb', 'depth', 'pc')}, e['rec_true'], fit)   # the 'text' row shows the true parameters as its input
     # Fig. 5 + supplement
     REC = pickle.load(open(RG.OUT.with_name('row_gallery_recipes.pkl'), 'rb')); G = pickle.load(open(RG.OUT, 'rb'))
     picks = {'sorghum': [('Sorghum_10756', 90), ('Sorghum_14816', 0), ('Sorghum_4815', 0)], 'maize': [('plant_0320', 90), ('plant_6665', 0), ('plant_4604', 0)]}
@@ -183,6 +192,7 @@ droopiness ({fit[3]} leaves).
 | fig1_teaser | Fig. 1 | row fine-tune on the occluded test row (yaw 0) |
 | fig3_dataset | Fig. 3 | none: the dataset figure shows true plants only (gallery of 6 per species and the crop-row scene plant, with row.json) |
 | fig2_stages | Fig. 2 | Stage 2: before / after distillation, photo only; Stage 3: before / after row fine-tuning |
+| fig4_any2all_maize / supp_any2all_sorghum | Fig. 4 and its sorghum twin in the supplement | the distilled generalist from each sensor alone: photo, depth, cloud (the figure's parameters row shows the true parameters as input) |
 | fig5_rows | Fig. 5 | row fine-tune and isolated control, on the test row |
 | supp_rows_galleries | Figs. 28-29 | the same, ten plants per species at yaw 0 and 90 |
 """)
