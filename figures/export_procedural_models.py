@@ -98,6 +98,17 @@ def emit(fig, sp, plant, tag, preds, true_rec, fit):
     ALL.setdefault(fig, []).append(entry)
 
 
+def true_recipe(sp, plant):
+    """the plant's true recipe decoded from its generator file (for recipes.json)"""
+    if sp == 'sorghum':
+        import embodied_mae_4m as S
+        tv, par = S.load_spline_params(str(find_true(sp, plant)))[:2]
+    else:
+        import embodied_mae_4m_maize as M
+        tv, par = M.load_spline_params(str(find_true(sp, plant)), schema='v2')[:2]
+    return V.decode_recipe(sp, np.asarray(par), np.asarray(tv))
+
+
 def jsonable(rec):
     return dict(height=float(rec['height']), n_leaves=int(rec.get('n', len(rec['leaves']))),
                 leaves=[{k: float(v) for k, v in l.items()} for l in rec['leaves']])
@@ -119,6 +130,24 @@ if __name__ == '__main__':
     emit('fig2_stages', 'sorghum', 'Sorghum_10113', 'row_stage3',
          {'before_row_finetune': (r['pred']['head:all']['recipe'], 'Stage 3 before: headline model zero-shot on the row, all streams'),
           'after_row_finetune': (r['pred']['ft:all']['recipe'], 'Stage 3 after: row fine-tuned model on the row, all streams')}, r['recipe_true'], fit)
+    # Fig. 3 (the dataset): true plants only. The gallery is make_dataset_fig_v2.gallery_plants, reproduced here (that
+    # module renders the figure on import): 5 val plants drawn with seed 3, sorted by height, plus the highlighted plant.
+    import pandas as pd
+    PL3 = {'sorghum': 'Sorghum_10001', 'maize': 'plant_0003'}; RP3 = {'sorghum': 'Sorghum_10007', 'maize': 'plant_0004'}
+    ROWROOT = {'sorghum': pathlib.Path('/work/mech-ai/alloydas/sorghum_row/test'), 'maize': pathlib.Path('/work/mech-ai/alloydas/maize_row/test')}
+    for sp in ('sorghum', 'maize'):
+        rng = np.random.default_rng(3)
+        if sp == 'sorghum':
+            t = pd.read_csv(V.ROOTS[sp] / 'assignment.csv').merge(pd.read_csv(V.ROOTS[sp] / 'features.csv'), on='plant')
+            t = t[t.split == 'val']; t['name'] = 'Sorghum_' + t.plant.astype(str); t['h'] = t.stem_length
+        else:
+            t = pd.read_csv(V.ROOTS[sp] / 'plant_scores.csv'); t = t[t.split == 'val']; t['name'] = t.plant; t['h'] = t.stem_internodeSum
+        t = t[t.name != PL3[sp]]
+        pick = list(t.sample(5, random_state=int(rng.integers(1e6))).name); hh = dict(zip(t.name, t.h))
+        for i, pl in enumerate(sorted(pick, key=lambda n: hh[n]) + [PL3[sp]]):
+            emit('fig3_dataset', sp, pl, 'gallery' + ('_highlighted' if pl == PL3[sp] else f'_{i + 1}'), {}, true_recipe(sp, pl), fit)
+        emit('fig3_dataset', sp, RP3[sp], 'row_scene', {}, true_recipe(sp, RP3[sp]), fit)
+        shutil.copy(ROWROOT[sp] / RP3[sp] / 'row.json', OUT / 'fig3_dataset' / sp / f'{RP3[sp]}_row_scene' / 'row.json')
     # Fig. 5 + supplement
     REC = pickle.load(open(RG.OUT.with_name('row_gallery_recipes.pkl'), 'rb')); G = pickle.load(open(RG.OUT, 'rb'))
     picks = {'sorghum': [('Sorghum_10756', 90), ('Sorghum_14816', 0), ('Sorghum_4815', 0)], 'maize': [('plant_0320', 90), ('plant_6665', 0), ('plant_4604', 0)]}
@@ -152,6 +181,7 @@ droopiness ({fit[3]} leaves).
 | folder | figure | predicted files |
 |---|---|---|
 | fig1_teaser | Fig. 1 | row fine-tune on the occluded test row (yaw 0) |
+| fig3_dataset | Fig. 3 | none: the dataset figure shows true plants only (gallery of 6 per species and the crop-row scene plant, with row.json) |
 | fig2_stages | Fig. 2 | Stage 2: before / after distillation, photo only; Stage 3: before / after row fine-tuning |
 | fig5_rows | Fig. 5 | row fine-tune and isolated control, on the test row |
 | supp_rows_galleries | Figs. 28-29 | the same, ten plants per species at yaw 0 and 90 |
