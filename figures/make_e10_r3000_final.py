@@ -16,6 +16,8 @@ CPU: sbatch --wait --partition=nova --account=mech-ai --qos=normal --cpus-per-ta
 import sys, pathlib, json; R = pathlib.Path(__file__).resolve().parents[1]; sys.path[:0] = [str(R), str(R / 'eval'), str(R / 'figures')]
 import numpy as np, pandas as pd, torch, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
+import io
+import _proc3d as P3
 import make_e10_r3000_preview as P                                 # cloud(), constants, Liberation Sans
 import _fig12_kit as K
 import _plantviz as V
@@ -109,7 +111,7 @@ def example(sp, pl, row, stop, i, M, best_ep):
     ncol = 6 if sp == 'maize' else 5
     W, t, g, m_ = 2.0 * ncol + 0.1 * (ncol - 1), 2.0, 0.1, 0.04; H = t + 0.5
     fig = plt.figure(figsize=(W, H))
-    heads = ['Image', 'Ground truth', 'Synthetic-row fine-tune', f'Real-row fine-tune (ep {best_ep})', 'Its procedural model'] + (['Leaf length per leaf'] if sp == 'maize' else [])
+    heads = ['Image', 'Ground truth', 'Synthetic-row fine-tune', f'Real-row fine-tune (ep {best_ep})', 'Its procedural model (3D)'] + (['Leaf length per leaf'] if sp == 'maize' else [])
     hc = [INK, INK, PINK, VIOLET, U.STREAM_INK['text'], INK]
     kinds = [('rgb', True), (None, False), ('pc', False), ('pc', False), ('text', False), (None, False)]
     for k in range(ncol):
@@ -126,7 +128,7 @@ def example(sp, pl, row, stop, i, M, best_ep):
         elif k in (2, 3):
             P.cloud(ax, preds[k - 2]); ax.text(0.04, 0.03, f'CD = {ch[k - 2]:.0f}' if ch[k - 2] >= 10 else f'CD = {ch[k - 2]:.1f}', transform=ax.transAxes, fontsize=FS, color=hc[k], path_effects=P.HALO)
         elif k == 4:
-            glyph_ax(ax, sp, recs[1], max(recs[1]['height'], 0.3))
+            ax.imshow(plt.imread(io.BytesIO(P3.png([(recs[1], P3.LEAF_C, 1.0)], sp, side=t - 2 * m_, dpi=300))))   # the 3D procedural model
             ax.text(0.04, 0.03, f"height {recs[1]['height']:.2f} m · {recs[1]['n']} leaves", transform=ax.transAxes, fontsize=FS, color=hc[k], path_effects=P.HALO)
         else:
             tr = info['leaf_raw'][:, 1]; n = len(tr)
