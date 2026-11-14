@@ -147,7 +147,7 @@ def _rec_lims(recs, sp):
     return (-st / 2, st / 2), (y0 - 0.17 * st, y0 + 0.83 * st)
 
 
-def draw_tiles_proc(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncols=3, key=None, sp=None):
+def draw_tiles_proc(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncols=3, key=None, sp=None, prefix='MAE = '):
     r = REC[sp][key]; m = 0.03
     kinds = [('rgb', True), (None, False), ('text', False)]
     axs = []
@@ -161,7 +161,7 @@ def draw_tiles_proc(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncol
     K.glyph(axs[2], sp, r['true'], '#b4b4b4', stem='#b4b4b4', lw_scale=lw * 1.8, alpha=1.0)
     K.glyph(axs[2], sp, r['ft'], INK_C['text'], stem='#4a3b2a', lw_scale=lw)
     if numbers:
-        axs[2].text(0.96, 0.04, f"MAE = {r['ft_leaf_mae']:.3f}", transform=axs[2].transAxes, fontsize=RG.FS, color=INK_C['text'],
+        axs[2].text(0.96, 0.04, f"{prefix}{r['ft_leaf_mae']:.3f}", transform=axs[2].transAxes, fontsize=RG.FS, color=INK_C['text'],
                     ha='right', va='bottom', path_effects=[pe.withStroke(linewidth=2.2, foreground=FILL['text'])])
     lims = _rec_lims([r['true'], r['ft']], sp)
     for ax in axs[1:]:
@@ -427,7 +427,7 @@ def render_rows_main_ugg(D, picks, proc=False):
     return fig
 
 
-def render_rows_more_ugg(D, sp):
+def render_rows_more_ugg(D, sp, proc=False):
     """make_row_gallery_v2.render_more (supplement: ten plants of one species) with the Fig. 5 changes: UGG tiles,
     'Ground truth', 'CD = <Chamfer>' in each prediction tile, block headers without degrees."""
     global NUM_PREFIX
@@ -442,12 +442,14 @@ def render_rows_more_ugg(D, sp):
         xb = x0 + lab + b * (block + gg)
         fig.text((xb + block / 2) / W, (H - 0.01) / H, 'Broadside' if th == 0 else 'End-on', fontsize=FS_, fontweight='bold', ha='center', va='top')
         for k in range(nc):
-            fig.text((xb + k * (s_ + g) + s_ / 2) / W, (H - 0.22) / H, head[k], fontsize=FS_, ha='center', va='top', color=RG.HEAD_C[k])
+            fig.text((xb + k * (s_ + g) + s_ / 2) / W, (H - 0.22) / H, head[k], fontsize=FS_, ha='center', va='top',
+                     color=INK_C['text'] if proc and k == 2 else RG.HEAD_C[k])
     y = H - hdr
     for pl, q in D[sp]['more']:
         y -= s_
         for b, th in enumerate(RG.THETAS):
-            RG.draw_tiles(fig, x0 + lab + b * (block + gg), y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
+            if proc: draw_tiles_proc(fig, x0 + lab + b * (block + gg), y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc, key=(pl, th), sp=sp, prefix='')
+            else: RG.draw_tiles(fig, x0 + lab + b * (block + gg), y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
         fig.text((x0 + lab - 0.06) / W, (y + s_ / 2) / H, f"{pl.split('_')[-1]}\n{q:.0f}th", fontsize=FS_, ha='right', va='center', linespacing=1.05)
         y -= gy
     return fig
@@ -464,6 +466,7 @@ if __name__ == '__main__':
         save(render_rows_main_ugg(D, picks, proc=True), f'fig_rows_examples{SUF}5_proc')
         for sp in ('sorghum', 'maize'):            # the supplement's ten-plant galleries, same changes
             save(render_rows_more_ugg(D, sp), f'fig_rows_more_{sp}{SUF}')
+            save(render_rows_more_ugg(D, sp, proc=True), f'fig_rows_more_{sp}{SUF}_proc')
         sys.exit(0)
     if '--fig2' in sys.argv:                     # only the full-UGG Fig. 2: preview + TikZ twin for the paper
         S = figure2_ugg2(); S.render(OUT / f'fig2_stages{SUF}2')
