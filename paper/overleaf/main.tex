@@ -204,7 +204,7 @@ To train and benchmark \method{} under controlled yet realistic field conditions
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_rows_examples_ugg_proc.pdf}
+  \resizebox{\linewidth}{!}{\input{Figures/fig_rows_examples_tikz}}
   \caption{\textbf{Reconstructing occluded target plants in simulated crop rows.} Results on held-out sorghum (left) and maize (right) test rows. Columns show the input row photograph (including adjacent neighbors), the ground-truth procedural model of the center target plant (drawn as a stem-and-leaf schematic), and the procedural model written by our row-trained model (purple) over the ground truth (grey), with its leaf-parameter MAE (normalized fields, as in Table~\ref{tab:rows}; lower is better) noted below. Examples are selected from plants where the row-trained model (by Chamfer distance) ranks in its top 35\% and the isolated-trained control ranks in its bottom 40\% across both broadside and end-on views; Figs.~\ref{fig:supp-rows-sorghum} and~\ref{fig:supp-rows-maize} show ten additional test plants per species sampled evenly across the full error distribution.}
   \label{fig:rowsex}
 \end{figure*}
