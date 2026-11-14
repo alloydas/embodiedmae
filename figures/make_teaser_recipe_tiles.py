@@ -16,6 +16,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import _plantviz as V
 import _fig12_kit as K
+import _proc3d as P3
 
 PL = {'sorghum': 'Sorghum_10113', 'maize': 'plant_0106'}
 ROW_RUNS = {'sorghum': 'sorghum_row_ft', 'maize': 'maize_row_ft_e1'}
@@ -60,7 +61,10 @@ if __name__ == '__main__':
     for sp, tag in (('sorghum', 's'), ('maize', 'm')):
         d = D[sp]
         rt = V.decode_recipe(sp, d['par'], d['tv']); rp = V.decode_recipe(sp, d['gen_par'], d['tv'], predicted=True)
-        fig = glyph_png(sp, rp, rt); fig.savefig(TILES / f'{tag}_recipe.png', dpi=600, transparent=True); plt.close(fig)
+        if '--2d' in sys.argv:
+            fig = glyph_png(sp, rp, rt); fig.savefig(TILES / f'{tag}_recipe.png', dpi=600, transparent=True); plt.close(fig)
+        else:                                         # 3D procedural model (user, 2026-11-14): truth translucent grey, written model purple
+            (TILES / f'{tag}_recipe.png').write_bytes(P3.png([(rt, P3.TRUTH_C, 0.45), (rp, P3.LEAF_C, 1.0)], sp, side=1.1, dpi=600))
         L = rp['leaves']; Lt = rt['leaves']
         if sp == 'sorghum':
             extra = [('leaf length', np.mean([l['length'] for l in L]), np.mean([l['length'] for l in Lt]), 'm', 2),
