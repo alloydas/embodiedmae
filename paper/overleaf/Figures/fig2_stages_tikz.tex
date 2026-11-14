@@ -1,3 +1,5 @@
+% PROCEDURAL 2026-11-13: Stage 2/3 before/after tiles show the written procedural model (true recipe grey
+% underneath), from figures/make_fig2_recipe_tiles.py, with parameter MAE instead of Chamfer.
 % LAYOUT v3 2026-11-13: Inside-CropCode panel left, stages center, warm-start
 % label+arcs mirrored to the far RIGHT edge.
 % LAYOUT SWAP 2026-11-13 (user request): Inside-CropCode panel moved to the LEFT,
@@ -90,14 +92,14 @@
 \node[anchor=south west, inner sep=0] at (4.1750,1.6200) {\includegraphics[width=0.2600in, height=0.2600in]{Figures/fig2/student_hidden_0.png}};
 \node[anchor=south west, inner sep=0] at (4.4750,1.6200) {\includegraphics[width=0.2600in, height=0.2600in]{Figures/fig2/student_hidden_1.png}};
 \node[anchor=south west, inner sep=0] at (4.7750,1.6200) {\includegraphics[width=0.2600in, height=0.2600in]{Figures/fig2/student_hidden_2.png}};
-\node[anchor=south west, inner sep=0] at (5.2650,1.6400) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_2_before.png}};
-\node[anchor=south west, inner sep=0] at (5.8850,1.6400) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_2_after.png}};
+\node[anchor=south west, inner sep=0] at (5.2650,1.6400) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_2_before_recipe.png}};
+\node[anchor=south west, inner sep=0] at (5.8850,1.6400) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_2_after_recipe.png}};
 \node[anchor=south west, inner sep=0] at (2.0350,0.4400) {\includegraphics[width=0.4000in, height=0.4000in]{Figures/fig2/row_image.png}};
 \node[anchor=south west, inner sep=0] at (2.4750,0.4400) {\includegraphics[width=0.4000in, height=0.4000in]{Figures/fig2/row_depth.png}};
 \node[anchor=south west, inner sep=0] at (2.9150,0.4400) {\includegraphics[width=0.4000in, height=0.4000in]{Figures/fig2/row_cloud.png}};
 \node[anchor=south west, inner sep=0] at (4.2800,0.7250) {\includegraphics[width=0.1700in, height=0.1700in]{Figures/fig2/fire_3.png}};
-\node[anchor=south west, inner sep=0] at (5.2650,0.3800) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_3_before.png}};
-\node[anchor=south west, inner sep=0] at (5.8850,0.3800) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_3_after.png}};
+\node[anchor=south west, inner sep=0] at (5.2650,0.3800) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_3_before_recipe.png}};
+\node[anchor=south west, inner sep=0] at (5.8850,0.3800) {\includegraphics[width=0.5800in, height=0.5800in]{Figures/fig2/stage_3_after_recipe.png}};
 \node[anchor=west, inner sep=0, outer sep=0, align=left, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (2.1450,4.2800) {Stage 1: masked pretraining};
 \node[anchor=west, inner sep=0, outer sep=0, align=left, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (2.1450,2.5600) {Stage 2: cross-modal distillation};
 \node[anchor=west, inner sep=0, outer sep=0, align=left, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (2.1450,1.2400) {Stage 3: row fine-tuning};
@@ -141,9 +143,9 @@
 \draw[draw=c1D221C, line width=1.100pt, -{Triangle[length=4.20pt,width=4.00pt]}] (5.0950,1.9100) -- (5.2350,1.9100);
 \draw[draw=c5F685C, line width=0.800pt, dash pattern=on 2.40pt off 1.60pt, rounded corners=0.0300in] (5.2650,1.6400) rectangle (5.8450,2.2200);
 \node[anchor=south, inner sep=0, outer sep=0, align=center, text=c5F685C, font={\fontsize{9.00}{11.25}\selectfont\sffamily}] at (5.5550,2.2700) {before};
-\draw[draw=c2A9D8F, line width=0.800pt, rounded corners=0.0300in] (5.8850,1.6400) rectangle (6.4650,2.2200);
+\draw[draw=c30638E, line width=0.800pt, rounded corners=0.0300in] (5.8850,1.6400) rectangle (6.4650,2.2200);
 \node[anchor=south, inner sep=0, outer sep=0, align=center, text=c2B3A67, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (6.1750,2.2700) {after};
-\node[anchor=north, inner sep=0, outer sep=0, align=center, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily}] at (5.8650,1.5800) {Chamfer 2.27 $\rightarrow$ 0.88};
+\node[anchor=north, inner sep=0, outer sep=0, align=center, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily}] at (5.8250,1.5800) {$\theta$ MAE 0.058 $\rightarrow$ 0.014};
 \draw[draw=cC0392B, line width=0.800pt, rounded corners=0.0300in] (2.0350,0.4400) rectangle (2.4350,0.8400);
 \draw[draw=cB8860B, line width=0.800pt, rounded corners=0.0300in] (2.4750,0.4400) rectangle (2.8750,0.8400);
 \draw[draw=c2A9D8F, line width=0.800pt, rounded corners=0.0300in] (2.9150,0.4400) rectangle (3.3150,0.8400);
@@ -155,9 +157,9 @@
 \draw[draw=c1D221C, line width=1.100pt, -{Triangle[length=4.20pt,width=4.00pt]}] (4.9750,0.6400) -- (5.2350,0.6400);
 \draw[draw=c5F685C, line width=0.800pt, dash pattern=on 2.40pt off 1.60pt, rounded corners=0.0300in] (5.2650,0.3800) rectangle (5.8450,0.9600);
 \node[anchor=south, inner sep=0, outer sep=0, align=center, text=c5F685C, font={\fontsize{9.00}{11.25}\selectfont\sffamily}] at (5.5550,1.0100) {before};
-\draw[draw=c2A9D8F, line width=0.800pt, rounded corners=0.0300in] (5.8850,0.3800) rectangle (6.4650,0.9600);
+\draw[draw=c30638E, line width=0.800pt, rounded corners=0.0300in] (5.8850,0.3800) rectangle (6.4650,0.9600);
 \node[anchor=south, inner sep=0, outer sep=0, align=center, text=c2B3A67, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (6.1750,1.0100) {after};
-\node[anchor=north, inner sep=0, outer sep=0, align=center, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily}] at (5.8650,0.3200) {Chamfer 230 $\rightarrow$ 31};
+\node[anchor=north, inner sep=0, outer sep=0, align=center, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily}] at (5.8250,0.3200) {$\theta$ MAE 0.114 $\rightarrow$ 0.061};
 \node[anchor=center, inner sep=0, outer sep=0, align=center, text=c1D221C, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (0.8975,4.0600) {CropCode};
 \node[anchor=west, inner sep=0, outer sep=0, align=left, text=cC0392B, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (0.8450,3.7100) {Image  196};
 \node[anchor=west, inner sep=0, outer sep=0, align=left, text=cB8860B, font={\fontsize{9.00}{11.25}\selectfont\sffamily\bfseries}] at (0.8450,3.4100) {Depth  196};
