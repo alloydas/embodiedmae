@@ -115,8 +115,11 @@ def jsonable(rec):
 
 
 if __name__ == '__main__':
-    if OUT.exists(): shutil.rmtree(OUT)
-    OUT.mkdir(parents=True); fit = fits(); print('fits', fit, flush=True)
+    if OUT.exists():                                   # keep the E10 folders of export_e10_recipes.py
+        for x in OUT.iterdir():
+            if not (x.name.startswith(('e10_', 'supp_e10_')) or x.name == 'recipes_e10.json'):
+                shutil.rmtree(x) if x.is_dir() else x.unlink()
+    OUT.mkdir(parents=True, exist_ok=True); fit = fits(); print('fits', fit, flush=True)
     # Fig. 1
     T = pickle.load(open(TEASER, 'rb'))
     for sp in ('sorghum', 'maize'):
