@@ -125,7 +125,7 @@ Despite their utility, existing methods for recovering procedural plant models r
 
 \begin{figure*}[t]
   \centering
-  \resizebox{\linewidth}{!}{\input{Figures/fig2_stages_tikz}}
+  \resizebox{\linewidth}{!}{\input{Figures/fig2_stages_tikz_ugg}}
   \caption{\textbf{Overview of the three-stage training pipeline in \method{}.} \textbf{Stage~1 (Multimodal Masked Pretraining):} All four plant streams (RGB, depth, point cloud, and procedural parameters, depicted as a stem-and-leaf schematic) are tokenized. We mask 80\% of tokens using a random Dirichlet allocation across streams, and a shared encoder--decoder reconstructs all streams (applying image, depth, and parameter losses on masked tokens, and a combined QAL + Sinkhorn loss on the full point cloud). \textbf{Stage~2 (Cross-Modal Distillation):} A frozen four-stream teacher transfers its latent representation and decoder features to single-sensor students; we show a point cloud reconstructed from a single RGB image before and after distillation. \textbf{Stage~3 (Row Occlusion Fine-Tuning):} Starting from Stage~1 weights, the model is fine-tuned on simulated crop rows with supervision computed strictly against the occluded center plant, enabling it to separate the target plant from its neighbors. Reported Chamfer values are sorghum test means from Table~\ref{tab:anysubset} ($\times10^{-3}$) and Table~\ref{tab:rows} (all streams, $\times10^{-4}\,\mathrm{m}^2$) in Appendix~\ref{app:tables}, illustrated on a held-out sorghum test plant and row.}
   \label{fig:arch}
 \end{figure*}

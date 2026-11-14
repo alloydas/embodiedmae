@@ -166,6 +166,20 @@ def _hatch_png(fill, line, px=120):
     return K.png_fig(fig, px, transparent=False)
 
 
+class _Shift:
+    """Scene proxy that moves every x by dx: lets Fig. 2 place its panels without rewriting each coordinate."""
+    def __init__(self, S, dx): self._S, self._dx = S, dx
+    def _p(self, p): return (p[0] + self._dx, p[1])
+    def rect(self, x, *a, **k): return self._S.rect(x + self._dx, *a, **k)
+    def text(self, x, *a, **k): return self._S.text(x + self._dx, *a, **k)
+    def image(self, x, *a, **k): return self._S.image(x + self._dx, *a, **k)
+    def ellipse(self, x, *a, **k): return self._S.ellipse(x + self._dx, *a, **k)
+    def poly(self, pts, *a, **k): return self._S.poly([self._p(q) for q in pts], *a, **k)
+    def path(self, pts, *a, **k): return self._S.path([self._p(q) for q in pts], *a, **k)
+    def arrow(self, p, q, *a, **k): return self._S.arrow(self._p(p), self._p(q), *a, **k)
+    def __getattr__(self, n): return getattr(self._S, n)
+
+
 def figure2_ugg2():
     """Fig. 2 (make_fig12_saga.figure2) with the UGG paper's diagram conventions, same layout, data, numbers and font:
     stream colours (image blue, depth yellow, cloud pink, parameters purple); inputs in dashed frames, outputs solid;
@@ -180,7 +194,11 @@ def figure2_ugg2():
     F = 9.0
     D = K.load_dump(); d = D['stage']['sorghum']['Sorghum_10036_00']; r = D['rows']['sorghum']['Sorghum_10113']
     W, H = 6.875, 4.42
-    S = Scene(W, H, 'Fig 2 stages (UGG)')
+    S0 = Scene(W, H, 'Fig 2 stages (UGG)')
+    # layout v3 (paper Fig. 2 since 2026-11-13): CropCode panel on the LEFT (x 0.02-1.775), the three stages in the
+    # centre (1.915-6.495), the warm-start arcs on the RIGHT edge. Stage code below is written at XL = 0.40 and shifted.
+    DX = 1.915 - 0.40
+    S = _Shift(S0, DX)
     V = dict(elev=10.0, azim=20.0)
     fr = cloud_frame(d['pc'], **V); frr = cloud_frame(r['gt_pc'], **V)
     hidden_c = '#d3d6cf'; BAND = _band_png(); HATCH = {k: _hatch_png(CSF[k], CSE[k]) for k in CSF}
@@ -231,9 +249,10 @@ def figure2_ugg2():
         tw = text_size(titles[k], F, bold=True)[0] + 0.18
         S.rect(XL + 0.14, y + h - 0.11, tw, 0.22, PANEL_E, lw=0.9, fill='#ffffff', r=0.05, z=0)
         S.text(XL + 0.23, y + h, titles[k], F, bold=True)
-    S.arrow((XL, 3.40), (XL, 2.00), color='#6b6f7a', lw=1.1, curve=0.22)
-    S.arrow((XL, 3.20), (XL, 0.66), color='#6b6f7a', lw=1.1, curve=0.11)
-    S.text(0.10, 2.00, 'warm start', F, color='#6b6f7a', rot=90, ha='center', bold=True)
+    XW = XR + DX + 0.005                                         # warm start, right edge
+    S0.arrow((XW, 3.40), (XW, 2.00), color='#6b6f7a', lw=1.5, curve=-0.22, ms=9)
+    S0.arrow((XW, 3.20), (XW, 0.66), color='#6b6f7a', lw=1.5, curve=-0.11, ms=9)
+    S0.text(6.80, 2.00, 'warm start', F, color='#6b6f7a', rot=90, ha='center', bold=True)
 
     # ---------------------------------------------------------------- Stage 1
     t, y1 = 0.40, 3.03
@@ -303,9 +322,10 @@ def figure2_ugg2():
     S.text((xo[0] + xo[1] + to) / 2, y3 - 0.12, 'Chamfer 230 → 31', F, ha='center', va='top')
 
     # ---------------------------------------------------------------- Inside CropCode
-    XZ, WZ = 5.10, W - 0.02 - 5.10
+    S = S0
+    XZ, WZ = 0.02, 1.755
     S.rect(XZ, 0.04, WZ, 4.24, '#8a8a8a', lw=1.2, fill='#ffffff', r=0.09)
-    S.text(XZ + WZ / 2, 4.06, 'Inside CropCode', F, ha='center', bold=True)
+    S.text(XZ + WZ / 2, 4.06, 'CropCode', F, ha='center', bold=True)
     a, gp = 0.12, 0.035
     for i, (nm, k, hid) in enumerate((('Image  196', 'rgb', (1, 3)), ('Depth  196', 'depth', (0, 2, 3)),
                                       ('Cloud  196', 'pc', (2,)), ('Params  1+K', 'text', (1, 2)))):
@@ -334,7 +354,7 @@ def figure2_ugg2():
         wq = (WZ - 0.28 - 0.09) / 4; xx = XZ + 0.14 + i * (wq + 0.03)
         S.rect(xx, 0.13, wq, 0.10, CSE[k], lw=0.6, fill=CSF[k], r=0.02, z=0)
     S.text(XZ + WZ / 2, 0.30, 'one head per stream', F, color=DARK, ha='center')
-    return S
+    return S0
 
 
 # ====================================================================== Fig. 5 (crop-row examples), paper version (2026-11-13)
