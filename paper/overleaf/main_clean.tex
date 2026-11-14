@@ -197,7 +197,7 @@ To train and benchmark \method{} under controlled yet realistic field conditions
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2all_maize_ugg.pdf}
+  \resizebox{\linewidth}{!}{\input{Figures/fig_any2all_maize_tikz}}
   \caption{\textbf{Any-to-all cross-modal reconstruction on a held-out maize test plant.} In each block, the distilled generalist receives a single input stream (dashed box, left of arrow) and reconstructs the remaining three streams (solid boxes: RGB in blue, depth in yellow, point cloud in pink, and procedural parameters in purple). Predicted point clouds and procedural schematics are overlaid on the ground truth in grey, with Chamfer distance ($\times 10^{-3}$) reported below each cloud and predicted height and leaf count below each parameter schematic (ground truth: 1.12\,m, 14 leaves). This example is drawn from test plants with low image-to-cloud error viewed within $25^\circ$ of the horizon. Reconstructing geometry from parameters alone yields only a coarse approximation (Chamfer 7.48 here; 12.8 on average in Table~\ref{tab:anysubset}).}
   \label{fig:any2any-maize}\label{fig:any2any}
 \end{figure*}
@@ -798,7 +798,7 @@ The result figures referenced in the main text are grouped below in order of app
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{Figures/fig_any2all_sorghum_ugg.pdf}
+  \resizebox{\linewidth}{!}{\input{Figures/fig_any2all_sorghum_tikz}}
   \caption{\textbf{Any-to-all cross-modal reconstruction on a held-out sorghum test plant.} Format follows Fig.~\ref{fig:any2any-maize} (ground truth: 1.43\,m height, 24 leaves). Given any single input modality (dashed box), the distilled generalist accurately reconstructs the remaining three streams.}
   \label{fig:any2any-sorghum}
 \end{figure*}
