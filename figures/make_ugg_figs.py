@@ -130,6 +130,46 @@ def draw_tiles_ugg(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncols
 
 
 RG.draw_tiles = draw_tiles_ugg
+
+
+# Fig. 5 with procedural models (user, 2026-11-13: "Now we have to update fig 5 for the same" as Fig. 2): the ground-truth
+# column draws the true recipe, the row-trained column the recipe the model writes (purple) over the truth (grey), with its
+# leaf-parameter MAE (Table 7's error). Recipes from figures/make_rows_recipe_dump.py (same items, protocol and seeds).
+REC = None
+
+
+def _rec_lims(recs, sp):
+    f = plt.figure(); a = f.add_axes([0, 0, 1, 1])
+    for r in recs: K.glyph(a, sp, r, '#000000')
+    bb = a.dataLim; plt.close(f)
+    w = max(abs(bb.x0), abs(bb.x1)); y0 = min(bb.y0, 0.0); st = max(2 * w, bb.y1 - y0) * 1.06
+    st *= 1.18                                           # room at the bottom for the MAE label
+    return (-st / 2, st / 2), (y0 - 0.17 * st, y0 + 0.83 * st)
+
+
+def draw_tiles_proc(fig, x, y, s, it, gap=0.04, W=1.0, H=1.0, numbers=True, ncols=3, key=None, sp=None):
+    r = REC[sp][key]; m = 0.03
+    kinds = [('rgb', True), (None, False), ('text', False)]
+    axs = []
+    for k in range(ncols):
+        xk = x + k * (s + gap)
+        box(fig, xk, y, s, s, kinds[k][0], dashed=kinds[k][1], transform=fig.dpi_scale_trans)
+        ax = fig.add_axes([(xk + m) / W, (y + m) / H, (s - 2 * m) / W, (s - 2 * m) / H]); ax.patch.set_alpha(0); axs.append(ax)
+    axs[0].imshow(it['img'])
+    lw = 0.42 * (s - 2 * m) / 0.735
+    K.glyph(axs[1], sp, r['true'], '#3c3b38', stem='#4a3b2a', lw_scale=lw)
+    K.glyph(axs[2], sp, r['true'], '#b4b4b4', stem='#b4b4b4', lw_scale=lw * 1.8, alpha=1.0)
+    K.glyph(axs[2], sp, r['ft'], INK_C['text'], stem='#4a3b2a', lw_scale=lw)
+    if numbers:
+        axs[2].text(0.96, 0.04, f"MAE = {r['ft_leaf_mae']:.3f}", transform=axs[2].transAxes, fontsize=RG.FS, color=INK_C['text'],
+                    ha='right', va='bottom', path_effects=[pe.withStroke(linewidth=2.2, foreground=FILL['text'])])
+    lims = _rec_lims([r['true'], r['ft']], sp)
+    for ax in axs[1:]:
+        ax.set_xlim(*lims[0]); ax.set_ylim(*lims[1]); ax.set_aspect('equal')
+    for ax in axs:
+        ax.set_xticks([]); ax.set_yticks([])
+        for sp_ in ax.spines.values(): sp_.set_visible(False)
+    return axs
 RG.HEAD = ['Row\nimage', 'Truth', 'Row-\ntrained']
 RG.HEAD_C = [INK, INK, INK_C['pc']]
 
@@ -358,7 +398,7 @@ def figure2_ugg2():
 
 
 # ====================================================================== Fig. 5 (crop-row examples), paper version (2026-11-13)
-def render_rows_main_ugg(D, picks):
+def render_rows_main_ugg(D, picks, proc=False):
     """make_row_gallery_v2.render_main with the UGG tiles (draw_tiles_ugg) and, per the user ("for fig 5 no degree,
     and what is the number? ... truth will be ground truth"): row labels without the yaw, 'Ground truth' for 'Truth',
     and the prediction column says what its number is (Chamfer to the ground truth, 1e-4 m^2)."""
@@ -369,17 +409,19 @@ def render_rows_main_ugg(D, picks):
     hdr = 0.48; n = max(len(v) for v in picks.values())
     H = hdr + n * s_ + (n - 1) * gy + 0.02
     head = ['Row image', 'Ground truth', 'Row-trained']
+    hc = [RG.HEAD_C[0], RG.HEAD_C[1], INK_C['text'] if proc else RG.HEAD_C[2]]
     fig = plt.figure(figsize=(W, H)); FS_ = RG.FS
     for c, sp in enumerate(('sorghum', 'maize')):
         x0 = c * (W - half - 0.08)                     # UGG boxes need room at the right edge
         fig.text((x0 + lab + (nc * s_ + (nc - 1) * g) / 2) / W, (H - 0.01) / H, sp.capitalize(), fontsize=FS_, fontweight='bold', ha='center', va='top')
         for k in range(nc):
             xc = (x0 + lab + k * (s_ + g) + s_ / 2) / W
-            fig.text(xc, (H - 0.20) / H, head[k], fontsize=FS_, ha='center', va='top', color=RG.HEAD_C[k])
+            fig.text(xc, (H - 0.20) / H, head[k], fontsize=FS_, ha='center', va='top', color=hc[k])
         y = H - hdr
         for pl, th in picks[sp]:
             y -= s_
-            RG.draw_tiles(fig, x0 + lab, y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
+            if proc: draw_tiles_proc(fig, x0 + lab, y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc, key=(pl, th), sp=sp)
+            else: RG.draw_tiles(fig, x0 + lab, y, s_, D[sp]['items'][(pl, th)], g, W, H, ncols=nc)
             fig.text((x0 + lab - 0.06) / W, (y + s_ / 2) / H, f"plant\n{pl.split('_')[-1]}", fontsize=FS_, ha='right', va='center', linespacing=1.1)
             y -= gy
     return fig
@@ -418,6 +460,8 @@ if __name__ == '__main__':
         picks = {'sorghum': [('Sorghum_10756', 90), ('Sorghum_14816', 0), ('Sorghum_4815', 0)],
                  'maize': [('plant_0320', 90), ('plant_6665', 0), ('plant_4604', 0)]}
         save(render_rows_main_ugg(D, picks), f'fig_rows_examples{SUF}5')
+        REC = pickle.load(open(RG.OUT.with_name('row_gallery_recipes.pkl'), 'rb'))
+        save(render_rows_main_ugg(D, picks, proc=True), f'fig_rows_examples{SUF}5_proc')
         for sp in ('sorghum', 'maize'):            # the supplement's ten-plant galleries, same changes
             save(render_rows_more_ugg(D, sp), f'fig_rows_more_{sp}{SUF}')
         sys.exit(0)
