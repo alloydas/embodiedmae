@@ -1177,7 +1177,17 @@ After masked pretraining and initial row training at mask ratio $m = 0.8$, we fi
 \subsection{Point-Cloud Loss}
 \label{sec:abl_loss}
 
-To prevent point-cloud decoders from collapsing points onto central stalks, we combine our quality-aware loss (QAL) with a debiased Sinkhorn divergence. Given predicted cloud $\mathcal{P}$, target cloud $\mathcal{T}$, and nearest-neighbor Euclidean distance $d(x,\mathcal{S}) = \min_{s\in\mathcal{S}} \|x-s\|_2$, QAL weights errors smoothly around tolerance $\tau$:
+We compare point-cloud losses for reconstructing single sorghum plants.
+
+\paragraph{Losses.}
+Let $\mathcal{P}$ be the predicted point cloud and $\mathcal{T}$ the target cloud, and let
+\begin{equation}
+  d(x,\mathcal{S})=\min_{s\in\mathcal{S}}\lVert x-s\rVert_2
+  =\min_{s\in\mathcal{S}}\sqrt{\textstyle\sum_{k=1}^{3}(x_k-s_k)^2}
+  \label{eq:dist}
+\end{equation}
+be the Euclidean (not squared) distance from a point $x$ to the nearest point of a cloud $\mathcal{S}$. The
+quality-aware loss (QAL) weights every nearest-neighbour distance by how far it is from a tolerance $\tau$:
 \begin{equation}
   \begin{aligned}
     \mathcal{L}_{\mathrm{QAL}} ={}& \frac{1}{|\mathcal{P}|}\sum_{p\in\mathcal{P}} w\big(d(p,\mathcal{T})\big)\,d(p,\mathcal{T})\\
@@ -1189,28 +1199,131 @@ To prevent point-cloud decoders from collapsing points onto central stalks, we c
   w(d) = \sigma\big(\alpha\,(d-\tau)\big),
   \label{eq:qal_w}
 \end{equation}
-with $\alpha = 100$ and $\tau = 0.01$ ($\approx 10$\,mm at median plant scale). Trained from scratch for 200 epochs on isolated sorghum plants (\cref{tab:loss_single}), QAL alone achieves high precision (0.561) but low recall (0.144), whereas Sinkhorn divergence alone ($S_\varepsilon$ on 1{,}024 points, blur 0.02) achieves higher recall (0.206) but poor precision (0.142). Combining $\mathcal{L}_{\mathrm{QAL}} + 0.5\,S_\varepsilon$ yields the highest $F_1$ at both 5\,mm (0.083) and 10\,mm (0.259), outperforming QAL alone on 82\% of test plants. Hyperparameter screening (\cref{tab:qal_params}) confirms that $\tau \in \{5, 10\}$\,mm and sharp weighting ($\alpha \in \{100, 300\}$) perform best.
+where $\sigma$ is the logistic function. Points within $\tau$ of the other cloud get a weight below $1/2$
+(down to $\sigma(-\alpha\tau)$ at $d=0$), while points far beyond $\tau$ get a weight close to 1, so training
+concentrates on the badly placed points, such as missing leaf tips; $\alpha$ sets how sharply the weight switches
+at $\tau$. We use
+$\alpha=100$ and $\tau=10$\,mm (the clouds are normalised per plant, so $\tau$ is 0.01 of the plant radius, \ie
+10\,mm for a plant of median size).
+
+\emph{Sinkhorn} compares the uniform distributions $\mu$ and $\nu$ on $n$ points $\{x_i\}$ and $\{y_j\}$ sampled from
+$\mathcal{P}$ and $\mathcal{T}$ through entropic optimal transport,
+\begin{equation}
+  \begin{aligned}
+    \mathrm{OT}_\varepsilon(\mu,\nu) = \min_{\pi\in\Pi(\mu,\nu)} &\sum_{i,j}\pi_{ij}\,\tfrac12\lVert x_i-y_j\rVert_2^2\\
+      &+ \varepsilon\,\mathrm{KL}(\pi\,\Vert\,\mu\otimes\nu),
+  \end{aligned}
+  \label{eq:ot}
+\end{equation}
+where $\Pi(\mu,\nu)$ is the set of transport plans with marginals $\mu$ and $\nu$, and uses the debiased Sinkhorn
+divergence
+\begin{equation}
+  S_\varepsilon(\mu,\nu) = \mathrm{OT}_\varepsilon(\mu,\nu) - \tfrac12\mathrm{OT}_\varepsilon(\mu,\mu)
+    - \tfrac12\mathrm{OT}_\varepsilon(\nu,\nu).
+  \label{eq:sink}
+\end{equation}
+Unlike a nearest-neighbour loss, every target point must receive the same share of predicted mass, so the
+prediction is spread over the whole plant. The blur $b=\sqrt{\varepsilon}$ sets the distance below which the
+matching is soft; we use $b=0.02$ of the plant radius ($\approx$20\,mm) and $n=1{,}024$. \emph{QAL\,+\,Sinkhorn} is
+\begin{equation}
+  \mathcal{L} = \mathcal{L}_{\mathrm{QAL}} + \lambda\,S_\varepsilon(\mu,\nu)
+  \label{eq:qalsink}
+\end{equation}
+with $\lambda=0.5$. Each point-cloud loss enters the total loss with weight 1.
+
+\paragraph{Single plants.}
+Models are trained from scratch on Sorghum\_15K (10{,}500 training plants, one random view per plant per epoch,
+each plant rendered alone) for 200 epochs (65.8k steps) with a cosine schedule, learning rate
+$1.5\times10^{-4}$, a global batch of 32 and 80\% token masking, and differ only in the point-cloud loss. They
+are tested on all 2{,}250 test plants with the plant alone as input.
+
+\paragraph{Metrics.}
+Precision is the fraction of predicted points within a threshold of the target plant, recall the fraction of
+target points with a prediction within the threshold, and F1 their harmonic mean, averaged over plants. We write
+F1@$x$, Prec.@$x$ and Rec.@$x$ for a threshold of $x$\,mm.
+
+\paragraph{Results.}
+Neither kind of loss is sufficient on its own (\cref{tab:loss_single}). QAL, which matches every point to its
+nearest neighbour, places points precisely but leaves much of the plant uncovered (Rec.@10 0.143), while the
+Sinkhorn divergence covers more of the plant but places points poorly (Prec.@10 0.143). Adding a Sinkhorn term to
+QAL gives the best F1: it improves F1@10 over QAL by 0.037 (95\% CI 0.035--0.039 over plants; better on 84\% of
+plants), mainly by raising recall at a moderate cost in precision.
 
 \begin{table}[t]
-  \caption{\textbf{Point-cloud loss ablation on isolated sorghum plants} (trained from scratch, 2{,}250 test plants).}
+  \caption{Point-cloud losses on single plants (sorghum, trained from scratch, 2{,}250 test plants).}
   \label{tab:loss_single}
-  \centering\small
+  \centering
+  \small
   \setlength{\tabcolsep}{3pt}
-  \begin{tabular}{@{}lcccc@{}}
+  \begin{tabular}{@{}lccc@{}}
     \toprule
-    Loss & F1@5 & F1@10 & Prec.@10 & Rec.@10 \\
+    Loss & F1@10 & Prec.@10 & Rec.@10 \\
     \midrule
-    QAL              & 0.057          & 0.224          & \textbf{0.561} & 0.144 \\
-    Sinkhorn         & 0.045          & 0.168          & 0.142          & \textbf{0.206} \\
-    QAL\,+\,Sinkhorn & \textbf{0.083} & \textbf{0.259} & 0.422          & 0.189 \\
+    QAL                    & 0.222          & \textbf{0.556} & 0.143 \\
+    Sinkhorn               & 0.169          & 0.143          & \textbf{0.207} \\
+    QAL\,+\,Sinkhorn       & \textbf{0.259} & 0.423          & 0.189 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
+\paragraph{Sinkhorn weight and parameters.}
+We vary the weight $\lambda$ of \cref{eq:qalsink} and, at $\lambda=0.5$, the blur and the number of sampled points,
+in the single-plant setting above (\cref{tab:sinkhorn}). The weight matters and the parameters do not. Adding
+Sinkhorn raises F1@10 from 0.222 ($\lambda=0$) to 0.256 ($\lambda=0.25$) and 0.259 ($\lambda=0.5$), and a larger
+weight lowers it again (0.243 at $\lambda=1.0$): more Sinkhorn trades precision (0.556 to 0.351) for recall (0.143
+to 0.189), and recall stops improving beyond $\lambda=0.5$ while precision keeps falling. At $\lambda=0.5$, raising
+the blur from 0.02 to 0.05 or sampling 512 or 2{,}048 points instead of 1{,}024 changes F1@10 by at most 0.009, so we
+keep blur 0.02 and 1{,}024 points.
+
 \begin{table}[t]
-  \caption{\textbf{QAL tolerance $\tau$ and sharpness $\alpha$ screen} (isolated sorghum, 3{,}000 training plants, epoch 300, 225 validation views; @10 denotes 0.01 unit-sphere radius $\approx 10$\,mm). The $\tau=10$\,mm, $\alpha=100$ entry is evaluated at epoch 300 of a 300k-step cosine schedule.}
+  \caption{Sinkhorn weight $\lambda$ in \cref{eq:qalsink} and Sinkhorn parameters (sorghum single plants, trained from
+  scratch, 200 epochs, 2{,}250 test plants). Each row changes one setting of the base ($\lambda=0.5$, blur 0.02,
+  1{,}024 points), which is repeated in each block.}
+  \label{tab:sinkhorn}
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    Setting & F1@10 & Prec.@10 & Rec.@10 \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Sinkhorn weight $\lambda$}} \\
+    $\lambda=0$ (QAL alone)            & 0.222          & \textbf{0.556} & 0.143 \\
+    $\lambda=0.25$                     & 0.256          & 0.456          & 0.180 \\
+    $\lambda=0.5$ (base)               & \textbf{0.259} & 0.423          & 0.189 \\
+    $\lambda=1.0$                      & 0.243          & 0.351          & 0.188 \\
+    Sinkhorn alone                     & 0.169          & 0.143          & \textbf{0.207} \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Sinkhorn blur ($\lambda=0.5$)}} \\
+    0.02 (base)                        & \textbf{0.259} & 0.423          & 0.189 \\
+    0.05                               & 0.255          & 0.421          & 0.184 \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Sampled points ($\lambda=0.5$)}} \\
+    512                                & 0.256          & 0.417          & 0.187 \\
+    1{,}024 (base)                     & \textbf{0.259} & 0.423          & 0.189 \\
+    2{,}048                            & 0.250          & 0.403          & 0.184 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{QAL parameters.}
+We screened the tolerance $\tau$ and the sharpness $\alpha$ of \cref{eq:qal_w} in a shorter setting: sorghum
+single plants, 3{,}000 training plants, trained from scratch with a 30k-step (320-epoch) cosine schedule, 75\% token
+masking and synthetic leaf occluders with sensor noise added to the training inputs, using QAL alone as the
+point-cloud loss. Each setting was trained once and is scored at epoch 300 on 225 clean validation views
+(\cref{tab:qal_params}).
+
+A sharper weighting ($\alpha=300$) gives the highest F1, precision and recall, and a tolerance of 20\,mm is the
+weakest; a tolerance of 5 or 10\,mm performs the same. The differences are small (at most 0.025 F1), come from a
+single seed and a short schedule, and should be read as a screen rather than a final ranking.
+
+\begin{table}[t]
+  \caption{QAL parameter screen (sorghum single plants, epoch 300, 225 validation views). Here @10 is a
+  threshold of 0.01 of the plant radius ($\approx$10\,mm). The row $\tau=10$\,mm, $\alpha=100$ is taken from a longer run
+  (300k-step schedule) at the same epoch, so its learning rate had not yet decayed.}
   \label{tab:qal_params}
-  \centering\small
+  \centering
+  \small
   \begin{tabular}{@{}ccccc@{}}
     \toprule
     $\tau$ & $\alpha$ & F1@10 & Prec.@10 & Rec.@10 \\
@@ -1227,33 +1340,69 @@ with $\alpha = 100$ and $\tau = 0.01$ ($\approx 10$\,mm at median plant scale). 
 \subsection{Mixed Masking}
 \label{sec:abl_mixed}
 
-We also tested \emph{mixed} masking during occluded training (\cref{fig:mixed}), where each occluded training scene is masked either by preferentially hiding occluder tokens (with probability 0.5) or uniformly at random (with probability 0.5), evaluated under standard random masking at test time. As shown in \cref{tab:mixed_scene}, mixed masking improves $F_1$@10\,mm on simplified synthetic neighbor scenes ($+0.048$ in maize, $+0.013$ in sorghum) but offers no advantage over uniform random masking on physically simulated crop rows ($-0.003$ in maize, $-0.004$ in sorghum).
+When the training input is occluded, the masking can target the occluder. \emph{Structured} masking hides the
+tokens that show an occluder first (an image patch that is at least 30\% occluder pixels, or a point-cloud token
+whose centre is an occluder point) and fills the rest of the masking budget at random. \emph{Mixed} masking flips
+one coin per occluded training scene: with probability 0.5 the scene is masked structured, otherwise uniformly at
+random (\cref{fig:mixed}). We compare mixed masking with uniform \emph{random} masking. Validation and test always
+use random masking.
 
 \begin{figure*}[t]
   \centering
   \includegraphics[width=0.85\textwidth]{Figures/fig_mixed_masking.png}
-  \caption{\textbf{Comparison of random, structured, and mixed masking policies on two occluded maize row scenes.} Structured masking prioritizes hiding tokens dominated by neighboring plants, whereas mixed masking flips a coin per scene between structured and random masking. Visible tokens are shown at full contrast, with occluder-overlapping tokens outlined in orange.}
+  \caption{Mixed masking with one coin per scene, on two occluded maize scenes from the rendered rows. Columns: the
+  occluded input (point cloud: target plant in green, occluders in orange); random masking; structured masking, which
+  masks the occluder tokens first; and mixed masking, where a coin per training scene selects structured masking
+  (scene 1) or random masking (scene 2). For illustration, every masked panel keeps the same 20\% of the tokens of
+  each modality visible, drawn with the same random numbers, so only the policy differs. Images: masked patches are
+  faded, visible patches are in full colour (the render background is grey), and visible occluder patches are
+  outlined in orange. Point clouds: dots mark the centres of the visible point
+  tokens (green: target, orange: occluder). Below each panel: visible tokens that lie on occluders, out of 39.}
   \label{fig:mixed}
 \end{figure*}
 
+\paragraph{Setup.}
+All models are EmbodiedMAE-4M (base) trained for 200 epochs with a cosine schedule, a global batch of 32, 80\% token
+masking and the point-cloud loss QAL\,$+\,0.5\times$Sinkhorn; half of the training samples are
+occluded. The two models of each pair differ only in the masking. \emph{Synthetic scenes}: the point clouds of two
+other plants from the batch are placed beside the target plant in 3D and rendered into its image and depth map;
+these models are trained from scratch and receive the target's procedural parameters as input in training and
+test. \emph{Rendered rows}: the target plant is rendered with its two neighbouring plants 0.15\,m to either side,
+and no procedural parameters are given at test. The maize rendered-row models are trained from scratch; the
+sorghum ones are fine-tuned from a model already trained for 1{,}000 epochs on the rendered rows with random
+masking. In the maize pair, the mixed model was trained with 8 samples per GPU on 4 GPUs and the random model with
+16 per GPU on 2 GPUs (the same global batch).
+
+\paragraph{Metrics.}
+Every model is tested on all 2{,}250 test plants, one view each, with the occluded input. F1@$x$ is the harmonic
+mean of precision (predicted points within $x$\,mm of the target plant) and recall (target points with a
+prediction within $x$\,mm), averaged over plants.
+
 \begin{table*}[t]
-  \caption{\textbf{Mixed masking versus uniform random masking on occluded test rows} (2{,}250 test plants). $\Delta$F1@10 denotes mixed minus random.}
+  \caption{Mixed masking (one coin per scene) against random masking on occluded test input (2{,}250 test plants).
+  $\Delta$ is mixed minus random in F1@10. The better F1@10 of each pair is in bold.}
   \label{tab:mixed_scene}
-  \centering\small
+  \centering
+  \small
   \begin{tabular}{@{}lllccccc@{}}
     \toprule
     & & & \multicolumn{2}{c}{Random} & \multicolumn{2}{c}{Mixed} & \\
     \cmidrule(lr){4-5}\cmidrule(lr){6-7}
     Training occlusion & Tested on & Species & F1@5 & F1@10 & F1@5 & F1@10 & $\Delta$F1@10 \\
     \midrule
-    Synthetic scenes & synthetic scenes & maize   & 0.160 & 0.439 & 0.190 & \textbf{0.487} & $+0.048$ \\
-    Synthetic scenes & synthetic scenes & sorghum & 0.112 & 0.310 & 0.119 & \textbf{0.323} & $+0.013$ \\
+    Synthetic scenes & synthetic scenes & maize   & 0.160 & 0.439          & 0.190 & \textbf{0.487} & $+0.048$ \\
+    Synthetic scenes & synthetic scenes & sorghum & 0.112 & 0.310          & 0.119 & \textbf{0.323} & $+0.013$ \\
     \midrule
-    Rendered rows & rendered rows & maize   & 0.525 & \textbf{0.775} & 0.522 & 0.771 & $-0.003$ \\
-    Rendered rows & rendered rows & sorghum & 0.133 & \textbf{0.377} & 0.133 & 0.373 & $-0.004$ \\
+    Rendered rows    & rendered rows    & maize   & 0.525 & \textbf{0.775} & 0.522 & 0.771          & $-0.003$ \\
+    Rendered rows    & rendered rows    & sorghum & 0.133 & \textbf{0.377} & 0.133 & 0.373          & $-0.004$ \\
     \bottomrule
   \end{tabular}
 \end{table*}
+
+\paragraph{Results.}
+Mixed masking helps only on the synthetic scenes: F1@10 rises by 0.048 in maize and by 0.013 in sorghum
+(\cref{tab:mixed_scene}). On the rendered rows it gives no gain in either species ($-0.003$ in maize and $-0.004$
+in sorghum).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % APPENDIX H: REAL-ROW FINE-TUNING GALLERY
