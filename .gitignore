@@ -78,3 +78,4 @@ slurm/delta/delta_env.sh
 reports/_snap_*.pth
 .DS_Store
 site/data/
+data_samples/
