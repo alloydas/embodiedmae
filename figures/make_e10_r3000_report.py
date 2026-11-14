@@ -234,5 +234,27 @@ Test plants at the 25th, 50th and 75th percentile of the fine-tuned model's per-
     shutil.copy(B / 'report.pdf', PDF); print('wrote', PDF, 'missing reports:', missing)
 
 
+def visual():
+    """--visual: the example figures only (user: "I need only the visual result no more data")."""
+    ex = json.load(open(IMG / 'final_examples.json'))
+    body = []
+    for sp, title in (('maize', 'Maize'), ('sorghum', 'Sorghum (zoomed window)')):
+        body.append(r'\section*{' + title + '}')
+        for e in ex[sp]:
+            body.append(r'\begin{center}\includegraphics[width=\linewidth,height=0.28\textheight,keepaspectratio]{' + str(IMG / e['file']) + r'}\end{center}')
+    tex = (r"""\RequirePackage[T1]{fontenc}
+\documentclass[10pt]{article}
+\usepackage[letterpaper,landscape,margin=0.5in]{geometry}
+\usepackage{helvet}\renewcommand{\familydefault}{\sfdefault}
+\usepackage{graphicx}\pagestyle{empty}\setlength{\parindent}{0pt}
+\begin{document}
+""" + '\n'.join(body) + '\n\\end{document}\n')
+    (B / 'visual.tex').write_text(tex)
+    env = dict(**__import__('os').environ); env['PATH'] = TEX_BIN + ':' + env['PATH']
+    r = subprocess.run(['tectonic', '-X', 'compile', 'visual.tex'], cwd=B, env=env, capture_output=True, text=True)
+    if r.returncode: print(r.stdout[-3000:], r.stderr[-3000:]); sys.exit(1)
+    out = R / 'reports/E10_rows3000_visual.pdf'; shutil.copy(B / 'visual.pdf', out); print('wrote', out)
+
+
 if __name__ == '__main__':
-    main()
+    visual() if '--visual' in sys.argv else main()
