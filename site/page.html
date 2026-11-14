@@ -66,6 +66,9 @@
   .btn.off { background: transparent; color: var(--muted); border-color: var(--rule); box-shadow: none; pointer-events: none; }
   .btn:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { .btn:hover { transform: none; } }
+  .abstract { max-width: 760px; margin: 0 auto; padding: 40px var(--gutter) 8px; display: grid; gap: 14px; }
+  .abstract h2 { text-align: center; }
+  .abstract p { font-size: 16px; line-height: 1.65; text-align: justify; hyphens: auto; }
   .tldr { max-width: 760px; background: var(--card); border: 1px solid var(--rule); border-radius: 14px; padding: 18px 22px; text-align: left; display: grid; gap: 6px; }
   .tldr .k { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .tldr p { font-size: 16.5px; }
@@ -159,7 +162,7 @@
 <div class="topbar"><div class="wrap">
   <a class="wordmark" href="#top">CropCode</a>
   <nav aria-label="Sections">
-    <a href="#explore">Results</a><a href="#data">Data</a><a href="#pretrain">Pretraining</a><a href="#any">Any input</a><a href="#partial">Partial clouds</a><a href="#rows">Crop rows</a><a href="#real">Real plants</a>
+    <a href="#abstract">Abstract</a><a href="#explore">Results</a><a href="#data">Data</a><a href="#pretrain">Pretraining</a><a href="#any">Any input</a><a href="#partial">Partial clouds</a><a href="#rows">Crop rows</a><a href="#real">Real plants</a>
   </nav>
   <a class="navcode" href="https://github.com/alloydas/CropCode">Code ↗</a>
 </div></div>
@@ -187,6 +190,14 @@
 </div></header>
 
 <main>
+  <section id="abstract" aria-labelledby="abstract-h">
+    <div class="abstract">
+      <h2 id="abstract-h">Abstract</h2>
+      <p>Editable, biologically interpretable 3D models of field-grown crops are essential for high-throughput phenotyping, <em>in silico</em> breeding trials, and agricultural digital twins. However, recovering these models from field sensors remains difficult because plant leaves are thin and slender, neighboring plants in a row heavily occlude one another, and routine field campaigns typically capture only a single photograph, a noisy depth map, or a partial point cloud per plant. In this regime of slender geometry under heavy occlusion, both standard 3D point-cloud completion and Chamfer-based evaluation break down. To overcome these challenges, we introduce CropCode, a multimodal masked-autoencoder framework that recovers the complete procedural representation of a plant—the generator parameters specifying leaf count, insertion heights, blade angles, and surface geometry—from any subset of RGB, depth, and point-cloud observations in a single forward pass.</p>
+      <p>We pretrain CropCode on 15,000 procedurally generated plants per species (maize and sorghum), fine-tune it on simulated crop rows where neighboring leaves bend realistically upon contact, and distill a full-modality teacher into single-sensor student models. Cross-modal distillation cuts sorghum parameter error from point clouds alone in half and reduces cross-modal generation loss by 30% in sorghum and 44% in maize. Fine-tuning on simulated rows removes 92% (maize) and 85% (sorghum) of the reconstruction error introduced by occluding neighbors. Through controlled ablations across both species, we establish a key architectural principle: exposing ground-truth procedural parameters to the encoder degrades learned sensor representations, whereas using them strictly as a reconstruction target helps maize while hurting sorghum. We also show that Chamfer distance and linear probes on frozen representations rank sensor modalities differently on thin foliage, motivating our adoption of frozen-latent probes as the primary metric for architectural decisions. Finally, on crop rows constructed from real plants of both species, zero-shot transfer degrades on plants taller than the synthetic training range, but fine-tuning on 75% of the real plants brings the held-out test set to a 1.6% median height error and predicts leaf count within one leaf on 70% of maize captures—running in milliseconds per plant rather than minutes or hours. We will release FieldScan, our 30,000-plant, two-species benchmark pairing multimodal field captures under simulated row occlusion with exact procedural ground truth.</p>
+    </div>
+  </section>
+
   <section id="explore" aria-labelledby="explore-h">
     <div class="task-head"><h2 id="explore-h">Results</h2><p class="lede">Choose a task. See what goes in and what CropCode writes out. Every 3D view is a held-out test plant: drag to rotate, scroll or pinch to zoom, double-click to reset.</p></div>
     <div class="tiles">
