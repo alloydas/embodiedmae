@@ -50,7 +50,19 @@ from the first upload, all handled here:
   plant    info['plant'] = the scan (plant_id without a `_t<k>` tilt suffix), the unit of the train/test split and of
            the bootstrap (a plant appears in many rows, as the middle plant and as a neighbour).
 """
-import csv, os, pathlib
+# source='field1000' (2026-11-15 upload, /work/mech-ai/alloy/{Maize,Sorghum}_Field_1000, the whole-plant photos unzipped to
+# FIELD1000/<species>/{png,pcd,csv}): 1000 rows per species of 20 plants plus 2 back rows (30 / 60 in behind; in the photo
+# only, not in the PCD), ring light, level camera ~1.1 m away, hfov ~72-75 deg, portrait photos ~2.7k x 3.6k px that
+# frame every front plant. Maize: the 520 scanned plants; sorghum: 51 scans + 306 replicas (`<scan>_rNN`, 1.5-2.0 m).
+# Same PCD header and fields as rows3000. Differences, handled here:
+#   csv      every front plant in view (plant_number, is_middle_plant); the truth and the leaf count use the middle
+#            plant's rows only. SORGHUM NOW HAS PER-LEAF PARAMETERS too (same columns as maize).
+#   window   'plant': a square around the middle plant's own extent in the photo (all its points, hidden ones too),
+#            8 % margin, so the target fills the 224 input as in the synthetic rows; training crops (zoom_aug) scale
+#            it by U(0.85, 1.15) and shift its centre by up to 8 % of the side.
+#   plant    the split unit is the SCAN: sorghum replicas map to their scan through design/field_design_sorghum_3000.csv
+#            (plant_id -> `<scan>_rNN`); maize plant ids are the scans.
+import csv, os, pathlib, re
 import numpy as np, torch
 from PIL import Image
 from torchvision import transforms
@@ -81,15 +93,33 @@ SPECIES = {
 
 
 ROWS3000 = ROOT / 'e10_rows_3000'
+FIELD1000 = ROOT / 'e10_field_1000'
+ROWS_ROOT = {'rows3000': ROWS3000, 'field1000': FIELD1000}
+FIELD_DESIGN = {'sorghum': pathlib.Path('/work/mech-ai/alloy/Sorghum_Field_1000/design/field_design_sorghum_3000.csv')}
 LEAF_TRUTH_COLS = ('internode_dist_m', 'leaf_length_m', 'leaf_width_m', 'curvature_1pm')
 LEAF_TRUTH_FIELDS = ('distance', 'leafLength', 'leafWidth', 'avgCurvature')     # maize v2 leaf fields, same order
 
 
-def read_leaf_csv(path):
-    """-> (n, 4) truth in LEAF_TRUTH_FIELDS order, (n,) zenith; rows sorted by leaf number."""
-    rows = sorted(csv.DictReader(open(path)), key=lambda r: int(r['leaf']))
-    return (np.array([[float(r[c]) for c in LEAF_TRUTH_COLS] for r in rows], np.float32).reshape(-1, len(LEAF_TRUTH_COLS)),
-            np.array([float(r['zenith_deg']) for r in rows], np.float32))
+def middle_leaf_rows(path):
+    """the middle plant's leaf rows of a stop's CSV, one per leaf number. field1000 CSVs list every front plant, and
+    1.3 % of the sorghum rows (853 of 6,076 stops) are blank duplicates of a leaf number (length / width / zenith /
+    azimuth / internode empty): those are dropped."""
+    rows = list(csv.DictReader(open(path)))
+    if rows and 'is_middle_plant' in rows[0]:
+        rows = [r for r in rows if r['is_middle_plant'] == '1']
+    out = {}
+    for r in rows:
+        if r.get('leaf_length_m', 'x') != '' and r['leaf'] not in out: out[r['leaf']] = r
+    return sorted(out.values(), key=lambda r: int(r['leaf']))
+
+
+def read_leaf_csv(path, len_scale=1.0):
+    """-> (n, 4) truth in LEAF_TRUTH_FIELDS order, (n,) zenith; rows sorted by leaf number. len_scale multiplies the
+    leaf length (field1000 sorghum: the 51 original scans' CSV lengths are those of the unscaled scan, see the index)."""
+    rows = middle_leaf_rows(path)
+    a = np.array([[float(r[c]) for c in LEAF_TRUTH_COLS] for r in rows], np.float32).reshape(-1, len(LEAF_TRUTH_COLS))
+    a[:, LEAF_TRUTH_COLS.index('leaf_length_m')] *= np.float32(len_scale)
+    return a, np.array([float(r['zenith_deg']) for r in rows], np.float32)
 _META_KEYS = ('row', 'stop', 'plant_id', 'middle_plant', 'camera_height_m', 'hfov_deg', 'image_px')
 
 
@@ -107,28 +137,47 @@ def _pcd_meta(path):
     return {k: kv[k] for k in _META_KEYS}
 
 
-def build_index_3000(species, workers=16):
-    """One pass over the PCD headers (4 KB each) -> ROWS3000/<species>/index.csv, plus the maize leaf counts."""
+def plant_scans(species, source):
+    """plant_id -> scan (the split unit)"""
+    if source == 'field1000' and species in FIELD_DESIGN:
+        return {r['plant_id']: re.sub(r'_r\d+$', '', r['plant']) for r in csv.DictReader(open(FIELD_DESIGN[species]))}
+    return {}
+
+
+def build_index_3000(species, workers=16, source='rows3000'):
+    """One pass over the PCD headers (4 KB each) -> <root>/<species>/index.csv, plus the middle plant's leaf counts
+    and its scan (the split unit)."""
     from concurrent.futures import ThreadPoolExecutor
-    base = ROWS3000 / species
+    base = ROWS_ROOT[source] / species
+    scans = plant_scans(species, source)
+    design = ({r['plant_id']: r for r in csv.DictReader(open(FIELD_DESIGN[species]))}
+              if source == 'field1000' and species in FIELD_DESIGN else None)
     names = sorted(f[:-4] for f in os.listdir(base / 'pcd') if f.endswith('.pcd'))
     def one(n):
         m = _pcd_meta(base / 'pcd' / f'{n}.pcd'); m['name'] = n
         m['png_ok'] = int((base / 'png' / f'{n}.png').exists())
         c = base / 'csv' / f'{n}.csv'
-        m['leaves'] = (sum(1 for _ in open(c)) - 1) if c.exists() else -1
+        rr = middle_leaf_rows(c) if c.exists() else []
+        m['leaves'] = len(rr) if c.exists() else -1
+        # field1000 sorghum: the CSV leaf lengths of the 51 ORIGINAL scans (no _rNN) are the unscaled scan's (1.8-5.2x
+        # the design's mean leaf length; widths and internodes are scaled); rescale to the design mean. Replicas: 1.
+        m['len_scale'] = 1.0
+        if design and rr and m['plant_id'] in design:
+            ratio = float(design[m['plant_id']]['mean_leaf_length_m']) / float(np.mean([float(r['leaf_length_m']) for r in rr]))
+            if abs(np.log(ratio)) > 0.05: m['len_scale'] = round(ratio, 5)
+        m['scan'] = scans.get(m['plant_id'], scan_id(m['plant_id']))
         return m
     with ThreadPoolExecutor(workers) as ex:
         rows = list(ex.map(one, names, chunksize=64))
     out = base / 'index.csv'; tmp = out.with_suffix('.csv.tmp')
     with open(tmp, 'w', newline='') as fh:
-        w = csv.DictWriter(fh, fieldnames=['name', *_META_KEYS, 'leaves', 'png_ok']); w.writeheader(); w.writerows(rows)
+        w = csv.DictWriter(fh, fieldnames=['name', *_META_KEYS, 'leaves', 'scan', 'len_scale', 'png_ok']); w.writeheader(); w.writerows(rows)
     os.replace(tmp, out)
     return out
 
 
-def load_index_3000(species):
-    return list(csv.DictReader(open(ROWS3000 / species / 'index.csv')))
+def load_index_3000(species, source='rows3000'):
+    return list(csv.DictReader(open(ROWS_ROOT[source] / species / 'index.csv')))
 
 
 def row_id(d):
@@ -167,21 +216,22 @@ class RealRowDataset(torch.utils.data.Dataset):
         # review page, maize-like proportions; user, 2026-11-13: "use this zoomed data for finetuning and zeroshot");
         # 'full' = the whole strip as a square (the first-upload convention).
         self.sorghum_window = sorghum_window if (source == 'rows3000' and species == 'sorghum') else None
+        self.field = source == 'field1000'                 # 'plant' window for both species
         # training augmentation (user: "also augment by zoomed cropped part"): a random zoomed crop per item and epoch,
         # side x U(0.75, 1.25) of the zoom window, centre anywhere between the 10th and 90th percentile of the middle
         # plant's leaves (image rows), +-10 % of the photo width sideways. The rng is the item's (seed changes per epoch).
-        self.zoom_aug = bool(zoom_aug) and self.sorghum_window == 'zoom'
-        if source == 'rows3000':                    # plants = scan ids (scan_id) to keep; rows = row numbers
+        self.zoom_aug = bool(zoom_aug) and (self.sorghum_window == 'zoom' or self.field)
+        if source in ROWS_ROOT:                     # plants = scan ids to keep; rows = row numbers
             plants = None if plants is None else {str(p) for p in plants}
-            for m in load_index_3000(species):
+            for m in load_index_3000(species, source):
                 if not int(m['png_ok']):
                     continue
                 rid, stop = f"{int(m['row']):04d}", int(m['stop'])
                 if (rows is not None and rid not in rows) or (stops is not None and stop not in stops) or \
-                   (plants is not None and scan_id(m['plant_id']) not in plants):
+                   (plants is not None and m.get('scan', scan_id(m['plant_id'])) not in plants):
                     continue
-                self.items.append(('rows3000', str(ROWS3000 / species), rid, stop, m))
-            layouts = ['rows3000']
+                self.items.append((source, str(ROWS_ROOT[source] / species), rid, stop, m))
+            layouts = [source]
         for layout in (layouts if source == 'rows2026' else ()):
             for d in sorted(self.sp['layouts'][layout].glob('row_*_seed1')):
                 rid = row_id(d)
@@ -213,14 +263,14 @@ class RealRowDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         layout, d, rid, stop = self.items[idx][:4]
         rng = np.random.default_rng(self.seed * 1000003 + idx)
-        if self.source == 'rows3000':
+        if self.source in ROWS_ROOT:
             m = self.items[idx][4]
             W_, H_ = (int(v) for v in m['image_px'].split('x'))
             fx = fy = (W_ / 2) / np.tan(np.radians(float(m['hfov_deg']) / 2)); cx, cy = (W_ - 1) / 2, (H_ - 1) / 2
             f = dict(photo=f"png/{m['name']}.png", pcd=f"pcd/{m['name']}.pcd", height_px=H_, camera_height_m=m['camera_height_m'])
-            target, plant, leaves, white_bg = int(m['middle_plant']), scan_id(m['plant_id']), int(m['leaves']), False
+            target, plant, leaves, white_bg = int(m['middle_plant']), m.get('scan') or scan_id(m['plant_id']), int(m['leaves']), False
             c = pathlib.Path(d) / 'csv' / f"{m['name']}.csv"
-            leaf_raw, leaf_zen = read_leaf_csv(c) if c.exists() else (None, None)
+            leaf_raw, leaf_zen = read_leaf_csv(c, float(m.get('len_scale') or 1.0)) if c.exists() else (None, None)
         else:
             frames, plants = self._table(d, rid)
             f = frames[stop - 1]
@@ -237,7 +287,7 @@ class RealRowDataset(torch.utils.data.Dataset):
         P = read_pcd(pathlib.Path(d) / f['pcd'])
         X = np.stack([P['x'], P['y'], P['z']], 1).astype(np.float64)
         lab = P['label'].astype(np.int64)
-        if self.source == 'rows3000':                                     # level camera: y is vertical (down)
+        if self.source in ROWS_ROOT:                                      # level camera: y is vertical (down)
             yt = X[lab == target, 1]; height = float(yt.max() - yt.min()) if len(yt) else float('nan')
         else:
             height = float(tp['height_m'])
@@ -255,6 +305,13 @@ class RealRowDataset(torch.utils.data.Dataset):
                     q10, q90 = np.percentile(v[leaf], [10, 90]); vm = float(zr.uniform(q10, q90))
                 wx = cx + zr.uniform(-0.1, 0.1) * Wp
             wy = float(np.clip(vm, half - 0.5, Hp - 0.5 - half))
+        if self.field:                                                    # 'plant': a square around the middle plant
+            tp_ = (lab == target) & (z > 0)
+            u0, u1, v0, v1 = u[tp_].min(), u[tp_].max(), v[tp_].min(), v[tp_].max()
+            half = 0.5 * max(u1 - u0, v1 - v0) * 1.08; wx, wy = (u0 + u1) / 2, (v0 + v1) / 2
+            if self.zoom_aug:
+                zr = np.random.default_rng(self.seed * 7919 + idx * 104729 + 17)
+                half *= zr.uniform(0.85, 1.15); wx += zr.uniform(-0.08, 0.08) * 2 * half; wy += zr.uniform(-0.08, 0.08) * 2 * half
         win = (z > 0) & (np.abs(u - wx) <= half) & (np.abs(v - wy) <= half)
 
         def visible(mask, res):
@@ -309,7 +366,7 @@ class RealRowDataset(torch.utils.data.Dataset):
 
         info = dict(layout=layout, row=rid, stop=stop, plant=plant, target=target, height=height, leaves=leaves,
                     occ_frac=occ, scale=scale, n_scene_visible=int(vis_scene.sum()), n_target_visible=int(vis_target.sum()),
-                    plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']), window=self.sorghum_window or self.sp['window'],
+                    plants_in_window=int(len(np.unique(lab[win]))), cam_height=float(f['camera_height_m']), window='plant' if self.field else (self.sorghum_window or self.sp['window']),
                     leaf_raw=leaf_raw, leaf_zenith=leaf_zen)
         out = (rgb, torch.from_numpy(dep)[None], torch.from_numpy(pin.astype(np.float32)),
                torch.zeros(self.sp['tokens'], self.sp['params']), torch.zeros(self.sp['tokens']), torch.from_numpy(pgt.astype(np.float32)))
