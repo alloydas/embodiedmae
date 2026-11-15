@@ -72,12 +72,16 @@
   </div></div>
   <div class="group" id="diagrams"><div class="k">Diagrams</div></div>
   <section aria-labelledby="h-fig-teaser">
-    <h2 id="h-fig-teaser">Fig. 1 · Teaser: new flow diagram</h2>
-    <p><b>New (right), built from the spec <code>figures/fig_teaser_flow_SPEC.md</code></b>, after the inputs → one model → outputs flow on the UGG project page. Two species rows share one CropCode model box listing its three training stages. Inputs: the occluded row's photograph (dashed box marks the target for the reader), depth frame and 24,576-point scene cloud, each with a wire in its stream colour. Outputs: the written recipe re-rendered as a 3D plant (purple) over the true plant (grey), with written vs true height, leaf count and leaf length. Same plants and recipes as the current Fig. 1. Full text width, <b>6.35 cm tall</b> (spec: at most 6.5). Both images are cropped from the compiled paper; <code>main.tex</code> is not changed.</p>
-    <p><b>One departure from the spec, and a caption error it exposed.</b> The spec asks for the photograph wire solid and the depth/cloud wires dimmed. But the numbers in the current Fig. 1 (height within 2 %, leaf count within one) come from the row model given <b>all three</b> streams. From the photograph alone, on these same rows, it writes sorghum 1.79 m / 24 leaves (true 1.10 m / 21) and maize 0.79 m / 6 leaves (true 1.06 m / 13). So the new figure draws all three wires solid ("here: all three streams, any subset is accepted"). The current caption's "Taking only the row photograph as input (a depth frame or point cloud works equally well)" is wrong and needs changing. The spec's photo-only variant is still available with <code>--photo-only</code>.</p>
+    <h2 id="h-fig-teaser">Fig. 1 · Teaser: two new versions</h2>
+    <p><b>A. Flow diagram, both species</b> (from <code>figures/fig_teaser_flow_SPEC.md</code>). Inputs: the occluded row's photograph (dashed box = target, for the reader), depth frame and scene cloud; one CropCode box; outputs: the procedural plant CropCode writes, <b>textured, with no ground truth drawn</b>, and its height, leaf count and leaf length beside the true values. Here all three streams go in: the reported numbers are only that good with all three (from the photograph alone these rows come out far worse). <b>Sorghum is now Sorghum_10780</b>, picked from 60 test rows (<code>figures/pick_teaser_sorghum.py</code>) because CropCode writes exactly the true leaf count (19 = 19) with height 0.3 % off; maize stays plant 0106 (13 = 13). 6.35 cm tall.</p>
     <div class="pair">
       <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig1_current.png" alt="Fig. 1, current paper version"></div><figcaption>Current paper</figcaption></figure>
-      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig1_flow.png" alt="Fig. 1, new flow diagram"></div><figcaption>New flow diagram (not yet in main.tex)</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig1_flow.png" alt="Fig. 1, new flow diagram, both species"></div><figcaption>A. Flow diagram, both species</figcaption></figure>
+    </div>
+    <p><b>B. Maize only, four streams in, four out.</b> One held-out maize test plant (plant 0106, view 1). All four streams go in with 80 % of their tokens hidden (counts beside each input); the maize headline model rebuilds all four: image, depth, cloud (Chamfer 0.39×10⁻³) and the procedural plant (textured, no ground truth drawn; height 1.04 m vs 1.06 m, 13 leaves vs 13). 6.35 cm tall.</p>
+    <div class="pair">
+      <figure class="paper"><div class="figbox"><img loading="lazy" src="img/fig1_current.png" alt="Fig. 1, current paper version"></div><figcaption>Current paper</figcaption></figure>
+      <figure class="ugg"><div class="figbox"><img loading="lazy" src="img/fig1_maize44.png" alt="Fig. 1, maize only, four streams in and out"></div><figcaption>B. Maize, 4 streams in → 4 out</figcaption></figure>
     </div>
   </section>
   <section aria-labelledby="h-fig2-stages">

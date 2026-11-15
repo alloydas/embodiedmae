@@ -16,15 +16,18 @@ from matplotlib.colors import to_rgb
 LEAF_C, STEM_C, TRUTH_C = '#7d67c4', '#6b5a3e', '#c4c4c4'
 
 
-def mesh(rec, species, step=0.012, across=4):
-    """-> list of (quad (4, 3) in plant frame x, y_up, z) and kind ('leaf' | 'stem')"""
+def mesh(rec, species, step=0.012, across=4, uv=False, fold=0.0):
+    """-> list of (quad (4, 3) in plant frame x, y_up, z) and kind ('leaf' | 'stem'); uv=True appends (t, o) per quad
+    (t: base 0 -> tip 1 along the leaf, or up the stem; o: -1..1 across the blade); fold > 0 lifts the blade edges into
+    a shallow V about the midrib (fraction of the half width)"""
     rad = np.radians; H = float(rec['height']); quads = []
     sr = 0.011 if species == 'maize' else 0.009
     ang = np.linspace(0, 2 * np.pi, 9); ys = np.linspace(0, H, max(2, int(H / 0.05) + 1))
     for a0, a1 in zip(ang[:-1], ang[1:]):
         for y0, y1 in zip(ys[:-1], ys[1:]):
-            quads.append((np.array([[sr * np.cos(a0), y0, sr * np.sin(a0)], [sr * np.cos(a1), y0, sr * np.sin(a1)],
-                                    [sr * np.cos(a1), y1, sr * np.sin(a1)], [sr * np.cos(a0), y1, sr * np.sin(a0)]]), 'stem'))
+            q = np.array([[sr * np.cos(a0), y0, sr * np.sin(a0)], [sr * np.cos(a1), y0, sr * np.sin(a1)],
+                          [sr * np.cos(a1), y1, sr * np.sin(a1)], [sr * np.cos(a0), y1, sr * np.sin(a0)]])
+            quads.append((q, 'stem', ((y0 + y1) / 2 / max(H, 1e-6), 0.0)) if uv else (q, 'stem'))
     y = 0.0
     for i, l in enumerate(rec['leaves']):
         if species == 'maize':
@@ -41,11 +44,13 @@ def mesh(rec, species, step=0.012, across=4):
         hz = (b * p1[0] + c * p2[0])[:, 0]; vy = (a * y0 + b * p1[1] + c * p2[1])[:, 0]
         hw = 0.5 * w * np.sin(np.pi * np.minimum(1, 0.15 + 0.85 * t[:, 0])) ** 0.6
         o = np.linspace(-1, 1, across + 1)
-        P = np.stack([hz[:, None] * d[0] + (hw[:, None] * o[None]) * e[0], np.repeat(vy[:, None], len(o), 1),
+        lift = fold * hw[:, None] * np.abs(o[None])                                        # V-shaped blade about the midrib
+        P = np.stack([hz[:, None] * d[0] + (hw[:, None] * o[None]) * e[0], vy[:, None] + lift,
                       hz[:, None] * d[1] + (hw[:, None] * o[None]) * e[1]], -1)             # (steps, across+1, 3)
         for s in range(len(t) - 1):
             for k in range(across):
-                quads.append((np.array([P[s, k], P[s, k + 1], P[s + 1, k + 1], P[s + 1, k]]), 'leaf'))
+                q = np.array([P[s, k], P[s, k + 1], P[s + 1, k + 1], P[s + 1, k]])
+                quads.append((q, 'leaf', (float(t[s, 0] + t[s + 1, 0]) / 2, float(o[k] + o[k + 1]) / 2)) if uv else (q, 'leaf'))
     return quads
 
 
@@ -59,6 +64,22 @@ def _shade(quads, base, light):
 
 
 VIEW = {'maize': (24, -38), 'sorghum': (16, -55)}             # three-quarter views, slightly from above
+TEXTURE = 'texture'                                              # layer colour: a leaf texture instead of a flat colour
+
+
+def texture(kind, t, o):
+    """plant colours (user, 2026-11-14: "the output procedural model need to be textured"): leaves dark green at the
+    base to lighter at the tip, a pale midrib, faint parallel veins, darker margins, a slight yellowing at the tip;
+    the stem a green-brown sheath with darker nodes every ~8 % of the height"""
+    if kind == 'stem':
+        c = np.array([0.34, 0.46, 0.20]) * (0.85 if (t * 12) % 1 < 0.12 else 1.0); return c
+    base = np.array([0.16, 0.40, 0.13]) * (1 - t) + np.array([0.40, 0.66, 0.24]) * t
+    a = abs(o)
+    if a < 0.14: base = base * 0.45 + np.array([0.80, 0.88, 0.58]) * 0.55             # midrib
+    base = base * (1 + 0.05 * np.cos(a * np.pi * 9))                                    # parallel veins
+    if a > 0.82: base = base * 0.86                                                    # margins
+    if t > 0.9: base = base * 0.75 + np.array([0.70, 0.66, 0.30]) * 0.25                # tip
+    return np.clip(base, 0, 1)
 
 
 def draw(ax, layers, species, elev=None, azim=None, lim=None):
@@ -67,6 +88,11 @@ def draw(ax, layers, species, elev=None, azim=None, lim=None):
     polys, cols = [], []
     L = np.array([0.4, 0.75, -0.55]); L /= np.linalg.norm(L)
     for rec, colr, alpha in layers:
+        if colr == TEXTURE:                                                             # finer blade, V-folded, textured
+            for q, kind, (t, o) in mesh(rec, species, across=8, uv=True, fold=0.18):
+                c = _shade([q], texture(kind, t, o), L)[0]
+                polys.append(q[:, [0, 2, 1]]); cols.append((*c, alpha))
+            continue
         for q, kind in mesh(rec, species):
             base = to_rgb(STEM_C if (kind == 'stem' and colr != TRUTH_C) else colr)
             c = _shade([q], base, L)[0]

@@ -5,10 +5,11 @@ Three zones, two species rows (sorghum on top, maize below) sharing one model bo
           the dashed target box), the row depth frame and the 24,576-point scene cloud. The photograph's wire is solid
           (the input used here), the depth and cloud wires dimmed and dashed: any one of these suffices.
   MODEL   one CropCode box (UGG's stream-colour gradient), its three training stages.
-  OUTPUT  per species the recipe CropCode writes, re-rendered as a 3D plant (figures/_proc3d.py: purple = written,
-          translucent grey = true), with written vs true height and leaf count.
+  OUTPUT  per species the recipe CropCode writes, re-rendered as a textured 3D plant (figures/_proc3d.py TEXTURE;
+          user 2026-11-14: "the output procedural model need to be textured", "dont use groundtruth in the image"), with written vs true height and leaf count.
 Wires are coloured by stream with the paper palette of the any-to-all figure (image blue, depth yellow, cloud pink,
-recipe purple). Same held-out test rows as the current teaser (Sorghum_10113, plant_0106; test split, yaw 0, seed 0),
+recipe purple). Held-out test rows (test split, yaw 0, seed 0): maize plant_0106 as the current teaser; sorghum
+Sorghum_10780 (figures/pick_teaser_sorghum.py: leaf count written = true),
 the same recipes as the current teaser (teaser_row_dump.pkl: the row fine-tune given ALL THREE streams), so all three
 wires are solid. --photo-only draws the spec's variant (photo solid, depth/cloud dimmed) with the photo-only recipe; on
 these rows that recipe is far off (sorghum 1.79 m / 24 leaves vs 1.10 / 21; maize 0.79 m / 6 vs 1.06 / 13).
@@ -30,42 +31,20 @@ import _proc3d as P3
 import ugg_style as U
 
 FIG = R / 'paper/overleaf/Figures'
-TEASER = FIG / 'teaser'
-PL = {'sorghum': 'Sorghum_10113', 'maize': 'plant_0106'}
+PL = {'sorghum': 'Sorghum_10780', 'maize': 'plant_0106'}        # sorghum: figures/pick_teaser_sorghum.py (user, 2026-11-14:
+# "Pick one best sorghum plant where leave number matches with ground truth": 19 leaves written = 19 true, height 0.3 % off)
 ROW_RUNS = {'sorghum': 'sorghum_row_ft', 'maize': 'maize_row_ft_e1'}
-DUMP = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12/teaser_row_dump.pkl')
-CACHE = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12/teaser_flow_inputs.pkl')
-BOX = {'sorghum': (0.355, 0.064, 0.645, 0.955), 'maize': (0.364, 0.045, 0.709, 0.982)}   # target box in the photo tile (x0, top, x1, bottom)
-OCC = {'sorghum': 25, 'maize': 22}
+CACHE = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12') / f"teaser_flow_rows_{PL['sorghum']}_{PL['maize']}.pkl"
 E, Fi, I = U.STREAM, U.STREAM_FILL, U.STREAM_INK
 INK, MUTED, GREY = '#1a1a1a', '#5f5f5f', '#8c8c8c'
 F = 8.5
 
 
-def inputs():
-    """the row depth frame and scene cloud of the teaser rows (the RowDataset item of make_teaser_v2.py --mode row)"""
+def rows():
+    """per species, the held-out test row at yaw 0 (shot 0, RowDataset seed 0, the teaser protocol): the row photograph as
+    captured, the target's box (from the target-only render's alpha), the hidden fraction, the depth frame, the scene cloud,
+    and the recipe the row fine-tune writes from all three streams ('all') and from the photograph alone ('rgb')"""
     if CACHE.exists(): return pickle.load(open(CACHE, 'rb'))
-    from row_dataset import RowDataset
-    from eval_row import build_model, DEFAULT_ROOT
-    D = {}
-    for sp in ('sorghum', 'maize'):
-        _, cfg, _ = build_model(R / 'outputs' / ROW_RUNS[sp], 'checkpoints/checkpoint_epoch_100.pth', 'cpu', sp)
-        gain = float(cfg.get('rgb_brighten_gain', 1.0)) if sp == 'sorghum' else None
-        ds = RowDataset(DEFAULT_ROOT[sp], 'test', sp, 'row', cfg.get('img_size', 224), cfg['num_points'], cfg['max_leaves'],
-                        thetas=[0], rgb_gain=gain, gt_points=cfg['gt_points'], plants=[PL[sp]])
-        np.random.seed(0)
-        rgb, depth, pc, params, valid, g_rgb, g_depth, g_pc, info = ds[0]
-        D[sp] = dict(depth=depth[0].numpy(), scene=pc.numpy())
-    pickle.dump(D, open(CACHE, 'wb')); return D
-
-
-PHOTO = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12/teaser_flow_photo_only.pkl')
-
-
-def photo_only():
-    """the recipe the row fine-tune writes from the ROW PHOTOGRAPH ALONE (the figure's solid wire; eval_row.predict with
-    src='rgb': the photograph fully visible, depth / cloud / recipe hidden), same rows and seed as the teaser"""
-    if PHOTO.exists(): return pickle.load(open(PHOTO, 'rb'))
     from row_dataset import RowDataset
     from eval_row import build_model, predict, DEFAULT_ROOT
     D = {}
@@ -76,9 +55,19 @@ def photo_only():
                         thetas=[0], rgb_gain=gain, gt_points=cfg['gt_points'], plants=[PL[sp]])
         np.random.seed(0)
         rgb, depth, pc, params, valid, g_rgb, g_depth, g_pc, info = ds[0]
-        _, ppar = predict(model, 'rgb', rgb[None], depth[None], pc[None], params[None], float(cfg.get('mask_ratio', 0.8)), 0)
-        D[sp] = dict(par=params.numpy(), tv=valid.numpy(), gen_par=ppar[0].clamp(0, 1).float().numpy(), epoch=ep)
-    pickle.dump(D, open(PHOTO, 'wb')); return D
+        folder = pathlib.Path(ds.items[ds._resolve(0)][3])
+        gen = {}
+        for src in ('all', 'rgb'):
+            _, ppar = predict(model, src, rgb[None], depth[None], pc[None], params[None], float(cfg.get('mask_ratio', 0.8)), 0)
+            gen[src] = ppar[0].clamp(0, 1).float().numpy()
+        a = np.asarray(Image.open(folder / 'rgba.png').convert('RGBA')).astype(np.float32) / 255
+        photo = np.clip(a[..., :3] * (gain or 1.0), 0, 1) * a[..., 3:]
+        ga = np.asarray(Image.open(folder / 'gt_rgba.png').convert('RGBA'))[..., 3] > 127
+        ys_, xs_ = np.where(ga); h_, w_ = ga.shape; pad = 0.015
+        box = (max(0, xs_.min() / w_ - pad), max(0, ys_.min() / h_ - pad), min(1, xs_.max() / w_ + pad), min(1, ys_.max() / h_ + pad))
+        D[sp] = dict(plant=PL[sp], photo=photo, box=box, occ=float(info['occ_frac']), depth=depth[0].numpy(), scene=pc.numpy(),
+                     par=params.numpy(), tv=valid.numpy(), gen=gen, epoch=ep)
+    pickle.dump(D, open(CACHE, 'wb')); return D
 
 
 def dim(png, f=0.45):
@@ -90,7 +79,7 @@ def dim(png, f=0.45):
 
 if __name__ == '__main__':
     PHOTO_ONLY = '--photo-only' in sys.argv          # off: all three streams in, as the reported numbers were made
-    X = inputs(); T = photo_only() if PHOTO_ONLY else pickle.load(open(DUMP, 'rb'))
+    X = rows()
     W, H = 6.875, 2.50
     S = Scene(W, H, 'Fig 1 teaser flow')
     s_ph, s_sm, m = 0.98, 0.45, 0.03                  # photo tile, small tiles, inset
@@ -122,10 +111,10 @@ if __name__ == '__main__':
         # photograph (current teaser tile) with the dashed target box
         S.rect(x_ph, y0, s_ph, s_ph, E['rgb'], lw=1.0, fill=Fi['rgb'], r=0.05, dash=True)
         inner = s_ph - 2 * m
-        S.image(x_ph + m, y0 + m, inner, inner, (TEASER / f"{sp[0]}_rgb.png").read_bytes(), f'{sp} row photograph')
-        bx0, btop, bx1, bbot = BOX[sp]
+        S.image(x_ph + m, y0 + m, inner, inner, K.png_array(d['photo']), f'{sp} row photograph')
+        bx0, btop, bx1, bbot = d['box']
         S.rect(x_ph + m + inner * bx0, y0 + m + inner * (1 - bbot), inner * (bx1 - bx0), inner * (bbot - btop), '#ffffff', lw=0.7, r=0.01, dash=True)
-        S.text(x_ph + m + 0.04, y0 + m + 0.05, f'{OCC[sp]} % hidden', F - 1.5, color='#ffffff', va='bottom')
+        S.text(x_ph + m + 0.04, y0 + m + 0.05, f"{d['occ'] * 100:.0f} % hidden", F - 1.5, color='#ffffff', va='bottom')
         # depth (top) and scene cloud (bottom), dimmed: not used here
         dimf = (lambda png, f: dim(png, f)) if PHOTO_ONLY else (lambda png, f: png)
         tiles = [('depth', y0 + s_ph - s_sm, dimf(K.tile_depth(d['depth']), 0.30)),
@@ -142,8 +131,8 @@ if __name__ == '__main__':
         S.arrow((x_sm + s_sm + 0.02, y0 + s_sm / 2), (x_mod - 0.02, yc - 0.20), color=E['pc'], lw=lw2, dash=PHOTO_ONLY, curve=-0.25, ms=ms2)
         # output card: the written recipe as a 3D plant over the true one
         S.rect(x_card, y0, w_card, s_ph, E['text'], lw=1.0, fill=Fi['text'], r=0.06)
-        t = T[sp]; rt = V.decode_recipe(sp, t['par'], t['tv']); rp = V.decode_recipe(sp, t['gen_par'], t['tv'], predicted=True)
-        S.image(x_card + m, y0 + m, inner, inner, P3.png([(rt, P3.TRUTH_C, 0.45), (rp, P3.LEAF_C, 1.0)], sp, side=inner, dpi=600), f'{sp} procedural plant')
+        rt = V.decode_recipe(sp, d['par'], d['tv']); rp = V.decode_recipe(sp, d['gen']['rgb' if PHOTO_ONLY else 'all'], d['tv'], predicted=True)
+        S.image(x_card + m, y0 + m, inner, inner, P3.png([(rp, P3.TEXTURE, 1.0)], sp, side=inner, dpi=600), f'{sp} procedural plant')   # no ground truth in the image (user)
         ll = (lambda r: np.mean([l['length'] for l in r['leaves']])) if sp == 'sorghum' else (lambda r: np.mean([l['leafLength'] for l in r['leaves']]))
         L = {'height': (rp['height'], rt['height']), 'leaves': (rp['n'], rt['n']), 'leaf length': (ll(rp), ll(rt))}
         print(sp, 'photo only' if PHOTO_ONLY else 'all three streams', {k: (round(float(a_), 3), round(float(b_), 3)) for k, (a_, b_) in L.items()}, flush=True)
