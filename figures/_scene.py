@@ -306,16 +306,13 @@ class Scene:
                         f"{{\\includegraphics[width={o['w']:.4f}in, height={o['h']:.4f}in]{{{img_prefix}/{name}.png}}}};")
 
         SH = ('rect', 'poly', 'ellipse')
-        for o in self.ops:
-            if o['kind'] in SH and o['z'] == 0: shape(o)
-        for o in self.ops:
-            if o['kind'] == 'image': image(o, o['png'])
-            elif o['kind'] == 'plot':
+        for o in sorted(self.ops, key=lambda o: o['z']):    # strictly by z (stable): fills 0, images 1, frames 2, text and
+            k = o['kind']                                      # arrows 3, and any z an op was given in between
+            if k == 'image': image(o, o['png'])
+            elif k == 'plot':
                 f = plt.figure(figsize=(o['w'], o['h'])); o['draw'](f, (0, 0, 1, 1))
                 b = io.BytesIO(); f.savefig(b, format='png', dpi=o['dpi'], transparent=True); plt.close(f); image(o, b.getvalue())
-        for o in self.ops:
-            k = o['kind']
-            if k in SH and o['z'] != 0: shape(o)
+            elif k in SH: shape(o)
             elif k == 'arrow':
                 (x0, y0), (x1, y1) = o['p'], o['q']
                 opt = f"draw={col(o['color'])}, line width={pt(o['lw'])}" + (', ' + head(o['ms']) if o['head'] else '') + dash(o)

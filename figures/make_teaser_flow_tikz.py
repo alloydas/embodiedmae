@@ -92,18 +92,51 @@ if __name__ == '__main__':
     S.text(x_ph + 0.50, H - 0.10, 'any subset, from an occluded row', F, color=MUTED, va='center')
     S.text(x_card, H - 0.10, 'OUTPUT', F, color=I['text'], bold=True, va='center')
     S.text(x_card + 0.72, H - 0.10, 'procedural plant', F, color=MUTED, va='center')
-    # ---- the model, spanning both rows
+    # ---- the model, spanning both rows (user, 2026-11-14: "make the crop code box more flashy, like put some icons for
+    # each of 3 methods"): shadow, stream-gradient body, a dark title pill, one white card per training stage with an icon
     yb, yt = y0s['maize'], y0s['sorghum'] + s_ph
     import make_ugg_figs as UG
-    S.image(x_mod, yb, w_mod, yt - yb, UG._band_png(), 'model band')
-    S.rect(x_mod, yb, w_mod, yt - yb, GREY, lw=1.0, r=0.08)
+    S.rect(x_mod + 0.035, yb - 0.035, w_mod, yt - yb, '#cfd0d8', lw=0.0, fill='#cfd0d8', r=0.08, z=-1)      # drop shadow
+    S.image(x_mod, yb, w_mod, yt - yb, UG._band_png(stops=('#d3deee', '#f6e7b4', '#f0d3de', '#dbd2f0')), 'model band')   # a deeper stream gradient
+    S.rect(x_mod, yb, w_mod, yt - yb, '#5b5f6b', lw=1.3, r=0.08)
     cx = x_mod + w_mod / 2
-    S.text(cx, yt - 0.30, 'CropCode', F + 2.5, color=INK, ha='center', va='center', bold=True)
-    S.text(cx, yt - 0.52, 'one model', F, color=MUTED, ha='center', va='center')
-    for k, st in enumerate(('masked pretraining', 'cross-modal\ndistillation', 'row fine-tuning')):
-        yy = yt - (0.80, 1.20, 1.70)[k]                       # the two-line label needs more room
-        S.text(cx, yy, f'{k + 1}', F - 0.5, color=MUTED, ha='center', va='center', bold=True)
-        S.text(cx, yy - 0.13, st, F, color=INK, ha='center', va='top', ls=1.05)
+    S.rect(x_mod + 0.10, yt - 0.42, w_mod - 0.20, 0.30, '#2b2f3a', lw=0.0, fill='#2b2f3a', r=0.15, z=1.5)  # title pill
+    S.text(cx, yt - 0.27, 'CropCode', F + 2.5, color='#ffffff', ha='center', va='center', bold=True)
+    S.text(cx, yt - 0.55, 'one model, three stages', F - 1.0, color=MUTED, ha='center', va='center')
+
+    def lift(z):                                   # raise the last op above the gradient image (Scene images sit at z 1)
+        S.ops[-1]['z'] = z
+
+    def icon_mask(ix, cy):                         # masked pretraining: a token grid, some hidden
+        a_, g_ = 0.062, 0.012; cols = [E['rgb'], E['depth'], E['pc'], E['text']]
+        hidden = {1, 3, 5, 6, 8}
+        for r_ in range(3):
+            for c_ in range(3):
+                k = r_ * 3 + c_; x_ = ix + c_ * (a_ + g_); y_ = cy + 0.105 - (r_ + 1) * a_ - r_ * g_
+                if k in hidden: S.rect(x_, y_, a_, a_, '#9a9aa6', lw=0.5, fill='#ffffff', r=0.008, z=1.7)
+                else: S.rect(x_, y_, a_, a_, cols[k % 4], lw=0.5, fill=cols[k % 4], r=0.008, z=1.7)
+
+    def icon_distill(ix, cy):                      # cross-modal distillation: frozen teacher -> trained student
+        K.icon(S, 'snow', ix + 0.055, cy, 0.125); lift(1.7)
+        S.arrow((ix + 0.12, cy), (ix + 0.155, cy), color='#5b5f6b', lw=1.0, ms=5)
+        K.icon(S, 'fire', ix + 0.212, cy, 0.125); lift(1.7)
+
+    def icon_row(ix, cy):                          # row fine-tuning: three plants in a row, the centre one the target
+        for k, px in enumerate((ix + 0.035, ix + 0.112, ix + 0.189)):
+            c_ = '#2f7d32' if k == 1 else '#b4b4b4'
+            S.arrow((px, cy - 0.10), (px, cy + 0.10), color=c_, lw=1.0, head=False)
+            for dy, sgn in ((-0.045, 1), (-0.005, -1), (0.035, 1)):
+                S.arrow((px, cy + dy), (px + sgn * 0.034, cy + dy + 0.045), color=c_, lw=0.9, head=False, curve=0.35 * sgn)
+        S.rect(ix + 0.077, cy - 0.115, 0.07, 0.235, '#2f7d32', lw=0.6, dash=True, r=0.01)
+
+    stages = [('masked\npretraining', icon_mask), ('cross-modal\ndistillation', icon_distill), ('row\nfine-tuning', icon_row)]
+    for k, (lab, ic) in enumerate(stages):
+        ccy = yt - 0.86 - k * 0.45; ch = 0.38
+        S.rect(x_mod + 0.07, ccy - ch / 2, w_mod - 0.14, ch, '#c4c6d2', lw=0.7, fill='#ffffff', r=0.05, z=1.5)
+        ic(x_mod + 0.13, ccy)
+        S.text(x_mod + 0.45, ccy, lab, F - 1.0, color=INK, va='center', ls=1.05)
+        S.ellipse(x_mod + 0.07, ccy + ch / 2 - 0.05, 0.05, stroke='#2b2f3a', lw=0.0, fill='#2b2f3a', z=1.8)   # step badge
+        S.text(x_mod + 0.07, ccy + ch / 2 - 0.05, f'{k + 1}', F - 2.0, color='#ffffff', ha='center', va='center', bold=True)
     # ---- per species
     for sp in ('sorghum', 'maize'):
         y0 = y0s[sp]; yc = y0 + s_ph / 2; d = X[sp]
