@@ -97,15 +97,12 @@ if __name__ == '__main__':
     yb, yt = y0s['maize'], y0s['sorghum'] + s_ph
     import make_ugg_figs as UG
     S.rect(x_mod + 0.035, yb - 0.035, w_mod, yt - yb, '#cfd0d8', lw=0.0, fill='#cfd0d8', r=0.08, z=-1)      # drop shadow
-    S.image(x_mod, yb, w_mod, yt - yb, UG._band_png(stops=('#d3deee', '#f6e7b4', '#f0d3de', '#dbd2f0')), 'model band')   # a deeper stream gradient
+    S.shade(x_mod, yb, w_mod, yt - yb, ('#d3deee', '#f6e7b4', '#f0d3de', '#dbd2f0'), r=0.08)   # native TikZ shading through the stream colours
     S.rect(x_mod, yb, w_mod, yt - yb, '#5b5f6b', lw=1.3, r=0.08)
     cx = x_mod + w_mod / 2
     S.rect(x_mod + 0.10, yt - 0.42, w_mod - 0.20, 0.30, '#2b2f3a', lw=0.0, fill='#2b2f3a', r=0.15, z=1.5)  # title pill
     S.text(cx, yt - 0.27, 'CropCode', F + 2.5, color='#ffffff', ha='center', va='center', bold=True)
     S.text(cx, yt - 0.55, 'one model, three stages', F - 1.0, color=MUTED, ha='center', va='center')
-
-    def lift(z):                                   # raise the last op above the gradient image (Scene images sit at z 1)
-        S.ops[-1]['z'] = z
 
     def icon_mask(ix, cy):                         # masked pretraining: a token grid, some hidden
         a_, g_ = 0.062, 0.012; cols = [E['rgb'], E['depth'], E['pc'], E['text']]
@@ -116,10 +113,36 @@ if __name__ == '__main__':
                 if k in hidden: S.rect(x_, y_, a_, a_, '#9a9aa6', lw=0.5, fill='#ffffff', r=0.008, z=1.7)
                 else: S.rect(x_, y_, a_, a_, cols[k % 4], lw=0.5, fill=cols[k % 4], r=0.008, z=1.7)
 
+    def snowflake(cx_, cy_, r_, c_='#2f8fd8'):    # vector: three spokes, a V at each tip
+        for a_ in (90, 30, 150):
+            u = np.array([np.cos(np.radians(a_)), np.sin(np.radians(a_))])
+            S.arrow((cx_ - r_ * u[0], cy_ - r_ * u[1]), (cx_ + r_ * u[0], cy_ + r_ * u[1]), color=c_, lw=0.9, head=False)
+            for sgn in (1, -1):
+                p0 = np.array([cx_, cy_]) + sgn * 0.62 * r_ * u
+                for b_ in (40, -40):
+                    v = sgn * np.array([np.cos(np.radians(a_ + b_)), np.sin(np.radians(a_ + b_))])
+                    S.arrow(tuple(p0), tuple(p0 + 0.38 * r_ * v), color=c_, lw=0.8, head=False)
+
+    def flame(cx_, by_, h_):                       # vector: an orange teardrop with a yellow core, base at by_
+        def drop(sc, dy):
+            th = np.linspace(-np.pi / 2, np.pi, 24); R = 0.30 * sc
+            right = [(R * np.cos(t_), R + R * np.sin(t_)) for t_ in th[th <= 0.25]]                  # base, right half
+            tip = (0.04 * sc, 1.0 * sc)
+            up = [((1 - u) ** 2 * right[-1][0] + 2 * (1 - u) * u * 0.36 * sc + u ** 2 * tip[0],
+                   (1 - u) ** 2 * right[-1][1] + 2 * (1 - u) * u * 0.62 * sc + u ** 2 * tip[1]) for u in np.linspace(0, 1, 14)[1:]]
+            th2 = np.linspace(np.pi / 2 + 0.9, 3 * np.pi / 2, 16)
+            left_start = (R * np.cos(th2[0]), R + R * np.sin(th2[0]))
+            down = [((1 - u) ** 2 * tip[0] + 2 * (1 - u) * u * -0.34 * sc + u ** 2 * left_start[0],
+                     (1 - u) ** 2 * tip[1] + 2 * (1 - u) * u * 0.55 * sc + u ** 2 * left_start[1]) for u in np.linspace(0, 1, 14)[1:]]
+            left = [(R * np.cos(t_), R + R * np.sin(t_)) for t_ in th2[1:]]
+            return [(cx_ + x_ * h_, by_ + (y_ + dy) * h_) for x_, y_ in right + up + down + left]
+        S.poly(drop(1.0, 0.0), '#e8641c', lw=0.4, fill='#f28c28', z=1.7)
+        S.poly(drop(0.55, 0.02), '#f6b51e', lw=0.3, fill='#ffd23f', z=1.75)
+
     def icon_distill(ix, cy):                      # cross-modal distillation: frozen teacher -> trained student
-        K.icon(S, 'snow', ix + 0.055, cy, 0.125); lift(1.7)
+        snowflake(ix + 0.055, cy, 0.055)
         S.arrow((ix + 0.12, cy), (ix + 0.155, cy), color='#5b5f6b', lw=1.0, ms=5)
-        K.icon(S, 'fire', ix + 0.212, cy, 0.125); lift(1.7)
+        flame(ix + 0.212, cy - 0.06, 0.125)
 
     def icon_row(ix, cy):                          # row fine-tuning: three plants in a row, the centre one the target
         for k, px in enumerate((ix + 0.035, ix + 0.112, ix + 0.189)):

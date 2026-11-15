@@ -82,6 +82,12 @@ class Scene:
         self.ops.append(dict(kind='text', z=3, x=x, y=y, s=s, size=size, color=color, ha=ha, va=va, bold=bold, mono=mono,
                              italic=italic, rot=rot, ls=ls, halo=halo, small_ok=small_ok))
 
+    def shade(self, x, y, w, h, stops, r=0.04, z=0.5):
+        """A rounded rectangle filled with a left-to-right colour gradient through `stops` (hex colours, evenly spaced):
+        a native TikZ shading (\\pgfdeclarehorizontalshading + \\shade), a clipped gradient in the matplotlib preview, a
+        two-colour gradient in draw.io."""
+        self.ops.append(dict(kind='shade', z=z, x=x, y=y, w=w, h=h, stops=list(stops), r=r))
+
     def image(self, x, y, w, h, png, name='image'):
         self.ops.append(dict(kind='image', z=1, x=x, y=y, w=w, h=h, png=png, name=name))
 
@@ -150,6 +156,13 @@ class Scene:
         for o in self.ops:
             if o['kind'] in SH and o['z'] == 0: draw_shape(bg, o)
         for o in self.ops:
+            if o['kind'] == 'shade':
+                from matplotlib.colors import LinearSegmentedColormap, to_rgb
+                ax = overlay(); cm = LinearSegmentedColormap.from_list('shade', [to_rgb(c) for c in o['stops']])
+                im = ax.imshow(np.linspace(0, 1, 256)[None, :], aspect='auto', cmap=cm, extent=(o['x'], o['x'] + o['w'], o['y'], o['y'] + o['h']))
+                clip = mpatches.FancyBboxPatch((o['x'], o['y']), o['w'], o['h'], boxstyle=f"round,pad=0,rounding_size={o['r']}",
+                                               transform=ax.transData, facecolor='none', edgecolor='none'); ax.add_patch(clip); im.set_clip_path(clip)
+                ax.set_xlim(0, W); ax.set_ylim(0, H)
             if o['kind'] == 'image':
                 ax = fig.add_axes([o['x'] / W, o['y'] / H, o['w'] / W, o['h'] / H])
                 ax.imshow(np.asarray(Image.open(io.BytesIO(o['png']))), aspect='auto', interpolation='lanczos'); ax.set_axis_off(); ax.patch.set_alpha(0)
@@ -212,6 +225,10 @@ class Scene:
                 coords = ','.join(f'[{(x - x0) / w:.4f},{(y1 - y) / h:.4f}]' for x, y in o['pts'])
                 vertex(x0, y0, w, h, f"shape=mxgraph.basic.polygon;polyCoords=[{coords}];polyline=0;html=1;fillColor={o['fill'] or 'none'};"
                                      f"strokeColor={o['stroke']};strokeWidth={pt(o['lw']):.1f};{'dashed=1;' if o['dash'] else ''}")
+            elif k == 'shade':
+                vertex(o['x'], o['y'], o['w'], o['h'],
+                       f"rounded=1;absoluteArcSize=1;arcSize={2 * o['r'] * PX:.0f};html=1;fillColor={o['stops'][0]};"
+                       f"gradientColor={o['stops'][-1]};gradientDirection=east;strokeColor=none;")
             elif k == 'ellipse':
                 vertex(o['cx'] - o['rx'], o['cy'] - o['ry'], 2 * o['rx'], 2 * o['ry'],
                        f"ellipse;html=1;fillColor={o['fill'] or 'none'};strokeColor={o['stroke']};strokeWidth={pt(o['lw']):.1f};")
@@ -313,6 +330,16 @@ class Scene:
                 f = plt.figure(figsize=(o['w'], o['h'])); o['draw'](f, (0, 0, 1, 1))
                 b = io.BytesIO(); f.savefig(b, format='png', dpi=o['dpi'], transparent=True); plt.close(f); image(o, b.getvalue())
             elif k in SH: shape(o)
+            elif k == 'shade':                               # native shading: the path's box maps to 25..75 bp of the shading
+                from matplotlib.colors import to_rgb
+                n = len(o['stops']); nm = 'shd' + ''.join(c.strip('#') for c in o['stops']).lower()
+                spec = [(0, o['stops'][0])] + [(25 + 50 * i / max(1, n - 1), c) for i, c in enumerate(o['stops'])] + [(100, o['stops'][-1])]
+                if nm not in used:
+                    used.add(nm)
+                    body.append('\\pgfdeclarehorizontalshading{' + nm + '}{100bp}{' + '; '.join(
+                        'rgb({:.1f}bp)=({:.4f},{:.4f},{:.4f})'.format(pos, *to_rgb(c)) for pos, c in spec) + '}%')
+                r = min(o['r'], o['w'] / 2, o['h'] / 2)
+                body.append(f"\\shade[shading={nm}, shading angle=0, rounded corners={r:.4f}in] {xy((o['x'], o['y']))} rectangle {xy((o['x'] + o['w'], o['y'] + o['h']))};")
             elif k == 'arrow':
                 (x0, y0), (x1, y1) = o['p'], o['q']
                 opt = f"draw={col(o['color'])}, line width={pt(o['lw'])}" + (', ' + head(o['ms']) if o['head'] else '') + dash(o)

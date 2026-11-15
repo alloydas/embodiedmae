@@ -4,6 +4,7 @@
 \definecolor{c1A1A1A}{HTML}{1A1A1A}%
 \definecolor{c2B2F3A}{HTML}{2B2F3A}%
 \definecolor{c2F7D32}{HTML}{2F7D32}%
+\definecolor{c2F8FD8}{HTML}{2F8FD8}%
 \definecolor{c3F5F8F}{HTML}{3F5F8F}%
 \definecolor{c5B5F6B}{HTML}{5B5F6B}%
 \definecolor{c5E4A96}{HTML}{5E4A96}%
@@ -19,7 +20,11 @@
 \definecolor{cD091A7}{HTML}{D091A7}%
 \definecolor{cE0B020}{HTML}{E0B020}%
 \definecolor{cE6ECF3}{HTML}{E6ECF3}%
+\definecolor{cE8641C}{HTML}{E8641C}%
 \definecolor{cEAE7F2}{HTML}{EAE7F2}%
+\definecolor{cF28C28}{HTML}{F28C28}%
+\definecolor{cF6B51E}{HTML}{F6B51E}%
+\definecolor{cFFD23F}{HTML}{FFD23F}%
 \definecolor{cFFFFFF}{HTML}{FFFFFF}%
 \begin{tikzpicture}[x=1in, y=1in]%
 \useasboundingbox (0,0) rectangle (6.8750,2.5000);
@@ -32,7 +37,8 @@
 \draw[draw=cE0B020, line width=0.800pt, fill=cFFFFFF, dash pattern=on 2.40pt off 1.60pt, rounded corners=0.0400in] (1.2700,0.7600) rectangle (1.7200,1.2100);
 \draw[draw=cD091A7, line width=0.800pt, fill=cFFFFFF, dash pattern=on 2.40pt off 1.60pt, rounded corners=0.0400in] (1.2700,0.2300) rectangle (1.7200,0.6800);
 \draw[draw=c9D8CC4, line width=1.000pt, fill=cEAE7F2, rounded corners=0.0600in] (3.8600,0.2300) rectangle (6.8350,1.2100);
-\node[anchor=south west, inner sep=0] at (2.3000,0.2300) {\includegraphics[width=1.1800in, height=2.0500in]{Figures/fig1/model_band.png}};
+\pgfdeclarehorizontalshading{shdd3deeef6e7b4f0d3dedbd2f0}{100bp}{rgb(0.0bp)=(0.8275,0.8706,0.9333); rgb(25.0bp)=(0.8275,0.8706,0.9333); rgb(41.7bp)=(0.9647,0.9059,0.7059); rgb(58.3bp)=(0.9412,0.8275,0.8706); rgb(75.0bp)=(0.8588,0.8235,0.9412); rgb(100.0bp)=(0.8588,0.8235,0.9412)}%
+\shade[shading=shdd3deeef6e7b4f0d3dedbd2f0, shading angle=0, rounded corners=0.0800in] (2.3000,0.2300) rectangle (3.4800,2.2800);
 \node[anchor=south west, inner sep=0] at (0.2700,1.3300) {\includegraphics[width=0.9200in, height=0.9200in]{Figures/fig1/sorghum_row_photograph.png}};
 \node[anchor=south west, inner sep=0] at (1.3000,1.8600) {\includegraphics[width=0.3900in, height=0.3900in]{Figures/fig1/sorghum_depth.png}};
 \node[anchor=south west, inner sep=0] at (1.3000,1.3300) {\includegraphics[width=0.3900in, height=0.3900in]{Figures/fig1/sorghum_pc.png}};
@@ -54,8 +60,8 @@
 \draw[draw=c9A9AA6, line width=0.500pt, fill=cFFFFFF, rounded corners=0.0080in] (2.4300,1.3150) rectangle (2.4920,1.3770);
 \draw[draw=c9D8CC4, line width=0.500pt, fill=c9D8CC4, rounded corners=0.0080in] (2.5040,1.3150) rectangle (2.5660,1.3770);
 \draw[draw=c9A9AA6, line width=0.500pt, fill=cFFFFFF, rounded corners=0.0080in] (2.5780,1.3150) rectangle (2.6400,1.3770);
-\node[anchor=south west, inner sep=0] at (2.4225,0.9075) {\includegraphics[width=0.1250in, height=0.1250in]{Figures/fig1/snow.png}};
-\node[anchor=south west, inner sep=0] at (2.5795,0.9075) {\includegraphics[width=0.1250in, height=0.1250in]{Figures/fig1/fire.png}};
+\draw[draw=cE8641C, line width=0.400pt, fill=cF28C28, line join=round] (2.6420,0.9100) -- (2.6496,0.9108) -- (2.6569,0.9131) -- (2.6636,0.9169) -- (2.6694,0.9219) -- (2.6740,0.9280) -- (2.6773,0.9349) -- (2.6792,0.9424) -- (2.6794,0.9501) -- (2.6803,0.9559) -- (2.6806,0.9618) -- (2.6804,0.9679) -- (2.6796,0.9741) -- (2.6782,0.9803) -- (2.6763,0.9868) -- (2.6738,0.9933) -- (2.6707,0.9999) -- (2.6671,1.0067) -- (2.6629,1.0136) -- (2.6582,1.0206) -- (2.6529,1.0278) -- (2.6470,1.0350) -- (2.6401,1.0266) -- (2.6338,1.0188) -- (2.6283,1.0116) -- (2.6235,1.0050) -- (2.6194,0.9989) -- (2.6161,0.9934) -- (2.6134,0.9884) -- (2.6115,0.9841) -- (2.6103,0.9803) -- (2.6098,0.9770) -- (2.6100,0.9744) -- (2.6110,0.9723) -- (2.6126,0.9708) -- (2.6095,0.9662) -- (2.6071,0.9611) -- (2.6054,0.9558) -- (2.6046,0.9502) -- (2.6046,0.9446) -- (2.6055,0.9391) -- (2.6071,0.9338) -- (2.6095,0.9287) -- (2.6127,0.9241) -- (2.6165,0.9200) -- (2.6209,0.9165) -- (2.6257,0.9137) -- (2.6310,0.9117) -- (2.6364,0.9104) -- (2.6420,0.9100) -- cycle;
+\draw[draw=cF6B51E, line width=0.300pt, fill=cFFD23F, line join=round] (2.6420,0.9125) -- (2.6462,0.9129) -- (2.6502,0.9142) -- (2.6539,0.9163) -- (2.6571,0.9190) -- (2.6596,0.9224) -- (2.6614,0.9262) -- (2.6624,0.9303) -- (2.6626,0.9345) -- (2.6631,0.9377) -- (2.6632,0.9410) -- (2.6631,0.9443) -- (2.6627,0.9477) -- (2.6619,0.9512) -- (2.6609,0.9547) -- (2.6595,0.9583) -- (2.6578,0.9620) -- (2.6558,0.9657) -- (2.6535,0.9695) -- (2.6509,0.9733) -- (2.6480,0.9773) -- (2.6447,0.9813) -- (2.6409,0.9766) -- (2.6375,0.9724) -- (2.6345,0.9684) -- (2.6318,0.9647) -- (2.6296,0.9614) -- (2.6277,0.9584) -- (2.6263,0.9556) -- (2.6252,0.9532) -- (2.6246,0.9511) -- (2.6243,0.9494) -- (2.6244,0.9479) -- (2.6249,0.9468) -- (2.6258,0.9459) -- (2.6241,0.9434) -- (2.6228,0.9406) -- (2.6219,0.9377) -- (2.6214,0.9346) -- (2.6214,0.9316) -- (2.6219,0.9285) -- (2.6228,0.9256) -- (2.6241,0.9228) -- (2.6259,0.9203) -- (2.6280,0.9180) -- (2.6304,0.9161) -- (2.6331,0.9145) -- (2.6359,0.9134) -- (2.6389,0.9127) -- (2.6420,0.9125) -- cycle;
 \draw[draw=c2B2F3A, line width=0.000pt, fill=c2B2F3A] (2.3700,1.5600) ellipse [x radius=0.0500, y radius=0.0500];
 \draw[draw=c2B2F3A, line width=0.000pt, fill=c2B2F3A] (2.3700,1.1100) ellipse [x radius=0.0500, y radius=0.0500];
 \draw[draw=c2B2F3A, line width=0.000pt, fill=c2B2F3A] (2.3700,0.6600) ellipse [x radius=0.0500, y radius=0.0500];
@@ -71,6 +77,21 @@
 \node[anchor=center, inner sep=0, outer sep=0, align=center, text=c5F5F5F, font={\fontsize{7.50}{9.38}\selectfont\sffamily}] at (2.8900,1.7300) {one model, three stages};
 \node[anchor=west, inner sep=0, outer sep=0, align=left, text=c1A1A1A, font={\fontsize{7.50}{7.88}\selectfont\sffamily}] at (2.7500,1.4200) {masked\\pretraining};
 \node[anchor=center, inner sep=0, outer sep=0, align=center, text=cFFFFFF, font={\fontsize{6.50}{8.12}\selectfont\sffamily\bfseries}] at (2.3700,1.5600) {1};
+\draw[draw=c2F8FD8, line width=0.900pt] (2.4850,0.9150) -- (2.4850,1.0250);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4850,1.0041) -- (2.4716,1.0201);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4850,1.0041) -- (2.4984,1.0201);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4850,0.9359) -- (2.4984,0.9199);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4850,0.9359) -- (2.4716,0.9199);
+\draw[draw=c2F8FD8, line width=0.900pt] (2.4374,0.9425) -- (2.5326,0.9975);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.5145,0.9871) -- (2.5217,1.0067);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.5145,0.9871) -- (2.5351,0.9834);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4555,0.9530) -- (2.4483,0.9333);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4555,0.9530) -- (2.4349,0.9566);
+\draw[draw=c2F8FD8, line width=0.900pt] (2.5326,0.9425) -- (2.4374,0.9975);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4555,0.9871) -- (2.4349,0.9834);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.4555,0.9871) -- (2.4483,1.0067);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.5145,0.9530) -- (2.5351,0.9566);
+\draw[draw=c2F8FD8, line width=0.800pt] (2.5145,0.9530) -- (2.5217,0.9333);
 \draw[draw=c5B5F6B, line width=1.000pt, -{Triangle[length=2.00pt,width=2.00pt]}] (2.5500,0.9700) -- (2.5850,0.9700);
 \node[anchor=west, inner sep=0, outer sep=0, align=left, text=c1A1A1A, font={\fontsize{7.50}{7.88}\selectfont\sffamily}] at (2.7500,0.9700) {cross-modal\\distillation};
 \node[anchor=center, inner sep=0, outer sep=0, align=center, text=cFFFFFF, font={\fontsize{6.50}{8.12}\selectfont\sffamily\bfseries}] at (2.3700,1.1100) {2};
