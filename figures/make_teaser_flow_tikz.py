@@ -102,7 +102,7 @@ if __name__ == '__main__':
     cx = x_mod + w_mod / 2
     S.rect(x_mod + 0.10, yt - 0.42, w_mod - 0.20, 0.30, '#2b2f3a', lw=0.0, fill='#2b2f3a', r=0.15, z=1.5)  # title pill
     S.text(cx, yt - 0.27, 'CropCode', F + 2.5, color='#ffffff', ha='center', va='center', bold=True)
-    S.text(cx, yt - 0.55, 'one model, three stages', F - 1.0, color=MUTED, ha='center', va='center')
+    S.text(cx, yt - 0.55, 'one model', F - 1.0, color=MUTED, ha='center', va='center')
 
     def icon_mask(ix, cy):                         # masked pretraining: a token grid, some hidden
         a_, g_ = 0.062, 0.012; cols = [E['rgb'], E['depth'], E['pc'], E['text']]
