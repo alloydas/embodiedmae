@@ -33,8 +33,9 @@ ap.add_argument('--models', nargs='+', default=None, help='run:ckpt ... (default
 ap.add_argument('--sources', nargs='+', default=['all', 'rgb', 'depth', 'pc'])
 ap.add_argument('--layouts', nargs='+', default=['parallel', 'perpendicular'])
 ap.add_argument('--rows', nargs='+', default=None); ap.add_argument('--stops', nargs='+', type=int, default=None)
-ap.add_argument('--source', default='rows3000', choices=('rows3000', 'rows2026'),
-                help='rows3000: the 3000-row upload of 2026-11-13 (the E10 data); rows2026: the first upload')
+ap.add_argument('--source', default='rows3000', choices=('rows3000', 'rows2026', 'field1000'),
+                help='rows3000: the 3000-row upload of 2026-11-13; field1000: the field upload of 2026-11-15 (1000 rows per '
+                     'species with back rows, per-leaf truth for both species); rows2026: the first upload')
 ap.add_argument('--plants', nargs='+', default=None, help='rows3000: scan ids to score (e.g. the held-out test plants)')
 ap.add_argument('--sorghum-window', default='auto', choices=('auto', 'zoom', 'full'),
                 help='rows3000 sorghum input window. auto: a real-row fine-tune uses the window it was trained on (its config.json '
@@ -102,6 +103,9 @@ for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
                 if a.species == 'maize':                     # per-leaf recipe, raw units (leaf tokens 1..28)
                     pl = pred_par[:, 1:29].clamp(0, 1).float().cpu().numpy() * M['leaf_sc'] - M['leaf_sh']
                     isum_pred = p0[:, PLANT_FIELDS_V2.index('stemInternodeSum')] * _PLANT_SCALE_V2[PLANT_FIELDS_V2.index('stemInternodeSum')]
+                else:                                        # sorghum leaf tokens 1..24: starting_point, length, ..., width
+                    nf = len(S4.LEAF_FIELDS)
+                    ps = pred_par[:, 1:25, :nf].clamp(0, 1).float().cpu().numpy() * S4._LEAF_SCALE[:nf] - S4._LEAF_SHIFT[:nf]
             for k, inf in enumerate(info):
                 r = dict(model=M['run'], epoch=M['epoch'], source=src, **inf, chamfer=float(cd[k]), chamfer_m2=float(cd_m2[k]),
                          miss_0p01=float(miss[k]), miss_5mm=float(miss5[k]), ms_per_stop=ms)
@@ -116,6 +120,14 @@ for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
                     r['internode_sum_true'] = float(tr[:, 0].sum()); r['internode_sum_pred'] = float(isum_pred[k])
                     r['internode_sum_rel_err'] = abs(r['internode_sum_pred'] - r['internode_sum_true']) / max(1e-6, r['internode_sum_true'])
                     r['_angle_pairs'] = (pl[k, :k_, A_IDX].tolist(), inf['leaf_zenith'][:k_].tolist())
+                if M['recipe'] and a.species == 'sorghum' and inf.get('leaf_raw') is not None and len(inf['leaf_raw']):
+                    # field1000 sorghum per-leaf truth (leaves matched by index from the base): length, width and the
+                    # insertion height (truth: cumulative internodes; prediction: starting_point x the written stem length)
+                    tr = inf['leaf_raw']; k_ = min(len(tr), 24); F_ = list(S4.LEAF_FIELDS)
+                    ins_t = np.cumsum(tr[:, 0])[:k_]; ins_p = ps[k, :k_, F_.index('starting_point')] * float(h[k])
+                    for nm, pv, tv in (('leaf_len', ps[k, :k_, F_.index('length')], tr[:k_, 1]),
+                                       ('leaf_width', ps[k, :k_, F_.index('width')], tr[:k_, 2]), ('insertion', ins_p, ins_t)):
+                        r[f'{nm}_mae'] = float(np.abs(pv - tv).mean()); r[f'{nm}_true_mean'] = float(tv.mean()); r[f'{nm}_pred_mean'] = float(pv.mean())
                 rows.append(r)
     if bi % 20 == 0:
         print(f'  {min((bi + 1) * a.batch_size, len(ds))}/{len(ds)} stops ({time.time() - t0:.0f} s)', flush=True)
@@ -142,7 +154,7 @@ for (model, src, layout), g in list(df.groupby(['model', 'source', 'layout'])) +
             e['leaves_acc_pm1'] = float((g['leaves_abs_err'] <= 1).mean())
             e['leaves_acc_exact'] = float((g['leaves_abs_err'] == 0).mean())
             e['leaves_mae'] = float(g['leaves_abs_err'].mean())
-    for f in LSHORT.values():                        # maize rows3000: per-leaf recipe vs the scanned leaves
+    for f in list(LSHORT.values()) + ['insertion']:  # per-leaf recipe vs the scanned leaves (maize rows3000 / field1000, sorghum field1000)
         if f'{f}_mae' in g and g[f'{f}_mae'].notna().any():
             e[f'{f}_mae'] = float(g[f'{f}_mae'].mean()); e[f'{f}_true_mean'] = float(g[f'{f}_true_mean'].mean())
             e[f'{f}_pred_mean'] = float(g[f'{f}_pred_mean'].mean())
@@ -160,5 +172,8 @@ for e in summary['groups']:
     if e['layout'] == 'both':
         print(f"{e['model']:26s} {e['source']:5s} chamfer {e['chamfer_m2']['mean'] * 1e4:6.1f}e-4 m2 [{e['chamfer_m2']['lo'] * 1e4:.1f}, {e['chamfer_m2']['hi'] * 1e4:.1f}]"
               f"  miss5mm {e['miss_5mm']['mean']:.2f}" + (f"  height err {e['height_rel_err_median'] * 100:.1f} %  leaves +-1 {e['leaves_acc_pm1']:.2f}" if 'leaves_acc_pm1' in e else '')
-              + (f"  leaf MAE len {e['leaf_len_mae'] * 100:.1f} cm width {e['leaf_width_mae'] * 100:.1f} cm internode {e['internode_mae'] * 100:.1f} cm curv {e['curvature_mae']:.2f}/m" if 'leaf_len_mae' in e else '')
+              + (f"  leaf MAE len {e['leaf_len_mae'] * 100:.1f} cm width {e['leaf_width_mae'] * 100:.1f} cm" if 'leaf_len_mae' in e else '')
+              + (f" internode {e['internode_mae'] * 100:.1f} cm curv {e['curvature_mae']:.2f}/m" if 'internode_mae' in e else '')
+              + (f" insertion {e['insertion_mae'] * 100:.1f} cm" if 'insertion_mae' in e else '')
+              + (f"  height err {e['height_rel_err_median'] * 100:.1f} %" if 'height_rel_err_median' in e and 'leaves_acc_pm1' not in e else '')
               + f"  {e['ms_per_stop']:.1f} ms/stop")

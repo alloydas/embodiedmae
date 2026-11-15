@@ -30,7 +30,7 @@ from real_rows import LEAF_TRUTH_FIELDS
 # recipe gets no loss by default (--recipe-weight 0): cloud and depth only. Defaults: 3 validation plants.
 ap = argparse.ArgumentParser()
 ap.add_argument('--species', default='maize', choices=('maize', 'sorghum'))
-ap.add_argument('--source', default='rows3000', choices=('rows3000', 'rows2026'),
+ap.add_argument('--source', default='rows3000', choices=('rows3000', 'rows2026', 'field1000'),
                 help='rows3000: the 3000-row upload of 2026-11-13 (split by scan: maize 520 plants, sorghum 52 scans '
                      'with their four tilted copies on one side); rows2026: the first upload (split by row = plant)')
 ap.add_argument('--init', default=None, help='run:ckpt (default: the species row fine-tune at epoch 100)')
@@ -57,12 +57,20 @@ ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cp
 a = ap.parse_args()
 SORG = a.species == 'sorghum'
 a.init = a.init or ('sorghum_row_ft:checkpoints/checkpoint_epoch_100.pth' if SORG else 'maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth')
-R3 = a.source == 'rows3000'
-a.zoom_aug = bool(a.zoom_aug if a.zoom_aug is not None else (R3 and a.species == 'sorghum'))
-a.run = a.run or f"{a.species}_real_ft{'_r3000' if R3 else ''}"     # never the first upload's run dirs
+# field1000 (2026-11-15 field upload): split by scan like rows3000, the 'plant' window for both species with random crops,
+# and SORGHUM NOW HAS TRUTH: height (on the written stem length, plant token field 0, range 0-3 m: the plants are 1.6-2.0 m)
+# and per-leaf insertion point / length / width (leaf tokens; the sorghum recipe has no leaf-count field: in the generator
+# the count follows from the stem length, so the count is not supervised).
+F1 = a.source == 'field1000'
+R3 = a.source == 'rows3000' or F1                    # scan-split sources
+a.zoom_aug = bool(a.zoom_aug if a.zoom_aug is not None else ((R3 and a.species == 'sorghum') or F1))
+a.run = a.run or f"{a.species}_real_ft{'_f1000' if F1 else '_r3000' if R3 else ''}"     # never the first upload's run dirs
 a.val_plants = a.val_plants if a.val_plants is not None else ((5 if R3 else 3) if SORG else 39)
-a.recipe_weight = a.recipe_weight if a.recipe_weight is not None else (0.0 if SORG else 5.0)
-a.leaf_weight = a.leaf_weight if a.leaf_weight is not None else (a.recipe_weight if (R3 and not SORG) else 0.0)
+a.recipe_weight = a.recipe_weight if a.recipe_weight is not None else (5.0 if (F1 or not SORG) else 0.0)
+a.leaf_weight = a.leaf_weight if a.leaf_weight is not None else (a.recipe_weight if (R3 and (F1 or not SORG)) else 0.0)
+import embodied_mae_4m as S4
+S_LF = list(S4.LEAF_FIELDS)
+S_LIDX = [S_LF.index('starting_point'), S_LF.index('length'), S_LF.index('width')]   # sorghum leaf slots with field1000 truth
 LAY = SPECIES[a.species]['layouts']
 dev = torch.device(a.device)
 H_IDX, N_IDX = PLANT_FIELDS_V2.index('height'), PLANT_FIELDS_V2.index('leafCount')
@@ -70,7 +78,7 @@ S_IDX = PLANT_FIELDS_V2.index('stemInternodeSum')
 L_IDX = [LEAF_FIELDS_V2.index(f) for f in LEAF_TRUTH_FIELDS]                # leaf-token slots with real truth
 MAXL = 28
 LEAF_SC, LEAF_SH = _LEAF_SCALE_V2.copy(), _LEAF_SHIFT_V2.copy()
-if a.leaf_weight > 0 and a.leaf_ranges:
+if a.leaf_weight > 0 and a.leaf_ranges and not SORG:
     for item in a.leaf_ranges.split(','):
         k, rng_ = item.split('='); lo, hi = (float(x) for x in rng_.split(':'))
         j = LEAF_FIELDS_V2.index({'length': 'leafLength', 'width': 'leafWidth'}[k.strip()])
@@ -79,7 +87,7 @@ if a.leaf_weight > 0 and a.leaf_ranges:
 # ---- split by plant --------------------------------------------------------------------------------
 if R3:                                         # scans; a scan's rows may also hold other splits' plants as neighbours
     from real_rows import load_index_3000, scan_id
-    plants = sorted({scan_id(m['plant_id']) for m in load_index_3000(a.species)})
+    plants = sorted({m.get('scan') or scan_id(m['plant_id']) for m in load_index_3000(a.species, a.source)})
 else:
     plants = sorted({row_id(d) for d in LAY['parallel'].glob('row_*_seed1')} &
                     {row_id(d) for d in LAY['perpendicular'].glob('row_*_seed1')})
@@ -102,7 +110,7 @@ if not run_dir.exists():
 (run_dir / 'checkpoints').mkdir(parents=True, exist_ok=True)
 split.to_csv(run_dir / 'split.csv', index=False)
 if not a.smoke:
-    split.to_csv(f"data_split/e10_real_split{'_sorghum' if SORG else ''}{'_rows3000' if R3 else ''}.csv", index=False)
+    split.to_csv(f"data_split/e10_real_split{'_sorghum' if SORG else ''}{'_field1000' if F1 else '_rows3000' if R3 else ''}.csv", index=False)
 
 if a.split_only:
     print('split written to', run_dir / 'split.csv'); sys.exit(0)
@@ -114,14 +122,15 @@ model.pc_sinkhorn_weight = float(cfg.get('pc_sinkhorn_weight', 0.0))      # buil
 model.pc_sinkhorn_points = int(cfg.get('pc_sinkhorn_points', 1024)); model.pc_sinkhorn_blur = float(cfg.get('pc_sinkhorn_blur', 0.02))
 mask = float(cfg.get('mask_ratio', 0.8)); pc_w = float(cfg.get('pc_loss_weight', 1.0))
 run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_seed=a.split_seed, n_train=len(train), n_val=len(val),
-                                       n_test=len(test), source=a.source, window=('zoom' if (R3 and SORG) else SPECIES[a.species]['window']), zoom_aug=a.zoom_aug, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
+                                       n_test=len(test), source=a.source, window=('plant' if F1 else 'zoom' if (R3 and SORG) else SPECIES[a.species]['window']), zoom_aug=a.zoom_aug, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
                                        leaf_weight=a.leaf_weight, leaf_scale=LEAF_SC.tolist(), leaf_shift=LEAF_SH.tolist(),
-                                       supervised=['pc', 'depth'] + (['height', 'leafCount'] if a.recipe_weight > 0 else [])
-                                       + (['stemInternodeSum'] + [f'leaf.{f}' for f in LEAF_TRUTH_FIELDS] if a.leaf_weight > 0 else []),
+                                       supervised=['pc', 'depth'] + ((['stem_length=height'] if SORG else ['height', 'leafCount']) if a.recipe_weight > 0 else [])
+                                       + ((['leaf.starting_point', 'leaf.length', 'leaf.width'] if SORG else ['stemInternodeSum'] + [f'leaf.{f}' for f in LEAF_TRUTH_FIELDS])
+                                          if a.leaf_weight > 0 else []),
                                        source_mask_ratio=mask))
 (run_dir / 'config.json').write_text(json.dumps(run_cfg, indent=1, default=str))
 
-sel = (lambda ps: dict(source='rows3000', plants=ps)) if R3 else (lambda ps: dict(rows=ps))
+sel = (lambda ps: dict(source=a.source, plants=ps)) if R3 else (lambda ps: dict(rows=ps))
 train_ds = RealRowDataset(with_targets=True, seed=1, species=a.species, rgb_gain=gain, zoom_aug=a.zoom_aug, **sel(train))
 val_ds = RealRowDataset(seed=0, species=a.species, rgb_gain=gain, **sel(val))
 mk = lambda ds, sh: DataLoader(ds, batch_size=a.batch_size, shuffle=sh, num_workers=a.num_workers, collate_fn=collate,
@@ -129,6 +138,18 @@ mk = lambda ds, sh: DataLoader(ds, batch_size=a.batch_size, shuffle=sh, num_work
 opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.weight_decay)
 steps_per_ep = max(1, len(train_ds) // a.batch_size); total = a.epochs * steps_per_ep; warm = a.warmup_epochs * steps_per_ep
 sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: (s + 1) / warm if s < warm else 0.5 * (1 + math.cos(math.pi * (s - warm) / max(1, total - warm))))
+
+
+def sorghum_height_target(info):
+    """(B,) normalised stem length = the plant height (field1000 sorghum), clipped to the head's range"""
+    h = np.array([i['height'] for i in info], np.float32)
+    return torch.from_numpy(np.clip((h + S4._PLANT_SHIFT[0]) / S4._PLANT_SCALE[0], 0, 1).astype(np.float32))
+
+
+def recipe_loss(ppar, info):
+    if SORG:
+        return F.smooth_l1_loss(ppar[:, 0, 0], sorghum_height_target(info).to(ppar.device), beta=0.1)
+    return F.smooth_l1_loss(ppar[:, 0, [N_IDX, H_IDX]], recipe_target(info).to(ppar.device), beta=0.1)
 
 
 def recipe_target(info):
@@ -151,7 +172,24 @@ def leaf_target(info):
     return torch.from_numpy(t), torch.from_numpy(v), torch.from_numpy(isum)
 
 
+def sorghum_leaf_target(info):
+    """(B, 24, 3) normalised truth for starting_point (cumulative internodes / height), length, width; (B, 24) validity"""
+    B = len(info); t = np.zeros((B, 24, 3), np.float32); v = np.zeros((B, 24), np.float32)
+    sc, sh = S4._LEAF_SCALE[S_LIDX], S4._LEAF_SHIFT[S_LIDX]
+    for b, i in enumerate(info):
+        r = i.get('leaf_raw')
+        if r is None or len(r) == 0: continue
+        n = min(len(r), 24); raw = np.stack([np.cumsum(r[:, 0]) / max(i['height'], 1e-6), r[:, 1], r[:, 2]], 1)[:n]
+        t[b, :n] = np.clip((raw + sh) / sc, 0, 1); v[b, :n] = 1
+    return torch.from_numpy(t), torch.from_numpy(v)
+
+
 def leaf_loss(ppar, info):
+    if SORG:
+        t, v = (x.to(ppar.device) for x in sorghum_leaf_target(info))
+        if v.sum() == 0: return ppar.new_zeros(())
+        per = F.smooth_l1_loss(ppar[:, 1:25][:, :, S_LIDX], t, beta=0.1, reduction='none').mean(-1)
+        return (per * v).sum() / v.sum()
     t, v, isum = (x.to(ppar.device) for x in leaf_target(info))
     if v.sum() == 0:
         return ppar.new_zeros(())
@@ -199,8 +237,7 @@ for ep in range(1, a.epochs + 1):
         rgb, dep, pin, par, valid, pgt, g_dep = (x.to(dev) for x in (rgb, dep, pin, par, valid, pgt, g_dep))
         _, (_, ld, lp, _), (_, _, _, ppar), _ = model(rgb, dep, pin, torch.zeros_like(par), valid, visible={'rgb', 'depth', 'pc'},
                                                       source_mask_ratio=mask, targets=(rgb, g_dep, pgt))
-        lr_ = (F.smooth_l1_loss(ppar[:, 0, [N_IDX, H_IDX]], recipe_target(info).to(dev), beta=0.1) if a.recipe_weight > 0
-               else ppar.new_zeros(()))
+        lr_ = recipe_loss(ppar, info) if a.recipe_weight > 0 else ppar.new_zeros(())
         ll = leaf_loss(ppar, info) if a.leaf_weight > 0 else ppar.new_zeros(())
         loss = pc_w * lp + ld + a.recipe_weight * lr_ + a.leaf_weight * ll
         opt.zero_grad(set_to_none=True); loss.backward()

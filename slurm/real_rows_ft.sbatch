@@ -23,9 +23,10 @@ SPECIES=${SPECIES:-maize}                                   # SPECIES=sorghum fo
 case $SPECIES in maize) BASE=maize_row_ft_e1:checkpoints/checkpoint_epoch_100.pth; TAG=e10_real_ft;;
                  sorghum) BASE=sorghum_row_ft:checkpoints/checkpoint_epoch_100.pth; TAG=e10_real_ft_sorghum;; esac
 SOURCE=${SOURCE:-rows3000}                                  # SOURCE=rows2026: the first upload (split by row)
-RUN=${SPECIES}_real_ft$([ "$SOURCE" = rows3000 ] && echo _r3000)${RUN_SUFFIX:-}
+case $SOURCE in rows3000) SUF=_r3000;; field1000) SUF=_f1000;; *) SUF=;; esac          # field1000: the 2026-11-15 field upload
+RUN=${SPECIES}_real_ft${SUF}${RUN_SUFFIX:-}
 python train_real_rows.py --species $SPECIES --source $SOURCE --run $RUN --num-workers 14 "$@"
 TEST=$(awk -F, '$2=="test"{print $1}' outputs/$RUN/split.csv | tr '\n' ' ')
-if [ "$SOURCE" = rows3000 ]; then SEL="--source rows3000 --plants-file outputs/$RUN/split.csv"; else SEL="--source rows2026 --rows $TEST"; fi
+if [ "$SOURCE" != rows2026 ]; then SEL="--source $SOURCE --plants-file outputs/$RUN/split.csv"; else SEL="--source rows2026 --rows $TEST"; fi
 python eval/eval_real_rows.py --species $SPECIES --num-workers 14 --batch-size 16 $SEL \
-  --models $RUN:best_model.pth $BASE --out reports/${TAG}$([ "$SOURCE" = rows3000 ] && echo _r3000)${RUN_SUFFIX:-}_test_${SLURM_JOB_ID}
+  --models $RUN:best_model.pth $BASE --out reports/${TAG}${SUF}${RUN_SUFFIX:-}_test_${SLURM_JOB_ID}
