@@ -95,21 +95,6 @@ if __name__ == '__main__':
     for d in EP.OUT.glob('supp_e10_*'): shutil.rmtree(d)
     idx, n = write(allrec, fit)
     json.dump(idx, open(EP.OUT / 'recipes_e10.json', 'w'), indent=1)
-    with open(EP.OUT / 'README.md', 'a') as fh:
-        fh.write("""
-## E10 (real plants)
-
-Real plants have no generator file, so each stop folder `<layout>_row<row>_stop<stop>/` holds `truth.json` (true height,
-maize leaf count, and for the 3,000-row maize the per-leaf CSV: internode distance, leaf length, width, curvature,
-zenith) and one `predicted_<model>` file per model the figure shows (all three inputs, the figure's own seed):
-`headline_zeroshot`, `synthetic_row_finetune`, `real_row_finetune`. `recipes_e10.json` collects them.
-
-| folder | figure |
-|---|---|
-| e10_paper_maize / e10_paper_sorghum | Figs. e10_real / e10_real_sorghum (first upload) |
-| supp_e10_gallery_maize / supp_e10_gallery_sorghum | supplement E10 galleries (first upload) |
-| e10_rows3000_examples | the new 3,000-row upload: the 25/50/75th-percentile test examples |
-""")
     import procedural_formats; procedural_formats.convert(EP.OUT)          # every model file as .yml AND .xml
     shutil.make_archive(str(EP.OUT), 'zip', EP.OUT.parent, EP.OUT.name)
     print('wrote', n, 'predicted recipes;', {k: len(v) for k, v in idx.items()}, flush=True)

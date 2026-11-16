@@ -30,6 +30,36 @@ import _fig12_kit as K
 import make_row_gallery_v2 as RG
 
 OUT = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/procedural_models_for_viz')
+README_EXTRA = '''
+## Fig. 3: the plants' data
+
+`fig3_dataset/<species>/<plant>_<role>/` also holds the dataset files the figure is drawn from (as stored in the dataset):
+
+- `gallery_1..5`, `gallery_highlighted` (the 6 gallery plants per species): for each view the figure draws,
+  `viewVV_image.png` (photograph), `viewVV_depth.png`, `viewVV_point_cloud_cam.ply` (camera frame) and
+  `viewVV_camera_pose.json`. The gallery view is the side view (sorghum camera 4; maize the camera nearest the horizon);
+  the highlighted plant also has camera 0 (panel b) and the five cameras of panel c. Sorghum: `point_cloud_complete_world.ply`
+  is the whole plant in the generator frame (each view cloud is the same plant moved rigidly into that camera's frame);
+  maize view clouds are single-camera captures.
+- `row_scene` (panel d, the test row seen broadside, shot 0): `row_image.png`, `row_depth.png`,
+  `row_scene_point_cloud_cam.ply` (target + neighbours), `target_image.png`, `target_depth.png`,
+  `target_point_cloud_cam.ply` (the target alone, same camera), `camera_pose.json`, `row.json` (the row layout).
+
+## E10 (real plants)
+
+Real plants have no generator file, so each stop folder `<layout>_row<row>_stop<stop>/` holds `truth.json` / `.yml` /
+`.xml` (true height, maize leaf count, and for the 3,000-row maize the per-leaf CSV values) and one `predicted_<model>`
+file per model the figure shows (all three inputs): `headline_zeroshot`, `synthetic_row_finetune`, `real_row_finetune`.
+`recipes_e10.json` collects them. Folders: e10_paper_maize / e10_paper_sorghum (paper E10 figures, first upload),
+supp_e10_gallery_maize / _sorghum (supplement E10 galleries), e10_rows3000_examples (the 3,000-row upload examples).
+
+## Both formats
+
+Every model file is given twice, with the same fields and values: sorghum `<name>.yml` (EvoEngine spline layout) and
+`<name>.xml` (`<sorghums><sorghum><parameters .../><leaves><leaf .../>`; the true file's generator geometry kept as
+`x y z; ...` text); maize `<name>.xml` (generator XML) and `<name>.yml` (`plant: {height, leaves: [...]}`). Header
+comments (which model wrote the file, how the unpredicted maize fields were filled) are carried into both.
+'''
 SORG = pathlib.Path('/work/mech-ai-scratch/alloy/shorgum_data/new_data_50K/Sorghum_15K')
 MAIZE = pathlib.Path('/work/mech-ai-scratch/alloy/Maize_1')
 TEASER = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12/teaser_row_dump.pkl')
@@ -147,10 +177,36 @@ if __name__ == '__main__':
             t = pd.read_csv(V.ROOTS[sp] / 'plant_scores.csv'); t = t[t.split == 'val']; t['name'] = t.plant; t['h'] = t.stem_internodeSum
         t = t[t.name != PL3[sp]]
         pick = list(t.sample(5, random_state=int(rng.integers(1e6))).name); hh = dict(zip(t.name, t.h))
+        # the plants' DATA too (user, 2026-11-16: "for fig 3 share point cloud and procedural parameters", "Share 6 plants
+        # data"): per view the figure draws, the photo, depth image, point cloud and camera pose as stored in the dataset
+        el = pd.read_csv(R / 'data_split/maize_view_elevation.csv.gz') if sp == 'maize' else None
+        def side_view(pl):                              # = make_dataset_fig_v2.side_view
+            if sp == 'sorghum': return 4
+            t_ = el[(el.split == 'val') & (el.plant == pl)]; return int(t_.iloc[np.argmin(np.abs(t_.elev_deg.values))]['view'])
+        def camera_views(pl):                           # panel (c): every other camera by elevation
+            if sp == 'sorghum': return list(range(10))[::2]
+            return el[(el.split == 'val') & (el.plant == pl)].sort_values('elev_deg', ascending=False)['view'].tolist()[::2]
+        def add_view(pl, v, d):
+            f = V.folder(sp, 'val', pl, v); cloud = (f / f'{pl}_nc_cam.ply') if sp == 'sorghum' else (f / 'pointcloud_cam.ply')
+            for src, nm in ((f / V.RGB_FILE[sp], f'view{v:02d}_image.png'), (f / 'depth.png', f'view{v:02d}_depth.png'),
+                            (cloud, f'view{v:02d}_point_cloud_cam.ply'), (f / 'camera_pose.json', f'view{v:02d}_camera_pose.json')):
+                if src.exists(): shutil.copy(src, d / nm)
+            if sp == 'sorghum' and (f / f'{pl}_nc.ply').exists() and not (d / 'point_cloud_complete_world.ply').exists():
+                shutil.copy(f / f'{pl}_nc.ply', d / 'point_cloud_complete_world.ply')     # the whole plant, generator frame
         for i, pl in enumerate(sorted(pick, key=lambda n: hh[n]) + [PL3[sp]]):
-            emit('fig3_dataset', sp, pl, 'gallery' + ('_highlighted' if pl == PL3[sp] else f'_{i + 1}'), {}, true_recipe(sp, pl), fit)
+            tag = 'gallery' + ('_highlighted' if pl == PL3[sp] else f'_{i + 1}')
+            emit('fig3_dataset', sp, pl, tag, {}, true_recipe(sp, pl), fit)
+            d = OUT / 'fig3_dataset' / sp / f'{pl}_{tag}'
+            for v in sorted({side_view(pl)} | ({0} | set(camera_views(pl)) if pl == PL3[sp] else set())):
+                add_view(pl, v, d)
         emit('fig3_dataset', sp, RP3[sp], 'row_scene', {}, true_recipe(sp, RP3[sp]), fit)
-        shutil.copy(ROWROOT[sp] / RP3[sp] / 'row.json', OUT / 'fig3_dataset' / sp / f'{RP3[sp]}_row_scene' / 'row.json')
+        d = OUT / 'fig3_dataset' / sp / f'{RP3[sp]}_row_scene'
+        shutil.copy(ROWROOT[sp] / RP3[sp] / 'row.json', d / 'row.json')
+        rs = V.row_shot_dir(sp, 'test', RP3[sp], 0)                                     # panel (d): broadside, shot 0
+        for src, nm in (('rgba.png', 'row_image.png'), ('depth.png', 'row_depth.png'), ('pointcloud_cam.ply', 'row_scene_point_cloud_cam.ply'),
+                        ('gt_rgba.png', 'target_image.png'), ('gt_depth.png', 'target_depth.png'),
+                        ('gt_pointcloud_cam.ply', 'target_point_cloud_cam.ply'), ('camera_pose.json', 'camera_pose.json')):
+            if (rs / src).exists(): shutil.copy(rs / src, d / nm)
     # Fig. 4 (any input to all; maize in the paper, sorghum in the supplement): the distilled generalist from each stream alone
     import make_any2all_fig as A
     D4 = pickle.load(open(A.OUT4, 'rb'))
@@ -198,7 +254,7 @@ droopiness ({fit[3]} leaves).
 | fig4_any2all_maize / supp_any2all_sorghum | Fig. 4 and its sorghum twin in the supplement | the distilled generalist from each sensor alone: photo, depth, cloud (the figure's parameters row shows the true parameters as input) |
 | fig5_rows | Fig. 5 | row fine-tune and isolated control, on the test row |
 | supp_rows_galleries | Figs. 28-29 | the same, ten plants per species at yaw 0 and 90 |
-""")
+""" + README_EXTRA)
     import procedural_formats; procedural_formats.convert(OUT)          # every model file as .yml AND .xml
     shutil.make_archive(str(OUT), 'zip', OUT.parent, OUT.name)
     print('wrote', OUT, 'and', str(OUT) + '.zip', n, 'plants', flush=True)
