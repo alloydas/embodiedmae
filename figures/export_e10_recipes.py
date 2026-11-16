@@ -110,5 +110,6 @@ zenith) and one `predicted_<model>` file per model the figure shows (all three i
 | supp_e10_gallery_maize / supp_e10_gallery_sorghum | supplement E10 galleries (first upload) |
 | e10_rows3000_examples | the new 3,000-row upload: the 25/50/75th-percentile test examples |
 """)
+    import procedural_formats; procedural_formats.convert(EP.OUT)          # every model file as .yml AND .xml
     shutil.make_archive(str(EP.OUT), 'zip', EP.OUT.parent, EP.OUT.name)
     print('wrote', n, 'predicted recipes;', {k: len(v) for k, v in idx.items()}, flush=True)

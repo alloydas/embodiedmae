@@ -199,5 +199,6 @@ droopiness ({fit[3]} leaves).
 | fig5_rows | Fig. 5 | row fine-tune and isolated control, on the test row |
 | supp_rows_galleries | Figs. 28-29 | the same, ten plants per species at yaw 0 and 90 |
 """)
+    import procedural_formats; procedural_formats.convert(OUT)          # every model file as .yml AND .xml
     shutil.make_archive(str(OUT), 'zip', OUT.parent, OUT.name)
     print('wrote', OUT, 'and', str(OUT) + '.zip', n, 'plants', flush=True)
