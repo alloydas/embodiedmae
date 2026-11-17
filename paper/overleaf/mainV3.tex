@@ -356,7 +356,7 @@ We also test whether simpler occlusions suffice for training (\appendixref{sec:a
 We next evaluate on crop rows built from real plants. We use the procedural models of 520 real maize plants released with MaizeField3D~\citep{maizefield3d2025} and our own laser scans of 30 real sorghum plants (2.2 to 5.3\,m tall). The plants are arranged into rows at 15 to 25\,cm spacing in two orientations and imaged from 18 rover camera stops per row. The sensor streams are rendered with the same pipeline as the training data. This isolates the transfer to real plant morphology from the effect of sensor noise.
 
 \begin{table}[t]
-  \caption{\textbf{Rows assembled from real plants.} All three sensor streams are given as input. Chamfer is the target Chamfer distance in $10^{-4}$\,m$^2$ with 95\% bootstrap confidence intervals over plants. Miss@5\,mm is the fraction of ground-truth target points farther than 5\,mm from any predicted point. Height is the median relative height error, and Leaves $\pm 1$ is the share of camera stops whose predicted leaf count is within one leaf of the ground truth (the sorghum scans have no comparable height or leaf-count labels). \emph{Real-row FT} denotes the row fine-tuned model further trained on 75\% of the real plants. On synthetic test rows, the row fine-tuned model reaches 4.0 (maize) and 30.7 (sorghum).}
+  \caption{\textbf{Rows assembled from real plants.} All three sensor streams are given as input. Chamfer is the target Chamfer distance in $10^{-4}$\,m$^2$ with 95\% bootstrap confidence intervals over plants. Miss@5\,mm is the fraction of ground-truth target points farther than 5\,mm from any predicted point. Height is the median relative height error, and Leaves $\pm 1$ is the share of camera stops whose predicted leaf count is within one leaf of the ground truth (\updtwo{the sorghum scans carry no leaf-count labels, and the sorghum real-row fine-tuning was supervised on the target cloud and depth only, not on height}). \emph{Real-row FT} denotes the row fine-tuned model further trained on 75\% of the real plants. On synthetic test rows, the row fine-tuned model reaches 4.0 (maize) and 30.7 (sorghum).}
   \label{tab:e10}
   \centering\scriptsize
   \setlength{\tabcolsep}{2.5pt}
@@ -372,15 +372,15 @@ We next evaluate on crop rows built from real plants. We use the procedural mode
     Maize perpend.\ (520) & Pretrained (no row FT) & 121.2 {\tiny[116.6, 127.2]} & 0.96 & 52\% & 23\% \\
      & Isolated control & 137.3 {\tiny[133.6, 141.9]} & 0.98 & 40\% & 13\% \\
      & Row fine-tuned (FT) & \textbf{80.0} {\tiny[76.4, 85.2]} & 0.97 & \textbf{35\%} & \textbf{46\%} \\
-    Sorghum, both (30) & Pretrained (no row FT) & 2{,}541 {\tiny[2{,}205, 2{,}886]} & 0.99 & n/a & n/a \\
-     & Isolated control & \textbf{975} {\tiny[876, 1{,}079]} & 0.99 & n/a & n/a \\
-     & Row fine-tuned (FT) & 2{,}145 {\tiny[1{,}910, 2{,}376]} & 0.99 & n/a & n/a \\
+    Sorghum, both (30) & Pretrained (no row FT) & 2{,}541 {\tiny[2{,}205, 2{,}886]} & 0.99 & \updtwo{\textbf{77\%}} & n/a \\
+     & Isolated control & \textbf{975} {\tiny[876, 1{,}079]} & 0.99 & \updtwo{81\%} & n/a \\
+     & Row fine-tuned (FT) & 2{,}145 {\tiny[1{,}910, 2{,}376]} & 0.99 & \updtwo{86\%} & n/a \\
     \midrule
     \multicolumn{6}{l}{\emph{Fine-tuned on 75\% of the real plants, scored on the held-out 25\%}} \\
     Maize, both (130) & Row FT & 59.5 {\tiny[56.0, 63.2]} & 0.95 & 36\% & 45\% \\
      & Real-row FT & \textbf{19.7} {\tiny[18.6, 21.0]} & \textbf{0.87} & \textbf{1.6\%} & \textbf{70\%} \\
-    Sorghum, both (8) & Row FT & 2{,}113 {\tiny[1{,}647, 2{,}520]} & 0.99 & n/a & n/a \\
-     & Real-row FT & \textbf{79.4} {\tiny[68.3, 92.6]} & \textbf{0.92} & n/a & n/a \\
+    Sorghum, both (8) & Row FT & 2{,}113 {\tiny[1{,}647, 2{,}520]} & 0.99 & \updtwo{86\%} & n/a \\
+     & Real-row FT & \textbf{79.4} {\tiny[68.3, 92.6]} & \textbf{0.92} & \updtwo{\textbf{74\%}} & n/a \\
     \bottomrule
   \end{tabular}}
 \end{table}
