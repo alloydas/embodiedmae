@@ -13,3 +13,17 @@ is the plant of panels b and c) and the crop-row plant of panel d.
   orientations `yawYYY/` (0 = broadside): `row_image.png`, `row_depth.png`, `row_scene_point_cloud_cam.ply` (target plus
   neighbours), `target_image.png`, `target_depth.png`, `target_point_cloud_cam.ply` (the target alone, same camera) and
   `camera_pose.json`.
+
+## Model outputs
+
+What CropCode writes for the same plants and views (Fig. 3 itself shows the dataset only):
+
+- gallery plants, `viewVV/predicted_from_{image,depth,point_cloud}/`: the distilled generalist (the model of Fig. 4)
+  given that one input alone, the procedural parameters never an input: `point_cloud_cam.ply` (the predicted plant cloud,
+  in the view's camera frame, metres, like the input cloud) and `procedural_parameters.yml` / `.xml`.
+- row-scene plant, `yawYYY/predicted_row_finetune/`: the row fine-tuned model (Figs. 1 and 5) given the row image, depth
+  and scene cloud: `target_point_cloud_cam.ply` (the predicted target plant, row camera frame, metres; compare with
+  `target_point_cloud_cam.ply` one level up) and `procedural_parameters.yml` / `.xml`.
+- `outputs_summary.csv`: per output, Chamfer to the true cloud (normalised frame and m^2), and written vs true height (m)
+  and leaf count. Predicted leaf counts are read from the written parameters (maize: the plant token; sorghum: the stem
+  length), as in the paper's tables.
