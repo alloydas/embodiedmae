@@ -65,7 +65,9 @@ for spec in a.models:
                        window=(cfg['real_finetune'].get('window', 'full') if 'real_finetune' in cfg else None),
                        # real-row fine-tunes may widen the leaf decoding ranges (train_real_rows.py --leaf-ranges)
                        leaf_sc=np.array(cfg.get('real_finetune', {}).get('leaf_scale', _LEAF_SCALE_V2), np.float32),
-                       leaf_sh=np.array(cfg.get('real_finetune', {}).get('leaf_shift', _LEAF_SHIFT_V2), np.float32)))
+                       leaf_sh=np.array(cfg.get('real_finetune', {}).get('leaf_shift', _LEAF_SHIFT_V2), np.float32),
+                       # sorghum runs trained with --count-slots: the leaf count = slots longer than the threshold
+                       count_thr=(cfg.get('real_finetune', {}).get('count_threshold_m') if cfg.get('real_finetune', {}).get('count_slots') else None)))
     print(f'{run} @ {ckpt} (epoch {ep}): mask ratio {models[-1]["mask"]}, recipe scored {models[-1]["recipe"]}', flush=True)
 
 gains = {M['gain'] for M in models}
@@ -100,6 +102,10 @@ for bi, (rgb, depth, pc, params, valid, gt, info) in enumerate(loader):
                 h = p0[:, H_IDX] * PSCALE[H_IDX] - PSHIFT[H_IDX]
                 n = (np.rint(p0[:, N_IDX] * PSCALE[N_IDX] - PSHIFT[N_IDX]) if N_IDX is not None
                      else np.full(len(info), -1))
+                if a.species == 'sorghum' and M['count_thr'] is not None:
+                    li = list(S4.LEAF_FIELDS).index('length')
+                    ln = pred_par[:, 1:25, li].clamp(0, 1).float().cpu().numpy() * S4._LEAF_SCALE[li] - S4._LEAF_SHIFT[li]
+                    n = (ln > M['count_thr']).sum(1)
                 if a.species == 'maize':                     # per-leaf recipe, raw units (leaf tokens 1..28)
                     pl = pred_par[:, 1:29].clamp(0, 1).float().cpu().numpy() * M['leaf_sc'] - M['leaf_sh']
                     isum_pred = p0[:, PLANT_FIELDS_V2.index('stemInternodeSum')] * _PLANT_SCALE_V2[PLANT_FIELDS_V2.index('stemInternodeSum')]

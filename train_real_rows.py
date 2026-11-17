@@ -50,6 +50,10 @@ ap.add_argument('--leaf-ranges', default='length=0.05:1.25,width=0:0.40',
                      'leafLength 0.05-0.90 m and leafWidth 0-0.15 m; 63 %% of the scanned leaves are wider, 7 %% longer). '
                      'Recorded in config.json real_finetune.leaf_scale / leaf_shift; eval_real_rows decodes with them. "" = off')
 ap.add_argument('--val-every', type=int, default=1)
+ap.add_argument('--count-slots', type=int, default=0,
+                help='sorghum: also train the leaf slots after the last real leaf to zero length, so the leaf count is the number of '
+                     'slots longer than --count-threshold (the sorghum recipe has no count field; user, 2026-11-16: "yes start it")')
+ap.add_argument('--count-threshold', type=float, default=0.05, help='m; real sorghum leaves are >= 0.10 m at the 1st percentile')
 ap.add_argument('--smoke', type=int, default=0, help='>0: that many train/val plants, 2 epochs, CPU-friendly')
 ap.add_argument('--zoom-aug', type=int, default=None, help='rows3000 sorghum: random zoomed crops for training (default 1 there, else 0)')
 ap.add_argument('--split-only', action='store_true', help='write the split (run dir + data_split/) and exit')
@@ -71,6 +75,14 @@ a.leaf_weight = a.leaf_weight if a.leaf_weight is not None else (a.recipe_weight
 import embodied_mae_4m as S4
 S_LF = list(S4.LEAF_FIELDS)
 S_LIDX = [S_LF.index('starting_point'), S_LF.index('length'), S_LF.index('width')]   # sorghum leaf slots with field1000 truth
+S_LEN = S_LF.index('length')
+assert not a.count_slots or (SORG and F1), '--count-slots: sorghum field1000 only'
+
+
+def sorghum_count(ppar, thr):
+    """(B,) leaf count read from the leaf slots: slots 1..24 whose written length exceeds thr metres"""
+    ln = ppar[:, 1:25, S_LEN].clamp(0, 1).float() * float(S4._LEAF_SCALE[S_LEN]) - float(S4._LEAF_SHIFT[S_LEN])
+    return (ln > thr).sum(1).cpu().numpy()
 LAY = SPECIES[a.species]['layouts']
 dev = torch.device(a.device)
 H_IDX, N_IDX = PLANT_FIELDS_V2.index('height'), PLANT_FIELDS_V2.index('leafCount')
@@ -124,8 +136,9 @@ mask = float(cfg.get('mask_ratio', 0.8)); pc_w = float(cfg.get('pc_loss_weight',
 run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_seed=a.split_seed, n_train=len(train), n_val=len(val),
                                        n_test=len(test), source=a.source, window=('plant' if F1 else 'zoom' if (R3 and SORG) else SPECIES[a.species]['window']), zoom_aug=a.zoom_aug, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
                                        leaf_weight=a.leaf_weight, leaf_scale=LEAF_SC.tolist(), leaf_shift=LEAF_SH.tolist(),
+                                       count_slots=bool(a.count_slots), count_threshold_m=(a.count_threshold if a.count_slots else None),
                                        supervised=['pc', 'depth'] + ((['stem_length=height'] if SORG else ['height', 'leafCount']) if a.recipe_weight > 0 else [])
-                                       + ((['leaf.starting_point', 'leaf.length', 'leaf.width'] if SORG else ['stemInternodeSum'] + [f'leaf.{f}' for f in LEAF_TRUTH_FIELDS])
+                                       + ((['leaf.starting_point', 'leaf.length', 'leaf.width'] + (['leaf.length=0 after the last leaf (count)'] if a.count_slots else []) if SORG else ['stemInternodeSum'] + [f'leaf.{f}' for f in LEAF_TRUTH_FIELDS])
                                           if a.leaf_weight > 0 else []),
                                        source_mask_ratio=mask))
 (run_dir / 'config.json').write_text(json.dumps(run_cfg, indent=1, default=str))
@@ -189,7 +202,14 @@ def leaf_loss(ppar, info):
         t, v = (x.to(ppar.device) for x in sorghum_leaf_target(info))
         if v.sum() == 0: return ppar.new_zeros(())
         per = F.smooth_l1_loss(ppar[:, 1:25][:, :, S_LIDX], t, beta=0.1, reduction='none').mean(-1)
-        return (per * v).sum() / v.sum()
+        out = (per * v).sum() / v.sum()
+        if a.count_slots:                       # the slots after the last real leaf: zero length (only plants with leaf truth)
+            has = v.any(1, keepdim=True); empty = (v == 0) & has
+            if empty.any():
+                z = float(np.clip(S4._LEAF_SHIFT[S_LEN] / S4._LEAF_SCALE[S_LEN], 0, 1))
+                e = F.smooth_l1_loss(ppar[:, 1:25, S_LEN], torch.full_like(ppar[:, 1:25, S_LEN], z), beta=0.1, reduction='none')
+                out = out + (e * empty).sum() / empty.sum()
+        return out
     t, v, isum = (x.to(ppar.device) for x in leaf_target(info))
     if v.sum() == 0:
         return ppar.new_zeros(())
@@ -211,7 +231,8 @@ def validate():
         p0 = ppar[:, 0].clamp(0, 1).float().cpu().numpy()
         if SORG:                                    # stem length (plant token field 0) against the plant height
             import embodied_mae_4m as S4
-            h = p0[:, 0] * S4._PLANT_SCALE[0] - S4._PLANT_SHIFT[0]; n = np.full(len(info), -99)
+            h = p0[:, 0] * S4._PLANT_SCALE[0] - S4._PLANT_SHIFT[0]
+            n = sorghum_count(ppar, a.count_threshold) if a.count_slots else np.full(len(info), -99)
         else:
             h = p0[:, H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]
             n = np.rint(p0[:, N_IDX] * _PLANT_SCALE_V2[N_IDX] - _PLANT_SHIFT_V2[N_IDX])
