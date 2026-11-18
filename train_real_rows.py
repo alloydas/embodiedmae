@@ -54,6 +54,10 @@ ap.add_argument('--count-slots', type=int, default=0,
                 help='sorghum: also train the leaf slots after the last real leaf to zero length, so the leaf count is the number of '
                      'slots longer than --count-threshold (the sorghum recipe has no count field; user, 2026-11-16: "yes start it")')
 ap.add_argument('--count-threshold', type=float, default=0.05, help='m; real sorghum leaves are >= 0.10 m at the 1st percentile')
+ap.add_argument('--empty-weight', type=float, default=1.0, help='weight of the empty-slot term of --count-slots (run 1: 1.0 cost 4 cm of leaf length)')
+ap.add_argument('--source-mix', type=float, default=0.0,
+                help='share of training batches given ONE random input stream (rgb / depth / pc, the others hidden, source mask 0) '
+                     'instead of all three at the pretraining mask ratio, as eval_real_rows scores single sources (0 = every earlier run)')
 ap.add_argument('--smoke', type=int, default=0, help='>0: that many train/val plants, 2 epochs, CPU-friendly')
 ap.add_argument('--zoom-aug', type=int, default=None, help='rows3000 sorghum: random zoomed crops for training (default 1 there, else 0)')
 ap.add_argument('--split-only', action='store_true', help='write the split (run dir + data_split/) and exit')
@@ -137,6 +141,7 @@ run_cfg = dict(cfg, real_finetune=dict(init=a.init, init_epoch=init_ep, split_se
                                        n_test=len(test), source=a.source, window=('plant' if F1 else 'zoom' if (R3 and SORG) else SPECIES[a.species]['window']), zoom_aug=a.zoom_aug, epochs=a.epochs, lr=a.lr, batch_size=a.batch_size, recipe_weight=a.recipe_weight,
                                        leaf_weight=a.leaf_weight, leaf_scale=LEAF_SC.tolist(), leaf_shift=LEAF_SH.tolist(),
                                        count_slots=bool(a.count_slots), count_threshold_m=(a.count_threshold if a.count_slots else None),
+                                       empty_weight=(a.empty_weight if a.count_slots else None), source_mix=a.source_mix,
                                        supervised=['pc', 'depth'] + ((['stem_length=height'] if SORG else ['height', 'leafCount']) if a.recipe_weight > 0 else [])
                                        + ((['leaf.starting_point', 'leaf.length', 'leaf.width'] + (['leaf.length=0 after the last leaf (count)'] if a.count_slots else []) if SORG else ['stemInternodeSum'] + [f'leaf.{f}' for f in LEAF_TRUTH_FIELDS])
                                           if a.leaf_weight > 0 else []),
@@ -208,7 +213,7 @@ def leaf_loss(ppar, info):
             if empty.any():
                 z = float(np.clip(S4._LEAF_SHIFT[S_LEN] / S4._LEAF_SCALE[S_LEN], 0, 1))
                 e = F.smooth_l1_loss(ppar[:, 1:25, S_LEN], torch.full_like(ppar[:, 1:25, S_LEN], z), beta=0.1, reduction='none')
-                out = out + (e * empty).sum() / empty.sum()
+                out = out + a.empty_weight * (e * empty).sum() / empty.sum()
         return out
     t, v, isum = (x.to(ppar.device) for x in leaf_target(info))
     if v.sum() == 0:
@@ -250,14 +255,18 @@ def validate():
 hist = dict(epoch=[], train_loss=[], train_pc=[], train_depth=[], train_recipe=[], train_leaf=[], val=[])
 hist['val'].append(dict(epoch=0, **validate())); print('epoch 0 (init)', hist['val'][-1], flush=True)
 best = hist['val'][-1]['val_chamfer_m2']
-model.train(); step = 0
+model.train(); step = 0; mix_rng = np.random.default_rng(12345)
 for ep in range(1, a.epochs + 1):
     train_ds.seed = 1 + ep                                                  # a fresh point subsample per epoch
     t0, sums, nb = time.time(), np.zeros(5), 0
     for rgb, dep, pin, par, valid, pgt, g_dep, info in mk(train_ds, True):
         rgb, dep, pin, par, valid, pgt, g_dep = (x.to(dev) for x in (rgb, dep, pin, par, valid, pgt, g_dep))
-        _, (_, ld, lp, _), (_, _, _, ppar), _ = model(rgb, dep, pin, torch.zeros_like(par), valid, visible={'rgb', 'depth', 'pc'},
-                                                      source_mask_ratio=mask, targets=(rgb, g_dep, pgt))
+        if a.source_mix > 0 and mix_rng.random() < a.source_mix:        # one stream alone, as the single-source evaluation
+            vis_, smr_ = {str(mix_rng.choice(['rgb', 'depth', 'pc']))}, 0.0
+        else:
+            vis_, smr_ = {'rgb', 'depth', 'pc'}, mask
+        _, (_, ld, lp, _), (_, _, _, ppar), _ = model(rgb, dep, pin, torch.zeros_like(par), valid, visible=vis_,
+                                                      source_mask_ratio=smr_, targets=(rgb, g_dep, pgt))
         lr_ = recipe_loss(ppar, info) if a.recipe_weight > 0 else ppar.new_zeros(())
         ll = leaf_loss(ppar, info) if a.leaf_weight > 0 else ppar.new_zeros(())
         loss = pc_w * lp + ld + a.recipe_weight * lr_ + a.leaf_weight * ll
