@@ -640,7 +640,8 @@ Synthetic pretraining ranges from fractal patterns~\citep{kataoka2020fractaldb} 
 \section{Dataset Generation Details}
 \label{app:data}
 
-\dataset{} comprises four synthetic subsets: isolated single-plant captures and physically contact-solved simulated rover rows, for both maize and sorghum. We render all images at $1024 \times 1024$ resolution with a $40^\circ$ vertical field of view ($f_x = f_y = 512 / \tan 20^\circ = 1406.7$\,px, principal point at the image center) in OpenGL camera coordinates ($+y$ up, camera looking down $-z$).
+\dataset{} comprises four synthetic subsets: isolated single-plant captures and physically contact-solved simulated rover rows, for both maize and sorghum. \tabref{tab:fieldproc} summarizes the configuration of every subset. We render all images at $1024 \times 1024$ resolution with a $40^\circ$ vertical field of view ($f_x = f_y = 512 / \tan 20^\circ = 1406.7$\,px, principal point at the image center) in OpenGL camera coordinates ($+y$ up, camera looking down $-z$).
+% (supplement reorder): cross-reference to tab:fieldproc added; the table was previously cited only from a main-text pointer that was commented out for submission.
 
 \begin{table}[h!]
   \caption{\textbf{\dataset{} dataset configuration.} The parameter dimensions combine plant-level macro traits with $K$ structured leaf slots. In each row scene, we place a target plant between two neighboring plants at 0.15\,m stem intervals.}
@@ -926,7 +927,7 @@ When Point-MAE is supplied with full 3D camera pose matrices on synthetic maize,
 \section{Result Tables}
 \label{app:tables}
 
-This appendix provides the full numerical tables referenced in the main paper, in the order of the main paper's experiments. We report simulated row occlusion (\tabref{tab:rows}), the real-plant row experiments (\tabref{tab:e10} of the main paper and \tabref{tab:e10_detail}), and single-view reconstruction of isolated plants (\tabref{tab:regime1}). The remaining full tables appear beside their analyses: partial camera coverage (\tabref{tab:views}), the controlled modality, scale, and capacity ablations (\tabref{tab:modality_value_add}), the token-budget control ablations (\tabref{tab:control}), and the encoder comparison (\tabref{tab:baselines}) in \appendixref{app:analyses}, and any-subset cross-modal generation and distillation (\tabref{tab:anysubset}) in \appendixref{app:discussion}.
+This appendix provides the full numerical tables referenced in the main paper, in the order of the main paper's experiments. We report simulated row occlusion (\tabref{tab:rows}; plotted in \figref{fig:rows}), the real-plant row experiments (\tabref{tab:e10} of the main paper and \tabref{tab:e10_detail}), and single-view reconstruction of isolated plants (\tabref{tab:regime1}). The remaining full tables appear beside their analyses: partial camera coverage (\tabref{tab:views}), the controlled modality, scale, and capacity ablations (\tabref{tab:modality_value_add}), the token-budget control ablations (\tabref{tab:control}), and the encoder comparison (\tabref{tab:baselines}) in \appendixref{app:analyses}, and any-subset cross-modal generation and distillation (\tabref{tab:anysubset}) in \appendixref{app:discussion}.
 % REVIEWER FLAG (supplement reorder): this listing sentence was rewritten so the tables are named in the main paper's order (rows, real plants, single-sensor); the submitted version listed them as regime1 / views / rows / anysubset / control. No numbers changed.
 
 
@@ -1057,7 +1058,8 @@ This appendix provides the full numerical tables referenced in the main paper, i
 \section{Result Figures}
 \label{app:figures}
 
-We group the result figures referenced in the main text below, in their order of appearance.
+We group the result figures below, in the order of the main paper's experiments: the quantitative row-occlusion results of \secref{sec:regime3} (\figref{fig:rows}), the real-plant rows of \secref{sec:exp-real} (\textcolor{cvprblue}{Figs.}~\ref{fig:e10_height}, \ref{fig:e10_real}, and~\ref{fig:e10_real_sorghum}), and the any-to-all cross-modal reconstructions of \secref{sec:exp-main} (\textcolor{cvprblue}{Figs.}~\ref{fig:any2any-maize} and~\ref{fig:any2any-sorghum}).
+% (supplement reorder): the intro now names every figure in this section so each one is cited from the text.
 
 
 \begin{figure*}[t]
@@ -1136,7 +1138,7 @@ We group the result figures referenced in the main text below, in their order of
 \section{Real-Row Fine-Tuning Gallery}
 \label{sec:supp-e10}
 
-\textcolor{cvprblue}{Figures}~\ref{fig:supp-e10-maize} and~\ref{fig:supp-e10-sorghum} show 20 additional held-out real plants from the real-row experiment (\secref{sec:exp-real}). For maize (\figref{fig:supp-e10-maize}), we sample examples at the 10th, 30th, 50th, 70th, 90th, and 98th error percentiles across both parallel and perpendicular row layouts. Fine-tuning on 75\% of the real plants reduces the Chamfer error at all of these percentiles, from a range of 20 to 195 down to a range of 6 to 52 $\times 10^{-4}$\,m$^2$. The predicted heights move from a saturated baseline of $\sim 1.0$\,m to within a few centimeters of the ground truth (e.g., 1.52 vs.\ 1.52\,m and 1.88 vs.\ 1.85\,m). For sorghum (\figref{fig:supp-e10-sorghum}), all eight held-out test plants (2.8 to 4.9\,m tall) improve, from a range of 661 to 2{,}781 down to a range of 52 to 122 $\times 10^{-4}$\,m$^2$. The fine-tuned model recovers the full stalk height, even though these plants are far taller than the 1.74\,m synthetic training range.
+\textcolor{cvprblue}{Figures}~\ref{fig:supp-e10-maize} and~\ref{fig:supp-e10-sorghum} show 20 additional held-out real plants from the real-row experiment (\secref{sec:exp-real}). \figref{fig:e10_height} plots the predicted versus true heights of the held-out maize plants, and \textcolor{cvprblue}{Figs.}~\ref{fig:e10_real} and~\ref{fig:e10_real_sorghum} show median-error camera stops for each species. For maize (\figref{fig:supp-e10-maize}), we sample examples at the 10th, 30th, 50th, 70th, 90th, and 98th error percentiles across both parallel and perpendicular row layouts. Fine-tuning on 75\% of the real plants reduces the Chamfer error at all of these percentiles, from a range of 20 to 195 down to a range of 6 to 52 $\times 10^{-4}$\,m$^2$. The predicted heights move from a saturated baseline of $\sim 1.0$\,m to within a few centimeters of the ground truth (e.g., 1.52 vs.\ 1.52\,m and 1.88 vs.\ 1.85\,m). For sorghum (\figref{fig:supp-e10-sorghum}), all eight held-out test plants (2.8 to 4.9\,m tall) improve, from a range of 661 to 2{,}781 down to a range of 52 to 122 $\times 10^{-4}$\,m$^2$. The fine-tuned model recovers the full stalk height, even though these plants are far taller than the 1.74\,m synthetic training range.
 
 \begin{figure*}[t!]
   \centering
@@ -1169,7 +1171,7 @@ This appendix collects analyses that support the main paper. We cover (a) the ef
 \label{sec:regime2}\label{sec:exp-regime2}
 
 \noindent\textbf{Effect of camera elevation.}
-The ten views of a plant share the same ground-truth procedural parameters, and evaluating across the elevation ladder thus isolates the effect of the camera angle. \subfigref{fig:views}{A} shows that the single-image reconstruction error follows a symmetric U-shaped curve across elevation, with the lowest error for horizontal side views and the highest error when looking steeply down or up. Camera elevation accounts for $\eta^2 = 0.24$ to $0.31$ of the per-plant variance, whereas the morphological traits correlate negligibly with the error ($|\rho| \le 0.06$). Distillation reduces the error by 28\% across all viewpoints, and the U-shaped difficulty profile is preserved.
+The ten views of a plant share the same ground-truth procedural parameters, and evaluating across the elevation ladder thus isolates the effect of the camera angle. \subfigref{fig:views}{A} shows that the single-image reconstruction error follows a symmetric U-shaped curve across elevation, with the lowest error for horizontal side views and the highest error when looking steeply down or up. Camera elevation accounts for $\eta^2 = 0.24$ to $0.31$ of the per-plant variance, whereas the morphological traits correlate negligibly with the error ($|\rho| \le 0.06$). Distillation reduces the error by 28\% across all viewpoints, and the U-shaped difficulty profile is preserved. \figref{fig:qual} shows single-photograph reconstructions before and after distillation.
 
 \begin{figure*}[t!]
   \centering
@@ -1794,7 +1796,7 @@ We also test \emph{mixed} masking during occluded training (\cref{fig:mixed}). H
 
 
 \subsection{Distillation Dynamics per Source Modality}
-Cross-modal distillation reduces the mean generation loss by 30.2\% in sorghum and 43.5\% in maize over 100 epochs, with the largest improvements on single-sensor inputs. The sorghum point-cloud-to-cloud Chamfer distance improves from $5.48$ to $1.39 \times 10^{-3}$, the parameter-only-to-cloud Chamfer distance drops from $22.7$ to $6.83 \times 10^{-3}$, and the maize RGB-to-cloud Chamfer distance drops from $11.3$ to $0.77 \times 10^{-3}$. On full validation point clouds, our multi-stream distilled generalist achieves a parameter MAE of 0.019, compared to 0.036 and 0.038 for parameter-only specialist students trained from the same initialization (at learning rates $10^{-4}$ and $3 \times 10^{-5}$). This indicates a regularizing benefit of joint multimodal reconstruction.
+Cross-modal distillation reduces the mean generation loss by 30.2\% in sorghum and 43.5\% in maize over 100 epochs, with the largest improvements on single-sensor inputs. The sorghum point-cloud-to-cloud Chamfer distance improves from $5.48$ to $1.39 \times 10^{-3}$, the parameter-only-to-cloud Chamfer distance drops from $22.7$ to $6.83 \times 10^{-3}$, and the maize RGB-to-cloud Chamfer distance drops from $11.3$ to $0.77 \times 10^{-3}$. On full validation point clouds, our multi-stream distilled generalist achieves a parameter MAE of 0.019, compared to 0.036 and 0.038 for parameter-only specialist students trained from the same initialization (at learning rates $10^{-4}$ and $3 \times 10^{-5}$). This indicates a regularizing benefit of joint multimodal reconstruction. Qualitative any-to-all reconstructions are shown in \textcolor{cvprblue}{Figs.}~\ref{fig:any2any-maize} and~\ref{fig:any2any-sorghum}.
 
 \subsection{Label-Free View Invariance Across Camera Perspectives}
 We evaluate the consistency of the predictions across the ten views of each plant, which gives a label-free measure of view invariance. Distillation reduces the cross-view prediction spread by roughly 50\% on observable morphological traits (the insertion height error falls by 59\% and the branching angle error by 60\%). In contrast, unobservable parameters (such as the early-release leaf waviness fields with near-zero skill) become more view-sensitive as the decoder fits image noise. We therefore exclude them from the final parameterization.
