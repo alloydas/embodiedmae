@@ -859,6 +859,32 @@ We detect contacts with a two-stage \Meets{} check. The first stage is a 1\,cm d
 We capture each row orientation with a horizontal rover camera at $(0, h, \mathrm{dist})$ looking at $(0, h, 0)$, where $h$ is the height of the target bounding-box center ($\mathrm{dist} = 1.0$\,m for maize, $2.5$\,m for sorghum). Each capture gives the three-plant row input (RGB, depth, and a 24{,}576-point scene cloud) and the ground truth, which is the contact-bent target plant alone (an 8{,}192-point cloud and its procedural parameters). Note that the dataset has two minor edge cases. (1) At a distance of 2.5\,m with a $40^\circ$ vertical field of view ($\approx 1.8$\,m vertical span), the top or the base of the tallest sorghum plants can extend slightly outside the image frame. (2) Sorghum training plant 0 (generated with seed 0, where the generator does not reseed its random number generator) omits the parameters for 2 of its 13 leaves, and its mesh is 0.35\,m taller than predicted by its stem length. This affects a single training instance and no validation or test plants.
 % REVIEWER FLAG: by the same geometry, the maize rover camera at 1.0 m with a 40 degree field of view spans about 0.73 m vertically, which is less than most maize plant heights (0.62 to 1.44 m), but only sorghum cropping is listed as an edge case. Not changed; authors to verify the maize camera distance or framing.
 
+\subsection{Rows Assembled from Real Plants}
+\label{sec:supp-real-rows}
+% How the field images were generated (plant geometry -> rows -> camera).
+\noindent\textbf{Plant geometry.}
+Each sorghum plant was cut at the base, removed from the field and fixed upright in a stand, where it was filmed from all
+around with an iPhone. Its 3D geometry was reconstructed from these videos with a neural radiance field
+(NeRF)~\citep{arshad2024nerf_field}, giving a dense, textured point cloud of the whole plant. The point cloud was
+segmented into stalk, leaves and panicle, and each organ was fitted with a NURBS surface using the procedural modelling
+approach of \citet{hadadi2025procmaize}, which finds an initial surface by particle swarm optimization and refines it
+by gradient-based optimization with the differentiable NURBS module NURBS-Diff~\citep{nurbsdiff2022}, the same approach
+used to build the maize models of MaizeField3D~\citep{maizefield3d2025}. For the field
+rows, the sorghum plants were scaled to 1.5--2.0\,m, and each was given six replicas with varied leaf geometry. The maize
+plants are the NURBS surface models of the 520 field-grown maize plants released with
+MaizeField3D~\citep{maizefield3d2025}. For both species, the procedural parameters of every plant (per leaf: length,
+width, azimuth, zenith, twist, curvature, and internode distance) were measured from the NURBS surfaces with the same
+code.
+
+\noindent\textbf{Row placement and imaging.}
+The field images were then recreated in a simulated environment. Each scene is a target row of 20 plants spaced 15 to
+25\,cm apart, with two back rows 76\,cm and 152\,cm behind it. Each plant is placed so that its leaves do not overlap
+those of its neighbors. One camera stop is placed at each plant of the target row. The camera is level, about 1.1\,m
+from the target row and at least 0.5\,m from any leaf, focused on the target row with a 20\,mm aperture and an exposure
+of 1.4, and lit by a diffused ring light around the lens against a black background. At each stop, a whole-plant
+photograph (1{,}700\,px wide) and four overlapping vertical sections of the middle plant are taken. Each comes with a
+camera-frame point cloud labeled by plant and organ and the procedural parameters of every plant in view.
+
 
 \FloatBarrier
 \clearpage
