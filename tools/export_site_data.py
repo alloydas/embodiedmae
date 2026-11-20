@@ -168,8 +168,10 @@ def export_dataset(sp):
         ply = next(f0.glob('*_nc_cam.ply')) if sp == 'sorghum' else f0 / 'pointcloud_cam.ply'
         P = V.read_cloud(ply); P, c, s = V.normalise_cloud(P)
         it = Item(s); it.add('plant', sub(P, 2 * a.points, 1))
+        import export_procedural_models as EP                        # the plant's true procedural model, for the page's 3D panel
         meta, nb = it.write(out / 'isolated' / plant, dict(task='dataset', kind='isolated', species=sp, plant=plant, views=views,
-                                                         note='complete plant' if sp == 'sorghum' else 'what camera 00 sees'))
+                                                         note='complete plant' if sp == 'sorghum' else 'what camera 00 sees',
+                                                         recipes=dict(truth=full_recipe(EP.true_recipe(sp, plant)))))
         index.append(dict(kind='isolated', id=plant, json=f'isolated/{plant}.json'))
         print(sp, 'isolated', plant, len(views), 'views', f'{nb / 1e3:.0f} kB', flush=True)
     # (2) synthetic crop rows: scene with the center plant marked, two yaws
@@ -183,7 +185,9 @@ def export_dataset(sp):
             sc = sub(scene, 3 * a.points, theta)
             it = Item(s); it.add('scene', sc, mark=nn_dist(sc, gt) < 0.012)
             img = save_jpg(rgba_over_black(shot / 'rgba.png', 1.85 if sp == 'sorghum' else None), out / 'rows' / f'{plant}_y{theta}.jpg')
-            meta, nb = it.write(out / 'rows' / f'{plant}_y{theta}', dict(task='dataset', kind='row', species=sp, plant=plant, yaw=theta, img=img))
+            import export_procedural_models as EP
+            meta, nb = it.write(out / 'rows' / f'{plant}_y{theta}', dict(task='dataset', kind='row', species=sp, plant=plant, yaw=theta, img=img,
+                                                                         recipes=dict(truth=full_recipe(EP.true_recipe(sp, plant)))))
             index.append(dict(kind='row', id=f'{plant}_y{theta}', json=f'rows/{plant}_y{theta}.json'))
             print(sp, 'row', plant, theta, f'{nb / 1e3:.0f} kB', flush=True)
     # (3) rows of real plants: one stop per layout, the scene with the center plant marked

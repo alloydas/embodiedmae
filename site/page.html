@@ -135,6 +135,7 @@
   .inbox { position: relative; }
   .inbox .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: #000; aspect-ratio: 1 / 1; align-content: center; }
   .inbox .pair img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: #fff; display: block; }
+  .inbox .pair canvas { width: 100%; aspect-ratio: 1 / 1; background: #fff; }
   .inbox > img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: #fff; }
   .legend .bar { display: inline-block; vertical-align: middle; }
   .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; font-size: 13.5px; color: var(--muted); }
@@ -144,7 +145,9 @@
   .strip { display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: var(--card); border-top: 1px solid var(--rule); }
   .strip img { width: 64px; height: 64px; object-fit: contain; border-radius: 7px; border: 2px solid transparent; cursor: pointer; background: #fff; flex: none; }
   .strip img[aria-current="true"] { border-color: var(--accent); }
-  .data-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  .data-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .procbox { position: relative; }
+  .noproc { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; font-size: 14px; color: var(--muted); background: var(--panel); }
   @media (max-width: 760px) { .data-grid { grid-template-columns: minmax(0, 1fr); } }
   .note { font-size: 14px; color: var(--muted); }
   .loading { opacity: .5; transition: opacity .15s; }
@@ -317,6 +320,7 @@
     <div class="data-grid">
       <div class="cell input"><header><b id="d-img-title">Image</b><span class="chip" id="d-img-chip"></span></header><div><img class="view" id="d-img" alt=""><div class="strip" id="d-strip" hidden></div></div></div>
       <div class="cell"><header><b>Point cloud</b><span class="chip" id="d-pc-chip"></span></header><canvas id="d-pc" aria-label="3D point cloud of the selected example"></canvas></div>
+      <div class="cell"><header><b>Procedural model</b><span class="chip" id="d-proc-chip"></span></header><div class="procbox"><canvas id="d-proc" aria-label="The plant's true procedural model in 3D"></canvas><p class="noproc" id="d-noproc" hidden>Real plants have no procedural model: their truth is the scanned plant itself.</p></div></div>
     </div>
     <div class="legend" id="d-legend"><span><i class="sw" style="background:#5aa83e"></i>plant (center plant in rows)</span><span id="d-legend-nb"><i class="sw" style="background:#c9c2b0"></i>neighbouring plants</span></div>
   </section>
@@ -471,6 +475,17 @@
   // ------------------------------------------------------------------ data section
   const D = { g: PCV.group(), species: 'maize', kind: 'isolated', index: {}, item: null };
   const dp = PCV.panel(document.getElementById('d-pc'), D.g);
+  const D2 = PCV.group(), dpp = PCV.panel(document.getElementById('d-proc'), D2);
+  linkTurn(D.g, D2);
+  // the true procedural model (textured, as in the paper), its own camera turned with the cloud's
+  function dProc(m) {
+    const rec = m.recipes && m.recipes.truth, none = document.getElementById('d-noproc');
+    none.hidden = !!rec; dpp.bg = panelBg();
+    if (!rec) { dpp.set([]); document.getElementById('d-proc-chip').textContent = ''; return; }
+    dpp.set([PCV.proceduralMesh(rec, m.species)]);
+    D2.frame(PCV.bounds(PCV.procedural(rec, m.species)), { phi: 0.1 });
+    document.getElementById('d-proc-chip').textContent = `${fmt(rec.h, 2)} m · ${rec.n} leaves`;
+  }
   const dSp = seg('d-species', v => { D.species = v; dFill(); });
   const dKind = seg('d-kind', v => { D.kind = v; dFill(); });
   const dSel = document.getElementById('d-item');
@@ -496,14 +511,14 @@
       document.getElementById('d-img-chip').textContent = `plant ${m.plant.split('_').pop()}`;
       document.getElementById('d-pc-chip').textContent = m.note;
       document.getElementById('d-legend-nb').hidden = true;
-      const c = it.clouds.plant; dp.bg = panelBg(); dp.set([{ pos: c.pos, col: PCV.plantColors(c.pos) }]); D.g.frame(PCV.bounds(c.pos));
+      const c = it.clouds.plant; dp.bg = panelBg(); dp.set([{ pos: c.pos, col: PCV.plantColors(c.pos) }]); D.g.frame(PCV.bounds(c.pos)); dProc(m);
     } else {
       strip.hidden = true; img.src = `data/dataset/${D.species}/${sub}/${m.img}`; img.style.background = '#000';
       document.getElementById('d-img-title').textContent = m.kind === 'real' ? 'Camera image' : 'Row image';
       document.getElementById('d-img-chip').textContent = m.kind === 'real' ? `${m.layout} row · true height ${fmt(m.height, 2)} m` : `yaw ${m.yaw}°`;
       document.getElementById('d-pc-chip').textContent = 'center plant in green';
       document.getElementById('d-legend-nb').hidden = false;
-      const c = it.clouds.scene; dp.bg = panelBg(); dp.set([{ pos: c.pos, col: PCV.markColors(c.pos, c.mark) }]); D.g.frame(PCV.bounds(c.pos));
+      const c = it.clouds.scene; dp.bg = panelBg(); dp.set([{ pos: c.pos, col: PCV.markColors(c.pos, c.mark) }]); D.g.frame(PCV.bounds(c.pos)); dProc(m);
     }
   }
 
@@ -586,11 +601,22 @@
     }
     return meta._proc[key];
   }
+  // the procedural model drawn as the paper draws it: shaded, textured leaf surfaces (PCV.proceduralMesh), placed exactly
+  // as procPos places the points; flat = a one-colour ghost (the true plant behind a written one)
+  function procMesh(meta, key, truthCloud, flat) {
+    const R_ = meta.recipes; if (!R_ || !R_[key] || !procPos(meta, key, truthCloud)) return null;
+    meta._mesh = meta._mesh || {}; const ck = key + '|' + (flat || '');
+    if (!meta._mesh[ck]) {
+      const M = PCV.proceduralMesh(R_[key], meta.species, flat), s_ = 1 / (meta.scale_m || 1), { c, at } = meta._procRef, P = M.pos;
+      for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) P[i + k] = (P[i + k] - c[k]) * s_ + at[k];
+      meta._mesh[ck] = M;
+    }
+    return meta._mesh[ck];
+  }
   function procLayers(meta, key, truthCloud, showTruth) {
-    const P = procPos(meta, key, truthCloud); if (!P) return null;
-    const L = [], T = meta.recipes.truth && key !== 'truth' ? procPos(meta, 'truth', truthCloud) : null;
-    if (showTruth && T) L.push({ pos: T, col: PCV.flat(T.length / 3, truthGrey()), size: 1.5 });
-    L.push({ pos: P, col: PCV.plantColors(P), size: 1.3 });
+    const M = procMesh(meta, key, truthCloud); if (!M) return null;
+    const L = [M], T = showTruth && meta.recipes.truth && key !== 'truth' ? procMesh(meta, 'truth', truthCloud, truthGrey()) : null;
+    if (T) L.push(Object.assign({}, T, { alpha: 0.4 }));           // the true plant as the grey ghost (Figs. 5, S8-S9)
     return L;
   }
   // frame a section on its procedural plants (the true recipe's, else the first written one) once per item
@@ -607,7 +633,7 @@
     procFrame(gp, meta, truthCloud, holder);
     for (const k of ks) {
       const base = k.slice(0, -5), key = rk(base), p = panels[k]; p.bg = panelBg();
-      if (base === 'truth') { const T = procPos(meta, 'truth', truthCloud); p.set(T ? [{ pos: T, col: PCV.plantColors(T) }] : []); continue; }
+      if (base === 'truth') { const T = procMesh(meta, 'truth', truthCloud); p.set(T ? [T] : []); continue; }
       p.set(procLayers(meta, key, truthCloud, showTruth) || []);
     }
   }
@@ -678,10 +704,19 @@
     draw: st => {
       const it = st.item, m = it.meta, C = it.clouds, src = document.getElementById('a-src').value;
       const box = document.getElementById('a-in'), cv = box.querySelector('canvas');
+      if (cv.parentElement !== box) box.append(cv);                  // a parameter pair had moved the canvas into its .pair
       box.querySelectorAll('img, .pair').forEach(e => e.remove());
       const imgOf = s => s === 'rgb' ? m.files.rgb : s === 'depth' ? m.files.depth : m.files.params;
       const parts = src.split('+');
       if (src === 'pc') { cv.hidden = false; st.panels.input.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]); }
+      else if (parts.includes('text')) {                              // the given parameters, drawn as the plant they describe
+        cv.hidden = false; const M = procMesh(m, 'truth', C.truth); st.panels.input.set(M ? [M] : []);
+        if (parts.length > 1) {
+          const d = document.createElement('div'); d.className = 'pair'; const o = parts.find(x => x !== 'text');
+          const im = new Image(); im.src = st.base + imgOf(o); im.alt = o; if (o === 'rgb') im.style.background = '#000';
+          d.append(im, cv); box.prepend(d); st.panels.input.draw();
+        }
+      }
       else {
         cv.hidden = true;
         if (parts.length === 1) { const im = new Image(); im.src = st.base + imgOf(src); im.alt = 'input'; box.prepend(im); if (src === 'rgb') im.style.background = '#000'; }
@@ -739,8 +774,8 @@
     for (const [id, url] of [['hero-maize', 'data/single/maize/plant_1875_09.json'], ['hero-sorghum', 'data/single/sorghum/Sorghum_7712_05.json']]) {
       const cv = document.getElementById(id); if (!cv) continue;
       const g = PCV.group(), p = PCV.panel(cv, g); p.bg = [1, 1, 1]; g.size = 1.25;
-      const it = await PCV.load(url), P = PCV.procedural(it.meta.recipes['rgb:after'], it.meta.species);
-      p.set([{ pos: P, col: PCV.plantColors(P), size: 1.15 }]);
+      const it = await PCV.load(url), rec = it.meta.recipes['rgb:after'], P = PCV.procedural(rec, it.meta.species);
+      p.set([PCV.proceduralMesh(rec, it.meta.species)]);           // textured surfaces; the points only frame the view
       const b = PCV.bounds(P), mid = [0, 1, 2].map(i => (b[0][i] + b[1][i]) / 2);
       g.frame([0, 1].map(j => b[j].map((v, i) => mid[i] + (v - mid[i]) * 0.96)), { phi: 0.06 });
       const v = { g, idle: 0, seen: true }; views.push(v);

@@ -6,7 +6,10 @@
  *   g.frame(bounds)                               // fit the camera to [[minx,miny,minz],[maxx,maxy,maxz]]
  *   const item = await PCV.load(url)             // manifest + binary: {meta, clouds: {name: {pos, err, mark, n}}}
  *   PCV.missed(truthPos, predPos, tau)            // true points with no prediction within tau: {pos, n}
- *   PCV.procedural(recipe, species)               // a 3D plant built from a decoded recipe (metres, y up)
+ *   PCV.procedural(recipe, species)               // a 3D plant built from a decoded recipe (metres, y up), as points
+ *   PCV.proceduralMesh(recipe, species, flat)     // the same plant as shaded, textured leaf surfaces (as the paper's
+ *                                                 // figures): {pos, nrm, col}; flat = '#rrggbb' for a one-colour ghost
+ *   p.set([{tri: true, pos, nrm, col, alpha}])     // a mesh layer; alpha < 1 draws after the opaque ones, without depth writes
  * Coordinates: camera frame of the capture (x right, y up, z toward the camera). Mouse / one finger: orbit;
  * wheel / pinch: zoom; double click: reset.
  */
@@ -16,6 +19,10 @@
     void main(){ gl_Position = m * vec4(p, 1.0); gl_PointSize = s; v = c; }`;
   const FS = `precision mediump float; varying vec3 v;
     void main(){ vec2 d = gl_PointCoord - 0.5; if (dot(d, d) > 0.25) discard; gl_FragColor = vec4(v, 1.0); }`;
+  // meshes: two-sided Lambert shading (0.55 ambient + 0.45 diffuse, as figures/_proc3d.py), per-vertex colour, one alpha
+  const VSM = `attribute vec3 p; attribute vec3 nr; attribute vec3 c; uniform mat4 m; uniform vec3 L; varying vec3 v;
+    void main(){ gl_Position = m * vec4(p, 1.0); v = c * (0.55 + 0.45 * abs(dot(normalize(nr), L))); }`;
+  const FSM = `precision mediump float; varying vec3 v; uniform float a; void main(){ gl_FragColor = vec4(v, a); }`;
 
   // ---------------------------------------------------------------- tiny matrix helpers (column-major)
   function persp(fovy, aspect, n, f) {
@@ -67,7 +74,10 @@
     const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); return o; };
     const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
     const loc = { p: gl.getAttribLocation(prog, 'p'), c: gl.getAttribLocation(prog, 'c'), m: gl.getUniformLocation(prog, 'm'), s: gl.getUniformLocation(prog, 's') };
-    return (SH = { cv, gl, prog, loc });
+    const progM = gl.createProgram(); gl.attachShader(progM, sh(gl.VERTEX_SHADER, VSM)); gl.attachShader(progM, sh(gl.FRAGMENT_SHADER, FSM)); gl.linkProgram(progM);
+    const locM = { p: gl.getAttribLocation(progM, 'p'), n: gl.getAttribLocation(progM, 'nr'), c: gl.getAttribLocation(progM, 'c'),
+                   m: gl.getUniformLocation(progM, 'm'), L: gl.getUniformLocation(progM, 'L'), a: gl.getUniformLocation(progM, 'a') };
+    return (SH = { cv, gl, prog, loc, progM, locM });
   }
 
   // ---------------------------------------------------------------- a panel
@@ -75,14 +85,13 @@
     const S = shared(), gl = S.gl, ctx = canvas.getContext('2d');
     const p = { canvas, layers: [], bg: [1, 1, 1] };
     if (!gl || !ctx) { p.set = () => {}; p.draw = () => {}; canvas.replaceWith(Object.assign(document.createElement('p'), { textContent: 'WebGL is not available in this browser.' })); return p; }
-    const { prog, loc } = S;
+    const { prog, loc, progM, locM } = S;
+    const buf = a => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW); return b; };
     p.set = function (layers) {
-      p.layers.forEach(l => { gl.deleteBuffer(l.bp); gl.deleteBuffer(l.bc); });
-      p.layers = layers.map(l => {
-        const bp = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bp); gl.bufferData(gl.ARRAY_BUFFER, l.pos, gl.STATIC_DRAW);
-        const bc = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bc); gl.bufferData(gl.ARRAY_BUFFER, l.col, gl.STATIC_DRAW);
-        return { bp, bc, n: l.pos.length / 3, size: l.size || 1 };
-      });
+      p.layers.forEach(l => { gl.deleteBuffer(l.bp); gl.deleteBuffer(l.bc); if (l.bn) gl.deleteBuffer(l.bn); });
+      p.layers = layers.filter(l => l && l.pos && l.pos.length).map(l => l.tri
+        ? { tri: true, bp: buf(l.pos), bn: buf(l.nrm), bc: buf(l.col), n: l.pos.length / 3, alpha: l.alpha == null ? 1 : l.alpha }
+        : { bp: buf(l.pos), bc: buf(l.col), n: l.pos.length / 3, size: l.size || 1 });
       p.draw();
     };
     p.draw = function () {
@@ -91,16 +100,33 @@
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
       if (S.cv.width !== w || S.cv.height !== h) { S.cv.width = w; S.cv.height = h; }
       gl.viewport(0, 0, w, h); gl.clearColor(p.bg[0], p.bg[1], p.bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      gl.enable(gl.DEPTH_TEST); gl.useProgram(prog);
-      const m = mul(persp(g.fov, w / h, g.dist / 50, g.dist * 4), lookAt(g.eye(), g.target, [0, 1, 0]));
-      gl.uniformMatrix4fv(loc.m, false, new Float32Array(m));
+      gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.BLEND);
+      const m = new Float32Array(mul(persp(g.fov, w / h, g.dist / 50, g.dist * 4), lookAt(g.eye(), g.target, [0, 1, 0])));
       const base = Math.max(1.2, Math.min(w, h) / 260) * g.size;
-      p.layers.forEach(l => {
-        gl.uniform1f(loc.s, base * l.size);
-        gl.bindBuffer(gl.ARRAY_BUFFER, l.bp); gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, l.bc); gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.POINTS, 0, l.n);
-      });
+      const pts = p.layers.filter(l => !l.tri), solid = p.layers.filter(l => l.tri && l.alpha >= 1), ghost = p.layers.filter(l => l.tri && l.alpha < 1);
+      if (pts.length) {
+        gl.useProgram(prog); gl.uniformMatrix4fv(loc.m, false, m);
+        pts.forEach(l => {
+          gl.uniform1f(loc.s, base * l.size);
+          gl.bindBuffer(gl.ARRAY_BUFFER, l.bp); gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, l.bc); gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.FLOAT, false, 0, 0);
+          gl.drawArrays(gl.POINTS, 0, l.n);
+        });
+      }
+      if (solid.length || ghost.length) {
+        gl.useProgram(progM); gl.uniformMatrix4fv(locM.m, false, m);
+        const Lw = [0.35, 0.8, 0.5], Ln = Math.hypot(...Lw); gl.uniform3f(locM.L, Lw[0] / Ln, Lw[1] / Ln, Lw[2] / Ln);
+        const mesh = l => {
+          gl.uniform1f(locM.a, l.alpha);
+          gl.bindBuffer(gl.ARRAY_BUFFER, l.bp); gl.enableVertexAttribArray(locM.p); gl.vertexAttribPointer(locM.p, 3, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, l.bn); gl.enableVertexAttribArray(locM.n); gl.vertexAttribPointer(locM.n, 3, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, l.bc); gl.enableVertexAttribArray(locM.c); gl.vertexAttribPointer(locM.c, 3, gl.FLOAT, false, 0, 0);
+          gl.drawArrays(gl.TRIANGLES, 0, l.n);
+        };
+        solid.forEach(mesh);
+        if (ghost.length) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); ghost.forEach(mesh); gl.depthMask(true); gl.disable(gl.BLEND); }
+        gl.disableVertexAttribArray(locM.n);                              // the point program has no normal attribute
+      }
       ctx.drawImage(S.cv, 0, 0);
     };
     // pointer: orbit with one pointer, pinch-zoom with two, wheel zoom, double-click reset
@@ -205,6 +231,67 @@
     return new Float32Array(out);
   }
 
+  // the same plant as shaded, textured surfaces (figures/_proc3d.py mesh() + texture(), the paper's 3D plants): leaf
+  // ribbons 8 strips across, V-folded about the midrib; leaves dark green at the base to lighter at the tip, a pale
+  // midrib, faint veins, darker margins, a yellowing tip; the stem a green-brown sheath with darker nodes.
+  // flat: one colour instead (the grey ghost of the true plant). Returns non-indexed triangles {pos, nrm, col}.
+  function proceduralMesh(rec, species, flat) {
+    const P = [], N = [], C = [], col = name => rec.f.indexOf(name), rad = d => d * Math.PI / 180, F = flat ? hex(flat) : null;
+    const H = rec.h, sr = species === 'maize' ? 0.011 : 0.009;
+    const mix = (a, b, t) => [0, 1, 2].map(k => a[k] * (1 - t) + b[k] * t);
+    function tex(kind, t, o) {
+      if (F) return F;
+      if (kind === 'stem') { const f = (t * 12) % 1 < 0.12 ? 0.85 : 1; return [0.34 * f, 0.46 * f, 0.20 * f]; }
+      let c = mix([0.16, 0.40, 0.13], [0.40, 0.66, 0.24], t); const a = Math.abs(o);
+      if (a < 0.14) c = mix(c, [0.80, 0.88, 0.58], 0.55);
+      c = c.map(v => v * (1 + 0.05 * Math.cos(a * Math.PI * 9)));
+      if (a > 0.82) c = c.map(v => v * 0.86);
+      if (t > 0.9) c = mix(c, [0.70, 0.66, 0.30], 0.25);
+      return c.map(v => Math.max(0, Math.min(1, v)));
+    }
+    function quad(a, b, c, d, rgb) {
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+      let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const l = Math.hypot(...n) || 1; n = n.map(x => x / l);
+      for (const q of [a, b, c, a, c, d]) { P.push(q[0], q[1], q[2]); N.push(n[0], n[1], n[2]); C.push(rgb[0], rgb[1], rgb[2]); }
+    }
+    const ny = Math.max(2, Math.floor(H / 0.05) + 1);
+    for (let k = 0; k < 8; k++) {
+      const a0 = k * Math.PI / 4, a1 = (k + 1) * Math.PI / 4;
+      for (let j = 0; j < ny - 1; j++) {
+        const y0 = H * j / (ny - 1), y1 = H * (j + 1) / (ny - 1), rgb = tex('stem', (y0 + y1) / 2 / Math.max(H, 1e-6), 0);
+        quad([sr * Math.cos(a0), y0, sr * Math.sin(a0)], [sr * Math.cos(a1), y0, sr * Math.sin(a1)], [sr * Math.cos(a1), y1, sr * Math.sin(a1)], [sr * Math.cos(a0), y1, sr * Math.sin(a0)], rgb);
+      }
+    }
+    let y = 0; const across = 8, fold = 0.18;
+    rec.L.forEach((l, i) => {
+      let y0, len, w, az, phi0, phi1;
+      if (species === 'maize') {
+        y += l[col('distance')]; y0 = y; len = l[col('leafLength')]; w = l[col('leafWidth')];
+        az = rad(180 * i + l[col('azJitterDeg')]); phi0 = rad(35 + l[col('leafAngle')]); phi1 = phi0 - rad(l[col('droopiness')]);
+      } else {
+        y0 = l[col('starting_point')] * H; len = l[col('length')]; w = l[col('width')];
+        az = rad(l[col('roll_angle')]); phi0 = rad(l[col('branching_angle')]); phi1 = phi0 + rad(75);
+      }
+      if (!(len > 0)) return;
+      const d = [Math.cos(az), Math.sin(az)], e = [-Math.sin(az), Math.cos(az)];
+      const p1 = [0.5 * len * Math.sin(phi0), y0 + 0.5 * len * Math.cos(phi0)];
+      const p2 = [p1[0] + 0.5 * len * Math.sin(phi1), p1[1] + 0.5 * len * Math.cos(phi1)];
+      const steps = Math.max(12, Math.floor(len / 0.012) + 1), G = [];
+      for (let s = 0; s < steps; s++) {
+        const t = s / (steps - 1), a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
+        const hz = b * p1[0] + c * p2[0], vy = a * y0 + b * p1[1] + c * p2[1];
+        const hw = 0.5 * w * Math.pow(Math.sin(Math.PI * Math.min(1, 0.15 + 0.85 * t)), 0.6), row = [];
+        for (let k = 0; k <= across; k++) { const o = -1 + 2 * k / across, off = hw * o; row.push([hz * d[0] + off * e[0], vy + fold * hw * Math.abs(o), hz * d[1] + off * e[1]]); }
+        G.push(row);
+      }
+      for (let s = 0; s < steps - 1; s++) for (let k = 0; k < across; k++) {
+        const t = (s + 0.5) / (steps - 1), o = -1 + 2 * (k + 0.5) / across;
+        quad(G[s][k], G[s][k + 1], G[s + 1][k + 1], G[s + 1][k], tex('leaf', t, o));
+      }
+    });
+    return { tri: true, pos: new Float32Array(P), nrm: new Float32Array(N), col: new Float32Array(C) };
+  }
+
   // ---------------------------------------------------------------- missed points
   // the true points with no predicted point within tau (same units as the clouds): a uniform grid of cell tau over the
   // prediction, each true point checks its 27 neighbouring cells. Returns the missed points' positions and their count.
@@ -226,5 +313,5 @@
     }
     return { pos: new Float32Array(out), n: out.length / 3 };
   }
-  window.PCV = { group, panel, load, bounds, plantColors, errorColors, flat, markColors, missed, procedural, VIRIDIS, hex };
+  window.PCV = { group, panel, load, bounds, plantColors, errorColors, flat, markColors, missed, procedural, proceduralMesh, VIRIDIS, hex };
 })();
