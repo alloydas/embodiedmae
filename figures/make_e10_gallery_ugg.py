@@ -24,6 +24,11 @@ from real_rows import RealRowDataset, SPECIES
 from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2
 import _scene                                                   # Liberation Sans, as Fig. 5
 import ugg_style as U
+# --proc (2026-11-20, user: supplement figures as textured 3D procedural models, like Figs. S8-S9): the two prediction
+# tiles show each model's WRITTEN procedural model in 3D (figures/_procfig.py; one frame per stop, so the two heights
+# compare), in the procedural-parameter (purple) boxes; the real plant stays its point cloud (no procedural model).
+# Writes fig_e10_gallery_{sp}_ugg_proc.{pdf,png} and copies the PDF to paper/overleaf/Figures/.
+PROC = '--proc' in sys.argv
 
 torch.set_num_threads(8)
 OUT = R / 'paper/figs/ugg_preview'
@@ -55,7 +60,7 @@ def compute(sp):
     models = []
     for spec in (CFG[sp]['row'], CFG[sp]['real']):
         run, ck = spec.split(':', 1); m, cfg, _ = build_model(R / 'outputs' / run, ck, torch.device('cpu'), sp)
-        models.append((m, float(cfg.get('mask_ratio', 0.8)), float(cfg.get('rgb_brighten_gain', 1.0)) if sp == 'sorghum' else None))
+        models.append((m, float(cfg.get('mask_ratio', 0.8)), float(cfg.get('rgb_brighten_gain', 1.0)) if sp == 'sorghum' else None, cfg))
     out = []
     for i, e in enumerate(picks):
         lay, row, stop = e['layout'], e['plant'], e['stop']
@@ -68,13 +73,15 @@ def compute(sp):
             img = np.asarray(im.resize((max(1, round(im.width * s)), 900))) / 255.0
         else:
             img = (rgb.permute(1, 2, 0).numpy() * STD + MEAN).clip(0, 1)
-        r = dict(e, img=img, gt=pgt.numpy(), preds=[], ch=[], hp=[])
-        for j, (m, mr, _) in enumerate(models):
+        r = dict(e, img=img, gt=pgt.numpy(), preds=[], ch=[], hp=[], recs=[])
+        for j, (m, mr, _, mcfg) in enumerate(models):
             with torch.no_grad():
                 pp, ppar = predict(m, 'all', rgb[None], dep[None], pin[None], par[None], mr, 1000003 * i)
             P = pp[0].float(); d2 = torch.cdist(P[None], pgt[None])[0]
             ch = 1e4 * float(d2.min(1).values.pow(2).mean() + d2.min(0).values.pow(2).mean()) * info['scale'] ** 2
             r['preds'].append(P.numpy()); r['ch'].append(ch)
+            if PROC:
+                import _procfig as PF; r['recs'].append(PF.decode_pred(sp, ppar[0].float().numpy(), mcfg))
             r['hp'].append(float(ppar[0, 0, H_IDX].clamp(0, 1)) * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX] if sp == 'maize' else None)
         ref = (e['before_chamfer'], e['after_chamfer'])
         assert all(abs(a - b) <= 0.01 * max(1.0, b) for a, b in zip(r['ch'], ref)), (sp, row, stop, r['ch'], ref)
@@ -85,7 +92,12 @@ def compute(sp):
 def block(fig, W, H, x, y, t, th, r, sorg, xlim, ylim, fs):
     """one stop: four boxed tiles of width t, height th, lower left (x, y) in inches"""
     m = 0.025
-    kinds = [('rgb', True), (None, False), ('pc', False), ('pc', False)]
+    kinds = [('rgb', True), (None, False), ('text' if PROC else 'pc', False), ('text' if PROC else 'pc', False)]
+    if PROC:
+        import _procfig as PF
+        lim = PF.shared_lim(r['recs'], 'sorghum' if sorg else 'maize')
+        ptiles = PF.trim_group([PF.tile([(rc, PF.P3.TEXTURE, 1.0)], 'sorghum' if sorg else 'maize', lim=lim, px=600) for rc in r['recs']],
+                               keep_aspect=(t - 2 * m) / ((th - 2 * m) * (1.0 if sorg else 0.70)))
     for k in range(4):
         xk = x + k * (t + 0.035)
         U.pastel_box(fig, xk, y, t, th, kinds[k][0], dashed=kinds[k][1], r=0.04, transform=fig.dpi_scale_trans, z=-1)
@@ -97,8 +109,11 @@ def block(fig, W, H, x, y, t, th, r, sorg, xlim, ylim, fs):
             if not sorg:
                 ax.text(0.04, 0.03, f"height {r['height']:.2f} m", transform=ax.transAxes, fontsize=fs, color=INKC, path_effects=HALO)
         else:
-            j = k - 2; cloud(ax, r['preds'][j], xlim, ylim, sorg)
-            c = U.STREAM_INK['pc'] if j == 0 else OURS
+            j = k - 2
+            if PROC:                                     # maize: the bottom 30 % of the tile holds the label
+                ax.imshow(ptiles[j], aspect='auto', extent=(0, 1, 0.0 if sorg else 0.30, 1)); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+            else: cloud(ax, r['preds'][j], xlim, ylim, sorg)
+            c = (U.STREAM_INK['text'] if PROC else U.STREAM_INK['pc']) if j == 0 else OURS
             if sorg:                                         # narrow tiles: the number goes under the box
                 fig.text((xk + t / 2) / W, (y - 0.04) / H, f"CD =\n{r['ch'][j]:.0f}", fontsize=fs, color=c, ha='center', va='top', linespacing=1.05)
             else:
@@ -147,7 +162,10 @@ def render_sorghum(D):
 if __name__ == '__main__':
     OUT.mkdir(parents=True, exist_ok=True)
     for sp, fn in (('maize', render_maize), ('sorghum', render_sorghum)):
-        fig = fn(compute(sp))
+        if PROC: HEAD_C[2] = U.STREAM_INK['text']
+        fig = fn(compute(sp)); name = f"fig_e10_gallery_{sp}_ugg{'_proc' if PROC else ''}"
         for ext in ('pdf', 'png'):
-            fig.savefig(OUT / f'fig_e10_gallery_{sp}_ugg.{ext}', dpi=300)
-        plt.close(fig); print('wrote', OUT / f'fig_e10_gallery_{sp}_ugg.pdf', flush=True)
+            fig.savefig(OUT / f'{name}.{ext}', dpi=300)
+        plt.close(fig); print('wrote', OUT / f'{name}.pdf', flush=True)
+        if PROC:
+            import shutil; shutil.copy(OUT / f'{name}.pdf', R / 'paper/overleaf/Figures' / f'{name}.pdf')

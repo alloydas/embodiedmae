@@ -32,6 +32,8 @@ ap.add_argument('--out', default=None)
 ap.add_argument('--ugg', action='store_true', help='UGG-style PREVIEW only (figures/ugg_grids.py): writes '
                 'paper/figs/ugg_preview/<name>_ugg.{pdf,png}, never the paper copy; the panels are cached')
 ap.add_argument('--refresh', action='store_true', help='with --ugg: regenerate the cached panels')
+ap.add_argument('--proc', action='store_true', help='the three model columns as textured 3D procedural models '
+                '(figures/_procfig.py; one frame per stop), user 2026-11-20; writes <out>_proc.{pdf,png} + Overleaf copy')
 a = ap.parse_args()
 torch.set_num_threads(8)
 SORG = a.species == 'sorghum'
@@ -71,8 +73,10 @@ for label, spec in (('Headline model,\nno row fine-tuning', CFG['head']), ('Row 
                     ('Real-row fine-tune\n(75 % of real plants)', CFG['real'])):
     run, ckpt = spec.split(':', 1)
     m, cfg, _ = build_model(pathlib.Path('outputs') / run, ckpt, dev, a.species)
-    models.append((label, m, float(cfg.get('mask_ratio', 0.8)), float(cfg.get('rgb_brighten_gain', 1.0)) if SORG else None))
+    models.append((label, m, float(cfg.get('mask_ratio', 0.8)), float(cfg.get('rgb_brighten_gain', 1.0)) if SORG else None, cfg))
 gain = models[-1][3]
+if a.proc:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent)); import _procfig as PF
 
 GREENS = matplotlib.colors.LinearSegmentedColormap.from_list('plant', ['#1f4d22', '#2f7d32', '#5aa83e', '#a8d26a'])
 MEAN, STD = np.array([0.485, 0.456, 0.406]), np.array([0.229, 0.224, 0.225])
@@ -114,7 +118,7 @@ if a.ugg:                                             # the same panels, in the 
         else:
             img = (rgb.permute(1, 2, 0).numpy() * STD + MEAN).clip(0, 1)
         preds = []
-        for j, (label, m, mr, _) in enumerate(models):
+        for j, (label, m, mr, _, _c) in enumerate(models):
             with torch.no_grad():
                 pp, ppar = predict(m, 'all', B(rgb), B(dep), B(pin), B(par), mr, a.seed + 1000003 * i)
             P = pp[0].float()
@@ -152,18 +156,30 @@ for i, (layout, row, stop) in enumerate(picks):
     fs = 5.6 if SORG else 6.5
     axes[i, 3].text(0.03, 0.02, f'height\n{info["height"]:.2f} m' if SORG else f'height {info["height"]:.2f} m',
                     transform=axes[i, 3].transAxes, fontsize=fs)
-    for j, (label, m, mr, _) in enumerate(models):
+    recs = []
+    for j, (label, m, mr, _, mcfg) in enumerate(models):
         with torch.no_grad():
             pp, ppar = predict(m, 'all', B(rgb), B(dep), B(pin), B(par), mr, a.seed + 1000003 * i)
         P = pp[0].float()
         d2 = torch.cdist(P[None], pgt[None])[0]
         ch = float(d2.min(1).values.pow(2).mean() + d2.min(0).values.pow(2).mean()) * info['scale'] ** 2
-        draw_cloud(axes[i, 4 + j], P.numpy(), xlim, ylim)
+        if a.proc:
+            recs.append(PF.decode_pred(a.species, ppar[0].float().numpy(), mcfg))
+        else:
+            draw_cloud(axes[i, 4 + j], P.numpy(), xlim, ylim)
         txt = f'Chamfer\n{1e4 * ch:.0f}e-4 m$^2$' if SORG else f'Chamfer {1e4 * ch:.0f}e-4 m$^2$'
         if not SORG:
             p0 = ppar[0, 0].clamp(0, 1).float().numpy()
             txt += f'\nheight {p0[H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]:.2f} m'
         axes[i, 4 + j].text(0.03, 0.02, txt, transform=axes[i, 4 + j].transAxes, fontsize=fs)
+    if a.proc:                                       # the three written procedural models, one frame, label space at the bottom
+        lo = 0.17 if SORG else 0.24
+        lim = PF.shared_lim(recs, a.species)
+        tiles = PF.trim_group([PF.tile([(rc, PF.P3.TEXTURE, 1.0)], a.species, lim=lim, px=700) for rc in recs],
+                              keep_aspect=(tw / th) / (1 - lo))
+        for j, tl in enumerate(tiles):
+            ax_ = axes[i, 4 + j]; ax_.imshow(tl, aspect='auto', extent=(0, 1, lo, 1), zorder=0); ax_.set_xlim(0, 1); ax_.set_ylim(0, 1)
+            ax_.set_facecolor('#eae7f2')
     axes[i, 0].set_ylabel(f'{layout}\nplant {row}, stop {stop}', fontsize=6.5 if SORG else 7)
 for j, c in enumerate(cols):
     axes[0, j].set_title(c, fontsize=6.2 if SORG else 7.5)
@@ -171,7 +187,7 @@ for ax in axes.ravel():
     ax.set_xticks([]); ax.set_yticks([])
     for s in ax.spines.values(): s.set_linewidth(0.4); s.set_color('#888888')
 fig.tight_layout(pad=0.3, w_pad=0.2, h_pad=0.4)
-out = pathlib.Path(a.out or CFG['out']); out.parent.mkdir(parents=True, exist_ok=True)
+out = pathlib.Path(a.out or CFG['out'] + ('_proc' if a.proc else '')); out.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(f'{out}.pdf', dpi=300); fig.savefig(f'{out}.png', dpi=200)
 shutil.copy(f'{out}.pdf', pathlib.Path('paper/overleaf/Figures') / f'{out.name}.pdf')
 print('wrote', f'{out}.pdf', f'{out}.png')

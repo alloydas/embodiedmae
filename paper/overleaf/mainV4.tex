@@ -690,8 +690,8 @@ We split both species 70\% / 15\% / 15\% into 10{,}500 training, 2{,}250 validat
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.9\linewidth]{Figures/fig_dataset_stats.pdf}
-  \caption{\textbf{Statistical overview of \dataset{}.} \textbf{(a)} Eight validation plants per species spanning the leaf-count range. \textbf{(b)} Leaf-count distributions across the train, validation, and test splits, showing the tail enrichment in validation and test. \textbf{(c)} Plant height versus leaf count across all 15{,}000 plants per species ($r = 0.99$ in sorghum vs.\ $r = 0.20$ in maize). \textbf{(d)} Row occlusion across yaw angles on test rows. We plot the fraction of target pixels occluded by neighbors (solid) and the fraction of total plant pixels belonging to neighbors (dashed) as the median and interquartile range.}
+  \includegraphics[width=0.9\linewidth]{Figures/fig_dataset_stats_proc.pdf}
+  \caption{\textbf{Statistical overview of \dataset{}.} \textbf{(a)} Eight validation plants per species spanning the leaf-count range. \textbf{(b)} Leaf-count distributions across the train, validation, and test splits, showing the tail enrichment in validation and test. \textbf{(c)} Plant height versus leaf count across all 15{,}000 plants per species ($r = 0.99$ in sorghum vs.\ $r = 0.20$ in maize). \textbf{(d)} Row occlusion across yaw angles on test rows. We plot the fraction of target pixels occluded by neighbors (solid) and the fraction of total plant pixels belonging to neighbors (dashed) as the median and interquartile range. \updtwo{In (a), each plant is drawn as its true procedural model, rendered in 3D at one scale per species.}}
   \label{fig:dataset_stats}
 \end{figure*}
 
@@ -1129,15 +1129,15 @@ We group the result figures below, in the order of the main paper's experiments:
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{Figures/fig_e10_real.pdf}
-  \caption{\textbf{Qualitative results on held-out real maize rows.} Each row shows a median-error camera stop for the parallel and perpendicular row layouts. From left to right, the columns show the inputs (RGB image, depth map, and scene point cloud), the visible ground-truth center plant, and the predictions from the undistilled headline model, the synthetic row fine-tuned model, and the real-row fine-tuned model. The predictions are annotated with the Chamfer distance ($10^{-4}$\,m$^2$) and the predicted height.}
+  \includegraphics[width=\textwidth]{Figures/fig_e10_real_proc.pdf}
+  \caption{\textbf{Qualitative results on held-out real maize rows.} Each row shows a median-error camera stop for the parallel and perpendicular row layouts. From left to right, the columns show the inputs (RGB image, depth map, and scene point cloud), the visible ground-truth center plant, and the predictions from the undistilled headline model, the synthetic row fine-tuned model, and the real-row fine-tuned model. The predictions are annotated with the Chamfer distance ($10^{-4}$\,m$^2$) and the predicted height. \updtwo{Each model's prediction is drawn as the procedural model it writes, rendered in 3D at one scale per camera stop; the Chamfer distance is that of its predicted point cloud.}}
   \label{fig:e10_real}
 \end{figure*}
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.8\textwidth]{Figures/fig_e10_real_sorghum.pdf}
-  \caption{\textbf{Qualitative results on held-out real sorghum rows.} The columns follow \figref{fig:e10_real}. The camera photograph is framed vertically to capture the full plant height of 2.2 to 5.3\,m, which is far taller than the 1.74\,m synthetic training ceiling. Without real training examples, the models predict short, compact plants. Fine-tuning on 19 real plants recovers the full stalk height, although the fine leaf detail remains limited.}
+  \includegraphics[width=0.8\textwidth]{Figures/fig_e10_real_sorghum_proc.pdf}
+  \caption{\textbf{Qualitative results on held-out real sorghum rows.} The columns follow \figref{fig:e10_real}. The camera photograph is framed vertically to capture the full plant height of 2.2 to 5.3\,m, which is far taller than the 1.74\,m synthetic training ceiling. Without real training examples, the models predict short, compact plants. Fine-tuning on 19 real plants recovers the full stalk height, although the fine leaf detail remains limited. \updtwo{The predictions are drawn as the procedural models the models write. This sorghum fine-tuning was supervised on the point cloud and depth map only, not on height, so the written plants stay short; the full stalk height is recovered in the predicted point cloud, whose Chamfer distance is shown.}}
   \label{fig:e10_real_sorghum}
   % REVIEWER FLAG: "fine-tuning on 19 real plants" does not match 75 percent of the 30 sorghum plants with 8 held out (22 training plants). Number kept. Co-authors to confirm the split.
 \end{figure*}
@@ -1193,15 +1193,15 @@ We group the result figures below, in the order of the main paper's experiments:
 
 \begin{figure*}[t!]
   \centering
-  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_maize_ugg.pdf}
-  \caption{\textbf{Held-out real maize rows across error percentiles.} We show parallel (left) and perpendicular (right) row layouts, sampled from the 10th to the 98th percentile of the Chamfer error of the real-row fine-tuned model. The columns show the input RGB image, the ground-truth center plant with its true height, and the predictions of the synthetic row fine-tuned and real-row fine-tuned models, with the metric Chamfer distance ($10^{-4}$\,m$^2$) and the predicted height.}
+  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_maize_ugg_proc.pdf}
+  \caption{\textbf{Held-out real maize rows across error percentiles.} We show parallel (left) and perpendicular (right) row layouts, sampled from the 10th to the 98th percentile of the Chamfer error of the real-row fine-tuned model. The columns show the input RGB image, the ground-truth center plant with its true height, and the predictions of the synthetic row fine-tuned and real-row fine-tuned models, with the metric Chamfer distance ($10^{-4}$\,m$^2$) and the predicted height. \updtwo{The predictions are drawn as the procedural models the two models write, rendered in 3D at one scale per camera stop; the Chamfer distance is that of the predicted point cloud.}}
   \label{fig:supp-e10-maize}
 \end{figure*}
 
 \begin{figure*}[t!]
   \centering
-  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_sorghum_ugg.pdf}
-  \caption{\textbf{All eight held-out real sorghum plants in crop rows.} We show the center camera stops with alternating row layouts. The columns follow \figref{fig:supp-e10-maize}, and the true plant height is noted beneath the ground-truth cloud.}
+  \includegraphics[width=\textwidth]{Figures/fig_e10_gallery_sorghum_ugg_proc.pdf}
+  \caption{\textbf{All eight held-out real sorghum plants in crop rows.} We show the center camera stops with alternating row layouts. The columns follow \figref{fig:supp-e10-maize}, and the true plant height is noted beneath the ground-truth cloud. \updtwo{The predictions are drawn as the procedural models the two models write, at one scale per plant; as in \figref{fig:e10_real_sorghum}, the written sorghum heights were not trained.}}
   \label{fig:supp-e10-sorghum}
 \end{figure*}
 

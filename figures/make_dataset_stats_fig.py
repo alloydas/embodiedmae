@@ -4,8 +4,12 @@
   c. height against leaf count for all 15,000 plants per species (sorghum r = 0.99: one variable; maize r = 0.2),
   d. row occlusion by yaw (test rows): share of the target hidden and share of plant pixels belonging to neighbours.
 Writes paper/figs/fig_dataset_stats.{pdf,png} + the Overleaf copy. CPU.
+--proc (2026-11-20, user: supplement figures S1-S11 as textured 3D procedural models): panel a draws each plant's TRUE
+procedural model in 3D (figures/_procfig.py), one frame per species row so the heights compare; writes
+fig_dataset_stats_proc.{pdf,png} (+ Overleaf copy). Panels b-d unchanged.
 """
-import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent)); sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+PROC = '--proc' in sys.argv
 import glob, shutil
 import numpy as np, pandas as pd, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
@@ -28,7 +32,15 @@ for r, sp in enumerate(('sorghum', 'maize')):
     t = T[sp][T[sp].split == 'val'].sort_values('leaves')
     picks = [t.iloc[int(q * (len(t) - 1))] for q in np.linspace(0.02, 0.98, 8)]
     sub = gs[r, :].subgridspec(1, 8, wspace=0.04)
+    if PROC:
+        import _procfig as PF, export_procedural_models as EP
+        recs = [EP.true_recipe(sp, p['name']) for p in picks]; lim = PF.shared_lim(recs, sp)
+        tiles = PF.trim_group([PF.tile([(r_, PF.P3.TEXTURE, 1.0)], sp, lim=lim, px=700) for r_ in recs], keep_aspect=0.62)
     for k, p in enumerate(picks):
+        if PROC:
+            ax = fig.add_subplot(sub[0, k]); ax.imshow(tiles[k]); ax.set_axis_off()
+            ax.set_title(f'{int(p["leaves"])} leaves, {p["height"]:.2f} m', fontsize=FS - 0.8, pad=1.5)
+            continue
         if sp == 'sorghum': v = 4                                    # +6 deg above the horizon on the ladder
         else:
             e = elev_tab[(elev_tab.split == 'val') & (elev_tab.plant == p['name'])]; v = int(e.iloc[(e.elev_deg - 10).abs().argmin()]['view'])
@@ -76,7 +88,8 @@ for s_ in ('top', 'right'): ax.spines[s_].set_visible(False)
 fig.text(0.745, 0.415, 'd', fontsize=9, fontweight='bold')
 fig.text(0.765, 0.415, 'Row occlusion by yaw (test rows)', fontsize=FS)
 out = pathlib.Path('paper/figs')
-for ext in ('pdf', 'png'): fig.savefig(out / f'fig_dataset_stats.{ext}', dpi=220)
-shutil.copy(out / 'fig_dataset_stats.pdf', 'paper/overleaf/Figures/fig_dataset_stats.pdf'); print('wrote', out / 'fig_dataset_stats.pdf')
+NAME = 'fig_dataset_stats' + ('_proc' if PROC else '')
+for ext in ('pdf', 'png'): fig.savefig(out / f'{NAME}.{ext}', dpi=220)
+shutil.copy(out / f'{NAME}.pdf', f'paper/overleaf/Figures/{NAME}.pdf'); print('wrote', out / f'{NAME}.pdf')
 for sp in ('sorghum', 'maize'):
     t = T[sp]; print(sp, 'r(leaves, height) = %.3f' % np.corrcoef(t.leaves, t.height)[0, 1], 'leaves', t.leaves.min(), t.leaves.max(), 'height %.2f-%.2f' % (t.height.min(), t.height.max()))
