@@ -475,12 +475,10 @@ def export_real(sp):
         d = next(pathlib.Path(x) for x in RSP[sp]['layouts'][lay].glob(f'row_{rid}_seed1'))
         fr = list(csv.DictReader(open(d / f'row_{rid}_seed1_frames.csv')))[stop - 1]
         sys.path.insert(0, str(R / 'tools')); import site_processed_images as SPI          # the processed inputs, as S4 / S5
-        win, dep_ = SPI.processed_window(ds, 0, with_depth=True); dimg = SPI.depth_image(dep_, 700 if sp == 'sorghum' else 448)
-        if sp == 'sorghum': win, dimg = SPI.strip_of(win), SPI.strip_of(dimg)
-        img = save_jpg(np.asarray(win), out / f'{lay}_{rid}_{stop}.jpg', side=700)
-        depth_img = f'{lay}_{rid}_{stop}_depth.jpg'; dimg.save(out / depth_img, quality=92)
+        if sp == 'sorghum': img = save_jpg(np.asarray(Image.open(d / fr['photo']).convert('RGB')), out / f'{lay}_{rid}_{stop}.jpg', side=900)
+        else: img = save_jpg(np.asarray(SPI.processed_window(ds, 0)), out / f'{lay}_{rid}_{stop}.jpg', side=700)
         sid = f'{lay}_{rid}_{stop}'
-        meta, nb = it.write(out / sid, dict(task='real', species=sp, layout=lay, row=rid, stop=stop, tag=tag, img=img, depth_img=depth_img,
+        meta, nb = it.write(out / sid, dict(task='real', species=sp, layout=lay, row=rid, stop=stop, tag=tag, img=img,
                                             truth=dict(height=round(float(info['height']), 3)), occ=round(float(info['occ_frac']), 3), metrics=metrics, recipes=recipes))
         index.append(dict(id=sid, tag=tag, layout=lay, json=f'{sid}.json'))
         print(sp, 'real', sid, tag, {k: v['chamfer'] for k, v in metrics.items()}, f'{nb / 1e3:.0f} kB', flush=True)

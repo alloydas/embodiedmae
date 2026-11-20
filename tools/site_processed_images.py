@@ -2,10 +2,10 @@
 training, use that RGB images in the website as you showed in S4 ... also in the data three kind isolated plants the RGB
 images are old").
 
-  real section (data/real/<sp>/*.jpg)          the processed input of each stop, as S4's Image column: the window around
-                                               the middle plant cut from the photograph, background black, sorghum at
-                                               the run's brightness gain (1.85); captured at the window's native size,
-                                               before the loader's resize to 224 px (eval/real_rows.py), saved 700 px
+  real section (data/real/<sp>/*.jpg)          maize: the processed input of each stop, as S4's Image column (the window
+                                               around the middle plant, background black), captured at the window's native
+                                               size before the loader's resize to 224 px, saved 700 px; sorghum: the
+                                               original camera photograph, 900 px high, as the data section's real plants
   data section, isolated views                 each camera's render composited over BLACK (the training inputs: maize
   (data/dataset/<sp>/isolated/*_v*.jpg)        rgba.png, sorghum rgb_nobg.png, stored at the brightness E1 trained on),
                                                1024 px source, saved 640 px (were composited over white, 300 px)
@@ -67,13 +67,16 @@ if __name__ == '__main__':
             if f.name == 'index.json': continue
             m = json.loads(f.read_text())
             ds = RealRowDataset(layouts=(m['layout'],), rows=[m['row']], stops={int(m['stop'])}, seed=0, species=sp, rgb_gain=GAIN[sp])
-            win, dep = processed_window(ds, 0, with_depth=True)
-            if sp == 'sorghum': win = strip_of(win)                      # the tall frame: the strip, as S5 (2026-11-20)
-            dimg = depth_image(dep, 700) if sp == 'sorghum' else depth_image(dep)
-            if sp == 'sorghum': dimg = strip_of(dimg)                    # the depth strip too, as S5
-            m['depth_img'] = f'{f.stem}_depth.jpg'; dimg.save(SITE / 'real' / sp / m['depth_img'], quality=92)
-            f.write_text(json.dumps(m, separators=(',', ':')))
-            print(sp, f.stem, save(win, SITE / 'real' / sp / m['img'], 700), flush=True)
+            if sp == 'sorghum':                                          # the original photograph, as the data section (2026-11-20)
+                from real_rows import SPECIES as RSP
+                d = next(pathlib.Path(x) for x in RSP[sp]['layouts'][m['layout']].glob(f"row_{m['row']}_seed1"))
+                fr = list(csv.DictReader(open(d / f"row_{m['row']}_seed1_frames.csv")))[int(m['stop']) - 1]
+                win = Image.open(d / fr['photo']).convert('RGB')
+            else:
+                win = processed_window(ds, 0)
+            if m.pop('depth_img', None):
+                (SITE / 'real' / sp / f'{f.stem}_depth.jpg').unlink(missing_ok=True); f.write_text(json.dumps(m, separators=(',', ':')))
+            print(sp, f.stem, save(win, SITE / 'real' / sp / m['img'], 900 if sp == 'sorghum' else 700), flush=True)
     # data section: isolated views over black, from the 1024 px renders
     for sp in ('maize', 'sorghum'):
         for f in sorted((SITE / 'dataset' / sp / 'isolated').glob('*.json')):
