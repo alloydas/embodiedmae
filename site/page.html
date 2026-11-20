@@ -283,8 +283,10 @@
           <div class="tx"><strong>Procedural plant</strong><span class="d">Kilobytes of editable parameters that re-render into 3D</span><div class="st">AVAILABLE</div></div></div>
         <div class="fl-node" data-side="out" data-m="pc" style="--c: var(--s-pc)"><div class="th light" style="background-image:url(assets/flow/pc.png)"></div>
           <div class="tx"><strong>Completed point cloud</strong><span class="d">The whole plant, hidden parts included</span><div class="st">AVAILABLE</div></div></div>
-        <div class="fl-node" data-side="out" data-m="img" style="--c: var(--s-depth)"><div class="th" style="background-image:url(assets/flow/depth.jpg)"></div>
-          <div class="tx"><strong>RGB and depth</strong><span class="d">The streams that were not given</span><div class="st">AVAILABLE</div></div></div>
+        <div class="fl-node" data-side="out" data-m="rgb" style="--c: var(--s-rgb)"><div class="th" style="background-image:url(assets/flow/rgb.jpg)"></div>
+          <div class="tx"><strong>Image</strong><span class="d">The RGB view, when it was not given</span><div class="st">AVAILABLE</div></div></div>
+        <div class="fl-node" data-side="out" data-m="depth" style="--c: var(--s-depth)"><div class="th" style="background-image:url(assets/flow/depth.jpg)"></div>
+          <div class="tx"><strong>Depth map</strong><span class="d">The depth view, when it was not given</span><div class="st">AVAILABLE</div></div></div>
       </div>
     </div>
     <div class="fl-foot"><p class="fl-summary" aria-live="off"></p><a class="fl-more" href="#any">See the examples ↓</a></div>
@@ -763,28 +765,34 @@
 <script>
 /* Task flow (#flow): cycles through the paper's tasks; active inputs and outputs light up and dashed wires carry the
    flow input -> model -> output. Pauses on hover / focus and off screen; a click takes over; respects reduced motion.
-   Numbers are the paper's (Tables 2 and 4, Sec. 4.3; Table S20 for the prior). */
+   Numbers are the paper's (Tables 2 and 4, Sec. 4.3; Table S20 for the parameter inputs). */
 (function () {
   var root = document.getElementById('flow'); if (!root) return;
   var T = [
-    { id: 'rgb', label: 'One photograph', in: ['rgb'], out: ['plant', 'pc', 'img'], stages: ['pre', 'dist'], more: '#any',
-      text: 'An image of an isolated plant: the whole procedural plant, its 3D cloud, and the missing depth.',
+    { id: 'rgb', label: 'One photograph', in: ['rgb'], out: ['plant', 'pc', 'depth'], stages: ['pre', 'dist'], more: '#any',
+      text: 'An image of an isolated plant: the whole procedural plant, its 3D point cloud, and the missing depth map.',
       metric: 'Leaf count within ±1 on 91 % (sorghum) and 97 % (maize) of plants.' },
-    { id: 'depth', label: 'Depth only', in: ['depth'], out: ['plant', 'pc', 'img'], stages: ['pre', 'dist'], more: '#any',
-      text: 'A depth frame alone: the same procedural plant, without color.',
+    { id: 'depth', label: 'Depth only', in: ['depth'], out: ['plant', 'pc', 'rgb'], stages: ['pre', 'dist'], more: '#any',
+      text: 'A depth frame alone: the same procedural plant, its point cloud, and the image it would show.',
       metric: 'Median height error 2.6 % (sorghum) and 4.6 % (maize).' },
-    { id: 'pc', label: 'Point cloud only', in: ['pc'], out: ['plant', 'img'], stages: ['pre', 'dist'], more: '#any',
-      text: 'A partial scan alone: parameters read straight from geometry.',
+    { id: 'pc', label: 'Point cloud only', in: ['pc'], out: ['plant', 'rgb', 'depth'], stages: ['pre', 'dist'], more: '#any',
+      text: 'A partial scan alone: parameters read straight from geometry, plus the image and depth map.',
       metric: 'Leaf count within ±1 on 99.8 % (sorghum) and 98.6 % (maize) of plants.' },
+    { id: 'params', label: 'Parameters only', in: ['params'], out: ['pc', 'rgb', 'depth'], stages: ['pre', 'dist'], more: '#any',
+      text: 'The procedural parameters alone: the point cloud, image and depth map they describe.',
+      metric: 'Point-cloud Chamfer 22.7 → 6.8 ×10⁻³ (sorghum) and 80.7 → 12.8 (maize) with distillation.' },
+    { id: 'rgbp', label: 'Image + parameters', in: ['rgb', 'params'], out: ['pc', 'depth'], stages: ['pre', 'dist'], more: '#any',
+      text: 'Known parameters, such as the growth stage, can go in beside a sensor and sharpen the reconstruction.',
+      metric: 'Image-to-cloud Chamfer 0.88 → 0.39 ×10⁻³ (sorghum) and 0.77 → 0.41 (maize).' },
+    { id: 'dp', label: 'Depth + parameters', in: ['depth', 'params'], out: ['pc', 'rgb'], stages: ['pre', 'dist'], more: '#any',
+      text: 'A depth frame with known parameters: the closest point cloud of any input.',
+      metric: 'Point-cloud Chamfer 0.36 ×10⁻³ (sorghum) and 0.40 (maize).' },
     { id: 'row', label: 'Occluded crop row', in: ['rgb', 'depth', 'pc'], out: ['plant', 'pc'], stages: ['pre', 'row'], more: '#rows',
       text: 'The crowded row from a rover camera, no mask or box: the target plant alone, separated from its neighbors.',
       metric: 'Removes 85 % (sorghum) and 92 % (maize) of the error neighbors cause.' },
     { id: 'real', label: 'Real plants', in: ['rgb', 'depth', 'pc'], out: ['plant', 'pc'], stages: ['pre', 'row', 'real'], more: '#real',
       text: 'Rows built from real plants: fine-tuned on 75 % of them, scored on the rest.',
-      metric: 'Median height error 1.6 % on held-out maize plants, in milliseconds per plant.' },
-    { id: 'prior', label: 'Image + known parameters', in: ['rgb', 'params'], out: ['pc', 'img'], stages: ['pre', 'dist'], more: '#any',
-      text: 'Parameters can also go in: a known prior sharpens the reconstruction.',
-      metric: 'Image-to-cloud Chamfer 0.88 → 0.39 ×10⁻³ (sorghum).' }
+      metric: 'Median height error 1.6 % on held-out maize plants, in milliseconds per plant.' }
   ];
   var MS = 3200, picker = root.querySelector('.fl-picker'), board = root.querySelector('.fl-board'), svg = root.querySelector('.fl-wires'),
       model = root.querySelector('.fl-model'), nodes = [].slice.call(root.querySelectorAll('.fl-node')),
