@@ -438,9 +438,10 @@
       <div class="ctl"><label for="e-stop">Plant</label><select id="e-stop"></select></div>
       <div class="ctl"><input type="checkbox" id="e-truth" checked><label for="e-truth">True plant in grey</label></div>
     </div>
-    <div class="grid" id="e-grid">
-      <div class="cell input"><header><b>Camera image</b><span class="chip" id="e-occ"></span></header><img class="view" id="e-img" alt="The camera image of the real-plant row"></div>
-      <div class="cell input"><header><b>Row point cloud</b><span class="chip">input</span></header><canvas data-k="scene"></canvas></div>
+    <div class="grid four" id="e-grid">
+      <div class="cell input"><header><b>Image</b><span class="chip" id="e-occ"></span></header><img class="view" id="e-img" alt="The image the model reads: the window around the middle plant"></div>
+      <div class="cell input"><header><b>Depth image</b><span class="chip">input</span></header><img class="view" id="e-depth" alt="The depth image the model reads"></div>
+      <div class="cell input"><header><b>Point cloud</b><span class="chip">input</span></header><canvas data-k="scene"></canvas></div>
       <div class="cell"><header><b>Center plant (truth)</b><span class="chip" id="e-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
       <div class="cell output"><header><b>No row training</b><span class="chip" data-m="head"></span></header><canvas data-k="head:proc" data-proc="head"></canvas></div>
       <div class="cell output"><header><b>Synthetic-row fine-tune</b><span class="chip" data-m="row"></span></header><canvas data-k="row:proc" data-proc="row"></canvas></div>
@@ -754,6 +755,7 @@
     draw: st => {
       const it = st.item, m = it.meta, C = it.clouds;
       document.getElementById('e-img').src = st.base + m.img;
+      const ed = document.getElementById('e-depth'); ed.hidden = !m.depth_img; if (m.depth_img) ed.src = st.base + m.depth_img;
       document.getElementById('e-occ').textContent = `${m.layout} row`;
       document.getElementById('e-truth-chip').textContent = `height ${fmt(m.truth.height, 2)} m`;
       st.panels.scene.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]);

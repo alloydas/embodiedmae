@@ -30,13 +30,23 @@ def save(im, path, side, q=90):
     im.save(path, quality=q); return im.size
 
 
-def processed_window(ds, i):
-    """the canvas the loader builds for item i (window, black background, gain), before its resize to 224"""
+def processed_window(ds, i, with_depth=False):
+    """the canvas the loader builds for item i (window, black background, gain), before its resize to 224;
+    with_depth: also the depth image the model reads (the loader's 224 px depth, 0 = no point)"""
     got = {}; tf = ds.tf
     ds.tf = lambda img: (got.__setitem__('im', img.copy()), tf(img))[1]
-    try: ds[i]
+    try: out = ds[i]
     finally: ds.tf = tf
-    return got['im']
+    return (got['im'], out[1][0].numpy()) if with_depth else got['im']
+
+
+def depth_image(d, side=448):
+    """the model's depth input drawn as in S4 / S5: viridis_r over the plant pixels, black elsewhere"""
+    import matplotlib.pyplot as plt
+    d = np.asarray(d, np.float64); ok = d > 0; rgb = np.zeros(d.shape + (3,))
+    if ok.any():
+        lo, hi = d[ok].min(), d[ok].max(); rgb[ok] = plt.get_cmap('viridis_r')((d[ok] - lo) / max(hi - lo, 1e-9))[:, :3]
+    im = Image.fromarray((rgb * 255).astype(np.uint8)); return im.resize((side, side), Image.NEAREST)
 
 
 def strip_of(im):
@@ -57,7 +67,13 @@ if __name__ == '__main__':
             if f.name == 'index.json': continue
             m = json.loads(f.read_text())
             ds = RealRowDataset(layouts=(m['layout'],), rows=[m['row']], stops={int(m['stop'])}, seed=0, species=sp, rgb_gain=GAIN[sp])
-            print(sp, f.stem, save(processed_window(ds, 0), SITE / 'real' / sp / m['img'], 700), flush=True)
+            win, dep = processed_window(ds, 0, with_depth=True)
+            if sp == 'sorghum': win = strip_of(win)                      # the tall frame: the strip, as S5 (2026-11-20)
+            dimg = depth_image(dep, 700) if sp == 'sorghum' else depth_image(dep)
+            if sp == 'sorghum': dimg = strip_of(dimg)                    # the depth strip too, as S5
+            m['depth_img'] = f'{f.stem}_depth.jpg'; dimg.save(SITE / 'real' / sp / m['depth_img'], quality=92)
+            f.write_text(json.dumps(m, separators=(',', ':')))
+            print(sp, f.stem, save(win, SITE / 'real' / sp / m['img'], 700), flush=True)
     # data section: isolated views over black, from the 1024 px renders
     for sp in ('maize', 'sorghum'):
         for f in sorted((SITE / 'dataset' / sp / 'isolated').glob('*.json')):
