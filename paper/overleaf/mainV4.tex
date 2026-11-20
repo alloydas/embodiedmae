@@ -953,7 +953,7 @@ When Point-MAE is supplied with full 3D camera pose matrices on synthetic maize,
 \section{Result Tables}
 \label{app:tables}
 
-This appendix provides the full numerical tables referenced in the main paper, in the order of the main paper's experiments. We report simulated row occlusion (\tabref{tab:rows}; plotted in \figref{fig:rows}), the real-plant row experiments (\tabref{tab:e10} of the main paper and \tabref{tab:e10_detail}), and single-view reconstruction of isolated plants (\tabref{tab:regime1}). The remaining full tables appear beside their analyses: partial camera coverage (\tabref{tab:views}), the controlled modality, scale, and capacity ablations (\tabref{tab:modality_value_add}), the token-budget control ablations (\tabref{tab:control}), and the encoder comparison (\tabref{tab:baselines}) in \appendixref{app:analyses}, and any-subset cross-modal generation and distillation (\tabref{tab:anysubset}) in \appendixref{app:discussion}.
+This appendix provides the full numerical tables referenced in the main paper, in the order of the main paper's experiments. We report simulated row occlusion (\tabref{tab:rows}; plotted in \figref{fig:rows}), the real-plant row experiments (\tabref{tab:e10} of the main paper and \tabref{tab:e10_detail}), \updtwo{the field rows of \secref{sec:supp-real-rows} (\tabref{tab:field_rows} and \tabref{tab:field_rows_single}),} and single-view reconstruction of isolated plants (\tabref{tab:regime1}). The remaining full tables appear beside their analyses: partial camera coverage (\tabref{tab:views}), the controlled modality, scale, and capacity ablations (\tabref{tab:modality_value_add}), the token-budget control ablations (\tabref{tab:control}), and the encoder comparison (\tabref{tab:baselines}) in \appendixref{app:analyses}, and any-subset cross-modal generation and distillation (\tabref{tab:anysubset}) in \appendixref{app:discussion}.
 % REVIEWER FLAG (supplement reorder): this listing sentence was rewritten so the tables are named in the main paper's order (rows, real plants, single-sensor); the submitted version listed them as regime1 / views / rows / anysubset / control. No numbers changed.
 
 
@@ -1043,6 +1043,31 @@ This appendix provides the full numerical tables referenced in the main paper, i
     \bottomrule
   \end{tabular}}
 \end{table}
+
+\updtwo{\noindent\textbf{Field rows from real plants.}
+\tabref{tab:field_rows} and \tabref{tab:field_rows_single} report the field rows of \secref{sec:supp-real-rows}. The
+plants are split by plant (sorghum: by scan, with its replicas), 351 / 39 / 130 maize plants and 33 / 5 / 13 sorghum
+scans for training, validation and test. A test plant is the middle plant at several camera stops (1{,}555 maize and
+1{,}484 sorghum test stops), and every model receives the 224-pixel window around the middle plant. The \emph{field
+fine-tuned} models start from the row fine-tuned model and are trained for 30 epochs on the training plants (learning
+rate $2\times10^{-5}$, batch size 16, random crops of the window). They are supervised on the middle plant's point cloud
+and depth map, its height, and per leaf on the measured length and width, with the leaf count, internode distance and
+curvature for maize and the insertion height for sorghum. The sorghum procedural model has no leaf-count field: the
+generator derives the count from the stem length (0.05\,m per leaf), which does not hold for the real plants. Two further
+sorghum runs therefore also train the leaf slots after the last real leaf to zero length and read the leaf count as the
+number of slots longer than 5\,cm. The second of these also gives a single random input stream on half of the training
+batches and weights the empty-slot term by 0.3.
+
+Without fine-tuning, the models trained on synthetic data miss the real plants. The row fine-tuned model has a Chamfer
+distance of 219 (maize) and 291 (sorghum) $\times10^{-4}$\,m$^2$ and a median height error of 37\% and 39\%. Field
+fine-tuning reduces the Chamfer distance to 61 and 49, the height error to 4.0\% and 3.0\%, and the leaf length error
+from 31 to 8.3\,cm in maize and from 27 to 10\,cm in sorghum, and it predicts the maize leaf count within one leaf at 69\%
+of stops (53\% before). Training the empty leaf slots gives a sorghum leaf count within one leaf at 52\% of stops, at the
+cost of 4\,cm in leaf length (10.2 to 14.4\,cm), but only with all three streams: from an image or a depth map alone the
+count stays near the maximum of 24 leaves. Adding single-stream batches makes the count work from one sensor (image 50\%,
+depth 40\%, point cloud 38\%), reduces the leaf length error to 12.3\,cm and the single-sensor Chamfer distance from 67 to
+45, but lowers the count from all three streams to 40\%. In maize, whose field fine-tuning used all three streams only, a
+single image or depth map still gives a median height error of about 50\%, against 9.4\% from the point cloud alone.}
 
 \begin{table*}[t]
   \caption{\textbf{Single-view reconstruction on isolated plants.} Each row evaluates the distilled generalist given a single input stream on view 00, across the 2{,}250 validation plants per species. $^{\dagger}$The undistilled headline model receives all three sensor streams and is evaluated under its 80\% masked pretraining regime (passing 100\% visible tokens causes cloud collapse). We decode the leaf count and height directly from the predicted procedural recipe. Maize stores the leaf count explicitly in the plant token, whereas sorghum derives the leaf count from the predicted stem length via the generator relation ($\text{stem length} = 0.05n - 0.001$). Leaf-parameter skill is Eq.~\eqref{eq:trait-skill} averaged across the active leaf slots. Chamfer distance ($\times 10^{-3}$) and $F_1$ score are computed against the complete unit-sphere plant cloud. Note that \tabref{tab:main} averages across random views, which explains the slight numerical difference. The three-view row averages the predicted recipes across views 00, 01, and 02. The two-stage baseline generates a point cloud from the view 00 RGB image and then predicts the recipe from that generated cloud. Reading recipes from generated clouds loses nearly all parameter accuracy (the sorghum leaf skill drops from 0.656 to $-0.010$). This indicates that the recipe should be predicted directly from the sensor data. The RMS error converts the unit-sphere Chamfer distance into millimeters per plant (median plant scale of 1.03\,m in sorghum and 0.61\,m in maize).}
@@ -2006,5 +2031,54 @@ Distilling a four-stream teacher into single-sensor students lowers the cross-mo
 
 \noindent\textbf{Limitations and future work.}
 We note three limitations. (a) The controlled ablations were run with one seed per configuration at a fixed 197{,}400-step budget (the estimated run-to-run variation is $\approx 2\%$ in Chamfer and $\le 0.011$ in probe $R^2$). (b) The recovered models are constrained by the expressivity of the procedural generator $G$. Field anomalies such as severe disease, broken stems, or unmodeled tassel droop cannot be represented exactly, and they are mapped to the closest valid procedural plant. Expanding the procedural grammars to capture stress and damage phenotypes is an important next step. (c) Real-field evaluation is still needed to guard against synthetic renderer cues.
+
+% Field-row tables (2026-11-20): placed last so that every earlier supplement table keeps the number the frozen
+% main pages cite (Tables S6, S10, S20); the text is in Appendix F (Field rows from real plants).
+\begin{table*}[t]
+  \caption{\updtwo{\textbf{Field rows from real plants} (\secref{sec:supp-real-rows}), held-out test plants (maize: 130 plants, 1{,}555 camera stops; sorghum: 13 scans, 1{,}484 stops), all three input streams. Chamfer is the distance to the middle plant in $10^{-4}$\,m$^2$ with 95\% bootstrap confidence intervals over plants; Height is the median relative height error; Leaves $\pm1$ is the share of stops whose predicted leaf count is within one leaf of the measured count; the leaf errors are mean absolute errors in cm against the measured leaves, matched by index from the base (internode distance for maize, insertion height for sorghum). The zero-shot models are those of the main paper. The sorghum models without leaf-slot training write no leaf count (n/a).}}
+  \label{tab:field_rows}
+  \centering\scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{l c c c ccc}
+    \toprule
+    Model & Chamfer $\downarrow$ & Height $\downarrow$ & Leaves $\pm1$ $\uparrow$ & Leaf length $\downarrow$ & Leaf width $\downarrow$ & Internode / insertion $\downarrow$ \\
+    \midrule
+    \multicolumn{7}{l}{\emph{Maize (130 test plants)}} \\
+    Pretrained, zero-shot & 324.2 {\tiny[307.1, 344.3]} & 52\% & 4\% & 31.2 & 10.8 & 8.4 \\
+    Isolated control, zero-shot & 371.0 {\tiny[354.1, 391.9]} & 46\% & 3\% & 22.2 & 11.0 & 7.9 \\
+    Row fine-tuned, zero-shot & 219.4 {\tiny[207.6, 233.4]} & 37\% & 53\% & 31.0 & 12.0 & 6.6 \\
+    Field fine-tuned & \textbf{61.1} {\tiny[58.1, 64.2]} & \textbf{4.0\%} & \textbf{69\%} & \textbf{8.3} & \textbf{4.7} & \textbf{3.6} \\
+    \midrule
+    \multicolumn{7}{l}{\emph{Sorghum (13 test scans)}} \\
+    Pretrained, zero-shot & 216.6 {\tiny[187.3, 244.9]} & 26\% & n/a & 14.3 & 2.5 & 51.4 \\
+    Isolated control, zero-shot & 286.1 {\tiny[261.0, 310.3]} & 26\% & n/a & 26.5 & 3.6 & 50.2 \\
+    Row fine-tuned, zero-shot & 291.1 {\tiny[267.6, 312.8]} & 39\% & n/a & 26.6 & 3.5 & 47.1 \\
+    Field fine-tuned & \textbf{48.7} {\tiny[43.0, 57.5]} & \textbf{3.0\%} & n/a & \textbf{10.2} & \textbf{1.0} & \textbf{12.0} \\
+    \quad + leaf-slot training & 51.1 {\tiny[44.7, 61.0]} & \textbf{3.0\%} & \textbf{52\%} & 14.4 & \textbf{1.0} & 12.1 \\
+    \quad + leaf-slot training, single-stream batches & 51.9 {\tiny[45.7, 61.2]} & 3.1\% & 40\% & 12.3 & \textbf{1.0} & 12.4 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{table}[t]
+  \caption{\updtwo{\textbf{Field rows from real plants, by input stream} (held-out test stops as in \tabref{tab:field_rows}; Chamfer in $10^{-4}$\,m$^2$, Height = median relative height error, Lv = leaves $\pm1$). Sorghum leaf-slot = field fine-tuned with leaf-slot training and single-stream batches.}}
+  \label{tab:field_rows_single}
+  \centering\scriptsize
+  \setlength{\tabcolsep}{2.2pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{l ccc cc ccc}
+    \toprule
+    & \multicolumn{3}{c}{Maize, field FT} & \multicolumn{2}{c}{Sorghum, field FT} & \multicolumn{3}{c}{Sorghum, leaf-slot} \\
+    \cmidrule(lr){2-4}\cmidrule(lr){5-6}\cmidrule(lr){7-9}
+    Input & Chamfer & Height & Lv & Chamfer & Height & Chamfer & Height & Lv \\
+    \midrule
+    All three & \textbf{61.1} & \textbf{4.0\%} & \textbf{69\%} & \textbf{48.7} & \textbf{3.0\%} & 51.9 & 3.1\% & 40\% \\
+    Image & 82.2 & 50\% & 35\% & 67.4 & 6.1\% & \textbf{44.9} & \textbf{2.7\%} & \textbf{50\%} \\
+    Depth & 79.0 & 51\% & 33\% & 66.5 & 4.2\% & 45.4 & 2.9\% & 40\% \\
+    Point cloud & 125.2 & 9.4\% & 48\% & 115.3 & 4.6\% & 69.5 & 4.5\% & 38\% \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
 
 \end{document}
