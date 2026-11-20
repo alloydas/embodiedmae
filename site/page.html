@@ -270,7 +270,7 @@
    width=".07"
    angle="41"/&gt;
  &lt;leaf …/&gt;</div>
-          <div class="tx"><strong>Known parameters</strong><span class="d">An optional prior</span><div class="st">AVAILABLE</div></div></div>
+          <div class="tx"><strong>Procedural parameters</strong><span class="d">In training, and as an optional prior</span><div class="st">AVAILABLE</div></div></div>
       </div>
       <div class="fl-model">
         <span class="eb">ONE MODEL</span><span class="mk">CropCode</span>
@@ -769,6 +769,9 @@
 (function () {
   var root = document.getElementById('flow'); if (!root) return;
   var T = [
+    { id: 'pre', label: 'Masked pretraining', in: ['rgb', 'depth', 'pc', 'params'], out: ['plant', 'pc', 'rgb', 'depth'], stages: ['pre'], more: '#pretrain',
+      text: 'Training: all four streams go in, the procedural parameters among them, with 80 % of the tokens hidden at random; the model rebuilds every stream.',
+      metric: 'About 58 % of the parameter tokens are visible on average, so the model also learns to use known parameters.' },
     { id: 'rgb', label: 'One photograph', in: ['rgb'], out: ['plant', 'pc', 'depth'], stages: ['pre', 'dist'], more: '#any',
       text: 'An image of an isolated plant: the whole procedural plant, its 3D point cloud, and the missing depth map.',
       metric: 'Leaf count within ±1 on 91 % (sorghum) and 97 % (maize) of plants.' },
