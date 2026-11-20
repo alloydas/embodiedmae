@@ -152,12 +152,71 @@
   .site-foot { border-top: 1px solid var(--rule); background: var(--card); color: var(--muted); font-size: 14px; text-align: center; }
   .site-foot .wrap { display: grid; gap: 10px; justify-items: center; padding-block: 36px 44px; }
   .site-foot p { max-width: 70ch; }
+
+  /* ---- task flow: which inputs CropCode reads and what it writes, cycling through the paper's tasks ---- */
+  #flow .lede { max-width: 720px; margin: 10px auto 0; text-align: center; color: var(--muted); }
+  .fl-picker { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 22px 0 18px; }
+  .fl-picker button { position: relative; overflow: hidden; border: 1px solid var(--rule); border-radius: 999px; background: var(--bg);
+    color: var(--muted); font: 500 13px var(--body); padding: 8px 14px; cursor: pointer; transition: background .2s, border-color .2s, color .2s; }
+  .fl-picker button:hover { border-color: #c9ccd2; color: var(--fg); }
+  .fl-picker button[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: #fff; }
+  .fl-picker[data-cycling="true"] button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+    background: var(--s-rgb); transform-origin: left; animation: fl-cycle var(--fl-ms, 3200ms) linear; }
+  @keyframes fl-cycle { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .fl-board { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(170px, 0.8fr) minmax(0, 1fr); gap: 56px;
+    align-items: center; padding: 22px; border: 1px solid var(--rule); border-radius: 18px; background: var(--card); }
+  .fl-col { display: grid; gap: 10px; position: relative; z-index: 2; }
+  .fl-colhead { font: 600 11px var(--mono); letter-spacing: .08em; color: var(--muted); margin: 0 0 2px; }
+  .fl-node { --c: #888; display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 10px;
+    border: 1px solid var(--rule); border-radius: 12px; background: var(--panel); transition: border-color .3s, box-shadow .3s, opacity .3s; opacity: .55; }
+  .fl-node .th { width: 54px; height: 54px; border-radius: 8px; background: #0e1012 center / cover no-repeat; filter: grayscale(1); transition: filter .3s; }
+  .fl-node .th.light { background-color: #fff; background-size: contain; border: 1px solid var(--rule); }
+  .fl-node .tx strong { display: block; font: 600 14px var(--body); color: var(--fg); }
+  .fl-node .tx span { font-size: 12.5px; color: var(--muted); }
+  .fl-node .st { font: 500 10.5px var(--mono); letter-spacing: .04em; color: var(--muted); }
+  .fl-node.on { opacity: 1; border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+  .fl-node.on .th { filter: none; }
+  .fl-node.on .st { color: color-mix(in srgb, var(--c) 70%, #000); }
+  .fl-node.big { grid-template-columns: 96px minmax(0, 1fr); }
+  .fl-node.big .th { width: 96px; height: 120px; }
+  .fl-params { width: 54px; height: 54px; border-radius: 8px; border: 1px solid var(--rule); background: #fff; font: 500 7px/1.25 var(--mono);
+    color: #5e4a96; padding: 5px; overflow: hidden; white-space: pre; filter: grayscale(1); transition: filter .3s; }
+  .fl-node.on .fl-params { filter: none; }
+  .fl-model { position: relative; z-index: 2; text-align: center; padding: 26px 14px; border: 1px solid #d5dce7; border-radius: 22px;
+    background: linear-gradient(150deg, #edf3fb, #f9fafc 50%, #f3eefa); box-shadow: 0 12px 30px #21354d10; }
+  .fl-model .eb { font: 600 10.5px var(--mono); letter-spacing: .1em; color: var(--muted); }
+  .fl-model .mk { display: block; font: 700 26px var(--display); margin: 6px 0 2px; color: var(--fg); }
+  .fl-model p { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .fl-model .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 12px; }
+  .fl-model .chips span { font: 500 11px var(--body); border-radius: 999px; padding: 3px 9px; background: #fff; border: 1px solid var(--rule); color: var(--muted);
+    transition: background .3s, color .3s, border-color .3s; }
+  .fl-model .chips span.on { background: var(--fg); border-color: var(--fg); color: #fff; }
+  .fl-wires { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; overflow: visible; }
+  .fl-wire { fill: none; stroke: #d3d6dc; stroke-width: 1.4; }
+  .fl-wire.on { stroke: var(--c); stroke-width: 2.2; stroke-dasharray: 7 9; animation: fl-travel 1.5s linear infinite; animation-play-state: paused; }
+  .fl-board[data-visible="true"] .fl-wire.on { animation-play-state: running; }
+  .fl-wire.out.on { animation-delay: .45s; }
+  @keyframes fl-travel { to { stroke-dashoffset: -32; } }
+  .fl-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-top: 14px; }
+  .fl-summary { font-size: 15px; color: var(--fg); }
+  .fl-metric { display: inline-block; margin-left: 6px; font-weight: 600; }
+  .fl-more { font: 500 13px var(--body); white-space: nowrap; }
+  @media (max-width: 760px) {
+    .fl-board { grid-template-columns: minmax(0, 1fr); gap: 34px; }
+    .fl-wires { display: none; }
+    .fl-col.in::after, .fl-model::after { content: "↓"; position: absolute; left: 50%; bottom: -27px; transform: translateX(-50%); color: var(--muted); font-size: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fl-wire.on { animation: none; stroke-dasharray: none; }
+    .fl-node, .fl-node .th, .fl-picker button, .fl-model .chips span { transition: none; }
+    .fl-picker button::after { display: none; }
+  }
 </style>
 
 <div class="topbar"><div class="wrap">
   <a class="wordmark" href="#top">CropCode</a>
   <nav aria-label="Sections">
-    <a href="#abstract">Abstract</a><a href="#explore">Results</a><a href="#data">Data</a><a href="#pretrain">Pretraining</a><a href="#any">Any input</a><a href="#partial">Partial clouds</a><a href="#rows">Crop rows</a><a href="#real">Real plants</a>
+    <a href="#abstract">Abstract</a><a href="#flow">Overview</a><a href="#explore">Results</a><a href="#data">Data</a><a href="#pretrain">Pretraining</a><a href="#any">Any input</a><a href="#partial">Partial clouds</a><a href="#rows">Crop rows</a><a href="#real">Real plants</a>
   </nav>
   <a class="navcode" href="https://github.com/alloydas/CropCode">Code ↗</a>
 </div></div>
@@ -190,6 +249,45 @@
       <h2 id="abstract-h">Abstract</h2>
       <p>Recovering thin, heavily occluded structures from sparse sensing remains an open problem in 3D vision. In agriculture, row crops are an extreme case of this problem. Leaves are millimeters thick and up to a meter long, and neighboring plants in a row occlude one another. Routine field imaging campaigns capture only a single photograph, a noisy depth map, or a partial point cloud per plant. We introduce CropCode, which recovers the complete procedural model of a plant from any subset of RGB, depth, and point-cloud observations in a single forward pass. The procedural model (the generator parameters for leaf count, insertion heights, leaf angles, and surface geometry) is compact, interpretable, and auditable. We use a realistic plant procedural generator as both the training data and the output space. We pretrain a masked autoencoder on all modalities of 15,000 generated plants per species (maize and sorghum) and specialize it in two ways: we distill it into single-sensor students, and we fine-tune it on agronomically realistic simulated crop rows in which neighboring leaves bend and deform upon contact. Fine-tuning on simulated rows removes 85% (sorghum) and 92% (maize) of the reconstruction error introduced by occluding neighbors. On rendered rows assembled from real plants, zero-shot predictions degrade for plants taller than the synthetic training range, but fine-tuning on real plants reduces the median height error on held-out maize plants to 1.6%, with an inference time of milliseconds per plant. From a single image of an isolated plant, CropCode reconstructs the 3D plant and predicts leaf count within one leaf on 91% (sorghum) and 97% (maize) of plants. In contrast, a two-stage variant of our model that first generates a point cloud from the image and then infers the parameters from that cloud reaches only 30% (sorghum) and 7% (maize). Training on all modalities improves single-sensor predictions, and distillation reduces the cross-modal generation loss by 30% in sorghum and 44% in maize. We also release FieldScan, a 30,000-plant, two-species benchmark that pairs RGB, depth, and point-cloud captures under simulated row occlusion with exact procedural ground truth. CropCode is a step toward generating plant-level 3D digital assets at field scale for agriculture. Code and project page: <a href="https://anonymous.4open.science/w/CropCode/">Crop Code</a>.</p>
     </div>
+  </section>
+
+  <section id="flow" aria-labelledby="flow-h">
+    <div class="task-head"><h2 id="flow-h">One model, any sensor in, a procedural plant out</h2>
+      <p class="lede">CropCode reads whichever field sensors are available and writes the plant's procedural model, the parameters a generator turns into the full 3D plant. Pick a task, or let it cycle.</p></div>
+    <div class="fl-picker" role="group" aria-label="Choose a task"></div>
+    <div class="fl-board" role="group" aria-label="Inputs flow through CropCode to its outputs" data-visible="false">
+      <svg class="fl-wires" aria-hidden="true"></svg>
+      <div class="fl-col in">
+        <p class="fl-colhead">INPUT · ANY SUBSET</p>
+        <div class="fl-node" data-side="in" data-m="rgb" style="--c: var(--s-rgb)"><div class="th" style="background-image:url(assets/flow/rgb.jpg)"></div>
+          <div class="tx"><strong>RGB image</strong><span class="d">A single photograph</span><div class="st">AVAILABLE</div></div></div>
+        <div class="fl-node" data-side="in" data-m="depth" style="--c: var(--s-depth)"><div class="th" style="background-image:url(assets/flow/depth.jpg)"></div>
+          <div class="tx"><strong>Depth map</strong><span class="d">A noisy depth frame</span><div class="st">AVAILABLE</div></div></div>
+        <div class="fl-node" data-side="in" data-m="pc" style="--c: var(--s-pc)"><div class="th light" style="background-image:url(assets/flow/pc.png)"></div>
+          <div class="tx"><strong>Point cloud</strong><span class="d">A partial scan</span><div class="st">AVAILABLE</div></div></div>
+        <div class="fl-node" data-side="in" data-m="params" style="--c: var(--s-text)"><div class="fl-params">&lt;plant h="1.07"&gt;
+ &lt;leaf len=".36"
+   width=".07"
+   angle="41"/&gt;
+ &lt;leaf …/&gt;</div>
+          <div class="tx"><strong>Known parameters</strong><span class="d">An optional prior</span><div class="st">AVAILABLE</div></div></div>
+      </div>
+      <div class="fl-model">
+        <span class="eb">ONE MODEL</span><span class="mk">CropCode</span>
+        <p>Masked autoencoder over four streams</p>
+        <div class="chips"><span data-stage="pre">masked pretraining</span><span data-stage="dist">single-sensor distillation</span><span data-stage="row">row fine-tuning</span><span data-stage="real">real-plant fine-tuning</span></div>
+      </div>
+      <div class="fl-col out">
+        <p class="fl-colhead">OUTPUT</p>
+        <div class="fl-node big" data-side="out" data-m="plant" style="--c: var(--s-text)"><div class="th light" style="background-image:url(assets/flow/plant.png)"></div>
+          <div class="tx"><strong>Procedural plant</strong><span class="d">Kilobytes of editable parameters that re-render into 3D</span><div class="st">AVAILABLE</div></div></div>
+        <div class="fl-node" data-side="out" data-m="pc" style="--c: var(--s-pc)"><div class="th light" style="background-image:url(assets/flow/pc.png)"></div>
+          <div class="tx"><strong>Completed point cloud</strong><span class="d">The whole plant, hidden parts included</span><div class="st">AVAILABLE</div></div></div>
+        <div class="fl-node" data-side="out" data-m="img" style="--c: var(--s-depth)"><div class="th" style="background-image:url(assets/flow/depth.jpg)"></div>
+          <div class="tx"><strong>RGB and depth</strong><span class="d">The streams that were not given</span><div class="st">AVAILABLE</div></div></div>
+      </div>
+    </div>
+    <div class="fl-foot"><p class="fl-summary" aria-live="off"></p><a class="fl-more" href="#any">See the examples ↓</a></div>
   </section>
 
   <section id="explore" aria-labelledby="explore-h">
@@ -660,5 +758,86 @@
     if (!still) requestAnimationFrame(spin);
   })().catch(e => console.error(e));
   dFill().catch(e => console.error(e)); rFill().catch(e => console.error(e));
+})();
+</script>
+<script>
+/* Task flow (#flow): cycles through the paper's tasks; active inputs and outputs light up and dashed wires carry the
+   flow input -> model -> output. Pauses on hover / focus and off screen; a click takes over; respects reduced motion.
+   Numbers are the paper's (Tables 2 and 4, Sec. 4.3; Table S20 for the prior). */
+(function () {
+  var root = document.getElementById('flow'); if (!root) return;
+  var T = [
+    { id: 'rgb', label: 'One photograph', in: ['rgb'], out: ['plant', 'pc', 'img'], stages: ['pre', 'dist'], more: '#any',
+      text: 'An image of an isolated plant: the whole procedural plant, its 3D cloud, and the missing depth.',
+      metric: 'Leaf count within ±1 on 91 % (sorghum) and 97 % (maize) of plants.' },
+    { id: 'depth', label: 'Depth only', in: ['depth'], out: ['plant', 'pc', 'img'], stages: ['pre', 'dist'], more: '#any',
+      text: 'A depth frame alone: the same procedural plant, without color.',
+      metric: 'Median height error 2.6 % (sorghum) and 4.6 % (maize).' },
+    { id: 'pc', label: 'Point cloud only', in: ['pc'], out: ['plant', 'img'], stages: ['pre', 'dist'], more: '#any',
+      text: 'A partial scan alone: parameters read straight from geometry.',
+      metric: 'Leaf count within ±1 on 99.8 % (sorghum) and 98.6 % (maize) of plants.' },
+    { id: 'row', label: 'Occluded crop row', in: ['rgb', 'depth', 'pc'], out: ['plant', 'pc'], stages: ['pre', 'row'], more: '#rows',
+      text: 'The crowded row from a rover camera, no mask or box: the target plant alone, separated from its neighbors.',
+      metric: 'Removes 85 % (sorghum) and 92 % (maize) of the error neighbors cause.' },
+    { id: 'real', label: 'Real plants', in: ['rgb', 'depth', 'pc'], out: ['plant', 'pc'], stages: ['pre', 'row', 'real'], more: '#real',
+      text: 'Rows built from real plants: fine-tuned on 75 % of them, scored on the rest.',
+      metric: 'Median height error 1.6 % on held-out maize plants, in milliseconds per plant.' },
+    { id: 'prior', label: 'Image + known parameters', in: ['rgb', 'params'], out: ['pc', 'img'], stages: ['pre', 'dist'], more: '#any',
+      text: 'Parameters can also go in: a known prior sharpens the reconstruction.',
+      metric: 'Image-to-cloud Chamfer 0.88 → 0.39 ×10⁻³ (sorghum).' }
+  ];
+  var MS = 3200, picker = root.querySelector('.fl-picker'), board = root.querySelector('.fl-board'), svg = root.querySelector('.fl-wires'),
+      model = root.querySelector('.fl-model'), nodes = [].slice.call(root.querySelectorAll('.fl-node')),
+      summary = root.querySelector('.fl-summary'), more = root.querySelector('.fl-more'), wires = new Map(), NS = 'http://www.w3.org/2000/svg';
+  root.style.setProperty('--fl-ms', MS + 'ms');
+  nodes.forEach(function (n) { var p = document.createElementNS(NS, 'path'); p.setAttribute('class', 'fl-wire ' + (n.dataset.side === 'in' ? 'in' : 'out'));
+    p.style.setProperty('--c', getComputedStyle(n).getPropertyValue('--c')); svg.appendChild(p); wires.set(n, p); });
+  var buttons = T.map(function (t, i) { var b = document.createElement('button'); b.type = 'button'; b.textContent = t.label; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { takeOver(i); choose(i); }); picker.appendChild(b); return b; });
+  function draw() {
+    var B = board.getBoundingClientRect(), M = model.getBoundingClientRect(); if (!B.width) return;
+    svg.setAttribute('viewBox', '0 0 ' + B.width + ' ' + B.height);
+    ['in', 'out'].forEach(function (side) {
+      var sib = nodes.filter(function (n) { return n.dataset.side === side; });
+      sib.forEach(function (n, k) {
+        var r = n.getBoundingClientRect(), off = (k - (sib.length - 1) / 2) * 10, x0, y0, x1, y1;
+        if (side === 'in') { x0 = r.right - B.left + 3; y0 = r.top + r.height / 2 - B.top; x1 = M.left - B.left - 4; y1 = M.top + M.height / 2 - B.top + off; }
+        else { x0 = M.right - B.left + 4; y0 = M.top + M.height / 2 - B.top + off; x1 = r.left - B.left - 3; y1 = r.top + r.height / 2 - B.top; }
+        wires.get(n).setAttribute('d', 'M' + x0 + ',' + y0 + ' C' + (x0 + 30) + ',' + y0 + ' ' + (x1 - 30) + ',' + y1 + ' ' + x1 + ',' + y1);
+      });
+    });
+  }
+  function choose(i) {
+    var t = T[i];
+    buttons.forEach(function (b, k) { b.setAttribute('aria-pressed', String(k === i)); });
+    nodes.forEach(function (n) {
+      var on = (n.dataset.side === 'in' ? t.in : t.out).indexOf(n.dataset.m) >= 0;
+      n.classList.toggle('on', on); wires.get(n).classList.toggle('on', on);
+      n.querySelector('.st').textContent = on ? (n.dataset.side === 'in' ? 'GIVEN' : 'WRITTEN') : 'NOT USED';
+    });
+    model.querySelectorAll('.chips span').forEach(function (c) { c.classList.toggle('on', t.stages.indexOf(c.dataset.stage) >= 0); });
+    summary.innerHTML = ''; summary.appendChild(document.createTextNode(t.text + ' '));
+    var m = document.createElement('span'); m.className = 'fl-metric'; m.textContent = t.metric; summary.appendChild(m);
+    more.href = t.more;
+    if (picker.dataset.cycling === 'true') { var a = buttons[i]; a.style.animation = 'none'; void a.offsetWidth; a.style.animation = ''; }
+  }
+  var still = window.matchMedia('(prefers-reduced-motion: reduce)'), idx = 0, timer = null, auto = !still.matches, paused = false, inView = false;
+  function sync() {
+    var run = auto && !paused && inView && !document.hidden;
+    if (run && !timer) timer = setInterval(function () { idx = (idx + 1) % T.length; choose(idx); }, MS);
+    else if (!run && timer) { clearInterval(timer); timer = null; }
+    picker.dataset.cycling = String(run); board.dataset.visible = String(inView && !document.hidden);
+  }
+  function takeOver(i) { auto = false; paused = false; idx = i; summary.setAttribute('aria-live', 'polite'); sync(); }
+  ['pointerenter', 'focusin'].forEach(function (e) { picker.addEventListener(e, function () { paused = true; sync(); }); });
+  ['pointerleave', 'focusout'].forEach(function (e) { picker.addEventListener(e, function () { paused = false; sync(); }); });
+  if (still.addEventListener) still.addEventListener('change', function () { if (still.matches) { auto = false; sync(); } });
+  if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { inView = es[es.length - 1].isIntersecting; sync(); }).observe(board);
+  else inView = true;
+  document.addEventListener('visibilitychange', sync);
+  if ('ResizeObserver' in window) new ResizeObserver(draw).observe(board);
+  window.addEventListener('resize', draw);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+  choose(0); draw(); sync();
 })();
 </script>
