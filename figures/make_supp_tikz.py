@@ -75,15 +75,7 @@ def gallery(sp):
     W, m, g = 6.875, 0.025, 0.035
     head = [('Image', INK), ('Ground truth', INK), ('Row fine-tune\n(synthetic)', STREAM_INK['text']), ('Real-row\nfine-tune', OURS)]
     kinds = [('rgb', True), (None, False), ('text', False), ('text', False)]
-    if sp == 'maize':                                  # S10 in the S11 layout (figures/_s10_layout.py; user, 2026-11-20)
-        import _s10_layout as L10
-        pct = ['10th', '30th', '50th', '70th', '90th', '98th']; side = 0.40
-        stops = {L: [dict(img_png=fit_png(r['img'], side, side, 500),
-                          truth_png=cloud_png(r['gt'], side, side, (-1.02, 1.02), (-1.02, 1.02)),
-                          pred_png=proc_tiles(r['recs'], 'maize', 1.0), height=r['height'], ch=r['ch'], hp=r['hp'], pct=pct[i])
-                     for i, r in enumerate([r for r in D if r['layout'] == L])] for L in ('parallel', 'perpendicular')}
-        return L10.layout(stops), 'fig_e10_gallery_maize'
-    if sp == 'maize_old_layout':                        # the previous S10 layout (6 percentile rows x 2 layouts), kept for reference
+    if sp == 'maize':
         F = 6.2; lab, gb = 0.42, 0.22; t = (W - lab - gb - 0.10 - 2 * 3 * g) / 8; th = t; hdr, gy = 0.52, 0.06
         rows = {L: [r for r in D if r['layout'] == L] for L in ('parallel', 'perpendicular')}
         n = max(len(v) for v in rows.values()); H = hdr + n * t + (n - 1) * gy + 0.03
