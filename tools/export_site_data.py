@@ -99,6 +99,39 @@ def rgba_over_black(path, gain=None):
     return np.clip(a_[..., :3] * (gain or 1.0), 0, 1) * a_[..., 3:]
 
 
+# ====================================================================== task: the data section's real plants = the field upload
+def export_dataset_field(sp):
+    """The data section's 'Real plants' items from the 2026-11-15 field upload (Maize / Sorghum_Field_1000; user,
+    2026-11-20: the section 'is not updated with new real data'): two held-out TEST plants per species (data_split/
+    e10_real_split*_field1000.csv), each at the middle stop of the first row with it in the middle. Per item: the
+    whole-plant photograph (900 px high), the point cloud the models read (the plant window, visible points) with the
+    middle plant marked, and its true height and leaf count (the stop's leaf CSV). Replaces the index's 'real' entries."""
+    from real_rows import RealRowDataset, ROWS_ROOT, scan_id
+    out = OUT / 'dataset' / sp
+    test = {r['plant'] for r in csv.DictReader(open(R / f"data_split/e10_real_split{'_sorghum' if sp == 'sorghum' else ''}_field1000.csv")) if r['split'] == 'test'}
+    ds = RealRowDataset(species=sp, source='field1000', plants=sorted(test), rgb_gain=None); by = {}
+    for i, it_ in enumerate(ds.items):
+        m = it_[4]; sc = m.get('scan') or scan_id(m['plant_id'])
+        by.setdefault(sc, {}).setdefault(it_[2], []).append((it_[3], i))
+    picks = []
+    for sc in sorted(by)[:: max(1, len(by) // 2)][:2]:
+        row = sorted(by[sc])[0]; st = sorted(by[sc][row]); picks.append((sc, st[len(st) // 2][1]))
+    idx = json.loads((out / 'index.json').read_text()); idx['items'] = [x for x in idx['items'] if x['kind'] != 'real']
+    for old in (out / 'real').glob('*'): old.unlink()
+    for sc, i in picks:
+        m = ds.items[i][4]; name = m['name']; rgb, dep, pin, par, valid, pgt, info = ds[i]
+        P, G_ = pin.numpy(), pgt.numpy(); sc_ = sub(P, 3 * a.points, 0)
+        it = Item(info['scale']); it.add('scene', sc_, mark=nn_dist(sc_, G_) < 0.012)
+        photo = np.asarray(Image.open(ROWS_ROOT['field1000'] / sp / 'png' / f'{name}.png').convert('RGB'))
+        key = f"field_{sc}_row{int(m['row']):02d}_stop{int(m['stop']):02d}"
+        img = save_jpg(photo, out / 'real' / f'{key}.jpg', side=900, quality=90)
+        it.write(out / 'real' / key, dict(task='dataset', kind='real', species=sp, layout='field', row=m['row'], stop=int(m['stop']), plant=sc,
+                                          img=img, height=round(float(info['height']), 3), leaves=int(info['leaves'])))
+        idx['items'].append(dict(kind='real', id=key, json=f'real/{key}.json'))
+        print(sp, 'field', key, 'height', round(float(info['height']), 2), 'leaves', info['leaves'], flush=True)
+    (out / 'index.json').write_text(json.dumps(idx, indent=0))
+
+
 # ====================================================================== task: crop rows (Regime III)
 def export_rows(sp):
     import _plantviz as V
@@ -452,6 +485,7 @@ def export_real(sp):
 if __name__ == '__main__':
     for sp in a.species:
         if 'dataset' in a.tasks: export_dataset(sp)
+        if 'dataset_field' in a.tasks: export_dataset_field(sp)
         if 'rows' in a.tasks: export_rows(sp)
         if 'single' in a.tasks: export_single(sp)
         if 'partial' in a.tasks: export_partial(sp)

@@ -493,7 +493,9 @@
   async function dFill() {
     const idx = await dIndex(D.species);
     const items = idx.items.filter(i => i.kind === D.kind);
-    dSel.innerHTML = items.map(i => `<option value="${i.json}">${i.id.replace(/_y(\d+)$/, ' · yaw $1°').replace(/_/g, ' ')}</option>`).join('');
+    const lab = id => /^field_/.test(id) ? id.replace(/^field_(.+)_row0*(\d+)_stop0*(\d+)$/, 'plant $1 · row $2 · stop $3')
+                                        : id.replace(/_y(\d+)$/, ' · yaw $1°').replace(/_/g, ' ');
+    dSel.innerHTML = items.map(i => `<option value="${i.json}">${lab(i.id)}</option>`).join('');
     dShow(dSel.value);
   }
   dSel.addEventListener('change', () => dShow(dSel.value));
@@ -515,7 +517,8 @@
     } else {
       strip.hidden = true; img.src = `data/dataset/${D.species}/${sub}/${m.img}`; img.style.background = '#000';
       document.getElementById('d-img-title').textContent = m.kind === 'real' ? 'Camera image' : 'Row image';
-      document.getElementById('d-img-chip').textContent = m.kind === 'real' ? `${m.layout} row · true height ${fmt(m.height, 2)} m` : `yaw ${m.yaw}°`;
+      document.getElementById('d-img-chip').textContent = m.kind === 'real'
+        ? (m.layout === 'field' ? `field row · ${fmt(m.height, 2)} m · ${m.leaves} leaves` : `${m.layout} row · true height ${fmt(m.height, 2)} m`) : `yaw ${m.yaw}°`;
       document.getElementById('d-pc-chip').textContent = 'center plant in green';
       document.getElementById('d-legend-nb').hidden = false;
       const c = it.clouds.scene; dp.bg = panelBg(); dp.set([{ pos: c.pos, col: PCV.markColors(c.pos, c.mark) }]); D.g.frame(PCV.bounds(c.pos)); dProc(m);
