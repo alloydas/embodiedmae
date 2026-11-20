@@ -142,8 +142,8 @@
   .bar { width: 160px; height: 10px; border-radius: 3px; background: linear-gradient(90deg, #440154, #414487, #2a788e, #22a884, #7ad151, #fde725); }
   .sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 5px; }
   .hint { font-size: 13.5px; color: var(--muted); }
-  .strip { display: flex; gap: 6px; overflow-x: auto; padding: 8px; background: var(--card); border-top: 1px solid var(--rule); }
-  .strip img { width: 64px; height: 64px; object-fit: contain; border-radius: 7px; border: 2px solid transparent; cursor: pointer; background: #fff; flex: none; }
+  .strip { display: flex; gap: 6px; overflow-x: auto; padding: 8px; margin-top: 12px; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; }
+  .strip img { width: 64px; height: 64px; object-fit: contain; border-radius: 7px; border: 2px solid transparent; cursor: pointer; background: #000; flex: none; }
   .strip img[aria-current="true"] { border-color: var(--accent); }
   .data-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .procbox { position: relative; }
@@ -318,10 +318,11 @@
       <div class="ctl"><label for="d-item">Example</label><select id="d-item"></select></div>
     </div>
     <div class="data-grid">
-      <div class="cell input"><header><b id="d-img-title">Image</b><span class="chip" id="d-img-chip"></span></header><div><img class="view" id="d-img" alt=""><div class="strip" id="d-strip" hidden></div></div></div>
+      <div class="cell input"><header><b id="d-img-title">Image</b><span class="chip" id="d-img-chip"></span></header><img class="view" id="d-img" alt=""></div>
       <div class="cell"><header><b>Point cloud</b><span class="chip" id="d-pc-chip"></span></header><canvas id="d-pc" aria-label="3D point cloud of the selected example"></canvas></div>
       <div class="cell"><header><b>Procedural model</b><span class="chip" id="d-proc-chip"></span></header><div class="procbox"><canvas id="d-proc" aria-label="The plant's true procedural model in 3D"></canvas><p class="noproc" id="d-noproc" hidden>Real plants have no procedural model: their truth is the scanned plant itself.</p></div></div>
     </div>
+    <div class="strip" id="d-strip" hidden aria-label="The ten camera views: choose one"></div>
     <div class="legend" id="d-legend"><span><i class="sw" style="background:#5aa83e"></i>plant (center plant in rows)</span><span id="d-legend-nb"><i class="sw" style="background:#c9c2b0"></i>neighbouring plants</span></div>
   </section>
 
@@ -507,7 +508,7 @@
     if (m.kind === 'isolated') {
       strip.hidden = false;
       strip.innerHTML = m.views.map((v, i) => `<img src="data/dataset/${D.species}/${sub}/${v}" alt="camera ${i}" data-i="${i}" aria-current="${i === 0}">`).join('');
-      img.src = `data/dataset/${D.species}/${sub}/${m.views[0]}`; img.style.background = '#fff';
+      img.src = `data/dataset/${D.species}/${sub}/${m.views[0]}`; img.style.background = '#000';
       strip.onclick = e => { const t = e.target.closest('img'); if (!t) return; strip.querySelectorAll('img').forEach(x => x.setAttribute('aria-current', String(x === t))); img.src = t.src; };
       document.getElementById('d-img-title').textContent = 'Image, ten cameras';
       document.getElementById('d-img-chip').textContent = `plant ${m.plant.split('_').pop()}`;
