@@ -179,9 +179,6 @@
   .fl-node.on .st { color: color-mix(in srgb, var(--c) 70%, #000); }
   .fl-node.big { grid-template-columns: 96px minmax(0, 1fr); }
   .fl-node.big .th { width: 96px; height: 120px; }
-  .fl-params { width: 54px; height: 54px; border-radius: 8px; border: 1px solid var(--rule); background: #fff; font: 500 7px/1.25 var(--mono);
-    color: #5e4a96; padding: 5px; overflow: hidden; white-space: pre; filter: grayscale(1); transition: filter .3s; }
-  .fl-node.on .fl-params { filter: none; }
   .fl-model { position: relative; z-index: 2; text-align: center; padding: 26px 14px; border: 1px solid #d5dce7; border-radius: 22px;
     background: linear-gradient(150deg, #edf3fb, #f9fafc 50%, #f3eefa); box-shadow: 0 12px 30px #21354d10; }
   .fl-model .eb { font: 600 10.5px var(--mono); letter-spacing: .1em; color: var(--muted); }
@@ -265,11 +262,7 @@
           <div class="tx"><strong>Depth map</strong><span class="d">A noisy depth frame</span><div class="st">AVAILABLE</div></div></div>
         <div class="fl-node" data-side="in" data-m="pc" style="--c: var(--s-pc)"><div class="th light" style="background-image:url(assets/flow/pc.png)"></div>
           <div class="tx"><strong>Point cloud</strong><span class="d">A partial scan</span><div class="st">AVAILABLE</div></div></div>
-        <div class="fl-node" data-side="in" data-m="params" style="--c: var(--s-text)"><div class="fl-params">&lt;plant h="1.07"&gt;
- &lt;leaf len=".36"
-   width=".07"
-   angle="41"/&gt;
- &lt;leaf …/&gt;</div>
+        <div class="fl-node" data-side="in" data-m="params" style="--c: var(--s-text)"><div class="th light" style="background-image:url(assets/flow/plant.png)"></div>
           <div class="tx"><strong>Procedural parameters</strong><span class="d">In training, and as an optional prior</span><div class="st">AVAILABLE</div></div></div>
       </div>
       <div class="fl-model">
