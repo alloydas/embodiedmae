@@ -163,7 +163,10 @@ if __name__ == '__main__':
     OUT.mkdir(parents=True, exist_ok=True)
     for sp, fn in (('maize', render_maize), ('sorghum', render_sorghum)):
         if PROC: HEAD_C[2] = U.STREAM_INK['text']
-        fig = fn(compute(sp)); name = f"fig_e10_gallery_{sp}_ugg{'_proc' if PROC else ''}"
+        D_ = compute(sp); fig = fn(D_); name = f"fig_e10_gallery_{sp}_ugg{'_proc' if PROC else ''}"
+        if PROC:                                     # the data, for the TikZ version (figures/make_supp_tikz.py)
+            import pickle; DUMP = pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12') / f'supp_{name}.pkl'
+            pickle.dump(D_, open(DUMP, 'wb'))
         for ext in ('pdf', 'png'):
             fig.savefig(OUT / f'{name}.{ext}', dpi=300)
         plt.close(fig); print('wrote', OUT / f'{name}.pdf', flush=True)

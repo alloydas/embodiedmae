@@ -137,6 +137,7 @@ if a.ugg:                                             # the same panels, in the 
     pickle.dump(D, open(UGG_DUMP.with_suffix('.tmp'), 'wb')); UGG_DUMP.with_suffix('.tmp').replace(UGG_DUMP)
     ugg_grids.render_e10(D, f"{pathlib.Path(CFG['out']).name}_ugg"); sys.exit(0)
 fig, axes = plt.subplots(len(picks), len(cols), figsize=(tw * len(cols), th * len(picks)), squeeze=False)
+TIKZ_ROWS = []                                        # --proc: the data, for the TikZ version (figures/make_supp_tikz.py)
 for i, (layout, row, stop) in enumerate(picks):
     ds = RealRowDataset(layouts=(layout,), rows=[row], stops={stop}, seed=a.seed, species=a.species, rgb_gain=gain)
     rgb, dep, pin, par, valid, pgt, info = ds[0]
@@ -152,6 +153,8 @@ for i, (layout, row, stop) in enumerate(picks):
         axes[i, 0].imshow(img); axes[i, 1].imshow(d, cmap='viridis_r'); axes[i, 1].set_facecolor('black')
         xlim = ylim = (-1.02, 1.02)
     draw_cloud(axes[i, 2], pin.numpy(), xlim, ylim)
+    TROW = dict(label=(layout, row, stop), img=(photo(layout, row, stop) if SORG else (rgb.permute(1, 2, 0).numpy() * STD + MEAN).clip(0, 1)),
+                depth=(d[:, c0:c1] if SORG else d), pin=pin.numpy(), pgt=pgt.numpy(), height=float(info['height']), texts=[], recs=None)
     draw_cloud(axes[i, 3], pgt.numpy(), xlim, ylim)
     fs = 5.6 if SORG else 6.5
     axes[i, 3].text(0.03, 0.02, f'height\n{info["height"]:.2f} m' if SORG else f'height {info["height"]:.2f} m',
@@ -172,6 +175,7 @@ for i, (layout, row, stop) in enumerate(picks):
             p0 = ppar[0, 0].clamp(0, 1).float().numpy()
             txt += f'\nheight {p0[H_IDX] * _PLANT_SCALE_V2[H_IDX] - _PLANT_SHIFT_V2[H_IDX]:.2f} m'
         axes[i, 4 + j].text(0.03, 0.02, txt, transform=axes[i, 4 + j].transAxes, fontsize=fs)
+        TROW['texts'].append(txt)
     if a.proc:                                       # the three written procedural models, one frame, label space at the bottom
         lo = 0.17 if SORG else 0.24
         lim = PF.shared_lim(recs, a.species)
@@ -181,6 +185,7 @@ for i, (layout, row, stop) in enumerate(picks):
             ax_ = axes[i, 4 + j]; ax_.imshow(tl, aspect='auto', extent=(0, 1, lo, 1), zorder=0); ax_.set_xlim(0, 1); ax_.set_ylim(0, 1)
             ax_.set_facecolor('#eae7f2')
     axes[i, 0].set_ylabel(f'{layout}\nplant {row}, stop {stop}', fontsize=6.5 if SORG else 7)
+    TROW['recs'] = recs if a.proc else None; TIKZ_ROWS.append(TROW)
 for j, c in enumerate(cols):
     axes[0, j].set_title(c, fontsize=6.2 if SORG else 7.5)
 for ax in axes.ravel():
@@ -191,3 +196,7 @@ out = pathlib.Path(a.out or CFG['out'] + ('_proc' if a.proc else '')); out.paren
 fig.savefig(f'{out}.pdf', dpi=300); fig.savefig(f'{out}.png', dpi=200)
 shutil.copy(f'{out}.pdf', pathlib.Path('paper/overleaf/Figures') / f'{out.name}.pdf')
 print('wrote', f'{out}.pdf', f'{out}.png')
+if a.proc:
+    import pickle
+    pickle.dump(dict(species=a.species, cols=cols, models=[m_[0] for m_ in models], rows=TIKZ_ROWS),
+                open(pathlib.Path('/work/mech-ai/alloydas/embodiedmae_outputs/_fig12') / f'supp_{out.name}.pkl', 'wb'))

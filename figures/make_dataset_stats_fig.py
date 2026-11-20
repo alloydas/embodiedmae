@@ -90,6 +90,7 @@ fig.text(0.765, 0.415, 'Row occlusion by yaw (test rows)', fontsize=FS)
 out = pathlib.Path('paper/figs')
 NAME = 'fig_dataset_stats' + ('_proc' if PROC else '')
 for ext in ('pdf', 'png'): fig.savefig(out / f'{NAME}.{ext}', dpi=220)
+if PROC: fig.savefig(out / f'{NAME}_600.png', dpi=600)                  # panels b-d for the TikZ version (make_supp_tikz.py)
 shutil.copy(out / f'{NAME}.pdf', f'paper/overleaf/Figures/{NAME}.pdf'); print('wrote', out / f'{NAME}.pdf')
 for sp in ('sorghum', 'maize'):
     t = T[sp]; print(sp, 'r(leaves, height) = %.3f' % np.corrcoef(t.leaves, t.height)[0, 1], 'leaves', t.leaves.min(), t.leaves.max(), 'height %.2f-%.2f' % (t.height.min(), t.height.max()))
