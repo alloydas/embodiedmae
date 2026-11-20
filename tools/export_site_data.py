@@ -195,8 +195,9 @@ def export_dataset(sp):
         for v in range(10):
             f = V.folder(sp, 'test', plant, v)
             if not f.exists(): continue
-            img = V.rgba_on_white(f / ('rgb_nobg.png' if sp == 'sorghum' else 'rgba.png'))
-            views.append(save_jpg(img, out / 'isolated' / f'{plant}_v{v}.jpg', side=300))
+            sys.path.insert(0, str(R / 'tools')); import site_processed_images as SPI      # as the models read it: over black
+            img = np.asarray(SPI.over_black(f / ('rgb_nobg.png' if sp == 'sorghum' else 'rgba.png')))
+            views.append(save_jpg(img, out / 'isolated' / f'{plant}_v{v}.jpg', side=640))
         f0 = V.folder(sp, 'test', plant, 0)
         ply = next(f0.glob('*_nc_cam.ply')) if sp == 'sorghum' else f0 / 'pointcloud_cam.ply'
         P = V.read_cloud(ply); P, c, s = V.normalise_cloud(P)
@@ -473,7 +474,8 @@ def export_real(sp):
                 recipes[k] = full_recipe(V.decode_recipe(sp, ppar[0].clamp(0, 1).float().numpy(), valid.numpy(), predicted=True))
         d = next(pathlib.Path(x) for x in RSP[sp]['layouts'][lay].glob(f'row_{rid}_seed1'))
         fr = list(csv.DictReader(open(d / f'row_{rid}_seed1_frames.csv')))[stop - 1]
-        img = save_jpg(np.asarray(Image.open(d / fr['photo']).convert('RGB')), out / f'{lay}_{rid}_{stop}.jpg', side=420)
+        sys.path.insert(0, str(R / 'tools')); import site_processed_images as SPI          # the processed input, as S4
+        img = save_jpg(np.asarray(SPI.processed_window(ds, 0)), out / f'{lay}_{rid}_{stop}.jpg', side=700)
         sid = f'{lay}_{rid}_{stop}'
         meta, nb = it.write(out / sid, dict(task='real', species=sp, layout=lay, row=rid, stop=stop, tag=tag, img=img,
                                             truth=dict(height=round(float(info['height']), 3)), occ=round(float(info['occ_frac']), 3), metrics=metrics, recipes=recipes))
