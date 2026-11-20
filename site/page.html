@@ -763,7 +763,7 @@
 <script>
 /* Task flow (#flow): cycles through the paper's tasks; active inputs and outputs light up and dashed wires carry the
    flow input -> model -> output. Pauses on hover / focus and off screen; a click takes over; respects reduced motion.
-   Numbers are the paper's (Tables 2 and 4, Sec. 4.3; Table S20 for the parameter inputs). */
+   Numbers are the paper's (Tables 2 and 4, Sec. 4.3; Table S6 for three views; Table S20 for the input pairs and parameter inputs). */
 (function () {
   var root = document.getElementById('flow'); if (!root) return;
   var T = [
@@ -779,6 +779,12 @@
     { id: 'pc', label: 'Point cloud only', in: ['pc'], out: ['plant', 'rgb', 'depth'], stages: ['pre', 'dist'], more: '#any',
       text: 'A partial scan alone: parameters read straight from geometry, plus the image and depth map.',
       metric: 'Leaf count within ±1 on 99.8 % (sorghum) and 98.6 % (maize) of plants.' },
+    { id: 'rgb3', label: 'Three photographs', in: ['rgb'], out: ['plant'], stages: ['pre', 'dist'], more: '#any', din: { rgb: 'Three camera views' },
+      text: 'Three views of the same plant: the procedural model written from each, then averaged.',
+      metric: 'Leaf count within ±1 on 99.5 % (sorghum) and 98.8 % (maize); sorghum height error 1.8 %.' },
+    { id: 'rgbd', label: 'Image + depth', in: ['rgb', 'depth'], out: ['pc'], stages: ['pre', 'dist'], more: '#any', din: { rgb: 'From an RGB-D camera', depth: 'Its depth channel' },
+      text: 'An RGB-D camera: the color image and its depth together, written out as the whole plant cloud.',
+      metric: 'Point-cloud Chamfer 2.91 → 0.59 ×10⁻³ (sorghum) and 1.30 → 0.55 (maize) with distillation.' },
     { id: 'params', label: 'Parameters only', in: ['params'], out: ['pc', 'rgb', 'depth'], stages: ['pre', 'dist'], more: '#any',
       text: 'The procedural parameters alone: the point cloud, image and depth map they describe.',
       metric: 'Point-cloud Chamfer 22.7 → 6.8 ×10⁻³ (sorghum) and 80.7 → 12.8 (maize) with distillation.' },
@@ -788,9 +794,12 @@
     { id: 'dp', label: 'Depth + parameters', in: ['depth', 'params'], out: ['pc', 'rgb'], stages: ['pre', 'dist'], more: '#any',
       text: 'A depth frame with known parameters: the closest point cloud of any input.',
       metric: 'Point-cloud Chamfer 0.36 ×10⁻³ (sorghum) and 0.40 (maize).' },
-    { id: 'row', label: 'Occluded crop row', in: ['rgb', 'depth', 'pc'], out: ['plant', 'pc'], stages: ['pre', 'row'], more: '#rows',
+    { id: 'row', label: 'Occluded crop row', din: { rgb: 'The crowded row', depth: 'The row, from the rover', pc: 'The row\u2019s scene cloud' }, in: ['rgb', 'depth', 'pc'], out: ['plant', 'pc'], stages: ['pre', 'row'], more: '#rows',
       text: 'The crowded row from a rover camera, no mask or box: the target plant alone, separated from its neighbors.',
       metric: 'Removes 85 % (sorghum) and 92 % (maize) of the error neighbors cause.' },
+    { id: 'rowd', label: 'Occluded row, depth only', in: ['depth'], out: ['plant', 'pc'], stages: ['pre', 'row'], more: '#rows', din: { depth: 'The row, depth only' },
+      text: 'The same row from one sensor: each of image, depth or point cloud works alone; depth is shown.',
+      metric: 'Depth alone: Chamfer 9.6 (maize) and 18.6 (sorghum) ×10⁻⁴ m², in sorghum better than all three streams (30.7).' },
     { id: 'real', label: 'Real plants', in: ['rgb', 'depth', 'pc'], out: ['plant', 'pc'], stages: ['pre', 'row', 'real'], more: '#real',
       text: 'Rows built from real plants: fine-tuned on 75 % of them, scored on the rest.',
       metric: 'Median height error 1.6 % on held-out maize plants, in milliseconds per plant.' }
@@ -799,6 +808,7 @@
       model = root.querySelector('.fl-model'), nodes = [].slice.call(root.querySelectorAll('.fl-node')),
       summary = root.querySelector('.fl-summary'), more = root.querySelector('.fl-more'), wires = new Map(), NS = 'http://www.w3.org/2000/svg';
   root.style.setProperty('--fl-ms', MS + 'ms');
+  nodes.forEach(function (n) { var d = n.querySelector('.d'); if (d) d.dataset.def = d.textContent; });
   nodes.forEach(function (n) { var p = document.createElementNS(NS, 'path'); p.setAttribute('class', 'fl-wire ' + (n.dataset.side === 'in' ? 'in' : 'out'));
     p.style.setProperty('--c', getComputedStyle(n).getPropertyValue('--c')); svg.appendChild(p); wires.set(n, p); });
   var buttons = T.map(function (t, i) { var b = document.createElement('button'); b.type = 'button'; b.textContent = t.label; b.setAttribute('aria-pressed', 'false');
@@ -823,6 +833,7 @@
       var on = (n.dataset.side === 'in' ? t.in : t.out).indexOf(n.dataset.m) >= 0;
       n.classList.toggle('on', on); wires.get(n).classList.toggle('on', on);
       n.querySelector('.st').textContent = on ? (n.dataset.side === 'in' ? 'GIVEN' : 'WRITTEN') : 'NOT USED';
+      var d = n.querySelector('.d'); if (d) d.textContent = (n.dataset.side === 'in' && t.din && t.din[n.dataset.m]) || d.dataset.def;
     });
     model.querySelectorAll('.fl-stage').forEach(function (c) { c.classList.toggle('on', t.stages.indexOf(c.dataset.stage) >= 0); });
     summary.innerHTML = ''; summary.appendChild(document.createTextNode(t.text + ' '));
