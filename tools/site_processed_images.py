@@ -39,6 +39,13 @@ def processed_window(ds, i):
     return got['im']
 
 
+def strip_of(im):
+    """the processed window cropped to the photograph's columns: drops the black padding the loader adds beside a tall
+    sorghum strip (the padding columns are exactly zero; the processing itself is untouched)"""
+    cols = np.flatnonzero((np.asarray(im) > 0).any(axis=(0, 2)))
+    return im.crop((int(cols.min()), 0, int(cols.max()) + 1, im.height)) if len(cols) else im
+
+
 def over_black(path):
     im = Image.open(path).convert('RGBA'); b = Image.new('RGBA', im.size, (0, 0, 0, 255)); b.alpha_composite(im); return b.convert('RGB')
 

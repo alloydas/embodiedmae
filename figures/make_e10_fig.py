@@ -153,7 +153,11 @@ for i, (layout, row, stop) in enumerate(picks):
         axes[i, 0].imshow(img); axes[i, 1].imshow(d, cmap='viridis_r'); axes[i, 1].set_facecolor('black')
         xlim = ylim = (-1.02, 1.02)
     draw_cloud(axes[i, 2], pin.numpy(), xlim, ylim)
-    TROW = dict(label=(layout, row, stop), img=(photo(layout, row, stop) if SORG else (rgb.permute(1, 2, 0).numpy() * STD + MEAN).clip(0, 1)),
+    if SORG:                                         # the model's processed input, cropped to the strip (2026-11-20; was the raw photo)
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools')); import site_processed_images as SPI
+        _im = SPI.strip_of(SPI.processed_window(ds, 0)); _s = 900 / _im.height
+        _proc = np.asarray(_im.resize((max(1, round(_im.width * _s)), 900), Image.LANCZOS)) / 255.0
+    TROW = dict(label=(layout, row, stop), img=(_proc if SORG else (rgb.permute(1, 2, 0).numpy() * STD + MEAN).clip(0, 1)),
                 depth=(d[:, c0:c1] if SORG else d), pin=pin.numpy(), pgt=pgt.numpy(), height=float(info['height']), texts=[], recs=None)
     draw_cloud(axes[i, 3], pgt.numpy(), xlim, ylim)
     fs = 5.6 if SORG else 6.5

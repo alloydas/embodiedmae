@@ -66,11 +66,10 @@ def compute(sp):
         lay, row, stop = e['layout'], e['plant'], e['stop']
         ds = RealRowDataset(layouts=(lay,), rows=[row], stops={stop}, seed=0, species=sp, rgb_gain=models[-1][2])
         rgb, dep, pin, par, valid, pgt, info = ds[0]
-        if sp == 'sorghum':
-            d = next(pathlib.Path(x) for x in SPECIES[sp]['layouts'][lay].glob(f'row_{row}_seed1'))
-            f = list(csv.DictReader(open(d / f'row_{row}_seed1_frames.csv')))[stop - 1]
-            im = Image.open(d / f['photo']).convert('RGB'); s = 900 / im.height
-            img = np.asarray(im.resize((max(1, round(im.width * s)), 900))) / 255.0
+        if sp == 'sorghum':                          # the model's processed input (window, black background, gain), as maize's,
+            sys.path.insert(0, str(R / 'tools')); import site_processed_images as SPI   # cropped to the strip (2026-11-20)
+            im = SPI.strip_of(SPI.processed_window(ds, 0)); s = 900 / im.height
+            img = np.asarray(im.resize((max(1, round(im.width * s)), 900), Image.LANCZOS)) / 255.0
         else:
             img = (rgb.permute(1, 2, 0).numpy() * STD + MEAN).clip(0, 1)
         r = dict(e, img=img, gt=pgt.numpy(), preds=[], ch=[], hp=[], recs=[])

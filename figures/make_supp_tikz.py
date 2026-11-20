@@ -45,6 +45,16 @@ def depth_png(d, max_side=600):
     return png_array(rgb, max_side)
 
 
+def fit_png(arr, w, h, side=700):
+    """an image placed in a w x h box without distortion: padded with black to the box's shape"""
+    a_ = np.asarray(arr, np.float64); H0, W0 = a_.shape[:2]; tgt = w / h
+    if W0 / H0 < tgt:
+        pad = int(round(H0 * tgt)) - W0; a_ = np.pad(a_, ((0, 0), (pad // 2, pad - pad // 2), (0, 0)))
+    elif W0 / H0 > tgt:
+        pad = int(round(W0 / tgt)) - H0; a_ = np.pad(a_, ((pad // 2, pad - pad // 2), (0, 0), (0, 0)))
+    return png_array(a_, side)
+
+
 def box(S, x, y, w, h, kind, dash=False, r=0.04):
     e, f = BOX[kind]; S.rect(x, y, w, h, e, lw=1.0, fill=f, r=r, dash=dash)
 
@@ -81,7 +91,7 @@ def gallery(sp):
                 pt = proc_tiles(r['recs'], 'maize', inner / (inner * 0.70))
                 for k in range(4):
                     xk = xb + k * (t + g); box(S, xk, y, t, t, kinds[k][0], kinds[k][1])
-                    if k == 0: S.image(xk + m, y + m, inner, inner, png_array(r['img'], 500), f'm {L} {i} image')
+                    if k == 0: S.image(xk + m, y + m, inner, inner, fit_png(r['img'], inner, inner, 500), f'm {L} {i} image')
                     elif k == 1:
                         S.image(xk + m, y + m, inner, inner, cloud_png(r['gt'], inner, inner, (-1.02, 1.02), (-1.02, 1.02)), f'm {L} {i} truth')
                         S.text(xk + m + 0.04 * inner, y + m + 0.03 * inner, f"height {r['height']:.2f} m", F, va='bottom')
@@ -104,7 +114,7 @@ def gallery(sp):
         pt = proc_tiles(r['recs'], 'sorghum', iw / ih)
         for k in range(4):
             xk = xb + k * (t + g); box(S, xk, yb, t, th, kinds[k][0], kinds[k][1])
-            if k == 0: S.image(xk + m, yb + m, iw, ih, png_array(r['img'], 700), f's {i} image')
+            if k == 0: S.image(xk + m, yb + m, iw, ih, fit_png(r['img'], iw, ih), f's {i} image')
             elif k == 1: S.image(xk + m, yb + m, iw, ih, cloud_png(r['gt'], iw, ih, (-0.37, 0.37), (-1.02, 1.02), s=0.10), f's {i} truth')
             else:
                 j = k - 2; S.image(xk + m, yb + m, iw, ih, pt[j], f's {i} pred {j}')
@@ -138,7 +148,7 @@ def e10(sp):
         for k in range(7):
             xk = lab + k * (t + g); box(S, xk, y, t, th, kinds[k][0], kinds[k][1], r=0.03)
             X, Y = xk + m, y + m
-            if k == 0: S.image(X, Y, iw, ih, png_array(r['img'], 700), f'{sp} {i} image')
+            if k == 0: S.image(X, Y, iw, ih, fit_png(r['img'], iw, ih), f'{sp} {i} image')
             elif k == 1: S.image(X, Y, iw, ih, depth_png(r['depth']), f'{sp} {i} depth')
             elif k in (2, 3):
                 P = r['pin'] if k == 2 else r['pgt']
