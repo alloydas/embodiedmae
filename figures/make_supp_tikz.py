@@ -195,8 +195,96 @@ def stats():
     return S, 'fig_dataset_stats'
 
 
+# ------------------------------------------------------------------ field data (2026-11-20): S4/S5 and S10/S11 rebuilt on the
+# field upload (figures/make_field_dump.py); both species in one layout, 3:4 tiles (the field photographs are 3:4)
+FIELD_HC = {'row': STREAM_INK['text'], 'field': OURS}
+
+
+def own_lims(P, w, h):
+    """limits that frame the plant itself (its height fills the tile, the width follows the tile's shape)"""
+    P = np.asarray(P); y0, y1 = P[:, 1].min(), P[:, 1].max(); cy = (y0 + y1) / 2; hh = (y1 - y0) / 2 * 1.06
+    cx = float(np.median(P[:, 0])); hw = hh * w / h
+    return (cx - hw, cx + hw), (cy - hh, cy + hh)
+
+
+def field_gallery(sp):
+    D = pickle.load(open(D12 / f'supp_field_gallery_{sp}.pkl', 'rb'))
+    W, m, g = 6.875, 0.02, 0.03
+    lab, gb = (0.70, 0.74) if sp == 'sorghum' else (0.48, 0.52)      # room for the plant ids left of each block
+    t = (W - lab - gb - 6 * g) / 8; th = t * 4 / 3; hdr, gy = 0.42, 0.06
+    blocks = [[r for r in D if r['block'] == b] for b in ('A', 'B')] if sp == 'maize' else [D[0::2], D[1::2]]
+    n = max(len(b) for b in blocks); H = hdr + n * th + (n - 1) * gy + 0.02
+    S = Scene(W, H, f'field gallery {sp}'); F = 6.0
+    head = [('Image', INK), ('Ground truth', INK), ('Synthetic-row\nfine-tune', STREAM_INK['text']), ('Field\nfine-tune', OURS)]
+    kinds = [('rgb', True), (None, False), ('text', False), ('text', False)]
+    for b, rows in enumerate(blocks):
+        xb = lab + b * (4 * t + 3 * g + gb)
+        for k, (s_, c) in enumerate(head):
+            S.text(xb + k * (t + g) + t / 2, H - 0.01, s_, 6.4, color=c, ha='center', va='top', ls=1.05)
+        y = H - hdr
+        for i, r in enumerate(rows):
+            y -= th; iw, ih = t - 2 * m, th - 2 * m; lo = 0.33
+            pt = proc_tiles(r['recs'], sp, iw / (ih * (1 - lo)))
+            for k in range(4):
+                xk = xb + k * (t + g); box(S, xk, y, t, th, kinds[k][0], kinds[k][1], r=0.03); X, Y = xk + m, y + m
+                if k == 0: S.image(X, Y, iw, ih, fit_png(r['img'], iw, ih), f'{sp} g{b} {i} image')
+                elif k == 1:
+                    xl_, yl_ = own_lims(r['gt'], iw, (1 - lo) * ih)
+                    S.image(X, Y + lo * ih, iw, (1 - lo) * ih, cloud_png(r['gt'], iw, (1 - lo) * ih, xl_, yl_, s=0.22), f'{sp} g{b} {i} truth')
+                    S.text(X + 0.05 * iw, Y + 0.03 * iw, f"{r['height']:.2f} m\n{r['leaves']} leaves", F, va='bottom', ls=1.1)
+                else:
+                    j = k - 2; S.image(X, Y + lo * ih, iw, (1 - lo) * ih, pt[j], f'{sp} g{b} {i} pred {j}')
+                    S.text(X + 0.05 * iw, Y + 0.03 * iw, f"CD = {r['ch'][j]:.0f}\n{r['hp'][j]:.2f} m\n{r['lv'][j]} leaves", F,
+                           color=STREAM_INK['text'] if j == 0 else OURS, va='bottom', ls=1.1)
+            S.text(xb - 0.06, y + th / 2, f"{r['label']}\nplant\n{r['plant']}", 6.0, ha='right', va='center', ls=1.1)
+            y -= gy
+    return S, f'fig_e10_gallery_{sp}'
+
+
+def field_e10(sp):
+    D = pickle.load(open(D12 / f'supp_field_real_{sp}.pkl', 'rb'))
+    W, g, m, lab = 6.875, 0.035, 0.02, 0.78
+    heads = ['Image', 'Depth image', 'Point cloud\n(scene)', 'Center plant\n(truth)', 'No row\ntraining', 'Synthetic-row\nfine-tune', 'Field\nfine-tune']
+    kinds = [('rgb', True), ('depth', True), ('pc', True), (None, False), ('text', False), ('text', False), ('text', False)]
+    hc = [INK] * 4 + [STREAM_INK['text'], STREAM_INK['text'], OURS]
+    t = (W - lab - 6 * g) / 7; th = t * 4 / 3; hdr, gy = 0.36, 0.07
+    n = len(D['rows']); H = hdr + n * th + (n - 1) * gy + 0.02
+    S = Scene(W, H, f'field rows {sp}'); F = 5.8
+    for k, (s_, c) in enumerate(zip(heads, hc)):
+        S.text(lab + k * (t + g) + t / 2, H - 0.01, s_, 6.4, color=c, ha='center', va='top', ls=1.05)
+    xl, yl = (-0.78, 0.78), (-1.02, 1.02)
+    y = H - hdr
+    for i, r in enumerate(D['rows']):
+        y -= th; iw, ih = t - 2 * m, th - 2 * m; lo = 0.27
+        pt = proc_tiles(r['recs'], sp, iw / (ih * (1 - lo)))
+        for k in range(7):
+            xk = lab + k * (t + g); box(S, xk, y, t, th, kinds[k][0], kinds[k][1], r=0.03); X, Y = xk + m, y + m
+            if k == 0: S.image(X, Y, iw, ih, fit_png(r['img'], iw, ih), f'{sp} {i} image')
+            elif k == 1:
+                d = np.asarray(r['depth'], np.float64); ok = np.isfinite(d); rgb = np.zeros(d.shape + (3,))
+                if ok.any(): lo_, hi_ = d[ok].min(), d[ok].max(); rgb[ok] = plt.get_cmap('viridis_r')((d[ok] - lo_) / max(hi_ - lo_, 1e-9))[:, :3]
+                S.image(X, Y, iw, ih, fit_png(rgb, iw, ih, 500), f'{sp} {i} depth')
+            elif k in (2, 3):
+                P = r['pin'] if k == 2 else r['pgt']
+                if k == 3:
+                    xl_, yl_ = own_lims(P, iw, (1 - lo) * ih)
+                    S.image(X, Y + lo * ih, iw, (1 - lo) * ih, cloud_png(P, iw, (1 - lo) * ih, xl_, yl_, s=0.24), f'{sp} {i} cloud {k}')
+                    S.text(X + 0.05 * iw, Y + 0.03 * iw, f"{r['height']:.2f} m\n{r['leaves']} leaves", F, va='bottom', ls=1.1)
+                else:
+                    S.image(X, Y, iw, ih, cloud_png(P, iw, ih, xl, yl, s=0.12), f'{sp} {i} cloud {k}')
+            else:
+                j = k - 4; S.image(X, Y + lo * ih, iw, (1 - lo) * ih, pt[j], f'{sp} {i} pred {j}')
+                S.text(X + 0.05 * iw, Y + 0.03 * iw, r['texts'][j].replace(' · ', ', '), F, color=hc[k], va='bottom', ls=1.1)
+        pl, row, stop = r['label']
+        S.text(lab - 0.08, y + th / 2, f'plant\n{pl}\nrow {row}\nstop {stop}', 6.2, ha='right', va='center', ls=1.1)
+        y -= gy
+    return S, f"fig_e10_real{'_sorghum' if sp == 'sorghum' else ''}"
+
+
 if __name__ == '__main__':
     want = sys.argv[1:] or ['s1', 's4', 's5', 's10', 's11']
-    jobs = {'s1': stats, 's4': lambda: e10('maize'), 's5': lambda: e10('sorghum'), 's10': lambda: gallery('maize'), 's11': lambda: gallery('sorghum')}
+    jobs = {'s1': stats, 's4': lambda: field_e10('maize'), 's5': lambda: field_e10('sorghum'), 's10': lambda: field_gallery('maize'),
+            's11': lambda: field_gallery('sorghum'),
+            's4old': lambda: e10('maize'), 's5old': lambda: e10('sorghum'), 's10old': lambda: gallery('maize'), 's11old': lambda: gallery('sorghum')}
     for k in want:
         S, name = jobs[k](); save(S, name)

@@ -430,9 +430,9 @@
   <!-- ====================================================== E10: real plants -->
   <section class="task" id="real">
     <div class="task-head">
-      <div class="eyebrow">Real plants · rows built from real plant models and scans</div>
+      <div class="eyebrow">Real plants · the field rows</div>
       <h2>From synthetic rows to real plants</h2>
-      <p class="lede">Rows of real maize plant models and scanned sorghum plants, seen by a rover camera. The model trained on synthetic rows is fine-tuned on 75 % of the real plants; every plant here is from the other 25 %.</p>
+      <p class="lede">Rows of real maize and sorghum plants from the field data (the plants of the data section’s real rows): twenty plants per row and two rows behind it, photographed by a rover camera at every plant. The model trained on synthetic rows is fine-tuned on the field rows’ training plants; every plant here is held out. The image is the whole-row photograph; the models read the window around the middle plant.</p>
     </div>
     <div class="controls">
       <div class="ctl"><span>Species</span><div class="seg" id="e-species"><button type="button" data-v="maize" aria-pressed="true">Maize</button><button type="button" data-v="sorghum" aria-pressed="false">Sorghum</button></div></div>
@@ -445,9 +445,9 @@
       <div class="cell"><header><b>Center plant (truth)</b><span class="chip" id="e-truth-chip"></span></header><canvas data-k="truth"></canvas></div>
       <div class="cell output"><header><b>No row training</b><span class="chip" data-m="head"></span></header><canvas data-k="head:proc" data-proc="head"></canvas></div>
       <div class="cell output"><header><b>Synthetic-row fine-tune</b><span class="chip" data-m="row"></span></header><canvas data-k="row:proc" data-proc="row"></canvas></div>
-      <div class="cell output"><header><b>Real-row fine-tune</b><span class="chip" data-m="real"></span></header><canvas data-k="real:proc" data-proc="real"></canvas></div>
+      <div class="cell output"><header><b>Field fine-tune</b><span class="chip" data-m="real"></span></header><canvas data-k="real:proc" data-proc="real"></canvas></div>
     </div>
-    <div class="legend"><span>Chips: Chamfer to the true plant (×10⁻⁴ m²) · predicted height (maize)</span><span><i class="sw" style="background:#c9c2b0"></i>neighbours in the row cloud</span></div>
+    <div class="legend"><span>Chips: Chamfer to the true plant (×10⁻⁴ m²) · written height · leaf count</span><span><i class="sw" style="background:#c9c2b0"></i>neighbours in the row cloud</span></div>
   </section>
 
 </main>
@@ -750,17 +750,17 @@
     } }).fill();
 
   // real plants (E10)
-  task({ sec: 'real', prefix: 'e', dir: 'real', select: 'stop', rk: (st, b) => b, label: i => `${i.id.split('_').slice(1, -1).join('_')} · ${i.layout} · ${i.tag}`,
+  task({ sec: 'real', prefix: 'e', dir: 'real', select: 'stop', rk: (st, b) => b, label: i => `plant ${i.id.replace(/_row\d+_stop\d+$/, '')} · ${i.tag}`,
     frame: st => st.g.frame(PCV.bounds(st.item.clouds.truth.pos), { phi: 0.08 }),
     draw: st => {
       const it = st.item, m = it.meta, C = it.clouds;
       document.getElementById('e-img').src = st.base + m.img;
-      document.getElementById('e-occ').textContent = `${m.layout} row`;
-      document.getElementById('e-truth-chip').textContent = `height ${fmt(m.truth.height, 2)} m`;
+      document.getElementById('e-occ').textContent = m.layout === 'field' ? `field row ${m.row} · stop ${m.stop}` : `${m.layout} row`;
+      document.getElementById('e-truth-chip').textContent = `${fmt(m.truth.height, 2)} m` + (m.truth.leaves != null ? ` · ${m.truth.leaves} leaves` : '');
       st.panels.scene.set([{ pos: C.scene.pos, col: PCV.markColors(C.scene.pos, C.scene.mark), size: 0.8 }]);
       st.panels.truth.set([{ pos: C.truth.pos, col: PCV.plantColors(C.truth.pos) }]);
       document.querySelectorAll('#e-grid .chip[data-m]').forEach(ch => {
-        const x = m.metrics[ch.dataset.m]; ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '');
+        const x = m.metrics[ch.dataset.m]; ch.textContent = `${fmt(x.chamfer, x.chamfer < 100 ? 1 : 0)}` + (x.height != null ? ` · ${fmt(x.height, 2)} m` : '') + (x.leaves != null ? ` · ${x.leaves}` : '');
       });
     } }).fill();
 

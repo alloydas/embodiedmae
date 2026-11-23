@@ -17,6 +17,13 @@ import _plantviz as V
 def decode_pred(sp, par, cfg=None):
     par = np.clip(np.asarray(par, np.float64), 0, 1)
     if sp == 'sorghum':
+        rf = (cfg or {}).get('real_finetune', {})
+        if rf.get('count_slots'):                        # leaf-slot runs: the leaves are the slots longer than the threshold
+            import embodied_mae_4m as S
+            nf = len(S.LEAF_FIELDS); raw = par[1:25, :nf] * S._LEAF_SCALE[:nf] - S._LEAF_SHIFT[:nf]
+            keep = raw[:, list(S.LEAF_FIELDS).index('length')] > float(rf.get('count_threshold_m') or 0.05)
+            H = float(par[0, 0] * S._PLANT_SCALE[0] - S._PLANT_SHIFT[0])
+            return dict(height=H, n=int(keep.sum()), leaves=[dict(zip(S.LEAF_FIELDS, r)) for r in raw[keep]])
         return V.decode_recipe('sorghum', par, None, predicted=True)
     from embodied_mae_4m_maize import _PLANT_SCALE_V2, _PLANT_SHIFT_V2, PLANT_FIELDS_V2, LEAF_FIELDS_V2, _LEAF_SCALE_V2, _LEAF_SHIFT_V2
     rf = (cfg or {}).get('real_finetune', {})

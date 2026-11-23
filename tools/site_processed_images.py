@@ -2,10 +2,8 @@
 training, use that RGB images in the website as you showed in S4 ... also in the data three kind isolated plants the RGB
 images are old").
 
-  real section (data/real/<sp>/*.jpg)          maize: the processed input of each stop, as S4's Image column (the window
-                                               around the middle plant, background black), captured at the window's native
-                                               size before the loader's resize to 224 px, saved 700 px; sorghum: the
-                                               original camera photograph, 900 px high, as the data section's real plants
+  real section (data/real/<sp>/*.jpg)          NOT here since 2026-11-20: the section shows the field data, written by
+                                               figures/make_field_dump.py (whole-row photographs, 900 px)
   data section, isolated views                 each camera's render composited over BLACK (the training inputs: maize
   (data/dataset/<sp>/isolated/*_v*.jpg)        rgba.png, sorghum rgb_nobg.png, stored at the brightness E1 trained on),
                                                1024 px source, saved 640 px (were composited over white, 300 px)
@@ -61,8 +59,8 @@ def over_black(path):
 
 
 if __name__ == '__main__':
-    # real section: every stop's processed window
-    for sp in ('maize', 'sorghum'):
+    # (the real section is written by figures/make_field_dump.py since 2026-11-20; this loop only touches old-format items)
+    for sp in ():
         for f in sorted((SITE / 'real' / sp).glob('*.json')):
             if f.name == 'index.json': continue
             m = json.loads(f.read_text())
@@ -97,6 +95,6 @@ if __name__ == '__main__':
     T = Image.new('RGB', (W, H), 'white')
     T.paste(cover(fld, lw, H), (0, 0)); T.paste(cover(iso, rw, rh), (lw + g, 0)); T.paste(cover(row, rw, H - rh - g), (lw + g, rh + g))
     T.save(SITE / 'tiles/data.jpg', quality=90)
-    ds = RealRowDataset(layouts=('parallel',), rows=['0019'], stops={17}, seed=0, species='maize', rgb_gain=None)
-    win = processed_window(ds, 0); cover(win, round(win.height * 0.8), win.height).save(SITE / 'tiles/real.jpg', quality=90)
-    print('tiles: data', T.size, 'real', win.size, flush=True)
+    rp = Image.open(ROWS_ROOT['field1000'] / 'sorghum' / 'png' / 'row723_seed1_stop08_full.png').convert('RGB')   # tile 06: a field photo
+    cover(rp, 1229, 1536).save(SITE / 'tiles/real.jpg', quality=90)
+    print('tiles: data', T.size, 'real', rp.size, flush=True)
